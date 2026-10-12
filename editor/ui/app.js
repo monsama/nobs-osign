@@ -47,8 +47,8 @@
   // State
   // ---------------------------------------------------------------------------------------------
   const S = {
-    config: null, settings: null, info: null, assets: [], dirty: false, publishedAt: '', commitUrl: '',
-    view: 'sig', sigId: null, mode: 'design', adValues: null, adName: '', tokenSet: false, tokenFromEnv: false
+    config: null, settings: null, info: null, assets: [], dirty: false, publishedAt: 0,
+    view: 'sig', sigId: null, mode: 'design', adValues: null, adName: '', 
   };
   const sig = () => (S.config.signatures || []).find((s) => s.id === S.sigId) || null;
   // Signatures are compiled in a document of their own: one that is not shown loads no images.
@@ -62,16 +62,9 @@
     return id;
   }
 
-  function assetBase() {
-    const s = S.settings;
-    if (!s || !s.publicBaseUrl) return '';
-    return s.publicBaseUrl.replace(/\/?$/, '/') + s.target.path.replace(/^\/|\/$/g, '') + '/';
-  }
-
   // The configuration as published: every signature compiled, the image address set.
   function prepared() {
     const c = JSON.parse(JSON.stringify(S.config));
-    c.assetBaseUrl = assetBase();
     c.signatures.forEach((s) => { s.html = sanitize(s.html); s.compiled = core.compile(s.html, scratchDoc); });
     return c;
   }
@@ -79,9 +72,9 @@
   // ---------------------------------------------------------------------------------------------
   // Saving: every change goes to the draft on its own, a moment after the last keystroke.
   // ---------------------------------------------------------------------------------------------
-  let saveTimer = null, saving = Promise.resolve();
+  let saveTimer = null, saving = Promise.resolve(), changeSeq = 0;
   function changed(opts) {
-    S.dirty = true; renderStatus('Saving…');
+    S.dirty = true; changeSeq++; renderStatus('Saving…');
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 600);
     if (!opts || opts.list !== false) renderList();
@@ -89,9 +82,10 @@
   }
   function save(opts) {
     clearTimeout(saveTimer); saveTimer = null;
-    const json = JSON.stringify(prepared());
+    const json = JSON.stringify(prepared()), seq = changeSeq;
     saving = saving.then(() => api('draft/save', { configJson: json }, opts))
-      .then((r) => { S.dirty = r.dirty; renderStatus(); })
+      // The answer to an older save says nothing about changes made since: those are still coming.
+      .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; renderStatus(); } })
       .catch((e) => { renderStatus('Not saved'); toast(e.message, true); });
     return saving;
   }
@@ -625,7 +619,7 @@
       meta.push(it.fields.length ? it.fields.length + ' fields' : 'no fields');
       meta.push(' · ' + it.imgs.length + ' image(s)');
       if (it.missing.length) meta.push(el('span', { class: 'warn' }, ' · not picked: ' + [...new Set(it.missing)].join(', ')));
-      if (it.perPerson.length) meta.push(el('span', { class: 'warn' }, ' · per-person image ' + it.perPerson[0] + ': left out for now'));
+      if (it.perPerson.length) meta.push(' · photo per person ' + it.perPerson[0] + ' → photos\\' + it.perPerson[0].split(/[\\/]/).pop());
       if (exists) meta.push(' · replaces the signature of the same name');
       ul.append(el('li', { class: it.checked ? '' : 'skip' }, box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta))));
     });
@@ -651,7 +645,9 @@
         t.innerHTML = sanitize(it.body);
         for (const img of t.content.querySelectorAll('img[src]')) {
           const src = img.getAttribute('src');
-          if (/^(https?:|cid:|data:)/i.test(src) || src.indexOf('@@') >= 0) continue;
+          if (/^(https?:|cid:|data:)/i.test(src)) continue;
+          // One image per person ("images/@@sAMAccountName.jpg"): from the photos folder.
+          if (src.indexOf('@@') >= 0) { img.setAttribute('src', 'photos/' + src.split(/[\\/]/).pop()); continue; }
           const base = decodeURIComponent(src.split(/[\\/]/).pop()), key = base.toLowerCase();
           if (impImages.has(key) && !uploaded.has(key)) uploaded.set(key, await uploadImage(impImages.get(key)));
           // Not picked: it points where the image will be once uploaded under that name.
@@ -740,20 +736,8 @@
   const OPTS = { optDisable: 'disableOutlookSignature', optChoice: 'allowUserChoice', optMeetings: 'meetings', optNoProfile: 'insertWithoutProfile' };
   function renderOptions() {
     Object.entries(OPTS).forEach(([id, k]) => { $(id).checked = !!S.config.options[k]; });
-    $('optClient').value = S.config.auth.clientId || '';
-    $('optTenant').value = S.config.auth.tenantId || '';
-    const base = (S.settings.publicBaseUrl || '').replace(/\/?$/, '/');
-    $('manifestUrl').textContent = base ? base + 'manifest.xml' : '(set the public address in Settings)';
-    let host = ''; try { host = new URL(base).host; } catch (e) { }
-    $('helpRedirect').textContent = 'brk-multihub://' + (host || '<your add-in host>');
   }
   Object.entries(OPTS).forEach(([id, k]) => $(id).addEventListener('change', () => { S.config.options[k] = $(id).checked; changed({ list: false }); }));
-  const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  ['optClient', 'optTenant'].forEach((id) => $(id).addEventListener('input', () => {
-    const v = $(id).value.trim();
-    $(id).style.borderColor = v && !GUID.test(v) ? 'var(--danger)' : '';
-    S.config.auth[id === 'optClient' ? 'clientId' : 'tenantId'] = v; changed({ list: false });
-  }));
   $('lnkSetup').addEventListener('click', (e) => { e.preventDefault(); $('dlgHelp').showModal(); });
 
   document.querySelectorAll('.nav-list a').forEach((a) => a.addEventListener('click', (e) => {
@@ -765,40 +749,25 @@
   // ---------------------------------------------------------------------------------------------
   // Settings
   // ---------------------------------------------------------------------------------------------
-  function renderSettingsKind() {
-    const kind = (document.querySelector('input[name=tkind]:checked') || {}).value || 'github';
-    $('setGithub').hidden = kind !== 'github'; $('setFolder').hidden = kind !== 'folder';
+  function renderSettingsNotes(r) {
+    $('setFolderNote').textContent = !S.settings.folder ? 'Not set yet.' : r.folderFound ? 'Found.' : 'Not found on this PC: is the library synced?';
+    $('setPhotosNote').textContent = r.photosFound ? 'Found.' : 'No photos folder there (yet): the preview shows no photos.';
   }
-  document.querySelectorAll('input[name=tkind]').forEach((r) => r.addEventListener('change', renderSettingsKind));
+  let lastSettings = {};
   $('btnSettings').addEventListener('click', () => {
-    const t = S.settings.target;
-    document.querySelectorAll('input[name=tkind]').forEach((r) => { r.checked = r.value === t.kind; });
-    $('setOwner').value = t.owner; $('setRepo').value = t.repo; $('setBranch').value = t.branch; $('setPath').value = t.path;
-    $('setFolderPath').value = t.folder; $('setBase').value = S.settings.publicBaseUrl;
-    $('setToken').value = '';
-    const env = S.info && S.info.features && S.info.features.tokenStore === 'env';
-    $('setToken').disabled = env;
-    $('setToken').placeholder = S.tokenSet ? '•••••••• stored - type a new one to replace it' : 'github_pat_…';
-    $('tokenNote').textContent = env ? 'Read from the GITHUB_TOKEN environment variable.'
-      : 'A fine-grained token for this repository only, with Contents: Read and write, and Actions: Read and write (to start the Pages build). Kept encrypted for your Windows account.' + (S.tokenSet ? ' Type "-" to remove it.' : '');
+    $('setFolder').value = S.settings.folder || '';
+    $('setPhotos').value = S.settings.photosFolder || '';
     $('setErr').textContent = '';
-    renderSettingsKind();
+    renderSettingsNotes(lastSettings);
     $('dlgSettings').showModal();
   });
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
-    const kind = (document.querySelector('input[name=tkind]:checked') || {}).value || 'github';
-    const tok = $('setToken').value.trim();
-    const body = {
-      settings: { target: { kind, owner: $('setOwner').value, repo: $('setRepo').value, branch: $('setBranch').value, path: $('setPath').value, folder: $('setFolderPath').value }, publicBaseUrl: $('setBase').value },
-      githubToken: tok === '-' ? '' : tok ? tok : null
-    };
     try {
-      const r = await api('settings/save', body);
-      S.settings = r.settings; S.tokenSet = r.tokenSet; S.tokenFromEnv = r.tokenFromEnv;
-      $('dlgSettings').close(); toast('Settings saved.');
-      if (S.view === 'options') renderOptions();
-      save();
+      const r = await api('settings/save', { settings: { folder: $('setFolder').value, photosFolder: $('setPhotos').value } });
+      S.settings = r.settings; lastSettings = r;
+      $('dlgSettings').close(); toast(r.folderFound || !r.settings.folder ? 'Settings saved.' : 'Saved, but the folder is not there on this PC.', !r.folderFound && !!r.settings.folder);
+      schedulePreview();
     } catch (err) { $('setErr').textContent = err.message; }
   });
 
@@ -814,10 +783,12 @@
     if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', 'No signature is the default for new mail: users get none unless they pick one.']);
     else if (!plain.some((s) => s.defaultNew)) out.push(['warn', 'The default for new mail is limited to some users: everyone else gets none.']);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', 'No signature is the default for replies.']);
-    if (!GUID.test(c.auth.clientId || '') || !GUID.test(c.auth.tenantId || '')) out.push(['warn', 'The Entra ID app registration is not set (Add-in): the add-in cannot read the users\' details' + (c.options.insertWithoutProfile ? ', the fields stay empty.' : ' and inserts no signature.')]);
+    if (!S.settings.folder) out.push(['bad', 'No folder to publish to: set the synced OSign folder in Settings.']);
     if (core.groupsUsed(c).length) out.push(['warn', 'Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.']);
-    const perPerson = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/)[^"]*@@/i.test(s.html || '')).map((s) => s.name);
-    if (perPerson.length) out.push(['warn', 'Per-person images are left out for now in: ' + perPerson.join(', ') + '.']);
+    const perPerson = c.signatures.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
+    if (perPerson.length) out.push(['good', 'Photos per person (' + perPerson.join(', ') + ') come from photos\\<username>.jpg in the OSign folder; who has none gets the signature without.']);
+    const lost = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/|photos\/|https:)[^"]*"/i.test(s.html || '')).map((s) => s.name);
+    if (lost.length) out.push(['warn', 'Images that are no file of the signatures are left out in: ' + lost.join(', ') + '.']);
     const keys = fieldKeys();
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
@@ -825,18 +796,16 @@
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && !f.graph; });
     if (noGraph.length) out.push(['warn', 'Empty in Outlook (no Graph source): ' + noGraph.map((k) => '@@' + k).join(', ')]);
     const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
-    if (missing.length) out.push(['bad', 'Images missing from the draft: ' + missing.join(', ')]);
-    if (!assetBase()) out.push(['warn', 'No public address set (Settings): images in signatures will not load.']);
+    if (missing.length) out.push(['warn', 'Images not in the draft, left out until added: ' + missing.join(', ')]);
     if (!out.some((x) => x[0] !== 'good')) out.push(['good', c.signatures.length + ' signature(s), ready.']);
     return out;
   }
 
   $('btnPublish').addEventListener('click', () => {
     flushSource();
-    const t = S.settings.target;
-    $('pubWhere').textContent = t.kind === 'github'
-      ? 'To github.com/' + t.owner + '/' + t.repo + ', branch ' + t.branch + ', folder ' + t.path + '. GitHub Pages serves it a minute or two later.'
-      : 'To the folder ' + t.folder + (t.path ? ' (' + t.path + ')' : '') + '.';
+    $('pubWhere').textContent = S.settings.folder
+      ? 'To ' + S.settings.folder + '. OneDrive uploads it to SharePoint; new messages use it a minute or two later.'
+      : 'No folder set yet (Settings).';
     const checks = publishChecks();
     $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
     $('pubGo').disabled = checks.some((c) => c[0] === 'bad');
@@ -850,9 +819,8 @@
       await saving;
       const c = prepared(); c.updated = new Date().toISOString();
       const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
-      S.config.updated = c.updated; S.dirty = false; S.publishedAt = new Date().toISOString(); renderStatus();
-      $('pubOk').replaceChildren(r.changed ? 'Published.' : 'Nothing had changed.', ' ', r.commitUrl ? el('a', { href: r.commitUrl, target: '_blank', rel: 'noopener' }, 'See the commit') : '');
-      if (r.note) $('pubErr').textContent = r.note;
+      S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
+      $('pubOk').textContent = r.changed ? 'Published to ' + r.folder + '.' : 'Nothing had changed.';
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = err.message; }
     finally { $('pubGo').disabled = false; }
   });
@@ -873,7 +841,7 @@
     c = c && typeof c === 'object' ? c : d;
     c.schemaVersion = core.SCHEMA_VERSION;
     c.options = Object.assign({}, d.options, c.options || {});
-    c.auth = Object.assign({}, d.auth, c.auth || {});
+    delete c.auth; delete c.assetBaseUrl;
     if (!Array.isArray(c.fields)) c.fields = d.fields;
     c.signatures = (Array.isArray(c.signatures) ? c.signatures : []).map((s) => {
       const n = Object.assign(core.newSignature(s.id, s.name), s);
@@ -887,7 +855,7 @@
     let c = null;
     try { c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { toast('The saved draft could not be read; starting from an empty one.', true); }
     S.config = normalize(c);
-    S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = r.publishedAt || ''; S.commitUrl = r.commitUrl || '';
+    S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = +r.publishedAt || 0;
     renderStatus();
     if (S.config.signatures.length) openSig(S.sigId && S.config.signatures.some((s) => s.id === S.sigId) ? S.sigId : S.config.signatures[0].id);
     else show('empty');
@@ -903,7 +871,7 @@
     initDesign();
     try {
       const [info, settings, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
-      S.info = info; S.settings = settings.settings; S.tokenSet = settings.tokenSet; S.tokenFromEnv = settings.tokenFromEnv;
+      S.info = info; S.settings = settings.settings; lastSettings = settings;
       S.config = normalize(null);
       buildToolbar();
       applyDraft(draft);

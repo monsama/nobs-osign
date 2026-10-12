@@ -2,7 +2,7 @@
  * The task pane: the signatures open to this user, each with a preview to insert, and - when the
  * editor allows it - which one is used for new mail and which for replies.
  */
-import { core, loadConfig, loadUserValues, getPrefs, setPrefs, composeInfo, fromAddress, insertSignature, renderFor } from './common.js';
+import { core, loadConfig, loadUserValues, getPrefs, setPrefs, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
 
 /* global Office */
 const $ = (id) => document.getElementById(id);
@@ -48,7 +48,7 @@ function renderList(list) {
     const btn = document.createElement('button'); btn.textContent = 'Insert';
     btn.onclick = async () => {
       btn.disabled = true;
-      try { await insertSignature(Office.context.mailbox.item, cfg, s, user.values, info.html); message(''); }
+      try { await insertSignature(Office.context.mailbox.item, cfg, s, user.values, info.html, { interactive: true }); message(''); }
       catch (e) { message('Outlook did not take the signature: ' + (e.message || e), true); }
       finally { btn.disabled = false; }
     };
@@ -56,7 +56,9 @@ function renderList(list) {
     const frame = document.createElement('iframe');
     frame.setAttribute('sandbox', '');
     frame.title = s.name;
-    frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}</style></head><body>' + renderFor(cfg, s, user.values, true) + '</body></html>';
+    const page = (body) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}</style></head><body>' + body + '</body></html>';
+    frame.srcdoc = page('');
+    previewHtml(s, user.values).then((h) => { frame.srcdoc = page(h); });
     card.append(head, frame);
     box.append(card);
   });
@@ -64,7 +66,7 @@ function renderList(list) {
 
 async function load(refresh) {
   message('');
-  try { cfg = await loadConfig(); } catch (e) { message(e.message, true); return; }
+  try { cfg = await loadConfig({ interactive: true }); } catch (e) { message(e.message, true); return; }
   const item = Office.context.mailbox.item;
   if (item) { info = await composeInfo(item); from = await fromAddress(item); }
   user = await loadUserValues(cfg, { interactive: true, refresh });

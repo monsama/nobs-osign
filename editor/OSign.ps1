@@ -4,16 +4,14 @@
 
 .DESCRIPTION
   Starts a small web server on 127.0.0.1, opens the editor in a Chrome or Edge app window, and
-  publishes the signatures to where the add-in reads them: a GitHub repository (GitHub Pages
-  serves it), or a folder (a web server's, a share's).
+  publishes the signatures to where the add-in reads them: the OSign folder in the company's
+  SharePoint, synced to this PC by OneDrive (or any other folder). Nothing goes anywhere else.
 
   This script is one backend for the web UI in .\ui. The UI talks to it only through the HTTP API
   described in docs/API.md, so another backend - a container - can take its place without the UI
   changing.
 
-  Data: %APPDATA%\OSign (or $env:OSIGN_DATA).
-  The GitHub token is kept encrypted with Windows DPAPI for your user account. Without Windows,
-  it is read from $env:GITHUB_TOKEN and never written anywhere.
+  Data: %APPDATA%\OSign (or $env:OSIGN_DATA): the draft, its images, the settings.
 
 .PARAMETER NoBrowser
   Start the server without opening a window. The address to open is printed.
@@ -50,7 +48,6 @@ $script:DraftFile = Join-Path $script:DataDir 'draft.json'
 $script:AssetDir = Join-Path $script:DataDir 'assets'
 $script:SettingsFile = Join-Path $script:DataDir 'settings.json'
 $script:StateFile = Join-Path $script:DataDir 'state.json'
-$script:TokenFile = Join-Path $script:DataDir 'github-token.dpapi'
 foreach ($d in @($script:DataDir, $script:AssetDir)) { if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null } }
 
 $script:Utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -106,15 +103,13 @@ function ConvertTo-LdapFilterValue([string]$Value) {
 }
 
 # ---------------------------------------------------------------------------
-# Settings and the GitHub token
+# Settings
 # ---------------------------------------------------------------------------
-function Get-DefaultSettings {
-    return [ordered]@{
-        target = [ordered]@{ kind = 'github'; owner = 'monsama'; repo = 'osign'; branch = 'osign-data'; path = 'config'; folder = '' }
-        # Where the add-in is served from. The published images are under <this>/<path>/assets/.
-        publicBaseUrl = 'https://monsama.github.io/osign/'
-    }
-}
+# folder:       where Publish writes - the OSign folder of SharePoint, synced by OneDrive
+#               (e.g. C:\Users\me\Contoso\Contoso - Documents\OSign). The add-in reads it there.
+# photosFolder: where the preview finds the photos per person (<username>.jpg). Empty: the
+#               photos folder inside the publish folder.
+function Get-DefaultSettings { return [ordered]@{ folder = ''; photosFolder = '' } }
 
 function Get-Settings {
     $d = Get-DefaultSettings
@@ -122,46 +117,29 @@ function Get-Settings {
     if ($raw) {
         try {
             $s = $raw | ConvertFrom-Json
-            if ($s.target) { foreach ($k in @($d.target.Keys)) { if ($null -ne $s.target.$k) { $d.target[$k] = [string]$s.target.$k } } }
-            if ($null -ne $s.publicBaseUrl) { $d.publicBaseUrl = [string]$s.publicBaseUrl }
+            foreach ($k in @($d.Keys)) { if ($null -ne $s.$k) { $d[$k] = [string]$s.$k } }
         } catch { }
     }
     return $d
 }
 
-function Test-Settings($s) {
-    $t = $s.target
-    if ($t.kind -notin @('github', 'folder')) { return 'The target is "github" or "folder".' }
-    if ($t.kind -eq 'github') {
-        if ($t.owner -notmatch '^[A-Za-z0-9-]{1,39}$') { return 'The GitHub owner is a user or organization name.' }
-        if ($t.repo -notmatch '^[A-Za-z0-9._-]{1,100}$') { return 'The repository is a name, without the owner.' }
-        if (-not $t.branch -or $t.branch -match '[\s~^:?*\[\\]|\.\.') { return 'The branch is not a valid branch name.' }
-    } else {
-        if (-not $t.folder) { return 'Pick the folder to publish to.' }
+function Test-Settings($s, [switch]$ForPublish) {
+    foreach ($k in @('folder', 'photosFolder')) {
+        $v = [string]$s[$k]
+        if ($v -and ($v.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0 -or -not [IO.Path]::IsPathRooted($v))) { return "The $k is a full path, like C:\Users\me\Contoso\Documents\OSign." }
     }
-    if ($t.path -notmatch '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$' -or $t.path -match '(^|/)\.\.?(/|$)') { return 'The path in the repository is a folder like "config".' }
-    if ($s.publicBaseUrl -and $s.publicBaseUrl -notmatch '^https://[^\s"''<>]+$') { return 'The public address starts with https://.' }
+    if ($ForPublish) {
+        if (-not $s.folder) { return 'Pick the folder to publish to in Settings: the OSign folder of SharePoint, synced to this PC.' }
+        if (-not (Test-Path -LiteralPath $s.folder -PathType Container)) { return "The folder $($s.folder) is not there. Is the SharePoint library synced to this PC?" }
+    }
     return $null
 }
 
-function Get-GitHubToken {
-    if ($script:OnWindows -and (Test-Path -LiteralPath $script:TokenFile)) {
-        try {
-            $ss = ConvertTo-SecureString -String (Read-Text $script:TokenFile).Trim()
-            $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
-            try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }
-        } catch { }
-    }
-    if ($env:GITHUB_TOKEN) { return $env:GITHUB_TOKEN }
+function Get-PhotosDir {
+    $s = Get-Settings
+    if ($s.photosFolder) { return $s.photosFolder }
+    if ($s.folder) { return (Join-Path $s.folder 'photos') }
     return $null
-}
-
-function Set-GitHubToken([string]$Token) {
-    if (-not $script:OnWindows) { throw 'Without Windows the token is not stored: set the GITHUB_TOKEN environment variable.' }
-    if (-not $Token) { Remove-Item -LiteralPath $script:TokenFile -Force -ErrorAction SilentlyContinue; return }
-    # ConvertFrom-SecureString without a key is DPAPI, for this user on this machine.
-    $enc = ConvertTo-SecureString -String $Token -AsPlainText -Force | ConvertFrom-SecureString
-    Write-Text $script:TokenFile $enc
 }
 
 # ---------------------------------------------------------------------------
@@ -178,10 +156,12 @@ function Get-DraftAssets {
 function Get-State {
     $raw = Read-Text $script:StateFile
     if ($raw) { try { return ($raw | ConvertFrom-Json) } catch { } }
-    return [pscustomobject]@{ publishedHash = ''; publishedAt = ''; commitUrl = '' }
+    return [pscustomobject]@{ publishedHash = ''; publishedAt = 0 }
 }
-function Save-State($hash, $commitUrl) {
-    Write-Text $script:StateFile (To-Json ([ordered]@{ publishedHash = $hash; publishedAt = (Get-Date).ToUniversalTime().ToString('o'); commitUrl = $commitUrl }))
+function Save-State($hash) {
+    # A number, not a date text: ConvertFrom-Json in PowerShell 7 turns ISO dates into DateTime,
+    # which then comes back in the machine's own date format.
+    Write-Text $script:StateFile (To-Json ([ordered]@{ publishedHash = $hash; publishedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }))
 }
 
 # One hash over the configuration and every image, to tell whether the draft differs from what was
@@ -206,140 +186,33 @@ function Test-ConfigJson([string]$Json) {
 }
 
 # ---------------------------------------------------------------------------
-# Publishing targets. Each one reads and writes the same set of files:
-#   <path>/signatures.json   <path>/assets/<image>
+# Publishing: the folder gets signatures.json and assets\<image>. Its photos\ are not touched:
+# they are put there by hand, once (one <username>.jpg per person).
 # ---------------------------------------------------------------------------
-function Get-GitHubApi { if ($env:OSIGN_GITHUB_API) { return $env:OSIGN_GITHUB_API.TrimEnd('/') } return 'https://api.github.com' }
-
-# -AllowNotFound: a 404 is an answer (the branch is not there yet), not an error: $null comes back.
-function Invoke-GitHub([string]$Method, [string]$Path, $Body, [switch]$AllowNotFound) {
-    $tok = Get-GitHubToken
-    if (-not $tok) { throw 'No GitHub token: add one in Settings.' }
-    $p = @{
-        Method = $Method; Uri = (Get-GitHubApi) + $Path; UseBasicParsing = $true
-        Headers = @{ Authorization = "Bearer $tok"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28'; 'User-Agent' = "OSign/$script:AppVersion" }
-    }
-    if ($null -ne $Body) { $p.Body = $script:Utf8.GetBytes((To-Json $Body)); $p.ContentType = 'application/json; charset=utf-8' }
-    try { return (Invoke-RestMethod @p) }
-    catch {
-        $msg = $_.Exception.Message
-        try { $detail = ($_.ErrorDetails.Message | ConvertFrom-Json).message; if ($detail) { $msg = $detail } } catch { }
-        $code = $null; try { $code = [int]$_.Exception.Response.StatusCode } catch { }
-        if ($code -eq 404 -and $AllowNotFound) { return $null }
-        if ($code -eq 401) { $msg = 'GitHub did not accept the token (401). It may have expired.' }
-        elseif ($code -eq 404) { $msg = "GitHub found nothing at $Path (404): the repository, the branch, or the token's access to it." }
-        elseif ($code -eq 409 -or $code -eq 422) { $msg = "GitHub refused the change ($code): $msg" }
-        throw "GitHub: $msg"
-    }
-}
-
-function Get-GitHubSnapshot($t) {
-    $repo = "/repos/$($t.owner)/$($t.repo)"
-    $ref = Invoke-GitHub GET "$repo/git/ref/heads/$($t.branch)" $null -AllowNotFound
-    if (-not $ref) {
-        # No such branch yet: fine for the first publish, as long as the repository is there.
-        [void](Invoke-GitHub GET $repo $null)
-        return @{ repo = $repo; head = $null; tree = $null; entries = @() }
-    }
-    $commit = Invoke-GitHub GET "$repo/git/commits/$($ref.object.sha)" $null
-    $tree = Invoke-GitHub GET "$repo/git/trees/$($commit.tree.sha)?recursive=1" $null
-    if ($tree.truncated) { throw 'GitHub: the repository has too many files to list in one go.' }
-    return @{ repo = $repo; head = $ref.object.sha; tree = $commit.tree.sha; entries = @($tree.tree) }
-}
-
-# The signatures live on a branch of their own, so the add-in's code (main) holds no company data.
-# A push to that branch runs no workflow (it has none), so the Pages build is started by hand: it
-# needs the token's "Actions: Read and write". Returns a sentence when it could not.
-function Start-PagesBuild($t) {
-    $repo = "/repos/$($t.owner)/$($t.repo)"
-    try {
-        $info = Invoke-GitHub GET $repo $null
-        [void](Invoke-GitHub POST "$repo/actions/workflows/pages.yml/dispatches" @{ ref = [string]$info.default_branch })
-        return ''
-    } catch {
-        return "Published, but GitHub Pages was not told to rebuild ($($_.Exception.Message)). Give the token Actions: Read and write, or run the pages workflow under Actions."
-    }
-}
-
-function Publish-GitHub($t, [string]$ConfigJson, [string]$Message) {
-    $snap = Get-GitHubSnapshot $t
-    $prefix = $t.path.Trim('/')
-    $files = @{}
-    $files["$prefix/signatures.json"] = $script:Utf8.GetBytes($ConfigJson)
-    foreach ($a in (Get-DraftAssets)) { $files["$prefix/assets/$($a.name)"] = [IO.File]::ReadAllBytes((Join-Path $script:AssetDir $a.name)) }
-
-    $remote = @{}
-    foreach ($e in $snap.entries) { if ($e.type -eq 'blob') { $remote[[string]$e.path] = [string]$e.sha } }
-    $changes = @()
-    foreach ($path in ($files.Keys | Sort-Object)) {
-        $bytes = $files[$path]
-        # Git's own blob id, so a file that is already there unchanged is not sent again.
-        $sha1 = [Security.Cryptography.SHA1]::Create()
-        try {
-            $hdr = $script:Utf8.GetBytes("blob $($bytes.Length)`0")
-            $all = New-Object byte[] ($hdr.Length + $bytes.Length); [Array]::Copy($hdr, $all, $hdr.Length); [Array]::Copy($bytes, 0, $all, $hdr.Length, $bytes.Length)
-            $gitSha = (($sha1.ComputeHash($all) | ForEach-Object { $_.ToString('x2') }) -join '')
-        } finally { $sha1.Dispose() }
-        if ($remote[$path] -eq $gitSha) { continue }
-        $blob = Invoke-GitHub POST "$($snap.repo)/git/blobs" @{ content = [Convert]::ToBase64String($bytes); encoding = 'base64' }
-        $changes += [ordered]@{ path = $path; mode = '100644'; type = 'blob'; sha = $blob.sha }
-    }
-    # Images taken out of the draft go from the repository too. Nothing else under the path is touched.
-    foreach ($path in @($remote.Keys)) {
-        if ($path.StartsWith("$prefix/assets/") -and -not $files.ContainsKey($path)) {
-            $changes += [ordered]@{ path = $path; mode = '100644'; type = 'blob'; sha = $null }
+function Publish-Folder([string]$Root, [string]$ConfigJson) {
+    $assets = Join-Path $Root 'assets'
+    if (-not (Test-Path -LiteralPath $assets)) { New-Item -ItemType Directory -Path $assets -Force | Out-Null }
+    $keep = @{}; $changed = $false
+    foreach ($a in (Get-DraftAssets)) {
+        $keep[$a.name] = 1
+        $src = Join-Path $script:AssetDir $a.name; $dst = Join-Path $assets $a.name
+        # Only what differs is written: OneDrive then uploads nothing that did not change.
+        if (-not (Test-Path -LiteralPath $dst) -or (Get-Sha256Hex ([IO.File]::ReadAllBytes($dst))) -ne (Get-Sha256Hex ([IO.File]::ReadAllBytes($src)))) {
+            Copy-Item -LiteralPath $src -Destination $dst -Force; $changed = $true
         }
     }
-    if ($changes.Count -eq 0) { return @{ changed = $false; commitUrl = ''; note = '' } }
-    if ($snap.head) {
-        $tree = Invoke-GitHub POST "$($snap.repo)/git/trees" @{ base_tree = $snap.tree; tree = $changes }
-        $commit = Invoke-GitHub POST "$($snap.repo)/git/commits" @{ message = $Message; tree = $tree.sha; parents = @($snap.head) }
-        # Not forced: if someone published in between, this fails instead of throwing their work away.
-        try { [void](Invoke-GitHub PATCH "$($snap.repo)/git/refs/heads/$($t.branch)" @{ sha = $commit.sha; force = $false }) }
-        catch { throw "$($_.Exception.Message) Someone may have published in the meantime: load the published version, and publish again." }
-    } else {
-        # The first publish: the branch starts with this commit alone, sharing no history with the code.
-        $tree = Invoke-GitHub POST "$($snap.repo)/git/trees" @{ tree = @($changes | Where-Object { $_.sha }) }
-        $commit = Invoke-GitHub POST "$($snap.repo)/git/commits" @{ message = $Message; tree = $tree.sha; parents = @() }
-        [void](Invoke-GitHub POST "$($snap.repo)/git/refs" @{ ref = "refs/heads/$($t.branch)"; sha = $commit.sha })
+    foreach ($f in @(Get-ChildItem -LiteralPath $assets -File)) {
+        if (-not $keep.ContainsKey($f.Name) -and (Get-SafeAssetName $f.Name)) { Remove-Item -LiteralPath $f.FullName -Force; $changed = $true }
     }
-    return @{ changed = $true; commitUrl = "https://github.com/$($t.owner)/$($t.repo)/commit/$($commit.sha)"; note = (Start-PagesBuild $t) }
-}
-
-function Read-GitHubPublished($t) {
-    $snap = Get-GitHubSnapshot $t
-    if (-not $snap.head) { return @{ config = $null; assets = @{} } }
-    $prefix = $t.path.Trim('/')
-    $out = @{ config = $null; assets = @{} }
-    foreach ($e in $snap.entries) {
-        if ($e.type -ne 'blob') { continue }
-        $isConfig = $e.path -eq "$prefix/signatures.json"
-        $isAsset = $e.path.StartsWith("$prefix/assets/") -and ($e.path.Substring($prefix.Length + 8) -notmatch '/')
-        if (-not ($isConfig -or $isAsset)) { continue }
-        $blob = Invoke-GitHub GET "$($snap.repo)/git/blobs/$($e.sha)" $null
-        $bytes = [Convert]::FromBase64String(([string]$blob.content -replace '\s', ''))
-        if ($isConfig) { $out.config = $script:Utf8.GetString($bytes) }
-        else { $n = Get-SafeAssetName ($e.path.Substring($prefix.Length + 8)); if ($n) { $out.assets[$n] = $bytes } }
-    }
-    return $out
-}
-
-function Publish-Folder($t, [string]$ConfigJson) {
-    $root = Join-Path $t.folder ($t.path -replace '/', [IO.Path]::DirectorySeparatorChar)
-    $assets = Join-Path $root 'assets'
-    if (-not (Test-Path -LiteralPath $assets)) { New-Item -ItemType Directory -Path $assets -Force | Out-Null }
-    $keep = @{}
-    foreach ($a in (Get-DraftAssets)) { $keep[$a.name] = 1; Copy-Item -LiteralPath (Join-Path $script:AssetDir $a.name) -Destination (Join-Path $assets $a.name) -Force }
-    foreach ($f in @(Get-ChildItem -LiteralPath $assets -File)) { if (-not $keep.ContainsKey($f.Name) -and (Get-SafeAssetName $f.Name)) { Remove-Item -LiteralPath $f.FullName -Force } }
     # The configuration last: the add-in never reads one that points at images not there yet.
-    Write-Text (Join-Path $root 'signatures.json') $ConfigJson
-    return @{ changed = $true; commitUrl = ''; note = '' }
+    $cfgPath = Join-Path $Root 'signatures.json'
+    if ((Read-Text $cfgPath) -ne $ConfigJson) { Write-Text $cfgPath $ConfigJson; $changed = $true }
+    return @{ changed = $changed }
 }
 
-function Read-FolderPublished($t) {
-    $root = Join-Path $t.folder ($t.path -replace '/', [IO.Path]::DirectorySeparatorChar)
-    $out = @{ config = (Read-Text (Join-Path $root 'signatures.json')); assets = @{} }
-    foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $root 'assets') -File -ErrorAction SilentlyContinue)) {
+function Read-FolderPublished([string]$Root) {
+    $out = @{ config = (Read-Text (Join-Path $Root 'signatures.json')); assets = @{} }
+    foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $Root 'assets') -File -ErrorAction SilentlyContinue)) {
         $n = Get-SafeAssetName $f.Name; if ($n -eq $f.Name) { $out.assets[$n] = [IO.File]::ReadAllBytes($f.FullName) }
     }
     return $out
@@ -353,7 +226,7 @@ function Api-Info {
     if ($script:OnWindows) {
         try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue; $ad = [bool]([DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()) } catch { $ad = $false }
     }
-    return (Ok @{ backend = 'powershell'; version = $script:AppVersion; dataDir = $script:DataDir; features = @{ adLookup = $ad; tokenStore = $(if ($script:OnWindows) { 'dpapi' } else { 'env' }) } })
+    return (Ok @{ backend = 'powershell'; version = $script:AppVersion; dataDir = $script:DataDir; features = @{ adLookup = $ad } })
 }
 
 function Api-DraftGet {
@@ -362,7 +235,7 @@ function Api-DraftGet {
     return (Ok @{
         configJson = $cfg; assets = (Get-DraftAssets)
         dirty = ([bool]$cfg -and ((Get-DraftHash) -ne [string]$st.publishedHash))
-        publishedAt = [string]$st.publishedAt; commitUrl = [string]$st.commitUrl
+        publishedAt = $(if ($st.publishedAt -is [string]) { 0 } else { [int64]$st.publishedAt })
     })
 }
 
@@ -401,20 +274,15 @@ function Api-AssetDelete($data) {
 }
 
 function Api-SettingsGet {
-    return (Ok @{ settings = (Get-Settings); tokenSet = [bool](Get-GitHubToken); tokenFromEnv = ((-not (Test-Path -LiteralPath $script:TokenFile)) -and [bool]$env:GITHUB_TOKEN) })
+    $s = Get-Settings
+    $pd = Get-PhotosDir
+    return (Ok @{ settings = $s; folderFound = [bool]($s.folder -and (Test-Path -LiteralPath $s.folder -PathType Container)); photosFound = [bool]($pd -and (Test-Path -LiteralPath $pd -PathType Container)) })
 }
 
 function Api-SettingsSave($data) {
     $s = Get-DefaultSettings
-    $in = $data.settings
-    if ($in.target) { foreach ($k in @($s.target.Keys)) { if ($null -ne $in.target.$k) { $s.target[$k] = ([string]$in.target.$k).Trim() } } }
-    if ($null -ne $in.publicBaseUrl) { $s.publicBaseUrl = ([string]$in.publicBaseUrl).Trim() }
-    if ($s.publicBaseUrl -and -not $s.publicBaseUrl.EndsWith('/')) { $s.publicBaseUrl += '/' }
+    foreach ($k in @($s.Keys)) { if ($null -ne $data.settings.$k) { $s[$k] = ([string]$data.settings.$k).Trim().TrimEnd('\', '/') } }
     $err = Test-Settings $s; if ($err) { return (Fail $err) }
-    # null: keep the token as it is; "": take it away.
-    if ($null -ne $data.githubToken) {
-        try { Set-GitHubToken ([string]$data.githubToken).Trim() } catch { return (Fail $_.Exception.Message) }
-    }
     Write-Text $script:SettingsFile (To-Json $s)
     return (Api-SettingsGet)
 }
@@ -422,26 +290,17 @@ function Api-SettingsSave($data) {
 function Api-Publish($data) {
     $err = Test-ConfigJson ([string]$data.configJson); if ($err) { return (Fail $err) }
     $s = Get-Settings
-    $err = Test-Settings $s; if ($err) { return (Fail $err) }
+    $err = Test-Settings $s -ForPublish; if ($err) { return (Fail $err) }
     Write-Text $script:DraftFile ([string]$data.configJson)
-    $msg = ([string]$data.message).Trim(); if (-not $msg) { $msg = 'Update signatures' }
-    if ($msg.Length -gt 500) { $msg = $msg.Substring(0, 500) }
-    try {
-        if ($s.target.kind -eq 'github') { $r = Publish-GitHub $s.target ([string]$data.configJson) $msg }
-        else { $r = Publish-Folder $s.target ([string]$data.configJson) }
-    } catch { return (Fail $_.Exception.Message) }
-    $hash = Get-DraftHash
-    $url = $r.commitUrl; if (-not $url) { $url = [string](Get-State).commitUrl }
-    Save-State $hash $url
-    return (Ok @{ changed = $r.changed; commitUrl = $r.commitUrl; note = [string]$r.note })
+    try { $r = Publish-Folder $s.folder ([string]$data.configJson) } catch { return (Fail "Writing to $($s.folder): $($_.Exception.Message)") }
+    Save-State (Get-DraftHash)
+    return (Ok @{ changed = $r.changed; folder = $s.folder })
 }
 
 function Api-LoadPublished {
     $s = Get-Settings
-    $err = Test-Settings $s; if ($err) { return (Fail $err) }
-    try {
-        if ($s.target.kind -eq 'github') { $p = Read-GitHubPublished $s.target } else { $p = Read-FolderPublished $s.target }
-    } catch { return (Fail $_.Exception.Message) }
+    $err = Test-Settings $s -ForPublish; if ($err) { return (Fail $err) }
+    try { $p = Read-FolderPublished $s.folder } catch { return (Fail $_.Exception.Message) }
     if (-not $p.config) { return (Fail 'Nothing has been published there yet.') }
     $err = Test-ConfigJson $p.config; if ($err) { return (Fail "The published configuration: $err") }
     # The draft being replaced is kept, once, in case it held work that was never published.
@@ -449,7 +308,7 @@ function Api-LoadPublished {
     Write-Text $script:DraftFile $p.config
     foreach ($f in @(Get-ChildItem -LiteralPath $script:AssetDir -File)) { if (-not $p.assets.ContainsKey($f.Name)) { Remove-Item -LiteralPath $f.FullName -Force } }
     foreach ($n in $p.assets.Keys) { [IO.File]::WriteAllBytes((Join-Path $script:AssetDir $n), $p.assets[$n]) }
-    Save-State (Get-DraftHash) ''
+    Save-State (Get-DraftHash)
     return (Api-DraftGet)
 }
 
@@ -623,6 +482,12 @@ function Invoke-Request($client) {
     # The draft's images, for the editor and its preview. No token: an <img> cannot send one, and
     # these are the logos that will be published for anyone to load anyway.
     if ($path -like '/assets/*') { Send-File $client $script:AssetDir $path.Substring(8) $script:AssetTypes; return }
+    # The photos per person, for the preview: from the photos folder (the synced one, or a share).
+    if ($path -like '/photos/*') {
+        $pd = Get-PhotosDir
+        if ($pd) { Send-File $client $pd $path.Substring(8) $script:AssetTypes } else { Send-Status $client '404 Not Found' }
+        return
+    }
     if ($path -like '/ui/*') { Send-File $client $script:UiDir $path.Substring(4) $script:StaticTypes; return }
     Send-Status $client '404 Not Found'
 }

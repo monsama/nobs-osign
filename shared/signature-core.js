@@ -49,8 +49,6 @@
     return {
       schemaVersion: SCHEMA_VERSION,
       updated: null,
-      assetBaseUrl: '',
-      auth: { clientId: '', tenantId: '' },
       options: {
         // Outlook's own signature (classic: the one picked in File > Options > Mail > Signatures;
         // new Outlook: the roaming one) is switched off for the message, so a mail never has two.
@@ -213,22 +211,42 @@
       if (!Object.prototype.hasOwnProperty.call(values, key)) return opts.keepUnknown === false ? '' : all;
       return isEmpty(values[key]) ? '' : escapeHtml(values[key]);
     });
+    // Images live in two folders next to signatures.json: assets/ (logos, icons) and photos/ (one
+    // per person, by name: photos/@@sAMAccountName.jpg). opts.assetBase is put in front of both,
+    // where the editor serves them; the add-in leaves them and embeds them in the mail instead.
     if (opts.assetBase !== undefined) {
       var base = String(opts.assetBase);
       if (base && !/\/$/.test(base)) base += '/';
-      html = html.replace(/(\s(?:src|background)\s*=\s*["'])assets\//gi, function (all, pre) { return pre + base + 'assets/'; });
+      html = html.replace(/(\s(?:src|background)\s*=\s*["'])(assets|photos)\//gi, function (all, pre, dir) { return pre + base + dir.toLowerCase() + '/'; });
     }
     // An image no mail program can load - a path on some computer ("images/logo.gif", as imported),
-    // or one whose address still holds a placeholder - would show as a broken image: it goes.
+    // an address still holding a placeholder, a photo for a user with no name - would show as a
+    // broken image: it goes.
     if (opts.dropBrokenImages !== false) {
       html = html.replace(/<img\b[^>]*>/gi, function (tag) {
-        var m = /\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
-        var src = m ? (m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : '';
-        var ok = /^(https?:|cid:|data:image\/|\/)/i.test(src) || /^assets\//i.test(src);
+        var src = imgSrc(tag);
+        var ok = /^(https?:|cid:|data:image\/|\/)/i.test(src) || /^(assets|photos)\/[^/]/i.test(src);
+        if (/(^|\/)photos\/\./i.test(src)) ok = false;
         return ok && src.indexOf('@@') < 0 ? tag : '';
       });
     }
     return html;
+  }
+
+  function imgSrc(tag) {
+    var m = /\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+    return m ? (m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : '';
+  }
+
+  // The images a rendered signature loads from its own folders, as { tag, src, dir, name }:
+  // what the add-in has to fetch and embed.
+  function localImages(html) {
+    var out = [], re = /<img\b[^>]*>/gi, m;
+    while ((m = re.exec(String(html || '')))) {
+      var src = imgSrc(m[0]), mm = /^(assets|photos)\/([^/?#]+)$/i.exec(src);
+      if (mm) out.push({ tag: m[0], src: src, dir: mm[1].toLowerCase(), name: decodeURIComponent(mm[2]) });
+    }
+    return out;
   }
 
   // For a mail written in plain text. Crude on purpose: no DOM here either.
@@ -402,6 +420,7 @@
     compile: compile,
     render: render,
     htmlToText: htmlToText,
+    localImages: localImages,
     domainOf: domainOf,
     isAvailable: isAvailable,
     available: available,
