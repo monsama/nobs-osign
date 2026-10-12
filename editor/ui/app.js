@@ -51,6 +51,8 @@
     view: 'sig', sigId: null, mode: 'design', adValues: null, adName: '', tokenSet: false, tokenFromEnv: false
   };
   const sig = () => (S.config.signatures || []).find((s) => s.id === S.sigId) || null;
+  // Signatures are compiled in a document of their own: one that is not shown loads no images.
+  const scratchDoc = document.implementation.createHTMLDocument('');
   const fieldKeys = () => S.config.fields.map((f) => f.key);
 
   function newId(name) {
@@ -70,7 +72,7 @@
   function prepared() {
     const c = JSON.parse(JSON.stringify(S.config));
     c.assetBaseUrl = assetBase();
-    c.signatures.forEach((s) => { s.html = sanitize(s.html); s.compiled = core.compile(s.html, document); });
+    c.signatures.forEach((s) => { s.html = sanitize(s.html); s.compiled = core.compile(s.html, scratchDoc); });
     return c;
   }
 
@@ -147,6 +149,7 @@
 
   function audienceText(s) {
     const a = s.audience || {}, parts = [];
+    if ((a.groups || []).length) parts.push(a.groups.join(', '));
     if ((a.departments || []).length) parts.push(a.departments.join(', '));
     if ((a.domains || []).length) parts.push('@' + a.domains.join(', @'));
     return parts.length ? parts.join(' · ') : 'everyone';
@@ -186,6 +189,7 @@
     $('sigNew').checked = !!s.defaultNew;
     $('sigReply').checked = !!s.defaultReply;
     $('sigRemoveEmpty').checked = s.removeEmptyLines !== false;
+    $('sigGroups').value = (s.audience.groups || []).join(', ');
     $('sigDeps').value = (s.audience.departments || []).join(', ');
     $('sigDoms').value = (s.audience.domains || []).join(', ');
     $('audienceSummary').textContent = audienceText(s);
@@ -485,7 +489,7 @@
 
   function renderPreview() {
     const s = sig(); if (!s || S.view !== 'sig') return;
-    const html = core.render(core.compile(sanitize(s.html), document), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const html = core.render(core.compile(sanitize(s.html), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
     const asText = $('pvText').checked;
     const greet = asText ? '' : '<p>Hello,</p><p>this is how the signature looks under a message.</p><p>&nbsp;</p>';
     const body = asText ? '<pre style="font:11pt/1.4 Consolas,monospace;white-space:pre-wrap">' + core.escapeHtml(core.htmlToText(html)) + '</pre>' : greet + html;
@@ -497,7 +501,15 @@
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && !f.graph; });
     if (unknown.length) notes.push(el('div', { class: 'warn' }, 'Not a field: ' + unknown.map((k) => '@@' + k).join(', ') + ' - left as typed.'));
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, 'No Graph source, so empty in Outlook: ' + noGraph.map((k) => '@@' + k).join(', ') + '. See Fields.'));
-    if ($('pvSource').value === 'ad' && S.adName) notes.push(el('div', null, 'Values of ' + S.adName + ' from Active Directory.'));
+    if ($('pvSource').value === 'ad' && S.adName) {
+      // What this user would get, as the add-in decides it (the From address being their own).
+      const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
+      const nm = (x) => (x ? x.name : 'none');
+      const open = core.isAvailable(s, v, from, g);
+      notes.push(el('div', { class: 'pv-groups' }, 'Values of ' + S.adName + ' from Active Directory. ' +
+        (open ? 'This signature is open to them.' : 'This signature is NOT open to them.') +
+        ' New mail: ' + nm(core.pick(S.config, v, from, 'new', null, g)) + ', replies: ' + nm(core.pick(S.config, v, from, 'reply', null, g)) + '.'));
+    }
     $('pvNote').replaceChildren(...notes);
   }
 
@@ -512,7 +524,7 @@
   async function adLookup() {
     try {
       const r = await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
-      S.adValues = r.values; S.adName = r.displayName; renderPreview();
+      S.adValues = r.values; S.adName = r.displayName; S.adGroups = r.groups || []; renderPreview();
     } catch (e) { toast(e.message, true); }
   }
   $('pvLookup').addEventListener('click', adLookup);
@@ -534,6 +546,22 @@
   $('sigNew').addEventListener('change', () => setDefault('defaultNew', $('sigNew').checked));
   $('sigReply').addEventListener('change', () => setDefault('defaultReply', $('sigReply').checked));
   $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
+  $('sigGroups').addEventListener('input', () => { const s = sig(); if (s) { s.audience.groups = splitList($('sigGroups').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
+  // Group names from AD to pick from, for what is typed after the last comma.
+  let grpTimer = null;
+  $('sigGroups').addEventListener('input', () => {
+    clearTimeout(grpTimer);
+    if (!(S.info && S.info.features && S.info.features.adLookup)) return;
+    const q = $('sigGroups').value.split(/[,;]/).pop().trim();
+    if (q.length < 2) return;
+    grpTimer = setTimeout(async () => {
+      try {
+        const r = await api('ad/groups', { query: q });
+        const before = $('sigGroups').value.replace(/[^,;]*$/, '');
+        $('adGroups').replaceChildren(...r.groups.map((g) => el('option', { value: (before ? before.trim() + ' ' : '') + g })));
+      } catch (e) { /* the list stays as it was */ }
+    }, 250);
+  });
   $('sigDeps').addEventListener('input', () => { const s = sig(); if (s) { s.audience.departments = splitList($('sigDeps').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
   $('sigDoms').addEventListener('input', () => { const s = sig(); if (s) { s.audience.domains = splitList($('sigDoms').value).map((d) => d.replace(/^@/, '').toLowerCase()); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
   $('btnNew').addEventListener('click', () => addSig());
@@ -548,27 +576,114 @@
   ['imgW', 'imgAlt', 'imgHref'].forEach((id) => $(id).addEventListener('change', applyImg));
   $('imgDone').addEventListener('click', () => { applyImg(); hideImgBar(); });
 
-  // Import an existing .htm signature (classic Outlook keeps them in %APPDATA%\Microsoft\Signatures).
-  $('btnImport').addEventListener('click', () => $('importFile').click());
-  $('importFile').addEventListener('change', async () => {
-    const f = $('importFile').files[0]; $('importFile').value = '';
-    if (!f) return;
-    const buf = await f.arrayBuffer();
-    // Outlook writes these in the Windows code page and says so in a <meta>.
-    const head = new TextDecoder('latin1').decode(buf.slice(0, 4096));
-    const cs = (/charset=["']?([\w-]+)/i.exec(head) || [])[1] || 'utf-8';
-    let text; try { text = new TextDecoder(cs).decode(buf); } catch (e) { text = new TextDecoder('utf-8').decode(buf); }
-    const d = new DOMParser().parseFromString(text, 'text/html');
-    let html = sanitize(d.body ? d.body.innerHTML : text);
-    const t = document.createElement('template'); t.innerHTML = html;
-    let dropped = 0;
-    t.content.querySelectorAll('img').forEach((i) => { const src = i.getAttribute('src') || ''; if (!/^(https:|assets\/)/i.test(src)) { i.remove(); dropped++; } });
-    html = t.innerHTML;
-    const s = sig(); if (!s) return;
-    if (s.html.trim() && !confirm('Replace the content of "' + s.name + '" with ' + f.name + '?')) return;
-    s.html = html; changed(); openSig(s.id);
-    toast(dropped ? dropped + ' image(s) were files on that computer: add them again with the image button.' : 'Imported ' + f.name + '.');
+  // ---------------------------------------------------------------------------------------------
+  // Import: templates (.htm) with their images, from a folder or picked files. CI-Sign keeps them
+  // as UTF-16 files that load "images/<name>"; classic Outlook as "<name>_files/<name>".
+  // ---------------------------------------------------------------------------------------------
+  let impItems = [], impImages = new Map();
+  const IMG_EXT = /\.(png|jpe?g|gif)$/i;
+
+  function relativeSrcs(doc) {
+    return [...doc.querySelectorAll('img[src]')].map((i) => i.getAttribute('src')).filter((src) => !/^(https?:|cid:|data:)/i.test(src));
+  }
+
+  async function readImportFiles(files) {
+    impItems = []; impImages = new Map();
+    const list = [...files];
+    list.filter((f) => IMG_EXT.test(f.name)).forEach((f) => { if (!impImages.has(f.name.toLowerCase())) impImages.set(f.name.toLowerCase(), f); });
+    for (const f of list.filter((x) => /\.html?$/i.test(x.name))) {
+      // A folder holds more than templates (CI-Sign's own editor, for one): those stay unticked.
+      const path = f.webkitRelativePath || f.name;
+      const text = core.decodeHtmlFile(new Uint8Array(await f.arrayBuffer()));
+      const d = new DOMParser().parseFromString(text, 'text/html');
+      const body = d.body ? d.body.innerHTML : text;
+      const name = f.name.replace(/\.html?$/i, '');
+      const fields = core.placeholdersIn(body);
+      const blocks = /\{##[^}]+\}/.test(text);
+      const srcs = relativeSrcs(d);
+      const perPerson = srcs.filter((x) => x.indexOf('@@') >= 0);
+      const imgs = srcs.filter((x) => x.indexOf('@@') < 0).map((x) => decodeURIComponent(x.split(/[\\/]/).pop()));
+      const missing = imgs.filter((x) => !impImages.has(x.toLowerCase()));
+      const looksLikeSig = fields.length > 0 && !blocks && !/\\(editor|ci-sign-update|AutoBackup-[^\\/]*|Templates)[\\/]/i.test(path.replace(/\//g, '\\'));
+      impItems.push({ file: f, path, name, body, fields, blocks, perPerson, imgs, missing, checked: looksLikeSig });
+    }
+    impItems.sort((a, b) => (b.checked - a.checked) || a.name.localeCompare(b.name));
+    // The same template twice (CI-Sign keeps a copy next to the program): the first one is ticked.
+    const seen = new Set();
+    impItems.forEach((it) => { const k = it.name.toLowerCase(); if (it.checked && seen.has(k)) it.checked = false; if (it.checked) seen.add(k); });
+    renderImportList();
+  }
+
+  function renderImportList() {
+    const ul = $('impList'); ul.textContent = '';
+    impItems.forEach((it) => {
+      const box = el('input', { type: 'checkbox' }); box.checked = it.checked;
+      box.addEventListener('change', () => { it.checked = box.checked; $('impGo').disabled = !impItems.some((x) => x.checked); });
+      const exists = S.config.signatures.some((x) => x.name.toLowerCase() === it.name.toLowerCase());
+      const meta = [];
+      if (it.blocks) meta.push(el('span', { class: 'warn' }, 'CI-Sign text blocks ({##…}), not a signature. '));
+      meta.push(it.fields.length ? it.fields.length + ' fields' : 'no fields');
+      meta.push(' · ' + it.imgs.length + ' image(s)');
+      if (it.missing.length) meta.push(el('span', { class: 'warn' }, ' · not picked: ' + [...new Set(it.missing)].join(', ')));
+      if (it.perPerson.length) meta.push(el('span', { class: 'warn' }, ' · per-person image ' + it.perPerson[0] + ': left out for now'));
+      if (exists) meta.push(' · replaces the signature of the same name');
+      ul.append(el('li', { class: it.checked ? '' : 'skip' }, box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta))));
+    });
+    const n = impItems.length;
+    $('impNote').textContent = n ? n + ' template file(s) found, ' + impImages.size + ' image(s) picked.' : 'No .htm files among what was picked.';
+    $('impGo').disabled = !impItems.some((x) => x.checked);
+  }
+
+  async function uploadImage(file) {
+    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(file); });
+    const r = await api('assets/upload', { name: file.name, data });
+    S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]).sort((a, b) => a.name.localeCompare(b.name));
+    return r.name;
+  }
+
+  async function runImport() {
+    $('impErr').textContent = ''; $('impGo').disabled = true;
+    const uploaded = new Map(); // picked file name (lower case) -> asset name
+    let first = null, count = 0;
+    try {
+      for (const it of impItems.filter((x) => x.checked)) {
+        const t = document.createElement('template');
+        t.innerHTML = sanitize(it.body);
+        for (const img of t.content.querySelectorAll('img[src]')) {
+          const src = img.getAttribute('src');
+          if (/^(https?:|cid:|data:)/i.test(src) || src.indexOf('@@') >= 0) continue;
+          const base = decodeURIComponent(src.split(/[\\/]/).pop()), key = base.toLowerCase();
+          if (impImages.has(key) && !uploaded.has(key)) uploaded.set(key, await uploadImage(impImages.get(key)));
+          // Not picked: it points where the image will be once uploaded under that name.
+          img.setAttribute('src', 'assets/' + (uploaded.get(key) || core.assetName(base)));
+        }
+        let s = S.config.signatures.find((x) => x.name.toLowerCase() === it.name.toLowerCase());
+        if (!s) { s = core.newSignature(newId(it.name), it.name); S.config.signatures.push(s); }
+        s.html = t.innerHTML.trim();
+        first = first || s; count++;
+      }
+      // With no default yet, the one called Standard (or the first) becomes it.
+      if (first && !S.config.signatures.some((x) => x.defaultNew)) {
+        const std = S.config.signatures.find((x) => /^standard$/i.test(x.name)) || first;
+        std.defaultNew = true; std.defaultReply = true;
+      }
+      changed();
+      $('dlgImport').close();
+      if (first) openSig(first.id);
+      toast(count + ' template(s) imported' + (uploaded.size ? ', with ' + uploaded.size + ' image(s)' : '') + '.');
+    } catch (e) { $('impErr').textContent = e.message; $('impGo').disabled = false; }
+  }
+
+  $('btnImportOpen').addEventListener('click', () => {
+    impItems = []; impImages = new Map(); renderImportList(); $('impNote').textContent = ''; $('impErr').textContent = '';
+    $('dlgImport').showModal();
   });
+  ['impFiles', 'impFolder'].forEach((id) => $(id).addEventListener('change', async () => {
+    const files = $(id).files; if (!files || !files.length) return;
+    try { await readImportFiles(files); } catch (e) { $('impErr').textContent = e.message; }
+    $(id).value = '';
+  }));
+  $('impGo').addEventListener('click', (e) => { e.preventDefault(); runImport(); });
 
   // ---------------------------------------------------------------------------------------------
   // Fields
@@ -665,7 +780,7 @@
     $('setToken').disabled = env;
     $('setToken').placeholder = S.tokenSet ? '•••••••• stored - type a new one to replace it' : 'github_pat_…';
     $('tokenNote').textContent = env ? 'Read from the GITHUB_TOKEN environment variable.'
-      : 'A fine-grained token for this repository only, with Contents: Read and write. Kept encrypted for your Windows account.' + (S.tokenSet ? ' Type "-" to remove it.' : '');
+      : 'A fine-grained token for this repository only, with Contents: Read and write, and Actions: Read and write (to start the Pages build). Kept encrypted for your Windows account.' + (S.tokenSet ? ' Type "-" to remove it.' : '');
     $('setErr').textContent = '';
     renderSettingsKind();
     $('dlgSettings').showModal();
@@ -695,11 +810,14 @@
     const errs = core.validate(prepared());
     errs.forEach((e) => out.push(['bad', e]));
     if (!c.signatures.length) out.push(['bad', 'There is no signature.']);
-    const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length);
+    const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length);
     if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', 'No signature is the default for new mail: users get none unless they pick one.']);
     else if (!plain.some((s) => s.defaultNew)) out.push(['warn', 'The default for new mail is limited to some users: everyone else gets none.']);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', 'No signature is the default for replies.']);
     if (!GUID.test(c.auth.clientId || '') || !GUID.test(c.auth.tenantId || '')) out.push(['warn', 'The Entra ID app registration is not set (Add-in): the add-in cannot read the users\' details' + (c.options.insertWithoutProfile ? ', the fields stay empty.' : ' and inserts no signature.')]);
+    if (core.groupsUsed(c).length) out.push(['warn', 'Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.']);
+    const perPerson = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/)[^"]*@@/i.test(s.html || '')).map((s) => s.name);
+    if (perPerson.length) out.push(['warn', 'Per-person images are left out for now in: ' + perPerson.join(', ') + '.']);
     const keys = fieldKeys();
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
@@ -734,6 +852,7 @@
       const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
       S.config.updated = c.updated; S.dirty = false; S.publishedAt = new Date().toISOString(); renderStatus();
       $('pubOk').replaceChildren(r.changed ? 'Published.' : 'Nothing had changed.', ' ', r.commitUrl ? el('a', { href: r.commitUrl, target: '_blank', rel: 'noopener' }, 'See the commit') : '');
+      if (r.note) $('pubErr').textContent = r.note;
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = err.message; }
     finally { $('pubGo').disabled = false; }
   });
@@ -758,7 +877,7 @@
     if (!Array.isArray(c.fields)) c.fields = d.fields;
     c.signatures = (Array.isArray(c.signatures) ? c.signatures : []).map((s) => {
       const n = Object.assign(core.newSignature(s.id, s.name), s);
-      n.audience = Object.assign({ departments: [], domains: [] }, s.audience || {});
+      n.audience = Object.assign({ departments: [], domains: [], groups: [] }, s.audience || {});
       return n;
     });
     return c;

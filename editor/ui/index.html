@@ -23,7 +23,10 @@
   <nav class="side">
     <div class="side-head">
       <span>Signatures</span>
-      <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
+      <span class="side-btns">
+        <button id="btnImportOpen" class="icon-btn" title="Import templates (.htm, e.g. from CI-Sign or classic Outlook)" aria-label="Import templates">⤓</button>
+        <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
+      </span>
     </div>
     <ul id="sigList" class="sig-list"></ul>
     <div class="side-head"><span>Setup</span></div>
@@ -39,7 +42,6 @@
       <div class="sig-head">
         <input id="sigName" class="title-input" placeholder="Signature name" maxlength="80" aria-label="Signature name">
         <div class="spacer"></div>
-        <button id="btnImport" class="ghost" title="Take the content of an existing .htm signature">Import .htm…</button>
         <button id="btnDup" class="ghost">Duplicate</button>
         <button id="btnDel" class="ghost danger">Delete</button>
       </div>
@@ -49,10 +51,13 @@
         <label class="check" title="A line whose fields are all empty for a user is left out: no &quot;Mobile:&quot; without a number"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines</label>
         <details class="audience">
           <summary>Who gets it: <span id="audienceSummary">everyone</span></summary>
-          <div class="grid2">
-            <label>Departments <small>(comma separated, empty = all)</small><input id="sigDeps" placeholder="Informatik, Verkauf"></label>
-            <label>Sender domains <small>(the From address, empty = all)</small><input id="sigDoms" placeholder="monsama.ch"></label>
+          <div class="grid3">
+            <label>AD groups <small>(any of them; nested groups count)</small><input id="sigGroups" list="adGroups" placeholder="SG-Signatur-Verkauf"></label>
+            <label>Departments <small>(comma separated)</small><input id="sigDeps" placeholder="Informatik, Verkauf"></label>
+            <label>Sender domains <small>(the From address)</small><input id="sigDoms" placeholder="example.com"></label>
           </div>
+          <p class="hint">Empty means everyone. When several are filled in, a user has to match each of them.</p>
+          <datalist id="adGroups"></datalist>
         </details>
       </div>
 
@@ -159,7 +164,7 @@
     <div id="setGithub" class="grid2">
       <label>Owner<input id="setOwner"></label>
       <label>Repository<input id="setRepo"></label>
-      <label>Branch<input id="setBranch"></label>
+      <label>Branch <small>(the signatures' own, not main)</small><input id="setBranch"></label>
       <label>Folder in the repository<input id="setPath"></label>
       <label class="span2">Access token
         <input id="setToken" type="password" autocomplete="off" placeholder="">
@@ -211,14 +216,34 @@
       <li>Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>; accounts in this organizational directory only.</li>
       <li><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
         <code id="helpRedirect"></code></li>
-      <li><b>API permissions</b>: Microsoft Graph, delegated, <code>User.Read</code> (there by default) → <b>Grant admin consent</b>, so no user is asked.</li>
+      <li><b>API permissions</b>: Microsoft Graph, delegated, <code>User.Read</code> (there by default). If signatures go to AD groups,
+        also <code>GroupMember.Read.All</code>. Then <b>Grant admin consent</b>, so no user is asked.</li>
       <li>Copy the <b>Application (client) ID</b> and the <b>Directory (tenant) ID</b> from Overview into the two fields here, and publish.</li>
     </ol>
     <div class="dlg-foot"><button value="cancel" class="primary">OK</button></div>
   </form>
 </dialog>
 
-<input type="file" id="importFile" accept=".htm,.html" hidden>
+<dialog id="dlgImport">
+  <form method="dialog" class="dlg wide">
+    <h2>Import templates</h2>
+    <p class="lead">Pick a folder, or the template files (<code>.htm</code>) together with their images. The images
+      a template uses (<code>images/logo.png</code>) are found among what you pick by their file name and become part
+      of the signatures. Templates from CI-Sign and from classic Outlook (<code>%APPDATA%\Microsoft\Signatures</code>) work.</p>
+    <div class="pick-row">
+      <label class="filepick button-like"><input type="file" id="impFiles" accept=".htm,.html,.png,.jpg,.jpeg,.gif" multiple> Choose files…</label>
+      <label class="filepick button-like"><input type="file" id="impFolder" webkitdirectory multiple> Choose a folder…</label>
+    </div>
+    <ul id="impList" class="imp-list"></ul>
+    <p id="impNote" class="lead"></p>
+    <p id="impErr" class="err"></p>
+    <div class="dlg-foot">
+      <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+      <button id="impGo" value="default" class="primary" disabled>Import</button>
+    </div>
+  </form>
+</dialog>
+
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

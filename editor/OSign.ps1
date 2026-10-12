@@ -110,7 +110,7 @@ function ConvertTo-LdapFilterValue([string]$Value) {
 # ---------------------------------------------------------------------------
 function Get-DefaultSettings {
     return [ordered]@{
-        target = [ordered]@{ kind = 'github'; owner = 'monsama'; repo = 'osign'; branch = 'main'; path = 'config'; folder = '' }
+        target = [ordered]@{ kind = 'github'; owner = 'monsama'; repo = 'osign'; branch = 'osign-data'; path = 'config'; folder = '' }
         # Where the add-in is served from. The published images are under <this>/<path>/assets/.
         publicBaseUrl = 'https://monsama.github.io/osign/'
     }
@@ -211,7 +211,8 @@ function Test-ConfigJson([string]$Json) {
 # ---------------------------------------------------------------------------
 function Get-GitHubApi { if ($env:OSIGN_GITHUB_API) { return $env:OSIGN_GITHUB_API.TrimEnd('/') } return 'https://api.github.com' }
 
-function Invoke-GitHub([string]$Method, [string]$Path, $Body) {
+# -AllowNotFound: a 404 is an answer (the branch is not there yet), not an error: $null comes back.
+function Invoke-GitHub([string]$Method, [string]$Path, $Body, [switch]$AllowNotFound) {
     $tok = Get-GitHubToken
     if (-not $tok) { throw 'No GitHub token: add one in Settings.' }
     $p = @{
@@ -224,6 +225,7 @@ function Invoke-GitHub([string]$Method, [string]$Path, $Body) {
         $msg = $_.Exception.Message
         try { $detail = ($_.ErrorDetails.Message | ConvertFrom-Json).message; if ($detail) { $msg = $detail } } catch { }
         $code = $null; try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+        if ($code -eq 404 -and $AllowNotFound) { return $null }
         if ($code -eq 401) { $msg = 'GitHub did not accept the token (401). It may have expired.' }
         elseif ($code -eq 404) { $msg = "GitHub found nothing at $Path (404): the repository, the branch, or the token's access to it." }
         elseif ($code -eq 409 -or $code -eq 422) { $msg = "GitHub refused the change ($code): $msg" }
@@ -233,11 +235,30 @@ function Invoke-GitHub([string]$Method, [string]$Path, $Body) {
 
 function Get-GitHubSnapshot($t) {
     $repo = "/repos/$($t.owner)/$($t.repo)"
-    $ref = Invoke-GitHub GET "$repo/git/ref/heads/$($t.branch)" $null
+    $ref = Invoke-GitHub GET "$repo/git/ref/heads/$($t.branch)" $null -AllowNotFound
+    if (-not $ref) {
+        # No such branch yet: fine for the first publish, as long as the repository is there.
+        [void](Invoke-GitHub GET $repo $null)
+        return @{ repo = $repo; head = $null; tree = $null; entries = @() }
+    }
     $commit = Invoke-GitHub GET "$repo/git/commits/$($ref.object.sha)" $null
     $tree = Invoke-GitHub GET "$repo/git/trees/$($commit.tree.sha)?recursive=1" $null
     if ($tree.truncated) { throw 'GitHub: the repository has too many files to list in one go.' }
     return @{ repo = $repo; head = $ref.object.sha; tree = $commit.tree.sha; entries = @($tree.tree) }
+}
+
+# The signatures live on a branch of their own, so the add-in's code (main) holds no company data.
+# A push to that branch runs no workflow (it has none), so the Pages build is started by hand: it
+# needs the token's "Actions: Read and write". Returns a sentence when it could not.
+function Start-PagesBuild($t) {
+    $repo = "/repos/$($t.owner)/$($t.repo)"
+    try {
+        $info = Invoke-GitHub GET $repo $null
+        [void](Invoke-GitHub POST "$repo/actions/workflows/pages.yml/dispatches" @{ ref = [string]$info.default_branch })
+        return ''
+    } catch {
+        return "Published, but GitHub Pages was not told to rebuild ($($_.Exception.Message)). Give the token Actions: Read and write, or run the pages workflow under Actions."
+    }
 }
 
 function Publish-GitHub($t, [string]$ConfigJson, [string]$Message) {
@@ -269,17 +290,25 @@ function Publish-GitHub($t, [string]$ConfigJson, [string]$Message) {
             $changes += [ordered]@{ path = $path; mode = '100644'; type = 'blob'; sha = $null }
         }
     }
-    if ($changes.Count -eq 0) { return @{ changed = $false; commitUrl = '' } }
-    $tree = Invoke-GitHub POST "$($snap.repo)/git/trees" @{ base_tree = $snap.tree; tree = $changes }
-    $commit = Invoke-GitHub POST "$($snap.repo)/git/commits" @{ message = $Message; tree = $tree.sha; parents = @($snap.head) }
-    # Not forced: if someone published in between, this fails instead of throwing their work away.
-    try { [void](Invoke-GitHub PATCH "$($snap.repo)/git/refs/heads/$($t.branch)" @{ sha = $commit.sha; force = $false }) }
-    catch { throw "$($_.Exception.Message) Someone may have published in the meantime: load the published version, and publish again." }
-    return @{ changed = $true; commitUrl = "https://github.com/$($t.owner)/$($t.repo)/commit/$($commit.sha)" }
+    if ($changes.Count -eq 0) { return @{ changed = $false; commitUrl = ''; note = '' } }
+    if ($snap.head) {
+        $tree = Invoke-GitHub POST "$($snap.repo)/git/trees" @{ base_tree = $snap.tree; tree = $changes }
+        $commit = Invoke-GitHub POST "$($snap.repo)/git/commits" @{ message = $Message; tree = $tree.sha; parents = @($snap.head) }
+        # Not forced: if someone published in between, this fails instead of throwing their work away.
+        try { [void](Invoke-GitHub PATCH "$($snap.repo)/git/refs/heads/$($t.branch)" @{ sha = $commit.sha; force = $false }) }
+        catch { throw "$($_.Exception.Message) Someone may have published in the meantime: load the published version, and publish again." }
+    } else {
+        # The first publish: the branch starts with this commit alone, sharing no history with the code.
+        $tree = Invoke-GitHub POST "$($snap.repo)/git/trees" @{ tree = @($changes | Where-Object { $_.sha }) }
+        $commit = Invoke-GitHub POST "$($snap.repo)/git/commits" @{ message = $Message; tree = $tree.sha; parents = @() }
+        [void](Invoke-GitHub POST "$($snap.repo)/git/refs" @{ ref = "refs/heads/$($t.branch)"; sha = $commit.sha })
+    }
+    return @{ changed = $true; commitUrl = "https://github.com/$($t.owner)/$($t.repo)/commit/$($commit.sha)"; note = (Start-PagesBuild $t) }
 }
 
 function Read-GitHubPublished($t) {
     $snap = Get-GitHubSnapshot $t
+    if (-not $snap.head) { return @{ config = $null; assets = @{} } }
     $prefix = $t.path.Trim('/')
     $out = @{ config = $null; assets = @{} }
     foreach ($e in $snap.entries) {
@@ -304,7 +333,7 @@ function Publish-Folder($t, [string]$ConfigJson) {
     foreach ($f in @(Get-ChildItem -LiteralPath $assets -File)) { if (-not $keep.ContainsKey($f.Name) -and (Get-SafeAssetName $f.Name)) { Remove-Item -LiteralPath $f.FullName -Force } }
     # The configuration last: the add-in never reads one that points at images not there yet.
     Write-Text (Join-Path $root 'signatures.json') $ConfigJson
-    return @{ changed = $true; commitUrl = '' }
+    return @{ changed = $true; commitUrl = ''; note = '' }
 }
 
 function Read-FolderPublished($t) {
@@ -404,7 +433,7 @@ function Api-Publish($data) {
     $hash = Get-DraftHash
     $url = $r.commitUrl; if (-not $url) { $url = [string](Get-State).commitUrl }
     Save-State $hash $url
-    return (Ok @{ changed = $r.changed; commitUrl = $r.commitUrl })
+    return (Ok @{ changed = $r.changed; commitUrl = $r.commitUrl; note = [string]$r.note })
 }
 
 function Api-LoadPublished {
@@ -436,7 +465,7 @@ function Api-AdLookup($data) {
         $searcher = New-Object System.DirectoryServices.DirectorySearcher
         $searcher.Filter = "(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=$v)(mail=$v)(userPrincipalName=$v)))"
         $searcher.SizeLimit = 2
-        foreach ($a in (@('displayName', 'sAMAccountName') + $attrs)) { [void]$searcher.PropertiesToLoad.Add($a) }
+        foreach ($a in (@('displayName', 'sAMAccountName', 'distinguishedName') + $attrs)) { [void]$searcher.PropertiesToLoad.Add($a) }
         $found = @($searcher.FindAll())
     } catch { return (Fail "Active Directory: $($_.Exception.Message)") }
     if ($found.Count -eq 0) { return (Fail "No user $q in Active Directory.") }
@@ -449,7 +478,37 @@ function Api-AdLookup($data) {
         $values[$k] = $(if ($a -and $props[$a.ToLowerInvariant()].Count) { [string]$props[$a.ToLowerInvariant()][0] } else { '' })
     }
     $name = $(if ($props['displayname'].Count) { [string]$props['displayname'][0] } else { $q })
-    return (Ok @{ values = $values; displayName = $name })
+    # Every group the user is in, nested ones included (the add-in reads them the same way from
+    # Entra ID): the matching rule IN_CHAIN follows group in group.
+    $groups = @()
+    try {
+        $dn = ConvertTo-LdapFilterValue ([string]$props['distinguishedname'][0])
+        $gs = New-Object System.DirectoryServices.DirectorySearcher
+        $gs.Filter = "(&(objectClass=group)(member:1.2.840.113556.1.4.1941:=$dn))"
+        $gs.PageSize = 500
+        foreach ($a in @('name', 'sAMAccountName')) { [void]$gs.PropertiesToLoad.Add($a) }
+        foreach ($g in @($gs.FindAll())) {
+            foreach ($a in @('samaccountname', 'name')) { if ($g.Properties[$a].Count) { $n = [string]$g.Properties[$a][0]; if ($groups -notcontains $n) { $groups += $n } } }
+        }
+    } catch { }
+    return (Ok @{ values = $values; displayName = $name; groups = @($groups | Sort-Object) })
+}
+
+# Groups whose name starts with what was typed, for picking who gets a signature.
+function Api-AdGroups($data) {
+    if (-not $script:OnWindows) { return (Fail 'Looking up groups needs Windows on a machine in the domain.') }
+    $q = ([string]$data.query).Trim()
+    if ($q.Length -lt 2) { return (Ok @{ groups = @() }) }
+    $v = ConvertTo-LdapFilterValue $q
+    try {
+        Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
+        $gs = New-Object System.DirectoryServices.DirectorySearcher
+        $gs.Filter = "(&(objectClass=group)(|(sAMAccountName=$v*)(name=$v*)))"
+        $gs.SizeLimit = 30
+        [void]$gs.PropertiesToLoad.Add('sAMAccountName')
+        $names = @(@($gs.FindAll()) | ForEach-Object { [string]$_.Properties['samaccountname'][0] } | Where-Object { $_ } | Sort-Object -Unique)
+    } catch { return (Fail "Active Directory: $($_.Exception.Message)") }
+    return (Ok @{ groups = $names })
 }
 
 # ---------------------------------------------------------------------------
@@ -548,6 +607,7 @@ function Invoke-Request($client) {
             '/api/publish'        { Api-Publish $data }
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }
+            '/api/ad/groups'      { Api-AdGroups $data }
             '/api/quit'           { $script:Quit = $true; Ok @{} }
             default               { $null }
         }

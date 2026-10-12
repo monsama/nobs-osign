@@ -58,6 +58,8 @@ either into `onPremisesExtensionAttributes.extensionAttribute1`…`15` or as dir
 Until then those fields stay empty in Outlook. The editor's preview can still show them, because it
 reads them from AD.
 
+`@@sAMAccountName` (Benutzername, Graph `onPremisesSamAccountName`) is there as well.
+
 A line whose fields all come out empty is left out, so nobody's signature shows "Mobile:" with no
 number. This works for paragraphs, lines split by line breaks, and table rows.
 
@@ -80,19 +82,28 @@ number. This works for paragraphs, lines split by line breaks, and table rows.
 ## How a signature is chosen
 
 Each signature can be the default for new mail, for replies and forwards, or both. It can also be
-limited to departments or to sender domains. For each message:
+limited to **AD groups** (nested groups count), departments or sender domains. For each message:
 
 1. If the editor allows user choice and the user picked a signature (or *none*) in the pane, that
    one is used.
 2. Otherwise the default for that kind of message is used. When several defaults apply, the one for
-   fewer people wins: a default for one sender domain beats a default for everyone.
+   fewer people wins: sender domain before group before department before everyone.
 
 Outlook's own signature is switched off for messages the add-in signs (an option in the editor), so
 a mail never gets two.
 
+## Importing existing templates
+
+**⤓** next to *Signatures* imports `.htm` templates with their images: from CI-Sign (it keeps them
+next to `CI-Sign.exe`, as UTF-16, with images in `images\`) or from classic Outlook. Pick the
+folder, or the template files and images together. Not imported (yet): CI-Sign's text blocks
+(`{##Name}…{end ##Name}` in `__intern.htm`), and images per person (`images/@@sAMAccountName.jpg`),
+which are left out of the signature until they have a home that is not public.
+
 ## Privacy
 
-GitHub Pages is public. Only the templates and images are published there, never anyone's details.
+The editor publishes to the branch `osign-data`; `main` holds only code. GitHub Pages is public:
+only the templates and shared images are published there, never anyone's details.
 Each user's values are read at the moment of writing, from their own Graph profile, with their own
 sign-in. The add-in keeps a copy in that user's own mailbox settings, read again after 15 minutes
 and used when Graph cannot be reached.

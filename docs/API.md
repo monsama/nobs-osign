@@ -54,11 +54,14 @@ removes it, and any other string replaces it.
 
 ## publish
 
-`{ configJson, message }` → `{ ok, changed, commitUrl }`
+`{ configJson, message }` → `{ ok, changed, commitUrl, note }`
 
 Saves the draft, then writes `<path>/signatures.json` and `<path>/assets/*` to the target. Images no
 longer in the draft are removed there. Other files are left alone. On GitHub this is one commit; if
-the branch moved in the meantime it is refused, not forced. `changed: false` means nothing differed.
+the branch moved in the meantime it is refused, not forced. A branch that is not there yet is
+created, with no history shared with the others. Then the `pages` workflow is started on the
+repository's default branch; `note` says so when that failed (the publish itself stands).
+`changed: false` means nothing differed.
 
 ## load-published
 
@@ -67,11 +70,17 @@ draft is kept as `draft.json.bak`.
 
 ## ad/lookup
 
-`{ query, fields: [{ key, ad }] }` → `{ ok, values: { <key>: string }, displayName }`
+`{ query, fields: [{ key, ad }] }` → `{ ok, values: { <key>: string }, displayName, groups: [string] }`
 
 Finds one user by sAMAccountName, mail or UPN (an empty query means the current user). It returns
-the listed AD attributes under the field keys. A backend that cannot do this answers `ok: false` and
+the listed AD attributes under the field keys, and the names (name and sAMAccountName) of every
+group the user is in, nested ones included. A backend that cannot do this answers `ok: false` and
 reports `features.adLookup: false`.
+
+## ad/groups
+
+`{ query }` → `{ ok, groups: [string] }`: up to 30 group names (sAMAccountName) starting with
+`query`, for picking who gets a signature.
 
 ## quit
 

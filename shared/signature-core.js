@@ -41,7 +41,8 @@
     { key: 'mobile',      label: 'Handy',              ad: 'mobile',      graph: 'mobilePhone', sample: '+41 79 123 45 67' },
     { key: 'homePhone',   label: 'Direkte Nr. ext.',   ad: 'homePhone',   graph: '',            sample: '+41 44 123 45 67' },
     { key: 'info',        label: 'Abwesenheit',        ad: 'info',        graph: '',            sample: '' },
-    { key: 'mail',        label: 'Mail',               ad: 'mail',        graph: 'mail',        sample: 'anna.muster@example.com' }
+    { key: 'mail',        label: 'Mail',               ad: 'mail',        graph: 'mail',        sample: 'anna.muster@example.com' },
+    { key: 'sAMAccountName', label: 'Benutzername',    ad: 'sAMAccountName', graph: 'onPremisesSamAccountName', sample: 'mustera' }
   ];
 
   function defaultConfig() {
@@ -78,7 +79,7 @@
       defaultReply: false,
       removeEmptyLines: true,
       // Who gets this signature. Empty lists mean everyone.
-      audience: { departments: [], domains: [] }
+      audience: { departments: [], domains: [], groups: [] }
     };
   }
 
@@ -217,6 +218,16 @@
       if (base && !/\/$/.test(base)) base += '/';
       html = html.replace(/(\s(?:src|background)\s*=\s*["'])assets\//gi, function (all, pre) { return pre + base + 'assets/'; });
     }
+    // An image no mail program can load - a path on some computer ("images/logo.gif", as imported),
+    // or one whose address still holds a placeholder - would show as a broken image: it goes.
+    if (opts.dropBrokenImages !== false) {
+      html = html.replace(/<img\b[^>]*>/gi, function (tag) {
+        var m = /\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+        var src = m ? (m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : '';
+        var ok = /^(https?:|cid:|data:image\/|\/)/i.test(src) || /^assets\//i.test(src);
+        return ok && src.indexOf('@@') < 0 ? tag : '';
+      });
+    }
     return html;
   }
 
@@ -247,34 +258,49 @@
     return at < 0 ? '' : s.slice(at + 1);
   }
 
-  // values: the user's fields (department is matched); from: the sender address of the mail.
-  function isAvailable(sig, values, from) {
+  // values: the user's fields (department is matched); from: the sender address of the mail;
+  // groups: the names (or ids) of the user's groups, nested ones included - null when they are not
+  // known, and then no signature limited to groups is open to the user.
+  function isAvailable(sig, values, from, groups) {
     var a = sig.audience || {};
-    var deps = lowerList(a.departments), doms = lowerList(a.domains);
+    var deps = lowerList(a.departments), doms = lowerList(a.domains), grps = lowerList(a.groups);
     if (deps.length && deps.indexOf(String((values || {}).department || '').trim().toLowerCase()) < 0) return false;
     if (doms.length && doms.indexOf(domainOf(from)) < 0) return false;
+    if (grps.length) {
+      var mine = lowerList(groups);
+      if (!grps.some(function (g) { return mine.indexOf(g) >= 0; })) return false;
+    }
     return true;
   }
 
-  function available(config, values, from) {
-    return ((config && config.signatures) || []).filter(function (s) { return isAvailable(s, values, from); });
+  function available(config, values, from, groups) {
+    return ((config && config.signatures) || []).filter(function (s) { return isAvailable(s, values, from, groups); });
+  }
+
+  // The group names the configuration limits signatures to: the add-in only needs to know these.
+  function groupsUsed(config) {
+    var out = [];
+    ((config && config.signatures) || []).forEach(function (s) {
+      lowerList((s.audience || {}).groups).forEach(function (g) { if (out.indexOf(g) < 0) out.push(g); });
+    });
+    return out;
   }
 
   // kind: 'new' or 'reply'. prefs: what the user picked in the add-in, { new: id|'none', reply: id|'none' }.
   // Returns the signature, or null for none.
-  function pick(config, values, from, kind, prefs) {
-    var list = available(config, values, from);
+  function pick(config, values, from, kind, prefs, groups) {
+    var list = available(config, values, from, groups);
     var allowChoice = !config.options || config.options.allowUserChoice !== false;
     var want = allowChoice && prefs ? prefs[kind] : null;
     if (want === 'none') return null;
     if (want) { for (var i = 0; i < list.length; i++) if (list[i].id === want) return list[i]; }
     // Of the defaults open to the user, the one meant for fewer people wins: a default for one
-    // sender domain or department beats the default for everyone.
+    // sender domain, group or department beats the default for everyone.
     var flag = kind === 'reply' ? 'defaultReply' : 'defaultNew', best = null, bestScore = -1;
     for (var j = 0; j < list.length; j++) {
       if (!list[j][flag]) continue;
       var a = list[j].audience || {};
-      var score = (lowerList(a.domains).length ? 2 : 0) + (lowerList(a.departments).length ? 1 : 0);
+      var score = (lowerList(a.domains).length ? 4 : 0) + (lowerList(a.groups).length ? 2 : 0) + (lowerList(a.departments).length ? 1 : 0);
       if (score > bestScore) { best = list[j]; bestScore = score; }
     }
     return best;
@@ -337,8 +363,37 @@
     return errors;
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Reading signature files written elsewhere (classic Outlook, CI-Sign): their encoding is told
+  // by a byte order mark (CI-Sign writes UTF-16), by a <meta charset>, or not at all.
+  // ---------------------------------------------------------------------------------------------
+  function decodeHtmlFile(bytes) {
+    var b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) return new TextDecoder('utf-16le').decode(b.subarray(2));
+    if (b.length >= 2 && b[0] === 0xfe && b[1] === 0xff) return new TextDecoder('utf-16be').decode(b.subarray(2));
+    if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return new TextDecoder('utf-8').decode(b.subarray(3));
+    // UTF-16 without a mark: every other byte of plain text is 0.
+    if (b.length >= 4 && b[1] === 0 && b[3] === 0 && b[0] !== 0) return new TextDecoder('utf-16le').decode(b);
+    var head = new TextDecoder('latin1').decode(b.subarray(0, 4096));
+    var cs = (/charset\s*=\s*["']?([\w-]+)/i.exec(head) || [])[1];
+    if (cs) { try { return new TextDecoder(cs).decode(b); } catch (e) { /* unknown name: below */ } }
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(b); }
+    catch (e) { return new TextDecoder('windows-1252').decode(b); }
+  }
+
+  // An image's file name as the editor stores it (the same rule as the backend's).
+  function assetName(name) {
+    var base = String(name || '').split(/[\\/]/).pop();
+    var dot = base.lastIndexOf('.');
+    var ext = dot > 0 ? base.slice(dot).toLowerCase() : '';
+    var stem = (dot > 0 ? base.slice(0, dot) : base).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'image';
+    return stem + ext;
+  }
+
   return {
     SCHEMA_VERSION: SCHEMA_VERSION,
+    decodeHtmlFile: decodeHtmlFile,
+    assetName: assetName,
     DEFAULT_FIELDS: DEFAULT_FIELDS,
     defaultConfig: defaultConfig,
     newSignature: newSignature,
@@ -351,6 +406,7 @@
     isAvailable: isAvailable,
     available: available,
     pick: pick,
+    groupsUsed: groupsUsed,
     readPath: readPath,
     graphSelect: graphSelect,
     valuesFromGraph: valuesFromGraph,

@@ -10,8 +10,10 @@ You do this once. Afterwards, changing a signature only means editing it and cli
    <https://monsama.github.io/osign/> shows the add-in's start page and
    <https://monsama.github.io/osign/manifest.xml> serves the manifest.
 
-From then on every push to `main` that changes `config/` deploys again. A publish from the editor is
-such a push, and it is live about a minute later.
+The editor publishes the signatures to a branch of their own, **`osign-data`**, never to `main`: the
+code holds no company data. The first publish creates that branch. After every publish the editor
+starts the **pages** workflow, which builds the add-in from `main` with the signatures from
+`osign-data`; they are live about a minute later.
 
 GitHub Pages from a private repository needs a paid GitHub plan. Either way, the site itself is
 public.
@@ -27,8 +29,10 @@ Outlook itself (nested app authentication), so nobody is asked for a password.
 2. **Authentication → Add a platform → Single-page application**. Redirect URI:
    `brk-multihub://monsama.github.io`
    (if you host elsewhere, use `brk-multihub://<that host>`).
-3. **API permissions**: *Microsoft Graph → Delegated → User.Read* is there by default. Click
-   **Grant admin consent for …**.
+3. **API permissions**: *Microsoft Graph → Delegated → User.Read* is there by default. If signatures
+   go to **AD groups**, add *Microsoft Graph → Delegated → GroupMember.Read.All*. Click
+   **Grant admin consent for …**. The groups have to be synced to Entra ID (Entra Connect does
+   that for AD groups); nested groups count.
 4. From **Overview**, copy the *Application (client) ID* and the *Directory (tenant) ID*. They go into
    the editor in step 4.
 
@@ -39,7 +43,8 @@ The editor publishes by making a commit in this repository.
 1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens →
    Generate new token**.
 2. Repository access: **Only select repositories → monsama/osign**.
-3. Permissions: **Contents: Read and write**. Nothing else is needed.
+3. Permissions: **Contents: Read and write** (to publish) and **Actions: Read and write** (to start
+   the Pages build after publishing). Nothing else is needed.
 4. Give it an expiry you will remember to renew.
 
 ## 4. The editor
@@ -55,8 +60,10 @@ The editor publishes by making a commit in this repository.
    stored encrypted for your Windows account (DPAPI) in `%APPDATA%\OSign`.
 4. **Add-in**: paste the client ID and the tenant ID from step 2.
 5. **Fields**: check the mapping, especially the Graph sources (see the README).
-6. **Signatures**: make them. *Import .htm…* takes over an existing classic Outlook signature from
-   `%APPDATA%\Microsoft\Signatures`. Its images have to be added again with the image button.
+6. **Signatures**: make them, or import existing ones with **⤓** next to *Signatures*: pick a folder,
+   or the `.htm` files together with their images. Templates from CI-Sign (UTF-16, `images/…`) and
+   from classic Outlook (`%APPDATA%\Microsoft\Signatures`) work. The images a template uses are
+   found among the picked files by name. Under *Who gets it*, enter the AD groups.
 7. **Publish**. The dialog lists anything that would go wrong first.
 
 On a PC in the domain, the preview can show any user's real values from Active Directory: pick

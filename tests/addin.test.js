@@ -146,3 +146,20 @@ test('the event always completes, even when everything fails', async () => {
   await r.fire('onNewMessageComposeHandler');
   assert.ok(r.calls.some((c) => c[0] === 'log' && /offline/.test(c[1])));
 });
+
+test('a signature for an AD group goes to its members, from the kept copy of their groups', async () => {
+  const cfg = makeConfig();
+  const field = Object.assign(core.newSignature('field', 'Field'), { defaultNew: true, audience: { departments: [], domains: [], groups: ['SG-Field'] }, html: '<p>Field @@givenName</p>' });
+  field.compiled = core.compile(field.html, doc);
+  cfg.signatures.push(field);
+  const member = { 'osign.profile': JSON.stringify({ at: Date.now(), values: anna, groups: ['sg-field'], groupsFor: 'sg-field' }) };
+  const r = runtime({ config: cfg, roaming: member });
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(r.calls.find((c) => c[0] === 'set')[1], '<p>Field Anna</p>');
+
+  // A copy read before the configuration named that group says nothing about it: without Graph
+  // (no app registration here) the group signature is not open, the general one is used.
+  const r2 = runtime({ config: cfg, roaming: cachedProfile(anna) });
+  await r2.fire('onNewMessageComposeHandler');
+  assert.match(r2.calls.find((c) => c[0] === 'set')[1], /Anna Muster/);
+});

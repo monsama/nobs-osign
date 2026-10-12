@@ -117,3 +117,39 @@ test('validate', () => {
   const errs = core.validate(cfg);
   assert.equal(errs.length, 3);
 });
+
+test('groups: a signature for groups is open to their members only, and wins as default', () => {
+  const cfg = core.defaultConfig();
+  cfg.signatures = [
+    Object.assign(core.newSignature('std', 'Standard'), { defaultNew: true }),
+    Object.assign(core.newSignature('sales', 'Sales'), { defaultNew: true, audience: { departments: [], domains: [], groups: ['SG-Sales', 'SG-Field'] } })
+  ];
+  assert.deepEqual(core.groupsUsed(cfg), ['sg-sales', 'sg-field']);
+  assert.equal(core.pick(cfg, {}, 'a@x.ch', 'new', null, ['sg-field']).id, 'sales');
+  assert.equal(core.pick(cfg, {}, 'a@x.ch', 'new', null, ['Other']).id, 'std');
+  // Groups not known (not readable): nothing limited to groups.
+  assert.equal(core.pick(cfg, {}, 'a@x.ch', 'new', null, null).id, 'std');
+  assert.deepEqual(core.available(cfg, {}, 'a@x.ch', ['SG-SALES']).map((s) => s.id), ['std', 'sales']);
+});
+
+test('images no mail program can load are left out', () => {
+  const html = '<p><img src="images/logo.gif"><img src="images/@@sAMAccountName.jpg"><img src="assets/@@nope.png"><img src="assets/a.png"><img src="https://x/b.png"><img src="cid:c"></p>';
+  assert.equal(core.render(html, { sAMAccountName: 'x' }, { assetBase: 'https://h/' }), '<p><img src="https://h/assets/a.png"><img src="https://x/b.png"><img src="cid:c"></p>');
+  assert.equal(core.render('<img src="images/a.gif">', {}, { dropBrokenImages: false }), '<img src="images/a.gif">');
+});
+
+test('signature files are read in their own encoding', () => {
+  const text = '<p>Grüsse @@givenName</p>';
+  const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
+  const be = Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(text, 'utf16le').swap16()]);
+  const noBom = Buffer.from(text, 'utf16le');
+  const cp1252 = Buffer.from('<meta charset="windows-1252"><p>Gr\xfcsse</p>', 'latin1');
+  const bare1252 = Buffer.from('<p>Gr\xfcsse</p>', 'latin1');
+  assert.equal(core.decodeHtmlFile(le), text);
+  assert.equal(core.decodeHtmlFile(be), text);
+  assert.equal(core.decodeHtmlFile(noBom), text);
+  assert.equal(core.decodeHtmlFile(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text)])), text);
+  assert.match(core.decodeHtmlFile(cp1252), /Grüsse/);
+  assert.equal(core.decodeHtmlFile(bare1252), '<p>Grüsse</p>');
+  assert.equal(core.assetName('C:\\x\\Logo Neu (2).JPG'), 'Logo-Neu-2.jpg');
+});

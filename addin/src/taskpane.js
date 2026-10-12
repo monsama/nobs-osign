@@ -22,7 +22,7 @@ function renderChoice(list) {
   const prefs = getPrefs();
   ['new', 'reply'].forEach((kind) => {
     const sel = $(kind === 'new' ? 'prefNew' : 'prefReply');
-    const central = core.pick(cfg, user.values, from, kind, null);
+    const central = core.pick(cfg, user.values, from, kind, null, user.groups);
     sel.replaceChildren(
       option('', 'Company default' + (central ? ' (' + central.name + ')' : ' (none)'), !prefs[kind]),
       option('none', 'No signature', prefs[kind] === 'none'),
@@ -76,7 +76,8 @@ async function load(refresh) {
   $('who').textContent = (up.displayName || '') + (from ? ' · ' + from : '') +
     (user.source === 'outlook' ? ' · details not available, fields stay empty' : '');
   if (user.error && user.source === 'cache') message('Showing your details as last read; reading them now failed: ' + user.error.message);
-  const list = core.available(cfg, user.values, from);
+  const list = core.available(cfg, user.values, from, user.groups);
+  if (user.groups === null && core.groupsUsed(cfg).length) message('Your groups could not be read, so signatures meant for groups are not shown' + (user.error ? ': ' + user.error.message : '.'), true);
   renderChoice(list);
   renderList(list);
 }
