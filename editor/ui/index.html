@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSign</title>
+<link rel="icon" href="/ui/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/ui/app.css">
+<script src="/shared/signature-core.js"></script>
+<script src="/ui/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="/ui/icon.svg" alt=""><span>OSign</span></div>
+  <div id="status" class="status" title=""></div>
+  <div class="spacer"></div>
+  <button id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button>
+  <button id="btnSettings" class="ghost">Settings</button>
+  <button id="btnPublish" class="primary">Publish…</button>
+</header>
+
+<div class="layout">
+  <nav class="side">
+    <div class="side-head">
+      <span>Signatures</span>
+      <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
+    </div>
+    <ul id="sigList" class="sig-list"></ul>
+    <div class="side-head"><span>Setup</span></div>
+    <ul class="nav-list">
+      <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
+      <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
+    </ul>
+  </nav>
+
+  <main id="main">
+    <!-- one signature -->
+    <section id="viewSig" class="view" hidden>
+      <div class="sig-head">
+        <input id="sigName" class="title-input" placeholder="Signature name" maxlength="80" aria-label="Signature name">
+        <div class="spacer"></div>
+        <button id="btnImport" class="ghost" title="Take the content of an existing .htm signature">Import .htm…</button>
+        <button id="btnDup" class="ghost">Duplicate</button>
+        <button id="btnDel" class="ghost danger">Delete</button>
+      </div>
+      <div class="sig-props">
+        <label class="check"><input type="checkbox" id="sigNew"> Default for new mail</label>
+        <label class="check"><input type="checkbox" id="sigReply"> Default for replies &amp; forwards</label>
+        <label class="check" title="A line whose fields are all empty for a user is left out: no &quot;Mobile:&quot; without a number"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines</label>
+        <details class="audience">
+          <summary>Who gets it: <span id="audienceSummary">everyone</span></summary>
+          <div class="grid2">
+            <label>Departments <small>(comma separated, empty = all)</small><input id="sigDeps" placeholder="Informatik, Verkauf"></label>
+            <label>Sender domains <small>(the From address, empty = all)</small><input id="sigDoms" placeholder="monsama.ch"></label>
+          </div>
+        </details>
+      </div>
+
+      <div class="workbench">
+        <div class="pane editor-pane">
+          <div class="tabs">
+            <button class="tab active" data-mode="design">Design</button>
+            <button class="tab" data-mode="html">HTML</button>
+          </div>
+          <div id="toolbar" class="toolbar"></div>
+          <div id="imgBar" class="imgbar" hidden>
+            <span>Image</span>
+            <label>Width <input id="imgW" type="number" min="16" max="800" step="1"> px</label>
+            <label>Alt text <input id="imgAlt"></label>
+            <label>Link <input id="imgHref" placeholder="https://"></label>
+            <button id="imgDone" class="ghost small">Done</button>
+          </div>
+          <iframe id="design" class="design" title="Signature editor"></iframe>
+          <textarea id="source" class="source" spellcheck="false" hidden aria-label="HTML"></textarea>
+        </div>
+        <div class="pane preview-pane">
+          <div class="preview-head">
+            <span class="pane-title">Preview</span>
+            <select id="pvSource" aria-label="Values for the preview">
+              <option value="sample">Sample values</option>
+              <option value="empty">All fields empty</option>
+              <option value="ad">User from Active Directory…</option>
+            </select>
+            <span id="pvAd" class="pv-ad" hidden>
+              <input id="pvUser" placeholder="user name or mail">
+              <button id="pvLookup" class="ghost small">Look up</button>
+            </span>
+            <div class="spacer"></div>
+            <label class="check small"><input type="checkbox" id="pvText"> Plain text</label>
+          </div>
+          <div id="pvNote" class="pv-note"></div>
+          <div class="mail">
+            <div class="mail-head"><b>To:</b> someone@example.com<br><b>Subject:</b> Preview</div>
+            <iframe id="preview" class="preview" sandbox="allow-same-origin" title="Preview"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- fields -->
+    <section id="viewFields" class="view" hidden>
+      <h1>Fields</h1>
+      <p class="lead">A field is a placeholder in a signature, <code>@@givenName</code>, filled with the user's
+        value when the add-in inserts it. The add-in reads the values from Microsoft Graph, the user's own
+        profile in Entra ID. <b>AD attribute</b> is for the preview here, read from Active Directory.</p>
+      <div class="table-wrap">
+        <table class="fields">
+          <thead><tr><th>Field</th><th>Placeholder</th><th>AD attribute</th><th>Graph source</th><th>Sample value</th><th></th></tr></thead>
+          <tbody id="fieldRows"></tbody>
+        </table>
+      </div>
+      <button id="btnAddField" class="ghost">+ Add field</button>
+      <datalist id="graphProps"></datalist>
+      <div class="callout">
+        <b>Without a Graph source</b> a field stays empty in Outlook. Graph knows no <code>description</code>,
+        <code>homePhone</code> or <code>info</code>. To use them, sync them from AD with Entra Connect,
+        either into <code>onPremisesExtensionAttributes.extensionAttribute1</code>…<code>15</code> (Exchange
+        attributes) or as directory extensions (<code>extension_&lt;appId&gt;_description</code>), and enter that
+        path here.
+      </div>
+    </section>
+
+    <!-- add-in options -->
+    <section id="viewOptions" class="view" hidden>
+      <h1>Add-in</h1>
+      <h2>Behaviour</h2>
+      <label class="check block"><input type="checkbox" id="optDisable"> Switch off Outlook's own signature in the messages the add-in signs, so no mail gets two</label>
+      <label class="check block"><input type="checkbox" id="optChoice"> Users may choose which signature they use for new mail and for replies (in the add-in's pane)</label>
+      <label class="check block"><input type="checkbox" id="optMeetings"> Sign new meetings too</label>
+      <label class="check block"><input type="checkbox" id="optNoProfile"> Insert a signature even when the user's details could not be read (the fields stay empty)</label>
+      <h2>Sign-in for the user's details</h2>
+      <p class="lead">The add-in reads the user's own profile from Microsoft Graph with the Entra ID app registration
+        below (single sign-on through Outlook, no password asked). <a href="#" id="lnkSetup">How to register it</a></p>
+      <div class="grid2 narrow">
+        <label>Application (client) ID<input id="optClient" placeholder="00000000-0000-0000-0000-000000000000"></label>
+        <label>Directory (tenant) ID<input id="optTenant" placeholder="00000000-0000-0000-0000-000000000000"></label>
+      </div>
+      <h2>Install</h2>
+      <p class="lead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps):</p>
+      <p><code id="manifestUrl"></code></p>
+    </section>
+
+    <section id="viewEmpty" class="view empty" hidden>
+      <h1>No signatures yet</h1>
+      <p>Start with a new one, or load what is published.</p>
+      <button id="btnNew2" class="primary">New signature</button>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlgSettings">
+  <form method="dialog" class="dlg">
+    <h2>Settings</h2>
+    <fieldset>
+      <legend>Publish to</legend>
+      <label class="check"><input type="radio" name="tkind" value="github"> GitHub repository (GitHub Pages serves it)</label>
+      <label class="check"><input type="radio" name="tkind" value="folder"> A folder (a web server's, a share)</label>
+    </fieldset>
+    <div id="setGithub" class="grid2">
+      <label>Owner<input id="setOwner"></label>
+      <label>Repository<input id="setRepo"></label>
+      <label>Branch<input id="setBranch"></label>
+      <label>Folder in the repository<input id="setPath"></label>
+      <label class="span2">Access token
+        <input id="setToken" type="password" autocomplete="off" placeholder="">
+        <small id="tokenNote"></small>
+      </label>
+    </div>
+    <div id="setFolder" class="grid2">
+      <label class="span2">Folder<input id="setFolderPath" placeholder="\\server\wwwroot\osign"></label>
+    </div>
+    <label>Public address of the add-in <small>(where the published files are served)</small><input id="setBase" placeholder="https://monsama.github.io/osign/"></label>
+    <p id="setErr" class="err"></p>
+    <div class="dlg-foot">
+      <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+      <button id="setSave" value="default" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgPublish">
+  <form method="dialog" class="dlg">
+    <h2>Publish</h2>
+    <p id="pubWhere" class="lead"></p>
+    <ul id="pubChecks" class="checks"></ul>
+    <label>What changed<input id="pubMsg" maxlength="200" placeholder="Update signatures"></label>
+    <p id="pubErr" class="err"></p>
+    <p id="pubOk" class="ok"></p>
+    <div class="dlg-foot">
+      <button value="cancel" class="ghost" formnovalidate>Close</button>
+      <button id="pubGo" value="default" class="primary">Publish</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgImage">
+  <form method="dialog" class="dlg">
+    <h2>Image</h2>
+    <p class="lead">PNG, JPG or GIF, at most 1 MB. It is published with the signatures.</p>
+    <div id="imgList" class="img-list"></div>
+    <label class="filepick"><input type="file" id="imgFile" accept=".png,.jpg,.jpeg,.gif"> Upload an image…</label>
+    <p id="imgErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="ghost">Cancel</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgHelp">
+  <form method="dialog" class="dlg wide">
+    <h2>Register the add-in in Entra ID</h2>
+    <ol class="steps">
+      <li>Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>; accounts in this organizational directory only.</li>
+      <li><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
+        <code id="helpRedirect"></code></li>
+      <li><b>API permissions</b>: Microsoft Graph, delegated, <code>User.Read</code> (there by default) → <b>Grant admin consent</b>, so no user is asked.</li>
+      <li>Copy the <b>Application (client) ID</b> and the <b>Directory (tenant) ID</b> from Overview into the two fields here, and publish.</li>
+    </ol>
+    <div class="dlg-foot"><button value="cancel" class="primary">OK</button></div>
+  </form>
+</dialog>
+
+<input type="file" id="importFile" accept=".htm,.html" hidden>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -1,0 +1,798 @@
+/*
+ * OSign editor - the web UI.
+ *
+ * Talks to its backend only through the HTTP API in docs/API.md (today OSign.ps1; a container
+ * later). Everything about signatures themselves - placeholders, the lines left out when empty,
+ * who gets which signature - is in shared/signature-core.js, the same file the add-in runs.
+ */
+'use strict';
+(function () {
+  const core = window.SignatureCore;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------------------------------------------------------------------------------------------
+  // Backend
+  // ---------------------------------------------------------------------------------------------
+  // The token comes after # in the address the window was opened with (never sent to the server
+  // in a URL, never in a log). Kept for this tab, so a reload still works.
+  const TOKEN = (function () {
+    const m = /(?:^#|&)t=([0-9a-f]{64})/.exec(location.hash);
+    try { if (m) sessionStorage.setItem('osign.token', m[1]); return m ? m[1] : sessionStorage.getItem('osign.token') || ''; }
+    catch (e) { return m ? m[1] : ''; }
+  })();
+
+  let serverDown = false;
+  async function api(path, body, opts) {
+    let r;
+    try {
+      r = await fetch('/api/' + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+        body: JSON.stringify(body || {}),
+        keepalive: !!(opts && opts.keepalive)
+      });
+    } catch (e) {
+      if (!serverDown) { serverDown = true; toast('The OSign server is not running. Start OSign.ps1 again.', true); }
+      throw new Error('The OSign server is not running.');
+    }
+    serverDown = false;
+    let j;
+    try { j = await r.json(); } catch (e) { throw new Error('The server answered ' + r.status + '.'); }
+    if (r.status === 401) throw new Error('This window is not signed in to the server: open the address OSign printed.');
+    if (!j.ok) throw new Error(j.error || 'Failed.');
+    return j;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------------------------
+  const S = {
+    config: null, settings: null, info: null, assets: [], dirty: false, publishedAt: '', commitUrl: '',
+    view: 'sig', sigId: null, mode: 'design', adValues: null, adName: '', tokenSet: false, tokenFromEnv: false
+  };
+  const sig = () => (S.config.signatures || []).find((s) => s.id === S.sigId) || null;
+  const fieldKeys = () => S.config.fields.map((f) => f.key);
+
+  function newId(name) {
+    const base = String(name || 'signature').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'signature';
+    let id = base, i = 2;
+    while (S.config.signatures.some((s) => s.id === id)) id = base + '-' + i++;
+    return id;
+  }
+
+  function assetBase() {
+    const s = S.settings;
+    if (!s || !s.publicBaseUrl) return '';
+    return s.publicBaseUrl.replace(/\/?$/, '/') + s.target.path.replace(/^\/|\/$/g, '') + '/';
+  }
+
+  // The configuration as published: every signature compiled, the image address set.
+  function prepared() {
+    const c = JSON.parse(JSON.stringify(S.config));
+    c.assetBaseUrl = assetBase();
+    c.signatures.forEach((s) => { s.html = sanitize(s.html); s.compiled = core.compile(s.html, document); });
+    return c;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Saving: every change goes to the draft on its own, a moment after the last keystroke.
+  // ---------------------------------------------------------------------------------------------
+  let saveTimer = null, saving = Promise.resolve();
+  function changed(opts) {
+    S.dirty = true; renderStatus('Saving…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 600);
+    if (!opts || opts.list !== false) renderList();
+    if (!opts || opts.preview !== false) schedulePreview();
+  }
+  function save(opts) {
+    clearTimeout(saveTimer); saveTimer = null;
+    const json = JSON.stringify(prepared());
+    saving = saving.then(() => api('draft/save', { configJson: json }, opts))
+      .then((r) => { S.dirty = r.dirty; renderStatus(); })
+      .catch((e) => { renderStatus('Not saved'); toast(e.message, true); });
+    return saving;
+  }
+  window.addEventListener('beforeunload', () => { if (saveTimer) save({ keepalive: true }); });
+  setInterval(() => { api('ping').catch(() => {}); }, 60000);
+
+  function renderStatus(text) {
+    const el = $('status');
+    if (text) { el.textContent = text; el.className = 'status'; return; }
+    if (S.dirty) { el.textContent = 'Unpublished changes'; el.className = 'status dirty'; }
+    else { el.textContent = S.publishedAt ? 'Published' : 'Saved'; el.className = 'status clean'; }
+    el.title = S.publishedAt ? 'Last published ' + new Date(S.publishedAt).toLocaleString() : '';
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // HTML hygiene: what goes into a signature is markup Outlook shows, nothing that runs.
+  // ---------------------------------------------------------------------------------------------
+  const DROP = 'script,style,meta,link,title,iframe,object,embed,form,input,button,select,textarea,base,xml,o\\:p,svg,video,audio';
+  function sanitize(html) {
+    const t = document.createElement('template');
+    t.innerHTML = String(html || '');
+    t.content.querySelectorAll(DROP).forEach((n) => {
+      // Word's <o:p> holds the text of the paragraph's end: keep that, lose the tag.
+      if (n.nodeName.toLowerCase() === 'o:p') n.replaceWith(...n.childNodes); else n.remove();
+    });
+    const walker = document.createTreeWalker(t.content, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      if (n.nodeType === 8) { comments.push(n); continue; }
+      [...n.attributes].forEach((a) => {
+        const name = a.name.toLowerCase(), v = a.value.trim().toLowerCase();
+        if (name.startsWith('on')) n.removeAttribute(a.name);
+        else if ((name === 'href' || name === 'src' || name === 'background') && /^(javascript|vbscript|data:text)/.test(v.replace(/\s+/g, ''))) n.removeAttribute(a.name);
+        else if (name === 'class' && /^mso/i.test(a.value)) n.removeAttribute(a.name);
+        else if (name === 'contenteditable') n.removeAttribute(a.name);
+      });
+    }
+    comments.forEach((c) => c.remove());
+    return t.innerHTML.trim();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Sidebar and views
+  // ---------------------------------------------------------------------------------------------
+  function el(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    Object.entries(attrs || {}).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === false) return;
+      if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? '' : v);
+    });
+    kids.flat().forEach((k) => { if (k !== null && k !== undefined) e.append(k.nodeType ? k : document.createTextNode(String(k))); });
+    return e;
+  }
+
+  function audienceText(s) {
+    const a = s.audience || {}, parts = [];
+    if ((a.departments || []).length) parts.push(a.departments.join(', '));
+    if ((a.domains || []).length) parts.push('@' + a.domains.join(', @'));
+    return parts.length ? parts.join(' · ') : 'everyone';
+  }
+
+  function renderList() {
+    const ul = $('sigList'); ul.textContent = '';
+    if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, 'None yet'));
+    S.config.signatures.forEach((s) => {
+      const a = el('a', { href: '#', class: S.view === 'sig' && s.id === S.sigId ? 'active' : '', onclick: (e) => { e.preventDefault(); openSig(s.id); } },
+        s.name || '(no name)',
+        el('div', { class: 'badges' },
+          s.defaultNew ? el('span', { class: 'badge on' }, 'New') : null,
+          s.defaultReply ? el('span', { class: 'badge on' }, 'Reply') : null,
+          audienceText(s) !== 'everyone' ? el('span', { class: 'badge', title: audienceText(s) }, 'Limited') : null));
+      ul.append(el('li', null, a));
+    });
+    document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
+  }
+
+  function show(view) {
+    S.view = view;
+    $('viewSig').hidden = view !== 'sig';
+    $('viewFields').hidden = view !== 'fields';
+    $('viewOptions').hidden = view !== 'options';
+    $('viewEmpty').hidden = view !== 'empty';
+    renderList();
+  }
+
+  function openSig(id) {
+    flushSource();
+    S.sigId = id;
+    if (!sig()) { show(S.config.signatures.length ? 'sig' : 'empty'); if (S.config.signatures.length) openSig(S.config.signatures[0].id); return; }
+    show('sig');
+    const s = sig();
+    $('sigName').value = s.name;
+    $('sigNew').checked = !!s.defaultNew;
+    $('sigReply').checked = !!s.defaultReply;
+    $('sigRemoveEmpty').checked = s.removeEmptyLines !== false;
+    $('sigDeps').value = (s.audience.departments || []).join(', ');
+    $('sigDoms').value = (s.audience.domains || []).join(', ');
+    $('audienceSummary').textContent = audienceText(s);
+    loadDesign(s.html);
+    $('source').value = s.html;
+    schedulePreview();
+  }
+
+  const STARTER = [
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:10pt;color:#222222">Freundliche Grüsse</p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:10pt">&nbsp;</p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:10pt;color:#222222"><b>@@givenName @@sn</b></p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:9pt;color:#555555">@@description</p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:9pt;color:#555555">@@title, @@department</p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:10pt">&nbsp;</p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:9pt;color:#222222">Direkt @@homePhone</p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:9pt;color:#222222">Mobile @@mobile</p>',
+    '<p style="margin:0;font-family:Arial,sans-serif;font-size:9pt"><a href="mailto:@@mail" style="color:#2f6fde">@@mail</a></p>'
+  ].join('\n');
+
+  function addSig(from) {
+    const name = from ? from.name + ' (copy)' : (S.config.signatures.length ? 'New signature' : 'Standard');
+    const s = from ? JSON.parse(JSON.stringify(from)) : core.newSignature('', name);
+    s.id = newId(name); s.name = name;
+    if (from) { s.defaultNew = false; s.defaultReply = false; } else { s.html = STARTER; s.defaultNew = !S.config.signatures.some((x) => x.defaultNew); s.defaultReply = !S.config.signatures.some((x) => x.defaultReply); }
+    S.config.signatures.push(s);
+    changed();
+    openSig(s.id);
+    if (!from) { $('sigName').focus(); $('sigName').select(); }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The design editor: an iframe of its own, so the app's styles never reach the signature
+  // ---------------------------------------------------------------------------------------------
+  const design = $('design');
+  let ddoc = null, designReady = null;
+  const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;min-height:380px;outline:none;word-wrap:break-word}' +
+    'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
+    'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}';
+
+  function initDesign() {
+    designReady = new Promise((resolve) => {
+      design.addEventListener('load', () => {
+        ddoc = design.contentDocument;
+        ddoc.body.contentEditable = 'true';
+        try { ddoc.execCommand('styleWithCSS', false, true); ddoc.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { }
+        ddoc.addEventListener('input', onDesignInput);
+        ddoc.addEventListener('keyup', updateToolbarState);
+        ddoc.addEventListener('mouseup', updateToolbarState);
+        ddoc.addEventListener('click', onDesignClick);
+        ddoc.addEventListener('paste', onPaste);
+        resolve();
+      }, { once: true });
+    });
+    // The base makes "assets/logo.png" load from this server, as it will from the published one.
+    design.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><base href="/"><style>' + EDITOR_CSS + '</style></head><body></body></html>';
+  }
+
+  async function loadDesign(html) {
+    await designReady;
+    ddoc.body.innerHTML = html || '';
+    hideImgBar();
+  }
+
+  function onDesignInput() {
+    const s = sig(); if (!s) return;
+    s.html = cleanEditorHtml(ddoc.body.innerHTML);
+    changed({ list: false });
+  }
+
+  // The editor's own marks (a selected image's outline) never go into the signature.
+  function cleanEditorHtml(html) {
+    return html.replace(/\sclass="sel"/g, '').replace(/(<img[^>]*?)\sclass="([^"]*)\bsel\b([^"]*)"/g, '$1 class="$2$3"');
+  }
+
+  function onPaste(e) {
+    const html = e.clipboardData && e.clipboardData.getData('text/html');
+    if (!html) return;
+    e.preventDefault();
+    const body = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html);
+    const clean = sanitize((body ? body[1] : html).replace(/<!--StartFragment-->|<!--EndFragment-->/g, ''));
+    ddoc.execCommand('insertHTML', false, clean);
+  }
+
+  function exec(cmd, val) {
+    if (S.mode !== 'design') return;
+    design.contentWindow.focus();
+    ddoc.execCommand(cmd, false, val === undefined ? null : val);
+    onDesignInput(); updateToolbarState();
+  }
+
+  // execCommand only knows sizes 1-7: size 7 is set, and what it made gets the real size.
+  function setFontSize(pt) {
+    exec('fontSize', '7');
+    ddoc.querySelectorAll('font[size="7"]').forEach((f) => { const sp = ddoc.createElement('span'); sp.style.fontSize = pt + 'pt'; sp.append(...f.childNodes); f.replaceWith(sp); });
+    ddoc.querySelectorAll('[style*="xxx-large"]').forEach((n) => { n.style.fontSize = pt + 'pt'; });
+    onDesignInput();
+  }
+
+  // Inserted as it is written. execCommand('insertHTML') would copy the editor's own font onto
+  // every element it inserts (an image with a font-size), which then goes out in the signature.
+  function insertHtml(html) {
+    if (S.mode !== 'design') return;
+    design.contentWindow.focus();
+    const frag = ddoc.createRange().createContextualFragment(html);
+    const last = frag.lastChild;
+    const sel = ddoc.getSelection();
+    if (!sel.rangeCount || !ddoc.body.contains(sel.getRangeAt(0).commonAncestorContainer)) ddoc.body.append(frag);
+    else {
+      const r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(frag);
+      if (last) { r.setStartAfter(last); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
+    }
+    onDesignInput();
+  }
+
+  const ICON = {
+    bold: '<path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z"/>',
+    italic: '<path d="M14 5h-4M14 19h-4M14 5l-4 14"/>',
+    underline: '<path d="M7 4v7a5 5 0 0 0 10 0V4M5 20h14"/>',
+    left: '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>',
+    center: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>',
+    right: '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>',
+    link: '<path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/>',
+    unlink: '<path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1M4 4l16 16"/>',
+    image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/>',
+    table: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 12h18M12 5v14"/>',
+    hr: '<path d="M4 12h16"/>',
+    clear: '<path d="M6 5h12M12 5l-3 14M4 20l16-16"/>',
+    undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+    redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/>'
+  };
+  const svg = (name) => '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICON[name] + '</svg>';
+
+  function buildToolbar() {
+    const tb = $('toolbar');
+    const btn = (name, title, fn, cmd) => { const b = el('button', { type: 'button', title, 'aria-label': title, 'data-cmd': cmd || '' }); b.innerHTML = svg(name); b.addEventListener('mousedown', (e) => e.preventDefault()); b.addEventListener('click', fn); return b; };
+    const sep = () => el('span', { class: 'sep' });
+    const fonts = ['Arial', 'Aptos', 'Calibri', 'Segoe UI', 'Verdana', 'Tahoma', 'Helvetica', 'Georgia', 'Times New Roman'];
+    const fontSel = el('select', { title: 'Font', 'aria-label': 'Font' }, el('option', { value: '' }, 'Font'), fonts.map((f) => el('option', { value: f }, f)));
+    fontSel.addEventListener('change', () => { if (fontSel.value) exec('fontName', fontSel.value + (fontSel.value === 'Georgia' || fontSel.value === 'Times New Roman' ? ', serif' : ', sans-serif')); fontSel.value = ''; });
+    const sizeSel = el('select', { title: 'Size', 'aria-label': 'Size' }, el('option', { value: '' }, 'Size'), [8, 9, 10, 11, 12, 14, 16, 18, 24].map((n) => el('option', { value: n }, n + ' pt')));
+    sizeSel.addEventListener('change', () => { if (sizeSel.value) setFontSize(sizeSel.value); sizeSel.value = ''; });
+    const color = el('input', { type: 'color', title: 'Text colour', 'aria-label': 'Text colour', value: '#222222' });
+    color.addEventListener('input', () => exec('foreColor', color.value));
+    const fieldSel = el('select', { class: 'field-pick', title: 'Insert a field', 'aria-label': 'Insert a field' });
+    fieldSel.addEventListener('focus', () => fillFieldSelect(fieldSel));
+    fieldSel.addEventListener('change', () => {
+      const k = fieldSel.value; fieldSel.value = '';
+      if (!k) return;
+      if (S.mode === 'html') insertAtCursor($('source'), '@@' + k); else exec('insertText', '@@' + k);
+    });
+    fillFieldSelect(fieldSel);
+    tb.append(
+      fieldSel, sep(), fontSel, sizeSel, color, sep(),
+      btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline'), sep(),
+      btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), sep(),
+      btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), btn('table', 'Two columns (logo beside the text)', insertTable), btn('hr', 'Line', () => exec('insertHorizontalRule')), sep(),
+      btn('clear', 'Clear formatting', () => exec('removeFormat')), btn('undo', 'Undo (Ctrl+Z)', () => exec('undo')), btn('redo', 'Redo (Ctrl+Y)', () => exec('redo'))
+    );
+  }
+
+  function fillFieldSelect(sel) {
+    sel.textContent = '';
+    sel.append(el('option', { value: '' }, '@@ Insert field'));
+    S.config && S.config.fields.forEach((f) => sel.append(el('option', { value: f.key }, (f.label || f.key) + '  @@' + f.key)));
+  }
+
+  function insertAtCursor(ta, text) {
+    const a = ta.selectionStart, b = ta.selectionEnd;
+    ta.setRangeText(text, a, b, 'end'); ta.focus(); ta.dispatchEvent(new Event('input'));
+  }
+
+  function updateToolbarState() {
+    if (!ddoc) return;
+    document.querySelectorAll('#toolbar button[data-cmd]').forEach((b) => {
+      const c = b.dataset.cmd; if (!c) return;
+      let on = false; try { on = ddoc.queryCommandState(c); } catch (e) { }
+      b.classList.toggle('on', on);
+    });
+  }
+
+  function makeLink() {
+    const url = prompt('Link address (https://…, mailto:…, tel:…). Fields work here too: mailto:@@mail', 'https://');
+    if (!url || url === 'https://') return;
+    if (!/^(https?:|mailto:|tel:)/i.test(url.trim())) { toast('A link starts with https://, mailto: or tel:.', true); return; }
+    exec('createLink', url.trim());
+  }
+
+  function insertTable() {
+    insertHtml('<table cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' +
+      '<td style="padding:0 14px 0 0;vertical-align:top">Logo</td>' +
+      '<td style="vertical-align:top;font-family:Arial,sans-serif;font-size:10pt"><b>@@givenName @@sn</b><br>@@title<br>Mobile @@mobile<br>@@mail</td>' +
+      '</tr></table><p><br></p>');
+  }
+
+  // Selected image: width, alt text and a link, in a bar above the editor.
+  let selImg = null;
+  function onDesignClick(e) {
+    if (e.target && e.target.nodeName === 'IMG') {
+      hideImgBar(); selImg = e.target; selImg.classList.add('sel');
+      $('imgW').value = selImg.getAttribute('width') || selImg.naturalWidth || '';
+      $('imgAlt').value = selImg.getAttribute('alt') || '';
+      const a = selImg.closest('a'); $('imgHref').value = a ? a.getAttribute('href') : '';
+      $('imgBar').hidden = false;
+    } else hideImgBar();
+  }
+  function hideImgBar() {
+    if (selImg) { selImg.classList.remove('sel'); if (!selImg.className) selImg.removeAttribute('class'); }
+    selImg = null; $('imgBar').hidden = true;
+  }
+  function applyImg() {
+    if (!selImg) return;
+    const w = parseInt($('imgW').value, 10);
+    if (w > 0) { selImg.setAttribute('width', w); selImg.removeAttribute('height'); selImg.style.width = ''; selImg.style.height = ''; if (!selImg.getAttribute('style')) selImg.removeAttribute('style'); }
+    selImg.setAttribute('alt', $('imgAlt').value);
+    const href = $('imgHref').value.trim(), a = selImg.closest('a');
+    if (href && /^(https?:|mailto:|tel:)/i.test(href)) {
+      if (a) a.setAttribute('href', href); else { const na = ddoc.createElement('a'); na.href = href; selImg.replaceWith(na); na.append(selImg); }
+    } else if (!href && a) a.replaceWith(...a.childNodes);
+    onDesignInput();
+  }
+
+  // Images: pick one already in the draft, or upload one.
+  function openImageDialog() {
+    $('imgErr').textContent = '';
+    renderImageList();
+    $('dlgImage').showModal();
+  }
+  function renderImageList() {
+    const box = $('imgList'); box.textContent = '';
+    if (!S.assets.length) box.append(el('p', { class: 'lead' }, 'No images yet.'));
+    S.assets.forEach((a) => {
+      const del = el('span', { class: 'del', title: 'Remove from the draft', role: 'button', onclick: (e) => { e.stopPropagation(); deleteAsset(a.name); } }, 'remove');
+      box.append(el('button', { type: 'button', onclick: () => { $('dlgImage').close(); insertImage('assets/' + a.name); } },
+        el('img', { src: '/assets/' + encodeURIComponent(a.name), alt: '' }), a.name, del));
+    });
+  }
+  function insertImage(src) {
+    const i = new Image();
+    i.onload = () => { const w = Math.min(i.naturalWidth, 240); insertHtml('<img src="' + core.escapeHtml(src) + '" width="' + w + '" alt="" style="border:0">'); };
+    i.onerror = () => insertHtml('<img src="' + core.escapeHtml(src) + '" alt="" style="border:0">');
+    i.src = '/' + src;
+  }
+  async function deleteAsset(name) {
+    const used = S.config.signatures.filter((s) => (s.html || '').includes('assets/' + name)).map((s) => s.name);
+    if (used.length && !confirm(name + ' is used in: ' + used.join(', ') + '. Remove it anyway?')) return;
+    try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = e.message; }
+  }
+  $('imgFile').addEventListener('change', async () => {
+    const f = $('imgFile').files[0]; $('imgFile').value = '';
+    if (!f) return;
+    $('imgErr').textContent = '';
+    if (f.size > 1024 * 1024) { $('imgErr').textContent = 'The image is larger than 1 MB.'; return; }
+    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+    try {
+      const r = await api('assets/upload', { name: f.name, data });
+      S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]).sort((a, b) => a.name.localeCompare(b.name));
+      $('dlgImage').close();
+      insertImage(r.path);
+    } catch (e) { $('imgErr').textContent = e.message; }
+  });
+
+  // Design / HTML
+  function setMode(mode) {
+    if (mode === S.mode) return;
+    const s = sig();
+    if (mode === 'html') { $('source').value = s ? s.html : ''; }
+    else { flushSource(); loadDesign(s ? s.html : ''); }
+    S.mode = mode;
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
+    design.hidden = mode !== 'design';
+    $('source').hidden = mode !== 'html';
+    document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
+    hideImgBar();
+  }
+  // What was typed in the HTML tab, made safe, once the tab is left.
+  function flushSource() {
+    if (S.mode !== 'html') return;
+    const s = sig(); if (!s) return;
+    const clean = sanitize($('source').value);
+    if (clean !== s.html) { s.html = clean; changed({ list: false }); }
+  }
+  $('source').addEventListener('input', () => { const s = sig(); if (!s) return; s.html = $('source').value; changed({ list: false }); });
+  $('source').addEventListener('blur', flushSource);
+
+  // ---------------------------------------------------------------------------------------------
+  // Preview
+  // ---------------------------------------------------------------------------------------------
+  let pvTimer = null;
+  function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(renderPreview, 150); }
+
+  function previewValues() {
+    const src = $('pvSource').value, v = {};
+    S.config.fields.forEach((f) => { v[f.key] = src === 'sample' ? (f.sample || '') : src === 'ad' && S.adValues ? (S.adValues[f.key] || '') : ''; });
+    return v;
+  }
+
+  function renderPreview() {
+    const s = sig(); if (!s || S.view !== 'sig') return;
+    const html = core.render(core.compile(sanitize(s.html), document), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const asText = $('pvText').checked;
+    const greet = asText ? '' : '<p>Hello,</p><p>this is how the signature looks under a message.</p><p>&nbsp;</p>';
+    const body = asText ? '<pre style="font:11pt/1.4 Consolas,monospace;white-space:pre-wrap">' + core.escapeHtml(core.htmlToText(html)) + '</pre>' : greet + html;
+    $('preview').srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222}p{margin:0}table{border-collapse:collapse}</style></head><body>' + body + '</body></html>';
+
+    // What to know about this signature before it goes out.
+    const notes = [], keys = fieldKeys(), used = core.placeholdersIn(s.html);
+    const unknown = used.filter((k) => keys.indexOf(k) < 0);
+    const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && !f.graph; });
+    if (unknown.length) notes.push(el('div', { class: 'warn' }, 'Not a field: ' + unknown.map((k) => '@@' + k).join(', ') + ' - left as typed.'));
+    if (noGraph.length) notes.push(el('div', { class: 'warn' }, 'No Graph source, so empty in Outlook: ' + noGraph.map((k) => '@@' + k).join(', ') + '. See Fields.'));
+    if ($('pvSource').value === 'ad' && S.adName) notes.push(el('div', null, 'Values of ' + S.adName + ' from Active Directory.'));
+    $('pvNote').replaceChildren(...notes);
+  }
+
+  $('pvSource').addEventListener('change', () => {
+    const ad = $('pvSource').value === 'ad';
+    $('pvAd').hidden = !ad;
+    if (ad && !(S.info && S.info.features && S.info.features.adLookup)) toast('Active Directory is not reachable from here: this needs Windows on a machine in the domain.', true);
+    if (ad && !S.adValues) $('pvUser').focus();
+    renderPreview();
+  });
+  $('pvText').addEventListener('change', renderPreview);
+  async function adLookup() {
+    try {
+      const r = await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
+      S.adValues = r.values; S.adName = r.displayName; renderPreview();
+    } catch (e) { toast(e.message, true); }
+  }
+  $('pvLookup').addEventListener('click', adLookup);
+  $('pvUser').addEventListener('keydown', (e) => { if (e.key === 'Enter') adLookup(); });
+
+  // ---------------------------------------------------------------------------------------------
+  // Signature properties
+  // ---------------------------------------------------------------------------------------------
+  const splitList = (v) => v.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+  $('sigName').addEventListener('input', () => { const s = sig(); if (s) { s.name = $('sigName').value; changed({ preview: false }); } });
+  $('sigName').addEventListener('blur', () => { const s = sig(); if (s && !s.name.trim()) { s.name = 'Signature'; $('sigName').value = s.name; changed(); } });
+  // One default for new mail and one for replies, unless the audiences differ: a second one with
+  // the same audience could never be picked.
+  function setDefault(flag, on) {
+    const s = sig(); if (!s) return;
+    if (on) S.config.signatures.forEach((x) => { if (x !== s && x[flag] && audienceText(x) === audienceText(s)) x[flag] = false; });
+    s[flag] = on; changed();
+  }
+  $('sigNew').addEventListener('change', () => setDefault('defaultNew', $('sigNew').checked));
+  $('sigReply').addEventListener('change', () => setDefault('defaultReply', $('sigReply').checked));
+  $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
+  $('sigDeps').addEventListener('input', () => { const s = sig(); if (s) { s.audience.departments = splitList($('sigDeps').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
+  $('sigDoms').addEventListener('input', () => { const s = sig(); if (s) { s.audience.domains = splitList($('sigDoms').value).map((d) => d.replace(/^@/, '').toLowerCase()); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
+  $('btnNew').addEventListener('click', () => addSig());
+  $('btnNew2').addEventListener('click', () => addSig());
+  $('btnDup').addEventListener('click', () => { flushSource(); const s = sig(); if (s) addSig(s); });
+  $('btnDel').addEventListener('click', () => {
+    const s = sig(); if (!s || !confirm('Delete the signature "' + s.name + '"? It goes from Outlook with the next publish.')) return;
+    S.config.signatures = S.config.signatures.filter((x) => x !== s);
+    changed(); openSig(S.config.signatures[0] ? S.config.signatures[0].id : null);
+  });
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setMode(t.dataset.mode)));
+  ['imgW', 'imgAlt', 'imgHref'].forEach((id) => $(id).addEventListener('change', applyImg));
+  $('imgDone').addEventListener('click', () => { applyImg(); hideImgBar(); });
+
+  // Import an existing .htm signature (classic Outlook keeps them in %APPDATA%\Microsoft\Signatures).
+  $('btnImport').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async () => {
+    const f = $('importFile').files[0]; $('importFile').value = '';
+    if (!f) return;
+    const buf = await f.arrayBuffer();
+    // Outlook writes these in the Windows code page and says so in a <meta>.
+    const head = new TextDecoder('latin1').decode(buf.slice(0, 4096));
+    const cs = (/charset=["']?([\w-]+)/i.exec(head) || [])[1] || 'utf-8';
+    let text; try { text = new TextDecoder(cs).decode(buf); } catch (e) { text = new TextDecoder('utf-8').decode(buf); }
+    const d = new DOMParser().parseFromString(text, 'text/html');
+    let html = sanitize(d.body ? d.body.innerHTML : text);
+    const t = document.createElement('template'); t.innerHTML = html;
+    let dropped = 0;
+    t.content.querySelectorAll('img').forEach((i) => { const src = i.getAttribute('src') || ''; if (!/^(https:|assets\/)/i.test(src)) { i.remove(); dropped++; } });
+    html = t.innerHTML;
+    const s = sig(); if (!s) return;
+    if (s.html.trim() && !confirm('Replace the content of "' + s.name + '" with ' + f.name + '?')) return;
+    s.html = html; changed(); openSig(s.id);
+    toast(dropped ? dropped + ' image(s) were files on that computer: add them again with the image button.' : 'Imported ' + f.name + '.');
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Fields
+  // ---------------------------------------------------------------------------------------------
+  const GRAPH_PROPS = ['givenName', 'surname', 'displayName', 'jobTitle', 'department', 'companyName', 'officeLocation', 'mobilePhone', 'businessPhones[0]', 'faxNumber', 'mail', 'userPrincipalName', 'streetAddress', 'postalCode', 'city', 'state', 'country', 'employeeId']
+    .concat(Array.from({ length: 15 }, (_, i) => 'onPremisesExtensionAttributes.extensionAttribute' + (i + 1)));
+  $('graphProps').append(...GRAPH_PROPS.map((p) => el('option', { value: p })));
+
+  function renderFields() {
+    const tb = $('fieldRows'); tb.textContent = '';
+    S.config.fields.forEach((f, i) => {
+      const inp = (prop, attrs) => {
+        const x = el('input', Object.assign({ value: f[prop] || '' }, attrs || {}));
+        x.addEventListener('input', () => { f[prop] = x.value.trim(); changed({ list: false }); if (prop === 'graph') x.closest('td').classList.toggle('nograph', !f.graph); });
+        return x;
+      };
+      const key = el('input', { value: f.key, 'aria-label': 'Placeholder name' });
+      let oldKey = f.key;
+      key.addEventListener('change', () => {
+        const nk = key.value.trim().replace(/^@@/, '');
+        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(nk)) { toast('A placeholder name is letters, digits and _, starting with a letter.', true); key.value = oldKey; return; }
+        if (S.config.fields.some((x) => x !== f && x.key === nk)) { toast('@@' + nk + ' is already a field.', true); key.value = oldKey; return; }
+        const uses = S.config.signatures.filter((s) => core.placeholdersIn(s.html).indexOf(oldKey) >= 0);
+        if (uses.length && confirm('Change @@' + oldKey + ' to @@' + nk + ' in ' + uses.length + ' signature(s) too?')) {
+          const re = new RegExp('@@' + oldKey + '(?![A-Za-z0-9_])', 'g');
+          uses.forEach((s) => { s.html = s.html.replace(re, '@@' + nk); });
+        }
+        f.key = nk; oldKey = nk; changed({ list: false });
+      });
+      const del = el('button', { class: 'ghost small danger', title: 'Remove field', 'aria-label': 'Remove field', onclick: () => {
+        const uses = S.config.signatures.filter((s) => core.placeholdersIn(s.html).indexOf(f.key) >= 0).map((s) => s.name);
+        if (uses.length && !confirm('@@' + f.key + ' is used in: ' + uses.join(', ') + '. Remove the field anyway? The placeholder then stays as typed.')) return;
+        S.config.fields.splice(i, 1); changed({ list: false }); renderFields();
+      } }, '✕');
+      tb.append(el('tr', null,
+        el('td', null, inp('label', { 'aria-label': 'Field' })),
+        el('td', null, el('div', { class: 'ph' }, el('span', null, '@@'), key)),
+        el('td', null, inp('ad', { 'aria-label': 'AD attribute' })),
+        el('td', { class: f.graph ? '' : 'nograph' }, inp('graph', { list: 'graphProps', placeholder: 'not available', 'aria-label': 'Graph source' })),
+        el('td', null, inp('sample', { 'aria-label': 'Sample value' })),
+        el('td', null, del)));
+    });
+  }
+  $('btnAddField').addEventListener('click', () => {
+    let n = 1; while (S.config.fields.some((f) => f.key === 'field' + n)) n++;
+    S.config.fields.push({ key: 'field' + n, label: 'New field', ad: '', graph: '', sample: '' });
+    changed({ list: false }); renderFields();
+    const rows = $('fieldRows').querySelectorAll('tr'); rows[rows.length - 1].querySelector('input').focus();
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Add-in options
+  // ---------------------------------------------------------------------------------------------
+  const OPTS = { optDisable: 'disableOutlookSignature', optChoice: 'allowUserChoice', optMeetings: 'meetings', optNoProfile: 'insertWithoutProfile' };
+  function renderOptions() {
+    Object.entries(OPTS).forEach(([id, k]) => { $(id).checked = !!S.config.options[k]; });
+    $('optClient').value = S.config.auth.clientId || '';
+    $('optTenant').value = S.config.auth.tenantId || '';
+    const base = (S.settings.publicBaseUrl || '').replace(/\/?$/, '/');
+    $('manifestUrl').textContent = base ? base + 'manifest.xml' : '(set the public address in Settings)';
+    let host = ''; try { host = new URL(base).host; } catch (e) { }
+    $('helpRedirect').textContent = 'brk-multihub://' + (host || '<your add-in host>');
+  }
+  Object.entries(OPTS).forEach(([id, k]) => $(id).addEventListener('change', () => { S.config.options[k] = $(id).checked; changed({ list: false }); }));
+  const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  ['optClient', 'optTenant'].forEach((id) => $(id).addEventListener('input', () => {
+    const v = $(id).value.trim();
+    $(id).style.borderColor = v && !GUID.test(v) ? 'var(--danger)' : '';
+    S.config.auth[id === 'optClient' ? 'clientId' : 'tenantId'] = v; changed({ list: false });
+  }));
+  $('lnkSetup').addEventListener('click', (e) => { e.preventDefault(); $('dlgHelp').showModal(); });
+
+  document.querySelectorAll('.nav-list a').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault(); flushSource();
+    show(a.dataset.view);
+    if (a.dataset.view === 'fields') renderFields(); else renderOptions();
+  }));
+
+  // ---------------------------------------------------------------------------------------------
+  // Settings
+  // ---------------------------------------------------------------------------------------------
+  function renderSettingsKind() {
+    const kind = (document.querySelector('input[name=tkind]:checked') || {}).value || 'github';
+    $('setGithub').hidden = kind !== 'github'; $('setFolder').hidden = kind !== 'folder';
+  }
+  document.querySelectorAll('input[name=tkind]').forEach((r) => r.addEventListener('change', renderSettingsKind));
+  $('btnSettings').addEventListener('click', () => {
+    const t = S.settings.target;
+    document.querySelectorAll('input[name=tkind]').forEach((r) => { r.checked = r.value === t.kind; });
+    $('setOwner').value = t.owner; $('setRepo').value = t.repo; $('setBranch').value = t.branch; $('setPath').value = t.path;
+    $('setFolderPath').value = t.folder; $('setBase').value = S.settings.publicBaseUrl;
+    $('setToken').value = '';
+    const env = S.info && S.info.features && S.info.features.tokenStore === 'env';
+    $('setToken').disabled = env;
+    $('setToken').placeholder = S.tokenSet ? '•••••••• stored - type a new one to replace it' : 'github_pat_…';
+    $('tokenNote').textContent = env ? 'Read from the GITHUB_TOKEN environment variable.'
+      : 'A fine-grained token for this repository only, with Contents: Read and write. Kept encrypted for your Windows account.' + (S.tokenSet ? ' Type "-" to remove it.' : '');
+    $('setErr').textContent = '';
+    renderSettingsKind();
+    $('dlgSettings').showModal();
+  });
+  $('setSave').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const kind = (document.querySelector('input[name=tkind]:checked') || {}).value || 'github';
+    const tok = $('setToken').value.trim();
+    const body = {
+      settings: { target: { kind, owner: $('setOwner').value, repo: $('setRepo').value, branch: $('setBranch').value, path: $('setPath').value, folder: $('setFolderPath').value }, publicBaseUrl: $('setBase').value },
+      githubToken: tok === '-' ? '' : tok ? tok : null
+    };
+    try {
+      const r = await api('settings/save', body);
+      S.settings = r.settings; S.tokenSet = r.tokenSet; S.tokenFromEnv = r.tokenFromEnv;
+      $('dlgSettings').close(); toast('Settings saved.');
+      if (S.view === 'options') renderOptions();
+      save();
+    } catch (err) { $('setErr').textContent = err.message; }
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Publish and load
+  // ---------------------------------------------------------------------------------------------
+  function publishChecks() {
+    const c = S.config, out = [];
+    const errs = core.validate(prepared());
+    errs.forEach((e) => out.push(['bad', e]));
+    if (!c.signatures.length) out.push(['bad', 'There is no signature.']);
+    const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length);
+    if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', 'No signature is the default for new mail: users get none unless they pick one.']);
+    else if (!plain.some((s) => s.defaultNew)) out.push(['warn', 'The default for new mail is limited to some users: everyone else gets none.']);
+    if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', 'No signature is the default for replies.']);
+    if (!GUID.test(c.auth.clientId || '') || !GUID.test(c.auth.tenantId || '')) out.push(['warn', 'The Entra ID app registration is not set (Add-in): the add-in cannot read the users\' details' + (c.options.insertWithoutProfile ? ', the fields stay empty.' : ' and inserts no signature.')]);
+    const keys = fieldKeys();
+    const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
+    const unknown = used.filter((k) => keys.indexOf(k) < 0);
+    if (unknown.length) out.push(['warn', 'Not fields, left as typed: ' + unknown.map((k) => '@@' + k).join(', ')]);
+    const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && !f.graph; });
+    if (noGraph.length) out.push(['warn', 'Empty in Outlook (no Graph source): ' + noGraph.map((k) => '@@' + k).join(', ')]);
+    const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
+    if (missing.length) out.push(['bad', 'Images missing from the draft: ' + missing.join(', ')]);
+    if (!assetBase()) out.push(['warn', 'No public address set (Settings): images in signatures will not load.']);
+    if (!out.some((x) => x[0] !== 'good')) out.push(['good', c.signatures.length + ' signature(s), ready.']);
+    return out;
+  }
+
+  $('btnPublish').addEventListener('click', () => {
+    flushSource();
+    const t = S.settings.target;
+    $('pubWhere').textContent = t.kind === 'github'
+      ? 'To github.com/' + t.owner + '/' + t.repo + ', branch ' + t.branch + ', folder ' + t.path + '. GitHub Pages serves it a minute or two later.'
+      : 'To the folder ' + t.folder + (t.path ? ' (' + t.path + ')' : '') + '.';
+    const checks = publishChecks();
+    $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
+    $('pubGo').disabled = checks.some((c) => c[0] === 'bad');
+    $('pubErr').textContent = ''; $('pubOk').textContent = ''; $('pubMsg').value = '';
+    $('dlgPublish').showModal();
+  });
+  $('pubGo').addEventListener('click', async (e) => {
+    e.preventDefault();
+    $('pubGo').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = 'Publishing…';
+    try {
+      await saving;
+      const c = prepared(); c.updated = new Date().toISOString();
+      const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
+      S.config.updated = c.updated; S.dirty = false; S.publishedAt = new Date().toISOString(); renderStatus();
+      $('pubOk').replaceChildren(r.changed ? 'Published.' : 'Nothing had changed.', ' ', r.commitUrl ? el('a', { href: r.commitUrl, target: '_blank', rel: 'noopener' }, 'See the commit') : '');
+    } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = err.message; }
+    finally { $('pubGo').disabled = false; }
+  });
+
+  $('btnLoad').addEventListener('click', async () => {
+    if (S.dirty && !confirm('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).')) return;
+    try { applyDraft(await api('load-published')); toast('Loaded the published signatures.'); }
+    catch (e) { toast(e.message, true); }
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Start
+  // ---------------------------------------------------------------------------------------------
+  // A configuration from an older editor or another hand gets whatever it lacks, so the rest of
+  // the UI can rely on every part being there.
+  function normalize(c) {
+    const d = core.defaultConfig();
+    c = c && typeof c === 'object' ? c : d;
+    c.schemaVersion = core.SCHEMA_VERSION;
+    c.options = Object.assign({}, d.options, c.options || {});
+    c.auth = Object.assign({}, d.auth, c.auth || {});
+    if (!Array.isArray(c.fields)) c.fields = d.fields;
+    c.signatures = (Array.isArray(c.signatures) ? c.signatures : []).map((s) => {
+      const n = Object.assign(core.newSignature(s.id, s.name), s);
+      n.audience = Object.assign({ departments: [], domains: [] }, s.audience || {});
+      return n;
+    });
+    return c;
+  }
+
+  function applyDraft(r) {
+    let c = null;
+    try { c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { toast('The saved draft could not be read; starting from an empty one.', true); }
+    S.config = normalize(c);
+    S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = r.publishedAt || ''; S.commitUrl = r.commitUrl || '';
+    renderStatus();
+    if (S.config.signatures.length) openSig(S.sigId && S.config.signatures.some((s) => s.id === S.sigId) ? S.sigId : S.config.signatures[0].id);
+    else show('empty');
+  }
+
+  let toastTimer = null;
+  function toast(msg, isError) {
+    const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (isError ? ' error' : '');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 6000 : 3000);
+  }
+
+  async function start() {
+    initDesign();
+    try {
+      const [info, settings, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
+      S.info = info; S.settings = settings.settings; S.tokenSet = settings.tokenSet; S.tokenFromEnv = settings.tokenFromEnv;
+      S.config = normalize(null);
+      buildToolbar();
+      applyDraft(draft);
+      if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = 'User from Active Directory (not reachable)';
+    } catch (e) {
+      document.body.classList.add('failed');
+      $('main').replaceChildren(el('section', { class: 'view empty' }, el('h1', null, 'Not connected'), el('p', null, e.message)));
+    }
+  }
+  start();
+})();
