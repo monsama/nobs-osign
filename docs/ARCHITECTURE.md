@@ -7,12 +7,13 @@ editor/ui  (web UI, static)
    │  HTTP API (docs/API.md): JSON over POST, Authorization: Bearer
    ▼
 editor backend  ── today: editor/OSign.ps1        later: a container (Node, …)
-   │  publishes  <path>/signatures.json + <path>/assets/*
+   │  publishes  signatures.json + assets/*  into a folder
    ▼
-target  ── GitHub: branch osign-data (Pages serves it with main's add-in)   or   a folder on a web server
-   │  https
+the OSign folder in the company's SharePoint (synced by OneDrive)   + photos/<user>.jpg (by hand)
+   │  Microsoft Graph, with each user's own sign-in
    ▼
-addin (event handler + pane)  ── reads signatures.json, the user's details from Graph
+addin (event handler + pane), served as code only from GitHub Pages
+   reads signatures.json, the images, the user's details and groups; embeds the images (cid:)
 ```
 
 ## The shared engine: `shared/signature-core.js`
@@ -26,7 +27,8 @@ will get.
 - `render(compiled, values, opts)` uses string operations only. Classic Outlook runs the event
   handler in a JavaScript-only runtime with no DOM. It removes the marked lines whose fields are all
   empty, fills `@@placeholders` (HTML-escaped), and puts the published image address in front of
-  `assets/…`.
+  `assets/…` and `photos/…` where the editor serves them. The add-in leaves those paths and embeds
+  the images instead (`localImages()` lists them).
 - `pick(config, values, from, kind, prefs)` decides which signature, as the README describes.
 
 ## `signatures.json`
@@ -35,8 +37,6 @@ will get.
 {
   "schemaVersion": 1,
   "updated": "2026-10-12T09:00:00.000Z",
-  "assetBaseUrl": "https://monsama.github.io/osign/config/",   // images: <this>assets/<name>
-  "auth": { "clientId": "…", "tenantId": "…" },               // Entra app for Graph
   "options": { "disableOutlookSignature": true, "allowUserChoice": true, "meetings": false, "insertWithoutProfile": false },
   "fields": [ { "key": "givenName", "label": "Vorname", "ad": "givenName", "graph": "givenName", "sample": "Anna" } ],
   "signatures": [ {
@@ -60,14 +60,13 @@ Whatever runs it, a backend has to:
    and the draft's images at `/assets/*`.
 2. Answer the API in [API.md](API.md), with authentication.
 3. Keep a draft: the configuration text and its images.
-4. Publish the draft to a target, and load from it. For GitHub that is one commit through the Git
-   Data API, never forced. For a folder, the images are copied first and the configuration is
-   written last.
+4. Publish the draft into the target folder (images first, the configuration last; only what
+   changed is written), and load from it.
 5. Optionally, look up a user in AD for the preview.
 
 `OSign.ps1` does this for one person on their own PC. It listens on 127.0.0.1 only, checks the Host
 header (against DNS rebinding), and uses a token that is new on every start and passed in the URL
-fragment. It stores the GitHub token with DPAPI.
+fragment. It holds no credentials: writing to SharePoint is OneDrive's job.
 
 ## Moving the editor into a container
 
@@ -78,14 +77,14 @@ What changes, and what doesn't:
 | UI | `editor/ui` | the same files |
 | API | `OSign.ps1` | a new server with the same routes (e.g. Node) |
 | Who may use it | whoever started it (token in the URL) | sign-in in front: Entra ID (App Service / Container Apps authentication, or a reverse proxy with OIDC). The API then accepts that session instead of the start token. |
-| GitHub token | DPAPI, per user | a secret of the container (`GITHUB_TOKEN`), or a GitHub App |
+| Writing to SharePoint | the synced folder (OneDrive) | Microsoft Graph with an app permission for that one site (`Sites.Selected`) |
 | Draft | `%APPDATA%\OSign` | a volume (`OSIGN_DATA`), shared by everyone |
 | AD lookup | ADSI on a domain PC | LDAP to a DC, or Graph (`User.Read.All`) |
-| Publishing | GitHub or a folder | the same, or straight into the container's own web root, so it can serve the add-in too |
 
-`OSign.ps1` already reads `OSIGN_DATA` and, without Windows, `GITHUB_TOKEN`. So it also runs as it is
-in a `mcr.microsoft.com/powershell` container, as a stopgap. It would need a port mapping and a
-proxy in front: it only listens on 127.0.0.1 and has no sign-in of its own.
+`OSign.ps1` already reads `OSIGN_DATA`. So it also runs as it is
+in a `mcr.microsoft.com/powershell` container, as a stopgap, publishing into a mounted folder. It
+would need a port mapping and a proxy in front: it only listens on 127.0.0.1 and has no sign-in of
+its own.
 
 The UI reads the token from `#t=` and sends it as `Authorization: Bearer`. A backend that
 authenticates by cookie instead can simply ignore that header.

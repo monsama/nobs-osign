@@ -7,7 +7,8 @@ The contract between `editor/ui` and any backend (`editor/OSign.ps1` today).
 - Every answer is JSON: `{ "ok": true, … }` or `{ "ok": false, "error": "a sentence for the user" }`.
   A wrong or missing token gets HTTP 401. A request from another origin, another Host or another
   method gets 403.
-- `GET /assets/<name>` serves a draft image (no token: an `<img>` cannot send one).
+- `GET /assets/<name>` serves a draft image, `GET /photos/<name>` a photo from the photos folder
+  (no token: an `<img>` cannot send one).
 
 ## ping
 
@@ -15,11 +16,13 @@ Keeps the server from stopping when idle. → `{ ok }`
 
 ## info
 
-→ `{ ok, backend: "powershell", version, dataDir, features: { adLookup: bool, tokenStore: "dpapi"|"env" } }`
+→ `{ ok, backend: "powershell", version, dataDir, features: { adLookup: bool } }`
 
 ## draft/get
 
-→ `{ ok, configJson: string|null, assets: [{ name, size }], dirty: bool, publishedAt, commitUrl }`
+→ `{ ok, configJson: string|null, assets: [{ name, size }], dirty: bool, publishedAt }`
+
+`publishedAt` is milliseconds since 1970 (0: never).
 
 `configJson` is the configuration as text, exactly as last saved. `dirty` means the draft differs
 from what was last published or loaded.
@@ -43,29 +46,28 @@ the extension. If an image with the same name but other content exists, the uplo
 
 ## settings/get
 
-→ `{ ok, settings: { target: { kind: "github"|"folder", owner, repo, branch, path, folder }, publicBaseUrl }, tokenSet, tokenFromEnv }`
+→ `{ ok, settings: { folder, photosFolder }, folderFound: bool, photosFound: bool }`
 
-The token itself is never returned.
+`folder`: where Publish writes (the synced OSign folder). `photosFolder`: where the preview finds
+the photos; empty means `<folder>\photos`.
 
 ## settings/save
 
-`{ settings, githubToken }` → like `settings/get`. `githubToken`: `null` keeps the stored token, `""`
-removes it, and any other string replaces it.
+`{ settings: { folder, photosFolder } }` → like `settings/get`. Paths have to be full paths; a folder
+that is not there (yet) is accepted, and Publish then says so.
 
 ## publish
 
-`{ configJson, message }` → `{ ok, changed, commitUrl, note }`
+`{ configJson }` → `{ ok, changed, folder }`
 
-Saves the draft, then writes `<path>/signatures.json` and `<path>/assets/*` to the target. Images no
-longer in the draft are removed there. Other files are left alone. On GitHub this is one commit; if
-the branch moved in the meantime it is refused, not forced. A branch that is not there yet is
-created, with no history shared with the others. Then the `pages` workflow is started on the
-repository's default branch; `note` says so when that failed (the publish itself stands).
-`changed: false` means nothing differed.
+Saves the draft, then writes `assets\*` and, last, `signatures.json` into the folder: only files that
+differ, so OneDrive uploads nothing that did not change. Images no longer in the draft are removed
+there; `photos\` and anything that is not an image are left alone. `changed: false` means nothing
+differed.
 
 ## load-published
 
-→ like `draft/get`. Replaces the draft and its images with what is on the target. The previous
+→ like `draft/get`. Replaces the draft and its images with what is in the folder. The previous
 draft is kept as `draft.json.bak`.
 
 ## ad/lookup

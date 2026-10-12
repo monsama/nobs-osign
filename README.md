@@ -12,16 +12,20 @@ Central email signatures for **classic and new Outlook**, managed in one place.
 
 ![The editor](docs/editor.png)
 
-The add-in and the published signatures are served from GitHub Pages of this repository. Another
-web server can take over later; see [Hosting elsewhere](#hosting-elsewhere).
+**Nothing of a company goes to GitHub.** GitHub holds only the code, and GitHub Pages serves only
+the add-in's code. The signatures, images and photos stay in the company's own Microsoft 365: in a
+folder `OSign` in the SharePoint home site. The add-in reads that folder with each user's own
+sign-in, and embeds the images in the mail.
 
 ```
- OSign.ps1 (editor)                 GitHub: monsama/osign            Outlook (every user)
- ┌───────────────────┐  publish    ┌──────────────────────┐ Pages  ┌──────────────────────────┐
- │ web UI on         │ ──────────> │ config/signatures.json│ ─────> │ OSign add-in             │
- │ 127.0.0.1         │  one commit │ config/assets/*.png   │ https  │  new mail / reply → sign │
- └───────────────────┘             └──────────────────────┘        │  user details ← Graph /me│
-                                                                    └──────────────────────────┘
+ OSign.ps1 (editor, admin PC)        Company SharePoint (home site)       Outlook (every user)
+ ┌──────────────────────────┐ write  ┌───────────────────────────┐ Graph  ┌───────────────────────────┐
+ │ web UI on 127.0.0.1      │ ─────> │ OSign\signatures.json     │ ─────> │ OSign add-in              │
+ │ publishes into the       │ (One-  │ OSign\assets\*.png        │ user's │  new mail / reply → sign  │
+ │ synced OSign folder      │ Drive) │ OSign\photos\<user>.jpg   │ sign-in│  details, groups ← Graph  │
+ └──────────────────────────┘        └───────────────────────────┘        │  images embedded (cid:)   │
+                                                                          └───────────────────────────┘
+ GitHub: code only ──── GitHub Pages: the add-in's code (no data) ─────────────────────┘
 ```
 
 ## Where it works
@@ -58,7 +62,9 @@ either into `onPremisesExtensionAttributes.extensionAttribute1`…`15` or as dir
 Until then those fields stay empty in Outlook. The editor's preview can still show them, because it
 reads them from AD.
 
-`@@sAMAccountName` (Benutzername, Graph `onPremisesSamAccountName`) is there as well.
+`@@sAMAccountName` (Benutzername, Graph `onPremisesSamAccountName`) is there as well. It also names
+each person's photo: a template image `photos/@@sAMAccountName.jpg` becomes
+`OSign\photos\<username>.jpg`, embedded in the mail; whoever has none gets the signature without.
 
 A line whose fields all come out empty is left out, so nobody's signature shows "Mobile:" with no
 number. This works for paragraphs, lines split by line breaks, and table rows.
@@ -67,17 +73,21 @@ number. This works for paragraphs, lines split by line breaks, and table rows.
 
 [docs/SETUP.md](docs/SETUP.md) has every step. In short:
 
-1. **GitHub Pages**: in this repository, go to Settings → Pages → Source: **GitHub Actions**.
-2. **Entra ID**: register an app (a single-page application with redirect URI
-   `brk-multihub://monsama.github.io`, Graph `User.Read`, admin consent).
-3. **Editor**: on Windows, run
+1. **SharePoint:** in the home site's document library, make a folder `OSign` (readable for all
+   employees). Sync it to the admin PC (*Sync* or *Add shortcut to My files*). Copy the photos into
+   `OSign\photos` (`<username>.jpg`).
+2. **Entra ID:** register an app (single-page application, redirect URI
+   `brk-multihub://<owner>.github.io`) with Graph `User.Read`, `Sites.Read.All` and, for groups,
+   `GroupMember.Read.All`, delegated, with admin consent.
+3. **GitHub:** set the repository variable `OSIGN_CLIENT_ID` to the app's ID, set Pages to
+   *GitHub Actions*, run the **pages** workflow.
+4. **Editor:** on Windows, run
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\editor\OSign.ps1
    ```
-   Then, in Settings, add a fine-grained GitHub token (this repository only, *Contents: Read and
-   write*). Make the signatures, enter the app registration under *Add-in*, and click **Publish**.
-4. **Microsoft 365 admin center**: go to Settings → Integrated apps → Upload custom apps and upload
-   `https://monsama.github.io/osign/manifest.xml`. Then assign it to the users.
+   In Settings, pick the synced `OSign` folder. Import or make the signatures and click **Publish**.
+5. **Microsoft 365 admin center:** Settings → Integrated apps → Upload custom apps, with
+   `https://<owner>.github.io/osign/manifest.xml`, and assign it to the users.
 
 ## How a signature is chosen
 
@@ -96,35 +106,37 @@ a mail never gets two.
 
 **⤓** next to *Signatures* imports `.htm` templates with their images: from CI-Sign (it keeps them
 next to `CI-Sign.exe`, as UTF-16, with images in `images\`) or from classic Outlook. Pick the
-folder, or the template files and images together. Not imported (yet): CI-Sign's text blocks
-(`{##Name}…{end ##Name}` in `__intern.htm`), and images per person (`images/@@sAMAccountName.jpg`),
-which are left out of the signature until they have a home that is not public.
+folder, or the template files and images together. A per-person image (`images/@@sAMAccountName.jpg`)
+becomes the photo from `OSign\photos`. Not imported (yet): CI-Sign's text blocks
+(`{##Name}…{end ##Name}` in `__intern.htm`).
 
 ## Privacy
 
-The editor publishes to the branch `osign-data`; `main` holds only code. GitHub Pages is public:
-only the templates and shared images are published there, never anyone's details.
-Each user's values are read at the moment of writing, from their own Graph profile, with their own
-sign-in. The add-in keeps a copy in that user's own mailbox settings, read again after 15 minutes
-and used when Graph cannot be reached.
+- GitHub and GitHub Pages hold only code. The add-in's app registration ID is built in (it is not
+  a secret); nothing else of the company is.
+- The signatures, images and photos are in the company's SharePoint, readable for its employees.
+  The add-in reads them, and each user's details and groups, with that user's own sign-in
+  (delegated permissions): it can never read more than the user can.
+- Images go into the mail itself, so no recipient's mail program loads anything from anywhere.
+- The add-in keeps a copy of the user's details in their own mailbox settings, read again after
+  15 minutes and used when Graph cannot be reached; and the images in the browser's storage.
 
-## Hosting elsewhere
+## Hosting the add-in elsewhere
 
-The editor can also publish to a folder (Settings → *A folder*), for example the folder of an IIS
-site or of any HTTPS web server. Build the add-in for that address:
+GitHub Pages only serves the add-in's code. Any HTTPS web server can do the same:
 
 ```
 npm ci
-BASE_URL=https://intranet.example.com/osign/ node addin/build.mjs
+BASE_URL=https://intranet.example.com/osign/ OSIGN_CLIENT_ID=<app id> node addin/build.mjs
 ```
 
-Serve `dist/` there. Point the editor's folder at the same place (it writes `config/` inside it),
-then upload the new `manifest.xml` in the admin center.
+Serve `dist/` there, add `brk-multihub://intranet.example.com` to the app registration, and upload
+the new `manifest.xml` in the admin center. `OSIGN_SP_SITE` and `OSIGN_SP_FOLDER` choose another
+SharePoint site or folder for the signatures.
 
-The editor itself is meant to move into a container later. The web UI talks to its backend only
-through the HTTP API in [docs/API.md](docs/API.md), so a second backend (for example Node in Docker)
-can replace `OSign.ps1` without the UI changing. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-describes the parts.
+The editor is meant to move into a container later. The web UI talks to its backend only through
+the HTTP API in [docs/API.md](docs/API.md), so a second backend can replace `OSign.ps1` without the
+UI changing. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes the parts.
 
 ## Development
 
@@ -142,8 +154,7 @@ The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows Powe
 | `editor/OSign.ps1` | The editor's backend: local web server, draft, GitHub/folder publishing, AD lookup |
 | `editor/ui/` | The editor's web UI |
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build |
-| `config/` | What the editor publishes (it writes this; don't edit it by hand) |
-| `tests/` | Engine, add-in runtime, backend API (with a stand-in GitHub), editor and pane in a browser |
+| `tests/` | Engine, add-in runtime (with a stand-in Graph and SharePoint), backend API, editor and pane in a browser |
 
 ## License
 

@@ -1,5 +1,2 @@
 node_modules/
 dist/
-# What the editor publishes lives on its own branch (osign-data), never on main.
-config/
-data/

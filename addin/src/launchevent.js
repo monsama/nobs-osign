@@ -9,7 +9,7 @@ import { core, loadConfig, loadUserValues, getPrefs, composeInfo, fromAddress, i
 async function sign(event, what) {
   try {
     const item = Office.context.mailbox.item;
-    const cfg = await loadConfig();
+    const cfg = await loadConfig({ interactive: false });
     if (!isMessage(item) && !(cfg.options && cfg.options.meetings)) return;
     const info = await composeInfo(item);
     const user = await loadUserValues(cfg, { interactive: false });

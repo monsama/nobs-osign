@@ -133,16 +133,13 @@
       <label class="check block"><input type="checkbox" id="optChoice"> Users may choose which signature they use for new mail and for replies (in the add-in's pane)</label>
       <label class="check block"><input type="checkbox" id="optMeetings"> Sign new meetings too</label>
       <label class="check block"><input type="checkbox" id="optNoProfile"> Insert a signature even when the user's details could not be read (the fields stay empty)</label>
-      <h2>Sign-in for the user's details</h2>
-      <p class="lead">The add-in reads the user's own profile from Microsoft Graph with the Entra ID app registration
-        below (single sign-on through Outlook, no password asked). <a href="#" id="lnkSetup">How to register it</a></p>
-      <div class="grid2 narrow">
-        <label>Application (client) ID<input id="optClient" placeholder="00000000-0000-0000-0000-000000000000"></label>
-        <label>Directory (tenant) ID<input id="optTenant" placeholder="00000000-0000-0000-0000-000000000000"></label>
-      </div>
+      <h2>Sign-in and permissions</h2>
+      <p class="lead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
+        details and groups from Entra ID and the signatures from the OSign folder in SharePoint. It uses one app registration,
+        set where the add-in is built - not here, and not in the signatures. <a href="#" id="lnkSetup">How to register it</a></p>
       <h2>Install</h2>
-      <p class="lead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps):</p>
-      <p><code id="manifestUrl"></code></p>
+      <p class="lead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
+        is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://&lt;owner&gt;.github.io/osign/manifest.xml</code>.</p>
     </section>
 
     <section id="viewEmpty" class="view empty" hidden>
@@ -154,27 +151,20 @@
 </div>
 
 <dialog id="dlgSettings">
-  <form method="dialog" class="dlg">
+  <form method="dialog" class="dlg wide">
     <h2>Settings</h2>
-    <fieldset>
-      <legend>Publish to</legend>
-      <label class="check"><input type="radio" name="tkind" value="github"> GitHub repository (GitHub Pages serves it)</label>
-      <label class="check"><input type="radio" name="tkind" value="folder"> A folder (a web server's, a share)</label>
-    </fieldset>
-    <div id="setGithub" class="grid2">
-      <label>Owner<input id="setOwner"></label>
-      <label>Repository<input id="setRepo"></label>
-      <label>Branch <small>(the signatures' own, not main)</small><input id="setBranch"></label>
-      <label>Folder in the repository<input id="setPath"></label>
-      <label class="span2">Access token
-        <input id="setToken" type="password" autocomplete="off" placeholder="">
-        <small id="tokenNote"></small>
-      </label>
-    </div>
-    <div id="setFolder" class="grid2">
-      <label class="span2">Folder<input id="setFolderPath" placeholder="\\server\wwwroot\osign"></label>
-    </div>
-    <label>Public address of the add-in <small>(where the published files are served)</small><input id="setBase" placeholder="https://monsama.github.io/osign/"></label>
+    <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
+      <input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign">
+      <small id="setFolderNote"></small>
+    </label>
+    <label>Photos for the preview <small>(one &lt;username&gt;.jpg per person; empty: the photos folder in the folder above)</small>
+      <input id="setPhotos" placeholder="\\server\share\photos">
+      <small id="setPhotosNote"></small>
+    </label>
+    <p class="lead">In SharePoint, open the document library of your home site (https://&lt;tenant&gt;.sharepoint.com), make
+      a folder <b>OSign</b>, and choose <b>Sync</b> (or <b>Add shortcut to My files</b>). It then appears in File Explorer;
+      its path goes in the first field. Publishing writes <code>signatures.json</code> and <code>assets\</code> there; the
+      photos go in <code>photos\</code>, by hand.</p>
     <p id="setErr" class="err"></p>
     <div class="dlg-foot">
       <button value="cancel" class="ghost" formnovalidate>Cancel</button>
@@ -213,12 +203,16 @@
   <form method="dialog" class="dlg wide">
     <h2>Register the add-in in Entra ID</h2>
     <ol class="steps">
-      <li>Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>; accounts in this organizational directory only.</li>
+      <li>Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>. Accounts:
+        <i>any organizational directory</i> (then no tenant ID is needed in the build).</li>
       <li><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
-        <code id="helpRedirect"></code></li>
-      <li><b>API permissions</b>: Microsoft Graph, delegated, <code>User.Read</code> (there by default). If signatures go to AD groups,
-        also <code>GroupMember.Read.All</code>. Then <b>Grant admin consent</b>, so no user is asked.</li>
-      <li>Copy the <b>Application (client) ID</b> and the <b>Directory (tenant) ID</b> from Overview into the two fields here, and publish.</li>
+        <code>brk-multihub://&lt;host the add-in is served from&gt;</code>, e.g. <code>brk-multihub://monsama.github.io</code>.</li>
+      <li><b>API permissions</b>, Microsoft Graph, delegated: <code>User.Read</code>, <code>Sites.Read.All</code> (the OSign
+        folder) and, for signatures by AD group, <code>GroupMember.Read.All</code>. Then <b>Grant admin consent</b>, so no
+        user is asked.</li>
+      <li>The <b>Application (client) ID</b> goes into the build: in GitHub, Settings → Secrets and variables → Actions →
+        Variables, <code>OSIGN_CLIENT_ID</code>; then run the <i>pages</i> workflow.</li>
+      <li>The OSign folder has to be readable for everyone who signs: in SharePoint, share it (read) with all employees.</li>
     </ol>
     <div class="dlg-foot"><button value="cancel" class="primary">OK</button></div>
   </form>

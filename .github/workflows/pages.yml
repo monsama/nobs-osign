@@ -1,6 +1,11 @@
-# Builds the add-in from main, with the published signatures from their own branch (osign-data,
-# written only by the editor - so main holds no company data), and serves it on GitHub Pages.
-# Runs when the add-in's code changes, and when the editor has published (it starts this workflow).
+# Builds the add-in and serves it on GitHub Pages. Only code goes there: the signatures, images and
+# photos stay in the company's own SharePoint, where the add-in reads them with the user's sign-in.
+#
+# Settings → Secrets and variables → Actions → Variables:
+#   OSIGN_CLIENT_ID   the Entra ID app registration's Application (client) ID (required)
+#   OSIGN_TENANT_ID   only for an app registration of a single organization
+#   OSIGN_SP_SITE     "root" (default: the tenant's home site) or "<host>.sharepoint.com:/sites/<name>:"
+#   OSIGN_SP_FOLDER   the folder in that site's document library (default: OSign)
 name: pages
 
 on:
@@ -9,17 +14,11 @@ on:
     paths: ['addin/**', 'shared/**', 'package.json', 'package-lock.json', '.github/workflows/pages.yml']
   workflow_dispatch:
 
-env:
-  # The branch the editor publishes to (Settings → Branch) and the folder in it (Settings → Folder).
-  DATA_BRANCH: osign-data
-  CONFIG_PATH: config
-
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# One deployment at a time; a newer publish replaces one still waiting.
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -32,13 +31,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      # Not there before the first publish: the add-in is built without signatures then.
-      - name: Get the published signatures
-        uses: actions/checkout@v4
-        continue-on-error: true
-        with:
-          ref: ${{ env.DATA_BRANCH }}
-          path: data
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -50,7 +42,10 @@ jobs:
         run: node addin/build.mjs
         env:
           BASE_URL: ${{ steps.pages.outputs.base_url }}/
-          CONFIG_SRC: data/${{ env.CONFIG_PATH }}
+          OSIGN_CLIENT_ID: ${{ vars.OSIGN_CLIENT_ID }}
+          OSIGN_TENANT_ID: ${{ vars.OSIGN_TENANT_ID }}
+          OSIGN_SP_SITE: ${{ vars.OSIGN_SP_SITE }}
+          OSIGN_SP_FOLDER: ${{ vars.OSIGN_SP_FOLDER }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

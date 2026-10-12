@@ -3,7 +3,6 @@ name: test
 on:
   push:
     branches: ['**']
-    paths-ignore: ['config/**']
   pull_request:
   workflow_dispatch:
 
