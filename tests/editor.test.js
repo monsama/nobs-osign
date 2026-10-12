@@ -117,15 +117,21 @@ test('the API wants the token, a JSON POST, and this machine as the host', opts,
   assert.equal(r, 403);
   const get = await fetch('http://127.0.0.1:' + PORT + '/api/info');
   assert.equal(get.status, 403);
+  await get.text();
   const info = await api('info');
   assert.equal(info.json.backend, 'powershell');
 });
 
 test('serves the UI and the shared engine, nothing outside them', opts, async () => {
+  // Every body is read: an answer left unread while the server closes the connection trips Node's
+  // fetch on Windows.
   const ui = await fetch('http://127.0.0.1:' + PORT + '/');
   assert.equal(ui.status, 200);
   assert.match(ui.headers.get('content-security-policy'), /script-src 'self'/);
-  assert.equal((await fetch('http://127.0.0.1:' + PORT + '/shared/signature-core.js')).status, 200);
+  assert.match(await ui.text(), /<title>OSign<\/title>/);
+  const coreJs = await fetch('http://127.0.0.1:' + PORT + '/shared/signature-core.js');
+  assert.equal(coreJs.status, 200);
+  assert.match(await coreJs.text(), /SignatureCore/);
   for (const p of ['/ui/../OSign.ps1', '/ui/..%2fOSign.ps1', '/assets/../draft.json', '/ui/%2e%2e/%2e%2e/package.json']) {
     const r = await new Promise((resolve) => http.get({ host: '127.0.0.1', port: PORT, path: p }, (res) => { res.resume(); resolve(res.statusCode); }));
     assert.equal(r, 404, p);
@@ -154,6 +160,7 @@ test('images: only real PNG/JPG/GIF, safe names, never overwritten', opts, async
   assert.equal(b.json.name, 'Our-Logo-2.png');
   const img = await fetch('http://127.0.0.1:' + PORT + '/assets/Our-Logo.png');
   assert.equal(img.headers.get('content-type'), 'image/png');
+  assert.ok(Buffer.from(await img.arrayBuffer()).equals(PNG));
   assert.equal((await api('assets/delete', { name: 'Our-Logo-2.png' })).json.ok, true);
   assert.deepEqual((await api('draft/get')).json.assets.map((x) => x.name), ['Our-Logo.png']);
 });
