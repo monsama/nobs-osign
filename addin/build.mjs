@@ -4,7 +4,9 @@
 //   BASE_URL=https://monsama.github.io/osign/ node addin/build.mjs
 //
 // BASE_URL is where dist/ will be served (default: GitHub Pages of this repository).
-// CONFIG_PATH is the folder the editor publishes to (default: config).
+// CONFIG_PATH is the folder the editor publishes to (default: config), and where it is served.
+// CONFIG_SRC is where that folder is on disk (default: <repository>/<CONFIG_PATH>); the Pages
+// workflow checks the editor's branch out into data/ and points here.
 import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,9 +57,9 @@ if (left) throw new Error('manifest.template.xml: ' + left[0] + ' is not filled 
 fs.writeFileSync(path.join(dist, 'manifest.xml'), manifest);
 
 // The published configuration, as the editor wrote it into the repository.
-const cfgSrc = path.join(root, configPath);
+const cfgSrc = process.env.CONFIG_SRC ? path.resolve(process.env.CONFIG_SRC) : path.join(root, configPath);
 if (fs.existsSync(cfgSrc)) fs.cpSync(cfgSrc, path.join(dist, configPath), { recursive: true });
-else console.warn('No ' + configPath + '/ yet: publish from the editor to create it.');
+else console.warn('No published signatures at ' + cfgSrc + ' yet: publish from the editor to create them.');
 
 // A page for whoever opens the address in a browser.
 fs.writeFileSync(path.join(dist, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OSign</title>

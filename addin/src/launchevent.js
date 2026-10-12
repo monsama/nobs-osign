@@ -15,7 +15,7 @@ async function sign(event, what) {
     const user = await loadUserValues(cfg, { interactive: false });
     if (!user.values) { console.log('OSign: no user details, no signature. ' + (user.error ? user.error.message : '')); return; }
     const from = await fromAddress(item);
-    const sig = core.pick(cfg, user.values, from, info.kind, getPrefs());
+    const sig = core.pick(cfg, user.values, from, info.kind, getPrefs(), user.groups);
     // A changed sender may have no signature where the first one had: then the old one goes.
     if (!sig && what !== 'fromChanged') return;
     await insertSignature(item, cfg, sig, user.values, info.html);

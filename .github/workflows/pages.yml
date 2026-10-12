@@ -1,12 +1,18 @@
-# Builds the add-in with the published signatures (config/) and serves it on GitHub Pages.
-# Runs on every push to main that touches either, so a publish from the editor goes live by itself.
+# Builds the add-in from main, with the published signatures from their own branch (osign-data,
+# written only by the editor - so main holds no company data), and serves it on GitHub Pages.
+# Runs when the add-in's code changes, and when the editor has published (it starts this workflow).
 name: pages
 
 on:
   push:
     branches: [main]
-    paths: ['config/**', 'addin/**', 'shared/**', 'package.json', 'package-lock.json', '.github/workflows/pages.yml']
+    paths: ['addin/**', 'shared/**', 'package.json', 'package-lock.json', '.github/workflows/pages.yml']
   workflow_dispatch:
+
+env:
+  # The branch the editor publishes to (Settings → Branch) and the folder in it (Settings → Folder).
+  DATA_BRANCH: osign-data
+  CONFIG_PATH: config
 
 permissions:
   contents: read
@@ -26,6 +32,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Not there before the first publish: the add-in is built without signatures then.
+      - name: Get the published signatures
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: ${{ env.DATA_BRANCH }}
+          path: data
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,6 +50,7 @@ jobs:
         run: node addin/build.mjs
         env:
           BASE_URL: ${{ steps.pages.outputs.base_url }}/
+          CONFIG_SRC: data/${{ env.CONFIG_PATH }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

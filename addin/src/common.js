@@ -84,37 +84,70 @@ export function setPrefs(p) { return writeRoaming(PREFS_KEY, { new: p.new || '',
 // ---------------------------------------------------------------------------------------------
 // The user's details, from Microsoft Graph (/me)
 // ---------------------------------------------------------------------------------------------
-async function readGraph(cfg, interactive) {
-  const token = await getGraphToken(cfg, interactive);
-  const select = core.graphSelect(cfg.fields);
-  const url = 'https://graph.microsoft.com/v1.0/me' + (select.length ? '?$select=' + encodeURIComponent(select.join(',')) : '');
-  const r = await withTimeout(fetch(url, { headers: { Authorization: 'Bearer ' + token } }), 8000, 'Reading your details');
-  if (!r.ok) throw new Error('Microsoft Graph answered ' + r.status + '.');
-  return core.valuesFromGraph(cfg.fields, await r.json());
+// Groups need GroupMember.Read.All (admin consent); only asked for when a signature is limited to groups.
+const GROUP_SCOPE = 'GroupMember.Read.All';
+
+async function graphGet(token, url, what) {
+  const r = await withTimeout(fetch(url, { headers: { Authorization: 'Bearer ' + token } }), 8000, what);
+  if (r.status === 403) throw new Error(what + ': not allowed (403). The app registration needs admin consent for ' + (/memberOf/i.test(url) ? GROUP_SCOPE : 'User.Read') + '.');
+  if (!r.ok) throw new Error(what + ': Microsoft Graph answered ' + r.status + '.');
+  return r.json();
 }
 
-// Returns { values, source: 'graph'|'cache'|'outlook', error } - or values null when there are none.
+// The user's groups, nested ones included, as the names the configuration uses: only those are
+// kept (a user can be in hundreds of groups, and the copy goes into the mailbox settings).
+async function readGroups(token, wanted) {
+  const found = [];
+  let url = 'https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$select=id,displayName,onPremisesSamAccountName&$top=999';
+  for (let page = 0; url && page < 20; page++) {
+    const j = await graphGet(token, url, 'Reading your groups');
+    (j.value || []).forEach((g) => {
+      [g.id, g.displayName, g.onPremisesSamAccountName].forEach((n) => {
+        const l = String(n || '').toLowerCase();
+        if (l && wanted.indexOf(l) >= 0 && found.indexOf(l) < 0) found.push(l);
+      });
+    });
+    url = j['@odata.nextLink'];
+  }
+  return found;
+}
+
+async function readGraph(cfg, interactive, wanted) {
+  const scopes = wanted.length ? ['User.Read', GROUP_SCOPE] : ['User.Read'];
+  const token = await getGraphToken(cfg, interactive, scopes);
+  const select = core.graphSelect(cfg.fields);
+  const me = await graphGet(token, 'https://graph.microsoft.com/v1.0/me' + (select.length ? '?$select=' + encodeURIComponent(select.join(',')) : ''), 'Reading your details');
+  const groups = wanted.length ? await readGroups(token, wanted) : [];
+  return { values: core.valuesFromGraph(cfg.fields, me), groups };
+}
+
+// Returns { values, groups, source: 'graph'|'cache'|'outlook', error } - or values null when there
+// are none. groups is null when they could not be read: no signature limited to groups applies then.
 // interactive: the task pane may show a sign-in window; the event handler never can.
 export async function loadUserValues(cfg, opts) {
   opts = opts || {};
+  const wanted = core.groupsUsed(cfg);
+  const key = wanted.slice().sort().join('\n');
   const cached = readRoaming(PROFILE_KEY);
-  if (!opts.refresh && cached && cached.values && Date.now() - cached.at < PROFILE_FRESH_MS) return { values: cached.values, source: 'cache' };
+  // A copy read for other groups than the configuration now names says nothing about the new ones.
+  const cacheFits = cached && cached.values && (cached.groupsFor || '') === key;
+  if (!opts.refresh && cacheFits && Date.now() - cached.at < PROFILE_FRESH_MS) return { values: cached.values, groups: cached.groups || [], source: 'cache' };
   let error = null;
   try {
-    const values = await readGraph(cfg, !!opts.interactive);
-    await writeRoaming(PROFILE_KEY, { at: Date.now(), values });
-    return { values, source: 'graph' };
+    const r = await readGraph(cfg, !!opts.interactive, wanted);
+    await writeRoaming(PROFILE_KEY, { at: Date.now(), values: r.values, groups: r.groups, groupsFor: key });
+    return { values: r.values, groups: r.groups, source: 'graph' };
   } catch (e) { error = e; }
-  if (cached && cached.values) return { values: cached.values, source: 'cache', error };
+  if (cached && cached.values) return { values: cached.values, groups: cacheFits ? cached.groups || [] : null, source: 'cache', error };
   if (cfg.options && cfg.options.insertWithoutProfile) {
     // What Outlook itself knows: the address, nothing else that fits a field reliably.
     const v = {};
     (cfg.fields || []).forEach((f) => { v[f.key] = ''; });
     const up = Office.context.mailbox && Office.context.mailbox.userProfile;
     if (up && 'mail' in v) v.mail = up.emailAddress || '';
-    return { values: v, source: 'outlook', error };
+    return { values: v, groups: null, source: 'outlook', error };
   }
-  return { values: null, source: 'none', error };
+  return { values: null, groups: null, source: 'none', error };
 }
 
 // ---------------------------------------------------------------------------------------------

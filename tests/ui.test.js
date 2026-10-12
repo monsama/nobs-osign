@@ -20,7 +20,7 @@ const skip = (!pwshOk && PS + ' is not installed') || (!chromium && 'playwright 
 const PORT = 17782;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
 let proc, url, browser, page, folder, dataDir;
-const errors = [];
+const errors = [], notFound = [];
 
 test.before(async () => {
   if (skip) return;
@@ -39,7 +39,8 @@ test.before(async () => {
   browser = await chromium.launch(fs.existsSync('/opt/pw-browsers/chromium') ? {} : {});
   page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  page.on('response', (r) => { if (r.status() >= 400) notFound.push(new URL(r.url()).pathname); });
   page.on('dialog', (d) => d.accept());
 });
 test.after(async () => {
@@ -125,4 +126,51 @@ test('fields: renaming a placeholder renames it in the signatures', { skip }, as
   await page.click('.tab[data-mode=html]');
   assert.match(await page.inputValue('#source'), /Abteilung @@abteilung/);
   assert.match(await page.textContent('#status'), /Unpublished|Saving/);
+});
+
+test('import: UTF-16 templates with their images, text-block files left out, groups set', { skip }, async () => {
+  const utf16 = (s) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, 'utf16le')]);
+  const tpl = '<!DOCTYPE html><html><head><title></title></head><body><table><tbody><tr>' +
+    '<td><img src="images/logo.png" width="90" /><br /><img src="images/@@sAMAccountName.jpg" width="100" /></td>' +
+    '<td><strong>@@givenName @@sn</strong><br />@@title<br />Mobile @@mobile</td></tr></tbody></table>@@info</body></html>';
+  const blocks = '<html><body>{##notice}{dats 01.01.2020}{date 31.01.2020}Closed in January{end ##notice}</body></html>';
+  await page.click('#btnImportOpen');
+  await page.waitForSelector('#dlgImport[open]');
+  await page.setInputFiles('#impFiles', [
+    { name: 'Vertrieb.htm', mimeType: 'text/html', buffer: utf16(tpl) },
+    { name: 'textblocks.htm', mimeType: 'text/html', buffer: utf16(blocks) },
+    { name: 'logo.png', mimeType: 'image/png', buffer: PNG }
+  ]);
+  await page.waitForSelector('#impList li');
+  const items = await page.$$eval('#impList li', (lis) => lis.map((li) => ({ name: li.querySelector('.imp-name').textContent, on: li.querySelector('input').checked, meta: li.querySelector('.imp-meta').textContent })));
+  assert.deepEqual(items.map((i) => [i.name, i.on]), [['Vertrieb', true], ['textblocks', false]]);
+  assert.match(items[0].meta, /per-person image images\/@@sAMAccountName\.jpg/);
+  assert.match(items[1].meta, /text blocks/);
+  await page.click('#impGo');
+  await page.waitForSelector('#dlgImport:not([open])', { state: 'attached' });
+  assert.equal(await page.inputValue('#sigName'), 'Vertrieb');
+
+  // The logo is now one of the signature's images; the per-person image is not in the preview.
+  await page.click('.tab[data-mode=html]');
+  const src = await page.inputValue('#source');
+  assert.match(src, /<img src="assets\/logo\.png" width="90">/);
+  await page.click('.tab[data-mode=design]');
+  // (The preview of the signature shown before may still be there for a moment.)
+  await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return d && d.body && /Anna Muster/.test(d.body.textContent) && !/Freundliche/.test(d.body.textContent); });
+  const imgs = await page.evaluate(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].map((i) => i.getAttribute('src')));
+  assert.deepEqual(imgs, ['/assets/logo.png']);
+
+  // Who gets it: an AD group.
+  await page.click('.audience summary');
+  await page.fill('#sigGroups', 'SG-Vertrieb, SG-Marketing');
+  assert.equal(await page.textContent('#audienceSummary'), 'SG-Vertrieb, SG-Marketing');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  const checks = await page.textContent('#pubChecks');
+  assert.match(checks, /GroupMember\.Read\.All/);
+  assert.match(checks, /Per-person images are left out for now in: Vertrieb/);
+  await page.click('#dlgPublish button[value=cancel]');
+  assert.deepEqual(errors, []);
+  // Only the editor's own view tried the per-person image (it shows as missing there).
+  assert.deepEqual([...new Set(notFound)], ['/images/@@sAMAccountName.jpg']);
 });

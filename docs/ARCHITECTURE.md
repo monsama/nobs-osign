@@ -9,7 +9,7 @@ editor/ui  (web UI, static)
 editor backend  ── today: editor/OSign.ps1        later: a container (Node, …)
    │  publishes  <path>/signatures.json + <path>/assets/*
    ▼
-target  ── GitHub repository (Pages serves it)   or   a folder on a web server
+target  ── GitHub: branch osign-data (Pages serves it with main's add-in)   or   a folder on a web server
    │  https
    ▼
 addin (event handler + pane)  ── reads signatures.json, the user's details from Graph
@@ -44,7 +44,7 @@ will get.
     "html": "<p>@@givenName @@sn</p>…",            // what the editor edits
     "compiled": "<!--sig-if:givenName,sn-->…",     // what the add-in renders
     "defaultNew": true, "defaultReply": false, "removeEmptyLines": true,
-    "audience": { "departments": [], "domains": [] }
+    "audience": { "groups": [], "departments": [], "domains": [] }
   } ]
 }
 ```
