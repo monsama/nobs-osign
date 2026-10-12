@@ -1,0 +1,35 @@
+# A tag v1.2.3 makes a release with the editor as one zip: OSign.ps1, its UI and the shared engine.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the version
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -q "AppVersion = '$v'" editor/OSign.ps1 || { echo "editor/OSign.ps1 is not version $v"; exit 1; }
+          grep -q "\"version\": \"$v\"" package.json || { echo "package.json is not version $v"; exit 1; }
+      - name: Package
+        run: |
+          mkdir -p out/OSign/shared
+          cp editor/OSign.ps1 out/OSign/
+          cp -r editor/ui out/OSign/ui
+          cp shared/signature-core.js out/OSign/shared/
+          cp LICENSE out/OSign/
+          (cd out && zip -r "OSign-${GITHUB_REF_NAME}.zip" OSign)
+          (cd out && sha256sum "OSign-${GITHUB_REF_NAME}.zip" > SHA256SUMS.txt)
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/OSign-${{ github.ref_name }}.zip
+            out/SHA256SUMS.txt
+          generate_release_notes: true
