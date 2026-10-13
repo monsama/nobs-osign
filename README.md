@@ -56,6 +56,11 @@ These are the placeholders the signatures used before, mapped to where the add-i
 | Abwesenheit | `@@info` | info | *(none, see below)* |
 | Mail | `@@mail` | mail | `mail` |
 
+**Where the values come from** is a choice in the editor (*Add-in*): **Entra ID** (Microsoft Graph,
+each field by its Graph source), **Active Directory** (the editor exports each user's fields into
+`OSign\users\<mail>.json`; `OSign.ps1 -ExportUsers` keeps them current from the Task Scheduler), or
+**both**: Graph where a field has a Graph source, AD for the rest.
+
 Graph has no `description`, `homePhone` or `info`. To use them, sync them with Entra Connect,
 either into `onPremisesExtensionAttributes.extensionAttribute1`…`15` or as directory extensions
 (`extension_<appId>_description`). Then enter that path as the field's Graph source in the editor.

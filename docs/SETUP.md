@@ -39,7 +39,8 @@ password, and reads with each user's own rights.
 3. **API permissions**, *Microsoft Graph → Delegated*:
    - `User.Read` (there by default): the user's name, title, phone…
    - `Sites.Read.All`: the OSign folder
-   - `GroupMember.Read.All`: only if signatures go to AD groups (synced to Entra ID; nested groups count)
+   - `GroupMember.Read.All`: only if signatures go to AD groups and the values come from Entra ID
+     (with values from AD, the groups come from AD too)
 
    Then **Grant admin consent for …**.
 4. Copy the **Application (client) ID** from Overview, for step 3.
@@ -71,7 +72,17 @@ signature.
 4. **Signatures**: import the existing ones with **⤓** next to *Signatures*. Pick the folder, or the
    `.htm` files together with their images. CI-Sign templates (UTF-16, `images\…`) and classic
    Outlook ones (`%APPDATA%\Microsoft\Signatures`) work. Under *Who gets it*, enter the AD groups.
-5. **Fields**: check the Graph sources (see the README).
+5. **Fields and where their values come from** (*Add-in → Where the users' values come from*):
+   - **Entra ID**: each field by its Graph source. Fields without one (`description`, `homePhone`,
+     `info`) stay empty, unless Entra Connect syncs them as directory extensions.
+   - **Entra ID and Active Directory** (recommended without those extensions): fields with a Graph
+     source from Entra ID, the others from AD.
+   - **Active Directory**: every field from AD.
+
+   With AD, **Publish** also exports every active user with a mail address into `OSign\users\`:
+   one file per person (`<mail>.json`) with their fields and groups. The add-in reads only its own
+   user's file. Groups then come from AD too, so `GroupMember.Read.All` is not needed. The values
+   are as current as the last export, so let Windows run it regularly (next section).
 6. **Publish**. The dialog lists what would go wrong first. OneDrive uploads the folder; new
    messages use it a minute or two later.
 
@@ -80,6 +91,20 @@ pick *User from Active Directory…* and enter a user name or address.
 
 Several admins can use the editor, each on their own PC with the folder synced. **Load published**
 takes the current state from the folder before you start.
+
+### Keeping the AD values current
+
+Only needed with *Entra ID and Active Directory* or *Active Directory*. On a PC in the domain where
+the OSign folder is synced, Task Scheduler → **Create Task**:
+
+- **General:** as the user whose OneDrive syncs the folder; *Run only when user is logged on*
+  (OneDrive uploads only while that user is signed in).
+- **Triggers:** daily, e.g. 12:00, or at log on.
+- **Actions:** program `powershell.exe`, arguments
+  `-NoProfile -ExecutionPolicy Bypass -File "C:\Tools\OSign\OSign.ps1" -ExportUsers`
+
+It reads the settings and the published `signatures.json`, writes only the users whose values
+changed, removes the files of users who are gone, and exits (code 0 when it worked).
 
 ## 5. Deploy the add-in
 
@@ -102,7 +127,7 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 |---|---|
 | No signature at all | Open the pane: it says what failed. Usually: no admin consent yet, the OSign folder not readable for that user, or `OSIGN_CLIENT_ID` not set when the add-in was built. |
 | "No signatures are published yet" | `OSign\signatures.json` is not in SharePoint: publish, and check that OneDrive has synced it. |
-| Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. |
+| Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign\users\` (no mail address in AD, or not exported yet). |
 | No photo | No `OSign\photos\<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |

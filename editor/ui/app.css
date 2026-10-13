@@ -204,3 +204,7 @@ dialog::backdrop { background: rgba(15, 20, 30, .45); }
 .imp-list li.skip { opacity: .65; }
 .pv-groups { color: var(--text); }
 dialog:has(.dlg.wide) { width: min(820px, 94vw); }
+
+.sources { border: 0; padding: 0; margin: 0; }
+.sources label.check.block { align-items: flex-start; }
+.sources input { margin-top: 3px; }

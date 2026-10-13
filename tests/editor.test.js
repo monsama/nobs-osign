@@ -21,7 +21,12 @@ let pwshOk = true;
 try { execFileSync(PS, ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }); } catch (e) { pwshOk = false; }
 
 const PORT = 17781;
-let proc, token, dataDir, folder;
+let proc, token, dataDir, folder, adJson;
+// The directory, for the AD export: what Get-AdUserRecords would find.
+const AD_USERS = [
+  { mail: 'Anna.Muster@example.com', attrs: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: ['sg-field'] },
+  { mail: 'beat@example.com', attrs: { description: '', homePhone: '+41 41 000 00 02', info: 'Mo-Do' }, groups: [] }
+];
 async function api(p, body, opts) {
   const r = await fetch('http://127.0.0.1:' + PORT + '/api/' + p, {
     method: 'POST',
@@ -34,9 +39,11 @@ async function api(p, body, opts) {
 test.before(async () => {
   if (!pwshOk) return;
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-test-'));
+  adJson = path.join(dataDir, 'ad-users.json');
+  fs.writeFileSync(adJson, JSON.stringify(AD_USERS));
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-sp-'));
   proc = spawn(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-NoBrowser', '-Port', String(PORT)], {
-    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir })
+    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, OSIGN_TEST_AD_JSON: adJson })
   });
   token = await new Promise((resolve, reject) => {
     let out = '';
@@ -180,6 +187,38 @@ test('load published replaces the draft and its images', opts, async () => {
   assert.deepEqual(r.json.assets.map((a) => a.name), ['Our-Logo.png']);
   assert.equal(r.json.dirty, false);
   assert.ok(fs.existsSync(path.join(dataDir, 'draft.json.bak')));
+});
+
+test('AD export: one file per user, only what changed, the gone ones removed', opts, async () => {
+  const fields = [{ key: 'description', ad: 'description' }, { key: 'homePhone', ad: 'homePhone' }, { key: 'info', ad: 'info' }];
+  fs.mkdirSync(path.join(folder, 'users'), { recursive: true });
+  fs.writeFileSync(path.join(folder, 'users', 'left@example.com.json'), '{}');
+  const r = await api('ad/export', { fields, groups: ['SG-Field'] });
+  assert.equal(r.json.ok, true, JSON.stringify(r.json));
+  assert.deepEqual([r.json.users, r.json.written, r.json.removed], [2, 2, 1]);
+  assert.deepEqual(fs.readdirSync(path.join(folder, 'users')).sort(), ['anna.muster@example.com.json', 'beat@example.com.json']);
+  const anna = JSON.parse(fs.readFileSync(path.join(folder, 'users', 'anna.muster@example.com.json'), 'utf8'));
+  assert.deepEqual(anna, { values: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: ['sg-field'] });
+  const again = await api('ad/export', { fields, groups: ['SG-Field'] });
+  assert.deepEqual([again.json.written, again.json.unchanged, again.json.removed], [0, 2, 0]);
+});
+
+test('-ExportUsers: the export alone, as the published signatures ask for', opts, async () => {
+  const cfgPath = path.join(folder, 'signatures.json');
+  const saved = fs.readFileSync(cfgPath, 'utf8');
+  const run = () => { try { return { code: 0, out: execFileSync(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-ExportUsers'], { env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, OSIGN_TEST_AD_JSON: adJson }), encoding: 'utf8' }) }; } catch (e) { return { code: e.status, out: String(e.stdout) + String(e.stderr) }; } };
+  try {
+    fs.writeFileSync(cfgPath, JSON.stringify({ schemaVersion: 1, options: { valueSource: 'graph' }, fields: [], signatures: [] }));
+    assert.match(run().out, /Entra ID: nothing to export/);
+    fs.writeFileSync(cfgPath, JSON.stringify({ schemaVersion: 1, options: { valueSource: 'mixed' },
+      fields: [{ key: 'givenName', ad: 'givenName', graph: 'givenName' }, { key: 'homePhone', ad: 'homePhone', graph: '' }],
+      signatures: [{ id: 'a', name: 'A', html: '', audience: { groups: ['SG-Field'] } }] }));
+    const r = run();
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /Exported 2 users/);
+    // Mixed: only the field without a Graph source comes from AD.
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder, 'users', 'beat@example.com.json'), 'utf8')), { values: { homePhone: '+41 41 000 00 02' }, groups: [] });
+  } finally { fs.writeFileSync(cfgPath, saved); }
 });
 
 test('AD lookup says plainly where it cannot work', opts, async () => {

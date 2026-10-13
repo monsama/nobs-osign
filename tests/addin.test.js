@@ -190,3 +190,44 @@ test('nothing published yet, or no sign-in: no signature, and the event still co
   assert.ok(!setCall(r2));
   assert.ok(r2.calls.some((c) => c[0] === 'log' && /sign-in failed/.test(c[1])));
 });
+
+test('values from AD: mixed takes the fields without a Graph source, and the groups, from the user file', async () => {
+  const config = makeConfig((c) => {
+    c.options.valueSource = 'mixed';
+    c.signatures = [
+      sig('std', 'Standard', '<p>@@givenName @@sn</p><p>@@description</p><p>Direkt @@homePhone</p>', { defaultNew: true }),
+      sig('field', 'Field', '<p>Field @@givenName, @@homePhone</p>', { defaultNew: true, audience: { departments: [], domains: [], groups: ['SG-Field'] } })
+    ];
+  });
+  const user = (groups) => JSON.stringify({ values: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups });
+  const base = { 'signatures.json': JSON.stringify(config) };
+  const r = runtime({ files: Object.assign({}, base, { 'users/anna@example.com.json': user([]) }) });
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r)[1], '<p>Anna Muster</p><p>Dipl. Ing.</p><p>Direkt +41 41 000 00 01</p>');
+  // Groups from the AD file: no GroupMember.Read.All, no Graph group call.
+  assert.ok(!r.graph.requests.some((u) => /memberOf/i.test(u)));
+  const r2 = runtime({ files: Object.assign({}, base, { 'users/anna@example.com.json': user(['sg-field']) }) });
+  await r2.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r2)[1], '<p>Field Anna, +41 41 000 00 01</p>');
+  // Not in the export: Graph's fields still come, the AD ones stay empty (and their lines go).
+  const r3 = runtime({ files: base });
+  await r3.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r3)[1], '<p>Anna Muster</p>');
+});
+
+test('values from AD only: no /me, and no signature for someone not in the export', async () => {
+  const config = makeConfig((c) => {
+    c.options.valueSource = 'ad';
+    c.fields = c.fields.map((f) => Object.assign({}, f));
+    c.signatures = [sig('std', 'Standard', '<p>@@givenName @@sn, @@title</p>', { defaultNew: true })];
+  });
+  const file = JSON.stringify({ values: { givenName: 'Anna', sn: 'Muster', title: 'Leiterin' }, groups: [] });
+  const r = runtime({ files: { 'signatures.json': JSON.stringify(config), 'users/anna@example.com.json': file } });
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r)[1], '<p>Anna Muster, Leiterin</p>');
+  assert.ok(!r.graph.requests.some((u) => /\/me(\?|$)/.test(u)), r.graph.requests.join('\n'));
+  const r2 = runtime({ files: { 'signatures.json': JSON.stringify(config) } });
+  await r2.fire('onNewMessageComposeHandler');
+  assert.ok(!setCall(r2));
+  assert.ok(r2.calls.some((c) => c[0] === 'log' && /not in the AD export/.test(c[1])));
+});

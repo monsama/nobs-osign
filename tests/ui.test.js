@@ -159,7 +159,8 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return d && d.body && /Anna Muster/.test(d.body.textContent) && !/Freundliche/.test(d.body.textContent); });
   const imgs = await page.evaluate(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].map((i) => i.getAttribute('src')));
   assert.deepEqual(imgs, ['/assets/logo.png', '/photos/mustera.jpg']);
-  assert.ok(await page.evaluate(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].every((i) => i.complete && i.naturalWidth > 0)));
+  // Both load: the logo from the draft, the photo from the photos folder.
+  await page.waitForFunction(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 5000 });
 
   // Who gets it: an AD group.
   await page.click('.audience summary');

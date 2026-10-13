@@ -60,7 +60,13 @@
         allowUserChoice: true,
         // Without the user's details (Graph not set up, or not reachable and nothing cached) a
         // signature would go out with no name in it. Off by default: nothing is inserted then.
-        insertWithoutProfile: false
+        insertWithoutProfile: false,
+        // Where the users' values come from:
+        //   'graph'  Entra ID (Microsoft Graph), each field by its Graph source
+        //   'ad'     Active Directory: the editor exports every user's fields and groups into
+        //            users/<mail>.json next to signatures.json
+        //   'mixed'  Graph for the fields that have a Graph source, AD for the others; groups from AD
+        valueSource: 'graph'
       },
       fields: DEFAULT_FIELDS.map(function (f) { return Object.assign({}, f); }),
       signatures: []
@@ -342,6 +348,43 @@
     return cur === null || cur === undefined ? '' : String(cur);
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Where each field's value comes from (options.valueSource)
+  // ---------------------------------------------------------------------------------------------
+  function valueSource(config) {
+    var v = config && config.options && config.options.valueSource;
+    return v === 'ad' || v === 'mixed' ? v : 'graph';
+  }
+  // 'graph', 'ad' or 'none' (then the field stays empty in Outlook).
+  function fieldSource(config, f) {
+    var mode = valueSource(config);
+    if (mode === 'ad') return f.ad ? 'ad' : 'none';
+    if (f.graph) return 'graph';
+    return mode === 'mixed' && f.ad ? 'ad' : 'none';
+  }
+  function graphFields(config) { return (config.fields || []).filter(function (f) { return fieldSource(config, f) === 'graph'; }); }
+  function adFields(config) { return (config.fields || []).filter(function (f) { return fieldSource(config, f) === 'ad'; }); }
+  // Whether the editor has to export users from AD at all.
+  function usesAdExport(config) { return valueSource(config) !== 'graph'; }
+
+  // The file a user's exported values are in, by their mail address: users/<this>.
+  function userFileName(mail) {
+    var m = String(mail || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+$/.test(m)) return '';
+    return m.replace(/[^a-z0-9@._-]/g, '_') + '.json';
+  }
+
+  // One set of values from both sources: each field from where it is to come from.
+  function mergeValues(config, graphValues, adValues) {
+    var v = {};
+    (config.fields || []).forEach(function (f) {
+      var src = fieldSource(config, f);
+      var from = src === 'graph' ? graphValues : src === 'ad' ? adValues : null;
+      v[f.key] = from && from[f.key] !== undefined && from[f.key] !== null ? String(from[f.key]) : '';
+    });
+    return v;
+  }
+
   // The top-level properties Graph has to be asked for ($select) to fill these fields.
   function graphSelect(fields) {
     var out = [];
@@ -426,6 +469,13 @@
     available: available,
     pick: pick,
     groupsUsed: groupsUsed,
+    valueSource: valueSource,
+    fieldSource: fieldSource,
+    graphFields: graphFields,
+    adFields: adFields,
+    usesAdExport: usesAdExport,
+    userFileName: userFileName,
+    mergeValues: mergeValues,
     readPath: readPath,
     graphSelect: graphSelect,
     valuesFromGraph: valuesFromGraph,
