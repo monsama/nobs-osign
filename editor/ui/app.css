@@ -208,3 +208,20 @@ dialog:has(.dlg.wide) { width: min(820px, 94vw); }
 .sources { border: 0; padding: 0; margin: 0; }
 .sources label.check.block { align-items: flex-start; }
 .sources input { margin-top: 3px; }
+
+/* users from AD */
+.users-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.users-bar #usersFilter { width: 260px; }
+.users-info { color: var(--muted); font-size: 12.5px; }
+table.users { min-width: 0; }
+table.users td:last-child { width: auto; text-align: left; }
+table.users td:first-child, table.users th:first-child { width: 1%; }
+table.users td { font-size: 12.5px; padding: 6px 8px; vertical-align: top; }
+table.users td.chg { background: var(--accent-soft); }
+table.users td.chg .was { display: block; color: var(--muted); text-decoration: line-through; }
+table.users tr.removed td { color: var(--muted); text-decoration: line-through; }
+.st { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.st.new { color: var(--ok); border-color: currentColor; }
+.st.changed { color: var(--accent); border-color: currentColor; }
+.st.removed { color: var(--danger); border-color: currentColor; }
+.st.unchanged { color: var(--muted); }

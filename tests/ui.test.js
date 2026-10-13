@@ -19,12 +19,17 @@ const skip = (!pwshOk && PS + ' is not installed') || (!chromium && 'playwright 
 
 const PORT = 17782;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
-let proc, url, browser, page, folder, dataDir;
+let proc, url, browser, page, folder, dataDir, adJson;
 const errors = [], notFound = [];
 
 test.before(async () => {
   if (skip) return;
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-'));
+  adJson = path.join(dataDir, 'ad.json');
+  fs.writeFileSync(adJson, JSON.stringify([
+    { mail: 'anna@example.com', attrs: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: [] },
+    { mail: 'beat@example.com', attrs: { description: '', homePhone: '+41 41 000 00 02', info: '' }, groups: [] }
+  ]));
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-pub-'));
   // Publishing goes to a folder: set before the start, as an admin would in Settings.
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ folder, photosFolder: '' }));
@@ -32,7 +37,7 @@ test.before(async () => {
   fs.mkdirSync(path.join(folder, 'photos'));
   fs.writeFileSync(path.join(folder, 'photos', 'mustera.jpg'), PNG);
   proc = spawn(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, '..', 'editor', 'OSign.ps1'), '-NoBrowser', '-Port', String(PORT)], {
-    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, GITHUB_TOKEN: '' })
+    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, GITHUB_TOKEN: '', OSIGN_TEST_AD_JSON: adJson })
   });
   url = await new Promise((resolve, reject) => {
     let out = '';
@@ -203,4 +208,34 @@ test('German: in a German browser the editor speaks German, and offers no transl
   await de.evaluate(() => localStorage.removeItem('osign.lang'));
   assert.deepEqual(errs, []);
   await de.close();
+});
+
+test('users from AD: read, look, and publish exactly that', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('#sigList a');
+  await page.click('a[data-view=options]');
+  await page.check('input[name=vsrc][value=mixed]');
+  // Publishing before reading: the users are not written, and it says so.
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  assert.match(await page.textContent('#pubChecks'), /The users are not written: read and check them under Users first/);
+  await page.click('#dlgPublish button[value=cancel]');
+
+  await page.click('a[data-view=users]');
+  assert.match(await page.textContent('#usersInfo'), /Not read yet/);
+  await page.click('#btnAdRead');
+  await page.waitForFunction(() => /Read .*2 users - 2 new/.test(document.querySelector('#usersInfo').textContent));
+  const rows = await page.$$eval('#usersRows tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
+  // The last column: groups (an earlier test made a signature for groups).
+  assert.deepEqual(rows[0], ['new', 'anna@example.com', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
+  assert.ok(!fs.existsSync(path.join(folder, 'users')), 'reading writes nothing');
+
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  assert.match(await page.textContent('#pubChecks'), /The users as read .* are written: 2 new, 0 changed, 0 removed/);
+  await page.click('#pubGo');
+  await page.waitForFunction(() => /users written/.test(document.querySelector('#pubOk').textContent));
+  assert.deepEqual(fs.readdirSync(path.join(folder, 'users')).sort(), ['anna@example.com.json', 'beat@example.com.json']);
+  await page.click('#dlgPublish button[value=cancel]');
+  assert.deepEqual(errors, []);
 });

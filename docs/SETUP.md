@@ -79,10 +79,14 @@ signature.
      source from Entra ID, the others from AD.
    - **Active Directory**: every field from AD.
 
-   With AD, **Publish** also exports every active user with a mail address into `OSign\users\`:
-   one file per person (`<mail>.json`) with their fields and groups. The add-in reads only its own
-   user's file. Groups then come from AD too, so `GroupMember.Read.All` is not needed. The values
-   are as current as the last export, so let Windows run it regularly (next section).
+   With AD, the users' values go to `OSign\users\`: one file per person (`<mail>.json`) with
+   their fields and groups. The add-in reads only its own user's file. Groups then come from AD
+   too, so `GroupMember.Read.All` is not needed.
+
+   **Check before you publish:** open **Users**, click **Read from AD**. You see every user with
+   the values that would go out, new and changed ones marked (with the old value), and who would
+   be removed. Nothing is written yet. **Publish** then writes exactly what you read there, once;
+   without a read, or after the fields or groups changed, the users stay as they are.
 6. **Publish**. The dialog lists what would go wrong first. OneDrive uploads the folder; new
    messages use it a minute or two later.
 
@@ -94,8 +98,10 @@ takes the current state from the folder before you start.
 
 ### Keeping the AD values current
 
-Only needed with *Entra ID and Active Directory* or *Active Directory*. On a PC in the domain where
-the OSign folder is synced, Task Scheduler → **Create Task**:
+Only needed with *Entra ID and Active Directory* or *Active Directory*, and only if AD changes
+(a new phone number) should reach the signatures without anyone publishing. The scheduled export
+writes **without being checked** - leave it out if every change is to be looked at first under
+**Users**. On a PC in the domain where the OSign folder is synced, Task Scheduler → **Create Task**:
 
 - **General:** as the user whose OneDrive syncs the folder; *Run only when user is logged on*
   (OneDrive uploads only while that user is signed in).

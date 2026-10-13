@@ -84,15 +84,30 @@ reports `features.adLookup: false`.
 `{ query }` → `{ ok, groups: [string] }`: up to 30 group names (sAMAccountName) starting with
 `query`, for picking who gets a signature.
 
+## ad/read
+
+`{ fields: [{ key, ad }], groups: [string] }` → `{ ok, readAt, written, counts: { new, changed, unchanged, removed }, users: [{ mail, status, values, groups, old }], removed: [mail] }`
+
+For signatures whose values come from AD. Reads every active user with a mail address and works out
+what an export would do, compared with `users\` in the publish folder; `old` holds the values now
+there for a changed user. Nothing is written to the folder: what was read is kept by the backend,
+for **ad/export**.
+
+## ad/snapshot
+
+`{ fields, groups }` → `{ ok, snapshot: null | <like ad/read>, matches }`: the last read, and whether
+it was read for these fields and groups.
+
 ## ad/export
 
-`{ fields: [{ key, ad }], groups: [string] }` → `{ ok, users, written, unchanged, removed }`
+`{ fields, groups }` → `{ ok, users, written, unchanged, removed }`
 
-For signatures whose values come from AD. Writes `users\<mail>.json` into the publish folder for
-every active user with a mail address: `{ "values": { <key>: string }, "groups": [<the named groups
-the user is in, nested ones included, lower case>] }`. Only files that differ are written; files of
-users no longer found are removed. The file name is the mail address in lower case, characters
-other than `a-z 0-9 @ . _ -` as `_` (`userFileName()` in the shared engine).
+Writes exactly the last read into `users\<mail>.json`: `{ "values": { <key>: string }, "groups":
+[<the named groups the user is in, nested ones included, lower case>] }`, and removes the files of
+users no longer found. Refused when nothing was read, when it was read for other fields or groups,
+and when it was written already (or a scheduled `-ExportUsers` ran since): an old read never goes
+over newer values. The file name is the mail address in lower case, characters other than
+`a-z 0-9 @ . _ -` as `_` (`userFileName()` in the shared engine).
 
 ## quit
 

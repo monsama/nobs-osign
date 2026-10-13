@@ -189,18 +189,51 @@ test('load published replaces the draft and its images', opts, async () => {
   assert.ok(fs.existsSync(path.join(dataDir, 'draft.json.bak')));
 });
 
-test('AD export: one file per user, only what changed, the gone ones removed', opts, async () => {
-  const fields = [{ key: 'description', ad: 'description' }, { key: 'homePhone', ad: 'homePhone' }, { key: 'info', ad: 'info' }];
+test('AD users: read first (nothing written), check, then exactly that is written - once', opts, async () => {
+  const req = { fields: [{ key: 'description', ad: 'description' }, { key: 'homePhone', ad: 'homePhone' }, { key: 'info', ad: 'info' }], groups: ['SG-Field'] };
   fs.mkdirSync(path.join(folder, 'users'), { recursive: true });
   fs.writeFileSync(path.join(folder, 'users', 'left@example.com.json'), '{}');
-  const r = await api('ad/export', { fields, groups: ['SG-Field'] });
+  fs.writeFileSync(path.join(folder, 'users', 'beat@example.com.json'), JSON.stringify({ values: { description: '', homePhone: '+41 41 000 00 99', info: 'Mo-Do' }, groups: [] }));
+  const files = () => fs.readdirSync(path.join(folder, 'users')).sort();
+
+  // Nothing read yet: nothing is written.
+  const none = await api('ad/export', req);
+  assert.equal(none.json.ok, false);
+  assert.match(none.json.error, /Read the users from AD and check them first/);
+
+  // Read: what would change, with the old values; the folder is untouched.
+  const r = await api('ad/read', req);
   assert.equal(r.json.ok, true, JSON.stringify(r.json));
-  assert.deepEqual([r.json.users, r.json.written, r.json.removed], [2, 2, 1]);
-  assert.deepEqual(fs.readdirSync(path.join(folder, 'users')).sort(), ['anna.muster@example.com.json', 'beat@example.com.json']);
-  const anna = JSON.parse(fs.readFileSync(path.join(folder, 'users', 'anna.muster@example.com.json'), 'utf8'));
-  assert.deepEqual(anna, { values: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: ['sg-field'] });
-  const again = await api('ad/export', { fields, groups: ['SG-Field'] });
-  assert.deepEqual([again.json.written, again.json.unchanged, again.json.removed], [0, 2, 0]);
+  assert.deepEqual(r.json.counts, { new: 1, changed: 1, unchanged: 0, removed: 1 });
+  const beat = r.json.users.find((u) => u.mail === 'beat@example.com');
+  assert.equal(beat.status, 'changed');
+  assert.equal(beat.values.homePhone, '+41 41 000 00 02');
+  assert.equal(beat.old.homePhone, '+41 41 000 00 99');
+  assert.deepEqual(r.json.removed, ['left@example.com']);
+  assert.deepEqual(files(), ['beat@example.com.json', 'left@example.com.json']);
+  assert.equal((await api('ad/snapshot', req)).json.matches, true);
+  assert.equal((await api('ad/snapshot', { fields: req.fields, groups: [] })).json.matches, false);
+
+  // Another set of fields than was read: refused.
+  const other = await api('ad/export', { fields: req.fields.slice(0, 1), groups: req.groups });
+  assert.match(other.json.error, /changed since the users were read/);
+
+  // Write: exactly what was read, even if AD changed in between.
+  const ad = JSON.parse(fs.readFileSync(adJson, 'utf8'));
+  fs.writeFileSync(adJson, JSON.stringify(ad.map((u) => Object.assign({}, u, { attrs: Object.assign({}, u.attrs, { homePhone: 'CHANGED IN AD LATER' }) }))));
+  const w = await api('ad/export', req);
+  fs.writeFileSync(adJson, JSON.stringify(ad));
+  assert.equal(w.json.ok, true, JSON.stringify(w.json));
+  assert.deepEqual([w.json.users, w.json.written, w.json.removed], [2, 2, 1]);
+  assert.deepEqual(files(), ['anna.muster@example.com.json', 'beat@example.com.json']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder, 'users', 'anna.muster@example.com.json'), 'utf8')),
+    { values: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: ['sg-field'] });
+
+  // Once: an old read is not written again over what may be newer.
+  const again = await api('ad/export', req);
+  assert.match(again.json.error, /written already/);
+  const re = await api('ad/read', req);
+  assert.deepEqual(re.json.counts, { new: 0, changed: 0, unchanged: 2, removed: 0 });
 });
 
 test('-ExportUsers: the export alone, as the published signatures ask for', opts, async () => {
@@ -216,6 +249,8 @@ test('-ExportUsers: the export alone, as the published signatures ask for', opts
     const r = run();
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /Exported 2 users/);
+    // A read the editor still held is older now: Publish must not write it.
+    assert.equal((await api('ad/snapshot', { fields: [], groups: [] })).json.snapshot.written, true);
     // Mixed: only the field without a Graph source comes from AD.
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder, 'users', 'beat@example.com.json'), 'utf8')), { values: { homePhone: '+41 41 000 00 02' }, groups: [] });
   } finally { fs.writeFileSync(cfgPath, saved); }
