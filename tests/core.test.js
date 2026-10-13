@@ -153,3 +153,26 @@ test('signature files are read in their own encoding', () => {
   assert.equal(core.decodeHtmlFile(bare1252), '<p>Grüsse</p>');
   assert.equal(core.assetName('C:\\x\\Logo Neu (2).JPG'), 'Logo-Neu-2.jpg');
 });
+
+test('value source: each field from Entra ID, from AD, or from nowhere', () => {
+  const cfg = core.defaultConfig();
+  const src = () => Object.fromEntries(cfg.fields.map((f) => [f.key, core.fieldSource(cfg, f)]));
+  assert.equal(src().description, 'none');
+  assert.equal(src().givenName, 'graph');
+  assert.equal(core.usesAdExport(cfg), false);
+  cfg.options.valueSource = 'mixed';
+  assert.equal(src().description, 'ad');
+  assert.equal(src().homePhone, 'ad');
+  assert.equal(src().givenName, 'graph');
+  assert.deepEqual(core.adFields(cfg).map((f) => f.key), ['description', 'homePhone', 'info']);
+  cfg.options.valueSource = 'ad';
+  assert.ok(Object.values(src()).every((v) => v === 'ad'));
+  assert.equal(core.graphFields(cfg).length, 0);
+  cfg.options.valueSource = 'mixed';
+  assert.deepEqual(
+    Object.entries(core.mergeValues(cfg, { givenName: 'Anna', description: 'from Graph?' }, { description: 'Dipl. Ing.', givenName: 'from AD?' })).filter(([, v]) => v),
+    [['givenName', 'Anna'], ['description', 'Dipl. Ing.']]);
+  assert.equal(core.userFileName(' Anna.Muster@Example.COM '), 'anna.muster@example.com.json');
+  assert.equal(core.userFileName("o'neil+x@example.com"), 'o_neil_x@example.com.json');
+  assert.equal(core.userFileName('not-a-mail'), '');
+});

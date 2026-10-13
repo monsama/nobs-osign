@@ -160,17 +160,47 @@ async function readGroups(tok, wanted) {
   return found;
 }
 
+// The user's own file of values exported from AD (users/<mail>.json in the OSign folder), or null.
+async function readAdFile(tok, mail) {
+  const name = core.userFileName(mail);
+  if (!name) return null;
+  const meta = await graphGet(tok, itemUrl('users/' + name), 'Finding your entry', true);
+  if (!meta) return null;
+  meta.__rel = 'users/' + name;
+  const j = JSON.parse(await download(meta, tok, 'Loading your entry', true));
+  return { values: j.values || {}, groups: (j.groups || []).map((g) => String(g).toLowerCase()) };
+}
+
+// The user's details from where the configuration says (options.valueSource): Entra ID through
+// Graph (/me), the AD export in SharePoint, or each field from where it has a source.
 async function readGraph(cfg, interactive, wanted) {
+  const mode = core.valueSource(cfg);
   const tok = await token(BASE_SCOPES, interactive);
-  const select = core.graphSelect(cfg.fields);
-  const me = await graphGet(tok, GRAPH + '/me' + (select.length ? '?$select=' + encodeURIComponent(select.join(',')) : ''), 'Reading your details');
-  // Groups that cannot be read (no consent yet) take only the group signatures out of reach.
-  let groups = [], groupError = null;
-  if (wanted.length) {
-    try { groups = await readGroups(await token([GROUP_SCOPE], interactive), wanted); }
-    catch (e) { groups = null; groupError = e; }
+  let graphValues = {};
+  const gFields = core.graphFields(cfg);
+  if (gFields.length) {
+    const select = core.graphSelect(gFields);
+    const me = await graphGet(tok, GRAPH + '/me' + (select.length ? '?$select=' + encodeURIComponent(select.join(',')) : ''), 'Reading your details');
+    graphValues = core.valuesFromGraph(gFields, me);
   }
-  return { values: core.valuesFromGraph(cfg.fields, me), groups, groupError };
+  let groups = [], groupError = null;
+  if (mode === 'graph') {
+    // Groups that cannot be read (no consent yet) take only the group signatures out of reach.
+    if (wanted.length) {
+      try { groups = await readGroups(await token([GROUP_SCOPE], interactive), wanted); }
+      catch (e) { groups = null; groupError = e; }
+    }
+    return { values: core.mergeValues(cfg, graphValues, {}), groups, groupError };
+  }
+  // From AD: the file of the address this mailbox has, as the editor exported it.
+  const mail = (Office.context.mailbox.userProfile || {}).emailAddress || '';
+  const ad = await readAdFile(tok, mail);
+  if (!ad && mode === 'ad') throw new Error('You are not in the AD export (users/' + (core.userFileName(mail) || mail) + '). Ask IT to export the users again.');
+  return {
+    values: core.mergeValues(cfg, graphValues, ad ? ad.values : {}),
+    groups: ad ? ad.groups.filter((g) => wanted.indexOf(g) >= 0) : null,
+    groupError: ad ? null : new Error('You are not in the AD export, so your groups are not known.')
+  };
 }
 
 // Returns { values, groups, source: 'graph'|'cache'|'outlook', error } - or values null when there
@@ -178,7 +208,7 @@ async function readGraph(cfg, interactive, wanted) {
 export async function loadUserValues(cfg, opts) {
   opts = opts || {};
   const wanted = core.groupsUsed(cfg);
-  const key = wanted.slice().sort().join('\n');
+  const key = core.valueSource(cfg) + '\n' + wanted.slice().sort().join('\n');
   const cached = readRoaming(PROFILE_KEY);
   // A copy read for other groups than the configuration now names says nothing about the new ones.
   const cacheFits = cached && cached.values && (cached.groupsFor || '') === key;

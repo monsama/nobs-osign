@@ -18,10 +18,17 @@
 
 .PARAMETER Port
   Listen on this port instead of the first free one of 17690-17697.
+
+.PARAMETER ExportUsers
+  No window, no server: export the users' values from Active Directory into the publish folder
+  (users\<mail>.json), as the published signatures.json asks for, and exit. For the Task
+  Scheduler, so the values in signatures stay as current as AD:
+    powershell -ExecutionPolicy Bypass -File OSign.ps1 -ExportUsers
 #>
 param(
     [switch]$NoBrowser,
-    [int]$Port = 0
+    [int]$Port = 0,
+    [switch]$ExportUsers
 )
 
 $ErrorActionPreference = 'Stop'
@@ -371,6 +378,117 @@ function Api-AdGroups($data) {
 }
 
 # ---------------------------------------------------------------------------
+# Users from AD, for signatures whose values come from AD (options.valueSource 'ad' or 'mixed'):
+# one file per user, users\<mail>.json in the publish folder, with the fields' values and the
+# groups (of those the signatures name) the user is in, nested ones included. The add-in reads
+# only the file of the user who writes.
+# ---------------------------------------------------------------------------
+# The fields to export, as signature-core.js's fieldSource() decides it.
+function Get-AdExportFields($Config) {
+    $mode = [string]$Config.options.valueSource
+    $out = @()
+    foreach ($f in @($Config.fields)) {
+        $ad = [string]$f.ad; $key = [string]$f.key
+        if (-not $key -or $ad -notmatch '^[A-Za-z][A-Za-z0-9-]{0,63}$') { continue }
+        if ($mode -eq 'ad' -or ($mode -eq 'mixed' -and -not [string]$f.graph)) { $out += [pscustomobject]@{ key = $key; ad = $ad } }
+    }
+    return , $out
+}
+
+function Get-GroupsUsed($Config) {
+    $g = @()
+    foreach ($s in @($Config.signatures)) { foreach ($n in @($s.audience.groups)) { $l = ([string]$n).Trim().ToLowerInvariant(); if ($l -and $g -notcontains $l) { $g += $l } } }
+    return , $g
+}
+
+# Every active user with a mail address: @{ mail; attrs = @{ <ad attribute> = value }; groups = @(<names, lower case>) }.
+# OSIGN_TEST_AD_JSON (tests only) stands in for the directory with a JSON file of such records.
+function Get-AdUserRecords([string[]]$Attributes, [string[]]$GroupNames) {
+    if ($env:OSIGN_TEST_AD_JSON) {
+        $out = @()
+        foreach ($r in @((Read-Text $env:OSIGN_TEST_AD_JSON) | ConvertFrom-Json)) {
+            $attrs = @{}; foreach ($p in $r.attrs.PSObject.Properties) { $attrs[$p.Name.ToLowerInvariant()] = [string]$p.Value }
+            $out += @{ mail = [string]$r.mail; attrs = $attrs; groups = @(@($r.groups) | ForEach-Object { ([string]$_).ToLowerInvariant() }) }
+        }
+        return , $out
+    }
+    if (-not $script:OnWindows) { throw 'Reading users needs Windows on a machine in the domain.' }
+    Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue
+    # Members of each named group, nested ones included: one search per group, not per user.
+    $memberOf = @{}
+    foreach ($gname in $GroupNames) {
+        $v = ConvertTo-LdapFilterValue $gname
+        $gs = New-Object System.DirectoryServices.DirectorySearcher
+        $gs.Filter = "(&(objectClass=group)(|(sAMAccountName=$v)(name=$v)))"
+        [void]$gs.PropertiesToLoad.Add('distinguishedName')
+        foreach ($g in @($gs.FindAll())) {
+            $dn = ConvertTo-LdapFilterValue ([string]$g.Properties['distinguishedname'][0])
+            $ms = New-Object System.DirectoryServices.DirectorySearcher
+            $ms.Filter = "(&(objectCategory=person)(objectClass=user)(memberOf:1.2.840.113556.1.4.1941:=$dn))"
+            $ms.PageSize = 500
+            [void]$ms.PropertiesToLoad.Add('distinguishedName')
+            foreach ($u in @($ms.FindAll())) {
+                $udn = [string]$u.Properties['distinguishedname'][0]
+                if (-not $memberOf.ContainsKey($udn)) { $memberOf[$udn] = @() }
+                if ($memberOf[$udn] -notcontains $gname) { $memberOf[$udn] += $gname }
+            }
+        }
+    }
+    $us = New-Object System.DirectoryServices.DirectorySearcher
+    # Users with a mail address whose account is not disabled.
+    $us.Filter = '(&(objectCategory=person)(objectClass=user)(mail=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))'
+    $us.PageSize = 500
+    foreach ($a in (@('mail', 'distinguishedName') + $Attributes)) { [void]$us.PropertiesToLoad.Add($a) }
+    $out = @()
+    foreach ($u in @($us.FindAll())) {
+        $attrs = @{}
+        foreach ($a in $Attributes) { $l = $a.ToLowerInvariant(); $attrs[$l] = $(if ($u.Properties[$l].Count) { [string]$u.Properties[$l][0] } else { '' }) }
+        $dn = [string]$u.Properties['distinguishedname'][0]
+        $out += @{ mail = [string]$u.Properties['mail'][0]; attrs = $attrs; groups = $(if ($memberOf.ContainsKey($dn)) { @($memberOf[$dn]) } else { @() }) }
+    }
+    return , $out
+}
+
+# The file name, as signature-core.js's userFileName() makes it.
+function Get-UserFileName([string]$Mail) {
+    $m = $Mail.Trim().ToLowerInvariant()
+    if ($m -notmatch '^[^@\s]+@[^@\s]+$') { return $null }
+    return (($m -replace '[^a-z0-9@._-]', '_') + '.json')
+}
+
+# Writes users\<mail>.json for everyone, only what changed, and removes the files of users that
+# are gone (left the company, disabled, mail removed).
+function Export-UsersToFolder([string]$Root, $Fields, [string[]]$GroupNames) {
+    $dir = Join-Path $Root 'users'
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $records = Get-AdUserRecords @($Fields | ForEach-Object { $_.ad } | Select-Object -Unique) $GroupNames
+    $keep = @{}; $written = 0; $same = 0; $removed = 0
+    foreach ($r in $records) {
+        $name = Get-UserFileName $r.mail
+        if (-not $name -or $keep.ContainsKey($name)) { continue }
+        $keep[$name] = 1
+        $values = [ordered]@{}
+        foreach ($f in ($Fields | Sort-Object key)) { $values[$f.key] = [string]$r.attrs[$f.ad.ToLowerInvariant()] }
+        $json = To-Json ([ordered]@{ values = $values; groups = @($r.groups | Sort-Object) })
+        $path = Join-Path $dir $name
+        if ((Read-Text $path) -eq $json) { $same++ } else { Write-Text $path $json; $written++ }
+    }
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -File -Filter '*.json' -ErrorAction SilentlyContinue)) {
+        if (-not $keep.ContainsKey($f.Name)) { Remove-Item -LiteralPath $f.FullName -Force; $removed++ }
+    }
+    return @{ users = $keep.Count; written = $written; unchanged = $same; removed = $removed }
+}
+
+function Api-AdExport($data) {
+    $s = Get-Settings
+    $err = Test-Settings $s -ForPublish; if ($err) { return (Fail $err) }
+    $fields = @(); foreach ($f in @($data.fields)) { if ([string]$f.key -and ([string]$f.ad) -match '^[A-Za-z][A-Za-z0-9-]{0,63}$') { $fields += [pscustomobject]@{ key = [string]$f.key; ad = [string]$f.ad } } }
+    $groups = @(@($data.groups) | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ })
+    try { $r = Export-UsersToFolder $s.folder $fields $groups } catch { return (Fail "Active Directory: $($_.Exception.Message)") }
+    return (Ok $r)
+}
+
+# ---------------------------------------------------------------------------
 # HTTP server: 127.0.0.1 only, a token per start
 # ---------------------------------------------------------------------------
 $script:Token = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Minimum 0 -Maximum 256) })
@@ -467,6 +585,7 @@ function Invoke-Request($client) {
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }
             '/api/ad/groups'      { Api-AdGroups $data }
+            '/api/ad/export'      { Api-AdExport $data }
             '/api/quit'           { $script:Quit = $true; Ok @{} }
             default               { $null }
         }
@@ -543,6 +662,22 @@ function Start-AppWindow([string]$Url) {
 
 # The functions above are what the tests load; the server starts only when the script is run.
 if ($MyInvocation.InvocationName -eq '.') { return }
+
+# -ExportUsers: the export alone, for the Task Scheduler. Exit code 0 when it worked.
+if ($ExportUsers) {
+    $s = Get-Settings
+    $err = Test-Settings $s -ForPublish
+    if ($err) { Write-Host $err -ForegroundColor Red; exit 1 }
+    $cfgText = Read-Text (Join-Path $s.folder 'signatures.json')
+    if (-not $cfgText) { Write-Host "No signatures.json in $($s.folder): publish from the editor first." -ForegroundColor Red; exit 1 }
+    $cfg = $cfgText | ConvertFrom-Json
+    if ([string]$cfg.options.valueSource -notin @('ad', 'mixed')) { Write-Host 'The signatures take their values from Entra ID: nothing to export.'; exit 0 }
+    try {
+        $r = Export-UsersToFolder $s.folder (Get-AdExportFields $cfg) (Get-GroupsUsed $cfg)
+        Write-Host ("Exported {0} users to {1}: {2} written, {3} unchanged, {4} removed." -f $r.users, (Join-Path $s.folder 'users'), $r.written, $r.unchanged, $r.removed)
+        exit 0
+    } catch { Write-Host "Export failed: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
+}
 
 # A stable port, so the window's own settings (kept per address) stay across starts.
 $listener = $null

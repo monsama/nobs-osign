@@ -492,9 +492,11 @@
     // What to know about this signature before it goes out.
     const notes = [], keys = fieldKeys(), used = core.placeholdersIn(s.html);
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
-    const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && !f.graph; });
+    const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && core.fieldSource(S.config, f) === 'none'; });
     if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', '))));
-    if (noGraph.length) notes.push(el('div', { class: 'warn' }, t('No Graph source, so empty in Outlook: {0}. See Fields.', noGraph.map((k) => '@@' + k).join(', '))));
+    if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
+      ? t('No Graph source, so empty in Outlook: {0}. See Fields.', noGraph.map((k) => '@@' + k).join(', '))
+      : t('No source (neither Graph nor AD attribute), so empty in Outlook: {0}. See Fields.', noGraph.map((k) => '@@' + k).join(', '))));
     if ($('pvSource').value === 'ad' && S.adName) {
       // What this user would get, as the add-in decides it (the From address being their own).
       const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
@@ -736,7 +738,14 @@
   const OPTS = { optDisable: 'disableOutlookSignature', optChoice: 'allowUserChoice', optMeetings: 'meetings', optNoProfile: 'insertWithoutProfile' };
   function renderOptions() {
     Object.entries(OPTS).forEach(([id, k]) => { $(id).checked = !!S.config.options[k]; });
+    const mode = core.valueSource(S.config);
+    document.querySelectorAll('input[name=vsrc]').forEach((r) => { r.checked = r.value === mode; });
+    $('vsrcNote').hidden = mode === 'graph';
   }
+  document.querySelectorAll('input[name=vsrc]').forEach((r) => r.addEventListener('change', () => {
+    if (!r.checked) return;
+    S.config.options.valueSource = r.value; changed({ list: false }); renderOptions();
+  }));
   Object.entries(OPTS).forEach(([id, k]) => $(id).addEventListener('change', () => { S.config.options[k] = $(id).checked; changed({ list: false }); }));
   $('lnkSetup').addEventListener('click', (e) => { e.preventDefault(); $('dlgHelp').showModal(); });
 
@@ -786,7 +795,7 @@
     else if (!plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.')]);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
     if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
-    if (core.groupsUsed(c).length) out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.')]);
+    if (core.groupsUsed(c).length && core.valueSource(c) === 'graph') out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.')]);
     const perPerson = c.signatures.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
     if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; who has none gets the signature without.', perPerson.join(', '))]);
     const lost = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/|photos\/|https:)[^"]*"/i.test(s.html || '')).map((s) => s.name);
@@ -795,8 +804,12 @@
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     if (unknown.length) out.push(['warn', t('Not fields, left as typed: {0}', unknown.map((k) => '@@' + k).join(', '))]);
-    const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && !f.graph; });
-    if (noGraph.length) out.push(['warn', t('Empty in Outlook (no Graph source): {0}', noGraph.map((k) => '@@' + k).join(', '))]);
+    const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
+    if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map((k) => '@@' + k).join(', '))]);
+    if (core.usesAdExport(c)) {
+      if (S.info && S.info.features && S.info.features.adLookup) out.push(['good', t('Users are exported from Active Directory on publishing ({0} field(s){1}).', core.adFields(c).length, core.groupsUsed(c).length ? t(', and the groups') : '')]);
+      else out.push(['warn', t('This PC cannot read Active Directory: the users are not exported now. Run OSign.ps1 -ExportUsers on a PC in the domain.')]);
+    }
     const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
     if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', '))]);
     if (!out.some((x) => x[0] !== 'good')) out.push(['good', t('{0} signature(s), ready.', c.signatures.length)]);
@@ -820,9 +833,17 @@
     try {
       await saving;
       const c = prepared(); c.updated = new Date().toISOString();
+      // Values from AD: the users first, so a signature never asks for a file that is not there yet.
+      let exported = '';
+      if (core.usesAdExport(c) && S.info && S.info.features && S.info.features.adLookup) {
+        try {
+          const x = await api('ad/export', { fields: core.adFields(c).map((f) => ({ key: f.key, ad: f.ad })), groups: core.groupsUsed(c) });
+          exported = ' ' + t('{0} users exported from AD ({1} changed, {2} removed).', x.users, x.written, x.removed);
+        } catch (err) { exported = ' ' + t('The users could not be exported from AD: {0}', t(err.message)); }
+      }
       const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
       S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
-      $('pubOk').textContent = r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.');
+      $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
     finally { $('pubGo').disabled = false; }
   });

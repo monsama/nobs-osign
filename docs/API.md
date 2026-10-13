@@ -84,6 +84,16 @@ reports `features.adLookup: false`.
 `{ query }` → `{ ok, groups: [string] }`: up to 30 group names (sAMAccountName) starting with
 `query`, for picking who gets a signature.
 
+## ad/export
+
+`{ fields: [{ key, ad }], groups: [string] }` → `{ ok, users, written, unchanged, removed }`
+
+For signatures whose values come from AD. Writes `users\<mail>.json` into the publish folder for
+every active user with a mail address: `{ "values": { <key>: string }, "groups": [<the named groups
+the user is in, nested ones included, lower case>] }`. Only files that differ are written; files of
+users no longer found are removed. The file name is the mail address in lower case, characters
+other than `a-z 0-9 @ . _ -` as `_` (`userFileName()` in the shared engine).
+
 ## quit
 
 Stops the server. → `{ ok }`
