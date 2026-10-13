@@ -1,0 +1,344 @@
+/*
+ * What the event handler and the task pane share: the signatures and their images (from the
+ * company's own SharePoint), the user's details and groups (Microsoft Graph), the user's own choice,
+ * and putting a signature into the item being written.
+ *
+ * Nothing of a company is in this code or where it is served: everything is read with the user's
+ * own sign-in from the SharePoint home site of their tenant, folder OSign (see docs/SETUP.md).
+ *
+ * Runs in two places. In new Outlook, Outlook on the web and Outlook for Mac, in a browser
+ * runtime. In classic Outlook on Windows, the event handler runs in a JavaScript-only runtime:
+ * no DOM, no localStorage, no window, no btoa - so nothing here may need them.
+ */
+import core from '../../shared/signature-core.js';
+import { getGraphToken } from './auth.js';
+
+/* global Office, OfficeRuntime, __SP_SITE__, __SP_FOLDER__ */
+export { core };
+
+// Where the editor publishes: a folder in the document library of a SharePoint site. "root" is the
+// tenant's home site (https://<tenant>.sharepoint.com), which every Microsoft 365 tenant has.
+const SITE = __SP_SITE__;
+const FOLDER = __SP_FOLDER__;
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+// Reading the folder needs Sites.Read.All; groups need GroupMember.Read.All. Both delegated, so the
+// add-in reads only what the user may read anyway, and both with admin consent, so nobody is asked.
+const BASE_SCOPES = ['User.Read', 'Sites.Read.All'];
+const GROUP_SCOPE = 'GroupMember.Read.All';
+
+const PROFILE_KEY = 'osign.profile';
+const PREFS_KEY = 'osign.prefs';
+const CONFIG_KEY = 'osign.config';
+// The user's details are read again after this long; within it the copy is used as it is.
+const PROFILE_FRESH_MS = 15 * 60 * 1000;
+// Images are kept between messages up to this size each (they are logos, icons, small photos).
+const IMAGE_CACHE_MAX = 300 * 1024;
+const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif' };
+// What the add-in attaches to show its images starts with this, so it knows its own again.
+const ATTACHMENT_PREFIX = 'osign-';
+
+function withTimeout(promise, ms, what) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(what + ' took too long.')), ms);
+    promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Storage between messages: localStorage where there is one, OfficeRuntime.storage in the
+// JavaScript-only runtime, memory otherwise.
+// ---------------------------------------------------------------------------------------------
+const memory = {};
+const store = {
+  async get(key) {
+    try { if (typeof localStorage !== 'undefined') return localStorage.getItem(key); } catch (e) { /* none */ }
+    try { if (typeof OfficeRuntime !== 'undefined' && OfficeRuntime.storage) return await OfficeRuntime.storage.getItem(key); } catch (e) { /* none */ }
+    return memory[key] || null;
+  },
+  async set(key, value) {
+    memory[key] = value;
+    try { if (typeof localStorage !== 'undefined') { localStorage.setItem(key, value); return; } } catch (e) { /* none */ }
+    try { if (typeof OfficeRuntime !== 'undefined' && OfficeRuntime.storage) await OfficeRuntime.storage.setItem(key, value); } catch (e) { /* none */ }
+  }
+};
+async function readJson(key) { try { const v = await store.get(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+
+// ---------------------------------------------------------------------------------------------
+// Microsoft Graph
+// ---------------------------------------------------------------------------------------------
+async function graphGet(token, url, what, allowNotFound) {
+  const r = await withTimeout(fetch(url, { headers: { Authorization: 'Bearer ' + token } }), 8000, what);
+  if (r.status === 404 && allowNotFound) return null;
+  if (r.status === 401 || r.status === 403) {
+    const need = /memberOf/i.test(url) ? GROUP_SCOPE : /\/sites\//.test(url) ? 'Sites.Read.All (or the folder is not readable for you)' : 'User.Read';
+    throw new Error(what + ': not allowed (' + r.status + '). The app registration needs admin consent for ' + need + '.');
+  }
+  if (r.status === 404) throw new Error(what + ': not found in SharePoint (404).');
+  if (!r.ok) throw new Error(what + ': Microsoft Graph answered ' + r.status + '.');
+  return r.json();
+}
+
+let tokens = {};
+async function token(scopes, interactive) {
+  const key = scopes.join(' ');
+  if (!tokens[key] || interactive) tokens[key] = getGraphToken(interactive, scopes).catch((e) => { delete tokens[key]; throw e; });
+  return tokens[key];
+}
+
+// A file in the OSign folder, by its path in there ("signatures.json", "assets/logo.png").
+function itemUrl(rel) {
+  const parts = (FOLDER + '/' + rel).split('/').filter(Boolean).map(encodeURIComponent);
+  return GRAPH + '/sites/' + SITE + '/drive/root:/' + parts.join('/');
+}
+
+async function download(meta, tok, what, asText) {
+  // The address Graph hands out is signed for a short while: no token is sent there.
+  const url = meta['@microsoft.graph.downloadUrl'];
+  const r = await withTimeout(url ? fetch(url) : fetch(itemUrl(meta.__rel) + ':/content', { headers: { Authorization: 'Bearer ' + tok } }), 10000, what);
+  if (!r.ok) throw new Error(what + ': SharePoint answered ' + r.status + '.');
+  return asText ? r.text() : new Uint8Array(await r.arrayBuffer());
+}
+
+// ---------------------------------------------------------------------------------------------
+// The configuration the editor published
+// ---------------------------------------------------------------------------------------------
+// interactive: the task pane may show a sign-in window; the event handler never can.
+export async function loadConfig(opts) {
+  opts = opts || {};
+  const cached = await readJson(CONFIG_KEY);
+  try {
+    const tok = await token(BASE_SCOPES, !!opts.interactive);
+    const meta = await graphGet(tok, itemUrl('signatures.json'), 'Finding the signatures', true);
+    if (!meta) throw new Error('No signatures are published yet: ' + FOLDER + '/signatures.json is not in SharePoint.');
+    meta.__rel = 'signatures.json';
+    // Unchanged since the last message: no need to fetch it again.
+    const text = cached && cached.etag && cached.etag === meta.eTag ? cached.text : await download(meta, tok, 'Loading the signatures', true);
+    const cfg = JSON.parse(text);
+    const errs = core.validate(cfg);
+    if (errs.length) throw new Error('The published signatures are not valid: ' + errs[0]);
+    if (!cached || cached.etag !== meta.eTag) await store.set(CONFIG_KEY, JSON.stringify({ etag: meta.eTag || '', text }));
+    return cfg;
+  } catch (e) {
+    if (cached && cached.text) { try { return JSON.parse(cached.text); } catch (e2) { /* below */ } }
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Roaming settings: kept in the mailbox, so they follow the user to every Outlook.
+// ---------------------------------------------------------------------------------------------
+function roaming() { return Office.context && Office.context.roamingSettings; }
+function readRoaming(key) { try { const v = roaming() && roaming().get(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+function writeRoaming(key, value) {
+  return new Promise((resolve) => {
+    const rs = roaming(); if (!rs) { resolve(); return; }
+    try { rs.set(key, JSON.stringify(value)); rs.saveAsync(() => resolve()); } catch (e) { resolve(); }
+  });
+}
+
+export function getPrefs() { return readRoaming(PREFS_KEY) || {}; }
+export function setPrefs(p) { return writeRoaming(PREFS_KEY, { new: p.new || '', reply: p.reply || '' }); }
+
+// ---------------------------------------------------------------------------------------------
+// The user's details and groups, from Microsoft Graph (/me)
+// ---------------------------------------------------------------------------------------------
+// The user's groups, nested ones included, as the names the configuration uses: only those are
+// kept (a user can be in hundreds of groups, and the copy goes into the mailbox settings).
+async function readGroups(tok, wanted) {
+  const found = [];
+  let url = GRAPH + '/me/transitiveMemberOf/microsoft.graph.group?$select=id,displayName,onPremisesSamAccountName&$top=999';
+  for (let page = 0; url && page < 20; page++) {
+    const j = await graphGet(tok, url, 'Reading your groups');
+    (j.value || []).forEach((g) => {
+      [g.id, g.displayName, g.onPremisesSamAccountName].forEach((n) => {
+        const l = String(n || '').toLowerCase();
+        if (l && wanted.indexOf(l) >= 0 && found.indexOf(l) < 0) found.push(l);
+      });
+    });
+    url = j['@odata.nextLink'];
+  }
+  return found;
+}
+
+async function readGraph(cfg, interactive, wanted) {
+  const tok = await token(BASE_SCOPES, interactive);
+  const select = core.graphSelect(cfg.fields);
+  const me = await graphGet(tok, GRAPH + '/me' + (select.length ? '?$select=' + encodeURIComponent(select.join(',')) : ''), 'Reading your details');
+  // Groups that cannot be read (no consent yet) take only the group signatures out of reach.
+  let groups = [], groupError = null;
+  if (wanted.length) {
+    try { groups = await readGroups(await token([GROUP_SCOPE], interactive), wanted); }
+    catch (e) { groups = null; groupError = e; }
+  }
+  return { values: core.valuesFromGraph(cfg.fields, me), groups, groupError };
+}
+
+// Returns { values, groups, source: 'graph'|'cache'|'outlook', error } - or values null when there
+// are none. groups is null when they could not be read: no signature limited to groups applies then.
+export async function loadUserValues(cfg, opts) {
+  opts = opts || {};
+  const wanted = core.groupsUsed(cfg);
+  const key = wanted.slice().sort().join('\n');
+  const cached = readRoaming(PROFILE_KEY);
+  // A copy read for other groups than the configuration now names says nothing about the new ones.
+  const cacheFits = cached && cached.values && (cached.groupsFor || '') === key;
+  if (!opts.refresh && cacheFits && Date.now() - cached.at < PROFILE_FRESH_MS) return { values: cached.values, groups: cached.groups || [], source: 'cache' };
+  let error = null;
+  try {
+    const r = await readGraph(cfg, !!opts.interactive, wanted);
+    await writeRoaming(PROFILE_KEY, { at: Date.now(), values: r.values, groups: r.groups, groupsFor: r.groups ? key : '\u0000' });
+    return { values: r.values, groups: r.groups, source: 'graph', error: r.groupError };
+  } catch (e) { error = e; }
+  if (cached && cached.values) return { values: cached.values, groups: cacheFits ? cached.groups || [] : null, source: 'cache', error };
+  if (cfg.options && cfg.options.insertWithoutProfile) {
+    // What Outlook itself knows: the address, nothing else that fits a field reliably.
+    const v = {};
+    (cfg.fields || []).forEach((f) => { v[f.key] = ''; });
+    const up = Office.context.mailbox && Office.context.mailbox.userProfile;
+    if (up && 'mail' in v) v.mail = up.emailAddress || '';
+    return { values: v, groups: null, source: 'outlook', error };
+  }
+  return { values: null, groups: null, source: 'none', error };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Images: assets/<name> (logos, icons) and photos/<name> (one per person), from the OSign folder.
+// ---------------------------------------------------------------------------------------------
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+export function base64(bytes) {
+  let out = '', i = 0;
+  for (; i + 2 < bytes.length; i += 3) {
+    const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    out += B64[n >> 18 & 63] + B64[n >> 12 & 63] + B64[n >> 6 & 63] + B64[n & 63];
+  }
+  if (i < bytes.length) {
+    const n = (bytes[i] << 16) | ((i + 1 < bytes.length ? bytes[i + 1] : 0) << 8);
+    out += B64[n >> 18 & 63] + B64[n >> 12 & 63] + (i + 1 < bytes.length ? B64[n >> 6 & 63] : '=') + '=';
+  }
+  return out;
+}
+
+function typeOf(name) { return IMAGE_TYPES[String(name).split('.').pop().toLowerCase()] || ''; }
+
+// { 'assets/logo.png': { b64, type, file } } for what the signature shows; what is not there is
+// left out of the map (and so out of the signature).
+async function loadImages(refs, interactive) {
+  const out = {};
+  const wanted = [];
+  refs.forEach((r) => { const k = r.dir + '/' + r.name; if (typeOf(r.name) && !wanted.some((w) => w.key === k)) wanted.push({ key: k, dir: r.dir, name: r.name }); });
+  if (!wanted.length) return out;
+  const tok = await token(BASE_SCOPES, interactive);
+  // The logos and icons: one listing tells which are there and whether they changed.
+  let assets = null;
+  if (wanted.some((w) => w.dir === 'assets')) {
+    const j = await graphGet(tok, itemUrl('assets') + ':/children?$top=999', 'Listing the images', true);
+    assets = {};
+    ((j && j.value) || []).forEach((it) => { assets[String(it.name).toLowerCase()] = it; });
+  }
+  for (const w of wanted) {
+    try {
+      const meta = w.dir === 'assets' ? assets[w.name.toLowerCase()] : await graphGet(tok, itemUrl('photos/' + w.name), 'Finding the photo', true);
+      if (!meta) continue;
+      meta.__rel = w.key;
+      const ck = 'osign.img.' + w.key.toLowerCase();
+      const cached = await readJson(ck);
+      let b64 = cached && cached.etag && cached.etag === meta.eTag ? cached.b64 : null;
+      if (!b64) {
+        b64 = base64(await download(meta, tok, 'Loading ' + w.name));
+        if (b64.length < IMAGE_CACHE_MAX * 4 / 3) await store.set(ck, JSON.stringify({ etag: meta.eTag || '', b64 }));
+      }
+      out[w.key] = { b64, type: typeOf(w.name), file: ATTACHMENT_PREFIX + w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-') };
+    } catch (e) {
+      console.log('OSign: image ' + w.key + ': ' + (e && e.message ? e.message : e));
+    }
+  }
+  return out;
+}
+
+// Each of the signature's own images becomes either an inline attachment (cid:, in a mail) or a
+// data: address (the pane's preview). One that could not be loaded goes.
+function placeImages(html, images, mode) {
+  return core.localImages(html).reduce((h, r) => {
+    const img = images[r.dir + '/' + r.name];
+    if (!img) return h.split(r.tag).join('');
+    const src = mode === 'cid' ? 'cid:' + img.file : 'data:' + img.type + ';base64,' + img.b64;
+    return h.split(r.tag).join(r.tag.replace(r.src, src));
+  }, html);
+}
+
+function renderHtml(sig, values) {
+  return core.render(sig.compiled || sig.html, values, { removeEmptyLines: sig.removeEmptyLines !== false });
+}
+
+// For the pane: the signature as the mail will show it, images inside.
+export async function previewHtml(sig, values) {
+  const html = renderHtml(sig, values);
+  let images = {};
+  try { images = await loadImages(core.localImages(html), false); } catch (e) { /* shown without */ }
+  return placeImages(html, images, 'data');
+}
+
+// ---------------------------------------------------------------------------------------------
+// The item being written
+// ---------------------------------------------------------------------------------------------
+function call(fn, ...args) {
+  return new Promise((resolve, reject) => {
+    fn(...args, (res) => (res.status === Office.AsyncResultStatus.Succeeded ? resolve(res.value) : reject(res.error || new Error('Outlook refused.'))));
+  });
+}
+
+export function isMessage(item) { return item && item.itemType === Office.MailboxEnums.ItemType.Message; }
+
+// 'new' or 'reply', and whether the body is HTML.
+export async function composeInfo(item) {
+  if (isMessage(item) && item.getComposeTypeAsync) {
+    try {
+      const v = await call(item.getComposeTypeAsync.bind(item));
+      return { kind: v.composeType === 'newMail' ? 'new' : 'reply', html: v.coercionType !== Office.CoercionType.Text };
+    } catch (e) { /* below */ }
+  }
+  let html = true;
+  try { html = (await call(item.body.getTypeAsync.bind(item.body))) !== Office.CoercionType.Text; } catch (e) { /* keep html */ }
+  return { kind: 'new', html };
+}
+
+export async function fromAddress(item) {
+  try { if (item.from && item.from.getAsync) { const v = await call(item.from.getAsync.bind(item.from)); if (v && v.emailAddress) return v.emailAddress; } } catch (e) { /* below */ }
+  try { if (item.organizer && item.organizer.getAsync) { const v = await call(item.organizer.getAsync.bind(item.organizer)); if (v && v.emailAddress) return v.emailAddress; } } catch (e) { /* below */ }
+  return (Office.context.mailbox.userProfile || {}).emailAddress || '';
+}
+
+// The images an earlier signature attached go when another one is put in (a changed sender, a
+// signature picked in the pane), so a mail never carries a logo it no longer shows.
+async function removeOwnAttachments(item) {
+  if (!item.getAttachmentsAsync) return;
+  let list = [];
+  try { list = await call(item.getAttachmentsAsync.bind(item)); } catch (e) { return; }
+  for (const a of list || []) {
+    if (a.isInline && String(a.name || '').indexOf(ATTACHMENT_PREFIX) === 0) {
+      try { await call(item.removeAttachmentAsync.bind(item), a.id); } catch (e) { /* leave it */ }
+    }
+  }
+}
+
+// Puts the signature where Outlook keeps one: a later call replaces it, nothing else in the body changes.
+export async function insertSignature(item, cfg, sig, values, asHtml, opts) {
+  if (cfg.options && cfg.options.disableOutlookSignature && isMessage(item) && item.disableClientSignatureAsync) {
+    try { await call(item.disableClientSignatureAsync.bind(item)); } catch (e) { /* insert ours anyway */ }
+  }
+  await removeOwnAttachments(item);
+  let content = '';
+  if (sig) {
+    const html = renderHtml(sig, values);
+    if (asHtml) {
+      let images = {};
+      try { images = await loadImages(core.localImages(html), !!(opts && opts.interactive)); } catch (e) { console.log('OSign: images: ' + e.message); }
+      for (const key of Object.keys(images)) {
+        try { await call(item.addFileAttachmentFromBase64Async.bind(item), images[key].b64, images[key].file, { isInline: true }); }
+        catch (e) { delete images[key]; }
+      }
+      content = placeImages(html, images, 'cid');
+    } else content = core.htmlToText(html);
+  }
+  await call(item.body.setSignatureAsync.bind(item.body), content, { coercionType: asHtml ? Office.CoercionType.Html : Office.CoercionType.Text });
+}

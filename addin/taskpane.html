@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSign</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<link rel="stylesheet" href="taskpane.css">
+<script src="taskpane.js" defer></script>
+</head>
+<body>
+<header>
+  <img src="assets/icon-32.png" alt="" width="20" height="20">
+  <h1>Signatures</h1>
+</header>
+<div id="msg" class="msg" hidden></div>
+<section id="who" class="who"></section>
+<section id="choice" class="choice" hidden>
+  <label>For new mail <select id="prefNew"></select></label>
+  <label>For replies and forwards <select id="prefReply"></select></label>
+</section>
+<section id="list" class="list"></section>
+<p class="foot"><a href="#" id="refresh">Read my details again</a></p>
+</body>
+</html>

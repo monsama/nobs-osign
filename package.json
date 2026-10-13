@@ -1,0 +1,20 @@
+{
+  "name": "osign",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Central email signatures for classic and new Outlook: an Outlook add-in, and the editor that publishes the signatures it reads.",
+  "scripts": {
+    "build": "node addin/build.mjs",
+    "test": "node addin/build.mjs && node --test \"tests/*.test.js\"",
+    "editor": "pwsh -NoProfile -File editor/OSign.ps1"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "4.26.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.11",
+    "jsdom": "26.1.0",
+    "playwright": "1.56.1"
+  },
+  "license": "GPL-3.0-or-later"
+}
