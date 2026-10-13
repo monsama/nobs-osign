@@ -492,6 +492,35 @@ function Invoke-Request($client) {
     Send-Status $client '404 Not Found'
 }
 
+# The window's own profile, set before every start: no offer to translate the editor (it has its
+# own languages), and no password manager or form filling. Chrome and Edge read this file at start.
+function Set-BrowserPrefs([string]$ProfileDir) {
+    try {
+        $dir = Join-Path $ProfileDir 'Default'
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $path = Join-Path $dir 'Preferences'
+        $prefs = $null
+        if (Test-Path -LiteralPath $path) { try { $prefs = (Read-Text $path) | ConvertFrom-Json } catch { $prefs = $null } }
+        if (-not $prefs) { $prefs = [pscustomobject]@{} }
+        $set = {
+            param($obj, [string]$dotted, $value)
+            $parts = $dotted -split '\.'; $cur = $obj
+            for ($i = 0; $i -lt $parts.Length - 1; $i++) {
+                $k = $parts[$i]
+                if (-not $cur.PSObject.Properties[$k] -or $cur.$k -isnot [pscustomobject]) { $cur | Add-Member -NotePropertyName $k -NotePropertyValue ([pscustomobject]@{}) -Force }
+                $cur = $cur.$k
+            }
+            $cur | Add-Member -NotePropertyName $parts[-1] -NotePropertyValue $value -Force
+        }
+        & $set $prefs 'translate.enabled' $false
+        & $set $prefs 'credentials_enable_service' $false
+        & $set $prefs 'profile.password_manager_enabled' $false
+        & $set $prefs 'autofill.profile_enabled' $false
+        & $set $prefs 'autofill.credit_card_enabled' $false
+        Write-Text $path (ConvertTo-Json -InputObject $prefs -Depth 30 -Compress)
+    } catch { }
+}
+
 function Start-AppWindow([string]$Url) {
     if (-not $script:OnWindows) { return $false }
     $cands = @(
@@ -507,7 +536,8 @@ function Start-AppWindow([string]$Url) {
     # server), and no extension of the everyday browser - a password manager above all - reaches it.
     $profileDir = Join-Path $env:LOCALAPPDATA 'OSign\browser'
     if (-not (Test-Path -LiteralPath $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
-    $script:BrowserProcess = Start-Process $exe -ArgumentList @("--app=$Url", "--user-data-dir=`"$profileDir`"", '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-features=Translate', '--window-size=1400,900') -PassThru
+    Set-BrowserPrefs $profileDir
+    $script:BrowserProcess = Start-Process $exe -ArgumentList @("--app=$Url", "--user-data-dir=`"$profileDir`"", '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-features=Translate,TranslateUI,msEdgeTranslate', '--window-size=1400,900') -PassThru
     return $true
 }
 

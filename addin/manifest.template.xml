@@ -11,7 +11,9 @@
   <ProviderName>{{PROVIDER}}</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="OSign"/>
-  <Description DefaultValue="Inserts the company email signature in new messages, replies and forwards."/>
+  <Description DefaultValue="Inserts the company email signature in new messages, replies and forwards.">
+    <Override Locale="de-DE" Value="Fügt die Firmensignatur in neue Mails, Antworten und Weiterleitungen ein."/>
+  </Description>
   <IconUrl DefaultValue="{{BASE}}assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="{{BASE}}assets/icon-128.png"/>
   <SupportUrl DefaultValue="{{SUPPORT}}"/>
@@ -130,10 +132,14 @@
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="Group.Label" DefaultValue="OSign"/>
-          <bt:String id="Pane.Label" DefaultValue="Signatures"/>
+          <bt:String id="Pane.Label" DefaultValue="Signatures">
+            <bt:Override Locale="de-DE" Value="Signaturen"/>
+          </bt:String>
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="Pane.Tooltip" DefaultValue="Pick a signature, or the one used for new mail and for replies."/>
+          <bt:String id="Pane.Tooltip" DefaultValue="Pick a signature, or the one used for new mail and for replies.">
+            <bt:Override Locale="de-DE" Value="Eine Signatur wählen, oder die für neue Mails und für Antworten."/>
+          </bt:String>
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>

@@ -175,3 +175,31 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   // Only the editor's own design view tried the photo with its placeholder (it shows as missing there).
   assert.deepEqual([...new Set(notFound)], ['/photos/@@sAMAccountName.jpg']);
 });
+
+test('German: in a German browser the editor speaks German, and offers no translation', { skip }, async () => {
+  const de = await browser.newPage({ locale: 'de-DE', viewport: { width: 1400, height: 900 } });
+  const errs = [];
+  de.on('pageerror', (e) => errs.push(e.message));
+  await de.goto(url);
+  await de.waitForSelector('#viewSig:not([hidden]), #viewEmpty:not([hidden])');
+  assert.equal(await de.getAttribute('html', 'lang'), 'de');
+  assert.equal(await de.getAttribute('html', 'translate'), 'no');
+  assert.equal(await de.getAttribute('meta[name=google]', 'content'), 'notranslate');
+  assert.equal((await de.textContent('#btnPublish')).trim(), 'Veröffentlichen…');
+  assert.equal((await de.textContent('#btnSettings')).trim(), 'Einstellungen');
+  assert.match(await de.textContent('.side'), /Signaturen.*Einrichtung.*Felder/s);
+  assert.match(await de.textContent('#toolbar'), /@@ Feld einfügen/);
+  await de.click('a[data-view=fields]');
+  assert.match(await de.textContent('#viewFields'), /Ein Feld ist ein Platzhalter.*Ohne Graph-Quelle/s);
+  // English can be chosen, and stays chosen.
+  await de.click('#btnSettings');
+  assert.equal(await de.inputValue('#setLang'), 'de');
+  await de.selectOption('#setLang', 'en');
+  await Promise.all([de.waitForNavigation(), de.click('#setSave')]);
+  await de.waitForSelector('#btnPublish');
+  assert.equal((await de.textContent('#btnPublish')).trim(), 'Publish…');
+  assert.equal(await de.getAttribute('html', 'lang'), 'en');
+  await de.evaluate(() => localStorage.removeItem('osign.lang'));
+  assert.deepEqual(errs, []);
+  await de.close();
+});

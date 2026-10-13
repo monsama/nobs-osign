@@ -32,14 +32,14 @@
         keepalive: !!(opts && opts.keepalive)
       });
     } catch (e) {
-      if (!serverDown) { serverDown = true; toast('The OSign server is not running. Start OSign.ps1 again.', true); }
-      throw new Error('The OSign server is not running.');
+      if (!serverDown) { serverDown = true; toast(t('The OSign server is not running. Start OSign.ps1 again.'), true); }
+      throw new Error(t('The OSign server is not running.'));
     }
     serverDown = false;
     let j;
-    try { j = await r.json(); } catch (e) { throw new Error('The server answered ' + r.status + '.'); }
-    if (r.status === 401) throw new Error('This window is not signed in to the server: open the address OSign printed.');
-    if (!j.ok) throw new Error(j.error || 'Failed.');
+    try { j = await r.json(); } catch (e) { throw new Error(t('The server answered {0}.', r.status)); }
+    if (r.status === 401) throw new Error(t('This window is not signed in to the server: open the address OSign printed.'));
+    if (!j.ok) throw new Error(t(j.error || 'Failed.'));
     return j;
   }
 
@@ -74,7 +74,7 @@
   // ---------------------------------------------------------------------------------------------
   let saveTimer = null, saving = Promise.resolve(), changeSeq = 0;
   function changed(opts) {
-    S.dirty = true; changeSeq++; renderStatus('Saving…');
+    S.dirty = true; changeSeq++; renderStatus(t('Saving…'));
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 600);
     if (!opts || opts.list !== false) renderList();
@@ -86,7 +86,7 @@
     saving = saving.then(() => api('draft/save', { configJson: json }, opts))
       // The answer to an older save says nothing about changes made since: those are still coming.
       .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; renderStatus(); } })
-      .catch((e) => { renderStatus('Not saved'); toast(e.message, true); });
+      .catch((e) => { renderStatus(t('Not saved')); toast(t(e.message), true); });
     return saving;
   }
   window.addEventListener('beforeunload', () => { if (saveTimer) save({ keepalive: true }); });
@@ -95,9 +95,9 @@
   function renderStatus(text) {
     const el = $('status');
     if (text) { el.textContent = text; el.className = 'status'; return; }
-    if (S.dirty) { el.textContent = 'Unpublished changes'; el.className = 'status dirty'; }
-    else { el.textContent = S.publishedAt ? 'Published' : 'Saved'; el.className = 'status clean'; }
-    el.title = S.publishedAt ? 'Last published ' + new Date(S.publishedAt).toLocaleString() : '';
+    if (S.dirty) { el.textContent = t('Unpublished changes'); el.className = 'status dirty'; }
+    else { el.textContent = S.publishedAt ? t('Published') : t('Saved'); el.className = 'status clean'; }
+    el.title = S.publishedAt ? t('Last published {0}', new Date(S.publishedAt).toLocaleString(I18N.lang)) : '';
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -146,19 +146,19 @@
     if ((a.groups || []).length) parts.push(a.groups.join(', '));
     if ((a.departments || []).length) parts.push(a.departments.join(', '));
     if ((a.domains || []).length) parts.push('@' + a.domains.join(', @'));
-    return parts.length ? parts.join(' · ') : 'everyone';
+    return parts.length ? parts.join(' · ') : t('everyone');
   }
 
   function renderList() {
     const ul = $('sigList'); ul.textContent = '';
-    if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, 'None yet'));
+    if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, t('None yet')));
     S.config.signatures.forEach((s) => {
       const a = el('a', { href: '#', class: S.view === 'sig' && s.id === S.sigId ? 'active' : '', onclick: (e) => { e.preventDefault(); openSig(s.id); } },
-        s.name || '(no name)',
+        s.name || t('(no name)'),
         el('div', { class: 'badges' },
-          s.defaultNew ? el('span', { class: 'badge on' }, 'New') : null,
-          s.defaultReply ? el('span', { class: 'badge on' }, 'Reply') : null,
-          audienceText(s) !== 'everyone' ? el('span', { class: 'badge', title: audienceText(s) }, 'Limited') : null));
+          s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
+          s.defaultReply ? el('span', { class: 'badge on' }, t('Reply')) : null,
+          audienceText(s) !== t('everyone') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null));
       ul.append(el('li', null, a));
     });
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
@@ -205,7 +205,7 @@
   ].join('\n');
 
   function addSig(from) {
-    const name = from ? from.name + ' (copy)' : (S.config.signatures.length ? 'New signature' : 'Standard');
+    const name = from ? from.name + ' ' + t('(copy)') : (S.config.signatures.length ? t('New signature') : t('Standard'));
     const s = from ? JSON.parse(JSON.stringify(from)) : core.newSignature('', name);
     s.id = newId(name); s.name = name;
     if (from) { s.defaultNew = false; s.defaultReply = false; } else { s.html = STARTER; s.defaultNew = !S.config.signatures.some((x) => x.defaultNew); s.defaultReply = !S.config.signatures.some((x) => x.defaultReply); }
@@ -319,16 +319,16 @@
 
   function buildToolbar() {
     const tb = $('toolbar');
-    const btn = (name, title, fn, cmd) => { const b = el('button', { type: 'button', title, 'aria-label': title, 'data-cmd': cmd || '' }); b.innerHTML = svg(name); b.addEventListener('mousedown', (e) => e.preventDefault()); b.addEventListener('click', fn); return b; };
+    const btn = (name, title, fn, cmd) => { title = t(title); const b = el('button', { type: 'button', title, 'aria-label': title, 'data-cmd': cmd || '' }); b.innerHTML = svg(name); b.addEventListener('mousedown', (e) => e.preventDefault()); b.addEventListener('click', fn); return b; };
     const sep = () => el('span', { class: 'sep' });
     const fonts = ['Arial', 'Aptos', 'Calibri', 'Segoe UI', 'Verdana', 'Tahoma', 'Helvetica', 'Georgia', 'Times New Roman'];
-    const fontSel = el('select', { title: 'Font', 'aria-label': 'Font' }, el('option', { value: '' }, 'Font'), fonts.map((f) => el('option', { value: f }, f)));
+    const fontSel = el('select', { title: t('Font'), 'aria-label': t('Font') }, el('option', { value: '' }, t('Font')), fonts.map((f) => el('option', { value: f }, f)));
     fontSel.addEventListener('change', () => { if (fontSel.value) exec('fontName', fontSel.value + (fontSel.value === 'Georgia' || fontSel.value === 'Times New Roman' ? ', serif' : ', sans-serif')); fontSel.value = ''; });
-    const sizeSel = el('select', { title: 'Size', 'aria-label': 'Size' }, el('option', { value: '' }, 'Size'), [8, 9, 10, 11, 12, 14, 16, 18, 24].map((n) => el('option', { value: n }, n + ' pt')));
+    const sizeSel = el('select', { title: t('Size'), 'aria-label': t('Size') }, el('option', { value: '' }, t('Size')), [8, 9, 10, 11, 12, 14, 16, 18, 24].map((n) => el('option', { value: n }, n + ' pt')));
     sizeSel.addEventListener('change', () => { if (sizeSel.value) setFontSize(sizeSel.value); sizeSel.value = ''; });
-    const color = el('input', { type: 'color', title: 'Text colour', 'aria-label': 'Text colour', value: '#222222' });
+    const color = el('input', { type: 'color', title: t('Text colour'), 'aria-label': t('Text colour'), value: '#222222' });
     color.addEventListener('input', () => exec('foreColor', color.value));
-    const fieldSel = el('select', { class: 'field-pick', title: 'Insert a field', 'aria-label': 'Insert a field' });
+    const fieldSel = el('select', { class: 'field-pick', title: t('Insert a field'), 'aria-label': t('Insert a field') });
     fieldSel.addEventListener('focus', () => fillFieldSelect(fieldSel));
     fieldSel.addEventListener('change', () => {
       const k = fieldSel.value; fieldSel.value = '';
@@ -347,7 +347,7 @@
 
   function fillFieldSelect(sel) {
     sel.textContent = '';
-    sel.append(el('option', { value: '' }, '@@ Insert field'));
+    sel.append(el('option', { value: '' }, t('@@ Insert field')));
     S.config && S.config.fields.forEach((f) => sel.append(el('option', { value: f.key }, (f.label || f.key) + '  @@' + f.key)));
   }
 
@@ -366,9 +366,9 @@
   }
 
   function makeLink() {
-    const url = prompt('Link address (https://…, mailto:…, tel:…). Fields work here too: mailto:@@mail', 'https://');
+    const url = prompt(t('Link address (https://…, mailto:…, tel:…). Fields work here too: mailto:@@mail'), 'https://');
     if (!url || url === 'https://') return;
-    if (!/^(https?:|mailto:|tel:)/i.test(url.trim())) { toast('A link starts with https://, mailto: or tel:.', true); return; }
+    if (!/^(https?:|mailto:|tel:)/i.test(url.trim())) { toast(t('A link starts with https://, mailto: or tel:.'), true); return; }
     exec('createLink', url.trim());
   }
 
@@ -414,9 +414,9 @@
   }
   function renderImageList() {
     const box = $('imgList'); box.textContent = '';
-    if (!S.assets.length) box.append(el('p', { class: 'lead' }, 'No images yet.'));
+    if (!S.assets.length) box.append(el('p', { class: 'lead' }, t('No images yet.')));
     S.assets.forEach((a) => {
-      const del = el('span', { class: 'del', title: 'Remove from the draft', role: 'button', onclick: (e) => { e.stopPropagation(); deleteAsset(a.name); } }, 'remove');
+      const del = el('span', { class: 'del', title: t('Remove from the draft'), role: 'button', onclick: (e) => { e.stopPropagation(); deleteAsset(a.name); } }, t('remove'));
       box.append(el('button', { type: 'button', onclick: () => { $('dlgImage').close(); insertImage('assets/' + a.name); } },
         el('img', { src: '/assets/' + encodeURIComponent(a.name), alt: '' }), a.name, del));
     });
@@ -429,21 +429,21 @@
   }
   async function deleteAsset(name) {
     const used = S.config.signatures.filter((s) => (s.html || '').includes('assets/' + name)).map((s) => s.name);
-    if (used.length && !confirm(name + ' is used in: ' + used.join(', ') + '. Remove it anyway?')) return;
-    try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = e.message; }
+    if (used.length && !confirm(t('{0} is used in: {1}. Remove it anyway?', name, used.join(', ')))) return;
+    try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = t(e.message); }
   }
   $('imgFile').addEventListener('change', async () => {
     const f = $('imgFile').files[0]; $('imgFile').value = '';
     if (!f) return;
     $('imgErr').textContent = '';
-    if (f.size > 1024 * 1024) { $('imgErr').textContent = 'The image is larger than 1 MB.'; return; }
+    if (f.size > 1024 * 1024) { $('imgErr').textContent = t('The image is larger than 1 MB.'); return; }
     const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
     try {
       const r = await api('assets/upload', { name: f.name, data });
       S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]).sort((a, b) => a.name.localeCompare(b.name));
       $('dlgImage').close();
       insertImage(r.path);
-    } catch (e) { $('imgErr').textContent = e.message; }
+    } catch (e) { $('imgErr').textContent = t(e.message); }
   });
 
   // Design / HTML
@@ -485,7 +485,7 @@
     const s = sig(); if (!s || S.view !== 'sig') return;
     const html = core.render(core.compile(sanitize(s.html), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
     const asText = $('pvText').checked;
-    const greet = asText ? '' : '<p>Hello,</p><p>this is how the signature looks under a message.</p><p>&nbsp;</p>';
+    const greet = asText ? '' : '<p>' + core.escapeHtml(t('Hello,')) + '</p><p>' + core.escapeHtml(t('this is how the signature looks under a message.')) + '</p><p>&nbsp;</p>';
     const body = asText ? '<pre style="font:11pt/1.4 Consolas,monospace;white-space:pre-wrap">' + core.escapeHtml(core.htmlToText(html)) + '</pre>' : greet + html;
     $('preview').srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222}p{margin:0}table{border-collapse:collapse}</style></head><body>' + body + '</body></html>';
 
@@ -493,16 +493,16 @@
     const notes = [], keys = fieldKeys(), used = core.placeholdersIn(s.html);
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && !f.graph; });
-    if (unknown.length) notes.push(el('div', { class: 'warn' }, 'Not a field: ' + unknown.map((k) => '@@' + k).join(', ') + ' - left as typed.'));
-    if (noGraph.length) notes.push(el('div', { class: 'warn' }, 'No Graph source, so empty in Outlook: ' + noGraph.map((k) => '@@' + k).join(', ') + '. See Fields.'));
+    if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', '))));
+    if (noGraph.length) notes.push(el('div', { class: 'warn' }, t('No Graph source, so empty in Outlook: {0}. See Fields.', noGraph.map((k) => '@@' + k).join(', '))));
     if ($('pvSource').value === 'ad' && S.adName) {
       // What this user would get, as the add-in decides it (the From address being their own).
       const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
-      const nm = (x) => (x ? x.name : 'none');
+      const nm = (x) => (x ? x.name : t('none'));
       const open = core.isAvailable(s, v, from, g);
-      notes.push(el('div', { class: 'pv-groups' }, 'Values of ' + S.adName + ' from Active Directory. ' +
-        (open ? 'This signature is open to them.' : 'This signature is NOT open to them.') +
-        ' New mail: ' + nm(core.pick(S.config, v, from, 'new', null, g)) + ', replies: ' + nm(core.pick(S.config, v, from, 'reply', null, g)) + '.'));
+      notes.push(el('div', { class: 'pv-groups' }, t('Values of {0} from Active Directory.', S.adName) + ' ' +
+        (open ? t('This signature is open to them.') : t('This signature is NOT open to them.')) + ' ' +
+        t('New mail: {0}, replies: {1}.', nm(core.pick(S.config, v, from, 'new', null, g)), nm(core.pick(S.config, v, from, 'reply', null, g)))));
     }
     $('pvNote').replaceChildren(...notes);
   }
@@ -510,7 +510,7 @@
   $('pvSource').addEventListener('change', () => {
     const ad = $('pvSource').value === 'ad';
     $('pvAd').hidden = !ad;
-    if (ad && !(S.info && S.info.features && S.info.features.adLookup)) toast('Active Directory is not reachable from here: this needs Windows on a machine in the domain.', true);
+    if (ad && !(S.info && S.info.features && S.info.features.adLookup)) toast(t('Active Directory is not reachable from here: this needs Windows on a machine in the domain.'), true);
     if (ad && !S.adValues) $('pvUser').focus();
     renderPreview();
   });
@@ -519,7 +519,7 @@
     try {
       const r = await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
       S.adValues = r.values; S.adName = r.displayName; S.adGroups = r.groups || []; renderPreview();
-    } catch (e) { toast(e.message, true); }
+    } catch (e) { toast(t(e.message), true); }
   }
   $('pvLookup').addEventListener('click', adLookup);
   $('pvUser').addEventListener('keydown', (e) => { if (e.key === 'Enter') adLookup(); });
@@ -529,7 +529,7 @@
   // ---------------------------------------------------------------------------------------------
   const splitList = (v) => v.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
   $('sigName').addEventListener('input', () => { const s = sig(); if (s) { s.name = $('sigName').value; changed({ preview: false }); } });
-  $('sigName').addEventListener('blur', () => { const s = sig(); if (s && !s.name.trim()) { s.name = 'Signature'; $('sigName').value = s.name; changed(); } });
+  $('sigName').addEventListener('blur', () => { const s = sig(); if (s && !s.name.trim()) { s.name = t('Signature'); $('sigName').value = s.name; changed(); } });
   // One default for new mail and one for replies, unless the audiences differ: a second one with
   // the same audience could never be picked.
   function setDefault(flag, on) {
@@ -562,7 +562,7 @@
   $('btnNew2').addEventListener('click', () => addSig());
   $('btnDup').addEventListener('click', () => { flushSource(); const s = sig(); if (s) addSig(s); });
   $('btnDel').addEventListener('click', () => {
-    const s = sig(); if (!s || !confirm('Delete the signature "' + s.name + '"? It goes from Outlook with the next publish.')) return;
+    const s = sig(); if (!s || !confirm(t('Delete the signature "{0}"? It goes from Outlook with the next publish.', s.name))) return;
     S.config.signatures = S.config.signatures.filter((x) => x !== s);
     changed(); openSig(S.config.signatures[0] ? S.config.signatures[0].id : null);
   });
@@ -615,16 +615,16 @@
       box.addEventListener('change', () => { it.checked = box.checked; $('impGo').disabled = !impItems.some((x) => x.checked); });
       const exists = S.config.signatures.some((x) => x.name.toLowerCase() === it.name.toLowerCase());
       const meta = [];
-      if (it.blocks) meta.push(el('span', { class: 'warn' }, 'CI-Sign text blocks ({##…}), not a signature. '));
-      meta.push(it.fields.length ? it.fields.length + ' fields' : 'no fields');
-      meta.push(' · ' + it.imgs.length + ' image(s)');
-      if (it.missing.length) meta.push(el('span', { class: 'warn' }, ' · not picked: ' + [...new Set(it.missing)].join(', ')));
-      if (it.perPerson.length) meta.push(' · photo per person ' + it.perPerson[0] + ' → photos\\' + it.perPerson[0].split(/[\\/]/).pop());
-      if (exists) meta.push(' · replaces the signature of the same name');
+      if (it.blocks) meta.push(el('span', { class: 'warn' }, t('CI-Sign text blocks ({##…}), not a signature. ')));
+      meta.push(it.fields.length ? t('{0} fields', it.fields.length) : t('no fields'));
+      meta.push(t(' · {0} image(s)', it.imgs.length));
+      if (it.missing.length) meta.push(el('span', { class: 'warn' }, t(' · not picked: {0}', [...new Set(it.missing)].join(', '))));
+      if (it.perPerson.length) meta.push(t(' · photo per person {0} → photos\\{1}', it.perPerson[0], it.perPerson[0].split(/[\\/]/).pop()));
+      if (exists) meta.push(t(' · replaces the signature of the same name'));
       ul.append(el('li', { class: it.checked ? '' : 'skip' }, box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta))));
     });
     const n = impItems.length;
-    $('impNote').textContent = n ? n + ' template file(s) found, ' + impImages.size + ' image(s) picked.' : 'No .htm files among what was picked.';
+    $('impNote').textContent = n ? t('{0} template file(s) found, {1} image(s) picked.', n, impImages.size) : t('No .htm files among what was picked.');
     $('impGo').disabled = !impItems.some((x) => x.checked);
   }
 
@@ -666,8 +666,8 @@
       changed();
       $('dlgImport').close();
       if (first) openSig(first.id);
-      toast(count + ' template(s) imported' + (uploaded.size ? ', with ' + uploaded.size + ' image(s)' : '') + '.');
-    } catch (e) { $('impErr').textContent = e.message; $('impGo').disabled = false; }
+      toast(uploaded.size ? t('{0} template(s) imported, with {1} image(s).', count, uploaded.size) : t('{0} template(s) imported.', count));
+    } catch (e) { $('impErr').textContent = t(e.message); $('impGo').disabled = false; }
   }
 
   $('btnImportOpen').addEventListener('click', () => {
@@ -676,7 +676,7 @@
   });
   ['impFiles', 'impFolder'].forEach((id) => $(id).addEventListener('change', async () => {
     const files = $(id).files; if (!files || !files.length) return;
-    try { await readImportFiles(files); } catch (e) { $('impErr').textContent = e.message; }
+    try { await readImportFiles(files); } catch (e) { $('impErr').textContent = t(e.message); }
     $(id).value = '';
   }));
   $('impGo').addEventListener('click', (e) => { e.preventDefault(); runImport(); });
@@ -696,36 +696,36 @@
         x.addEventListener('input', () => { f[prop] = x.value.trim(); changed({ list: false }); if (prop === 'graph') x.closest('td').classList.toggle('nograph', !f.graph); });
         return x;
       };
-      const key = el('input', { value: f.key, 'aria-label': 'Placeholder name' });
+      const key = el('input', { value: f.key, 'aria-label': t('Placeholder name') });
       let oldKey = f.key;
       key.addEventListener('change', () => {
         const nk = key.value.trim().replace(/^@@/, '');
-        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(nk)) { toast('A placeholder name is letters, digits and _, starting with a letter.', true); key.value = oldKey; return; }
-        if (S.config.fields.some((x) => x !== f && x.key === nk)) { toast('@@' + nk + ' is already a field.', true); key.value = oldKey; return; }
+        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(nk)) { toast(t('A placeholder name is letters, digits and _, starting with a letter.'), true); key.value = oldKey; return; }
+        if (S.config.fields.some((x) => x !== f && x.key === nk)) { toast(t('@@{0} is already a field.', nk), true); key.value = oldKey; return; }
         const uses = S.config.signatures.filter((s) => core.placeholdersIn(s.html).indexOf(oldKey) >= 0);
-        if (uses.length && confirm('Change @@' + oldKey + ' to @@' + nk + ' in ' + uses.length + ' signature(s) too?')) {
+        if (uses.length && confirm(t('Change @@{0} to @@{1} in {2} signature(s) too?', oldKey, nk, uses.length))) {
           const re = new RegExp('@@' + oldKey + '(?![A-Za-z0-9_])', 'g');
           uses.forEach((s) => { s.html = s.html.replace(re, '@@' + nk); });
         }
         f.key = nk; oldKey = nk; changed({ list: false });
       });
-      const del = el('button', { class: 'ghost small danger', title: 'Remove field', 'aria-label': 'Remove field', onclick: () => {
+      const del = el('button', { class: 'ghost small danger', title: t('Remove field'), 'aria-label': t('Remove field'), onclick: () => {
         const uses = S.config.signatures.filter((s) => core.placeholdersIn(s.html).indexOf(f.key) >= 0).map((s) => s.name);
-        if (uses.length && !confirm('@@' + f.key + ' is used in: ' + uses.join(', ') + '. Remove the field anyway? The placeholder then stays as typed.')) return;
+        if (uses.length && !confirm(t('@@{0} is used in: {1}. Remove the field anyway? The placeholder then stays as typed.', f.key, uses.join(', ')))) return;
         S.config.fields.splice(i, 1); changed({ list: false }); renderFields();
       } }, '✕');
       tb.append(el('tr', null,
-        el('td', null, inp('label', { 'aria-label': 'Field' })),
+        el('td', null, inp('label', { 'aria-label': t('Field') })),
         el('td', null, el('div', { class: 'ph' }, el('span', null, '@@'), key)),
-        el('td', null, inp('ad', { 'aria-label': 'AD attribute' })),
-        el('td', { class: f.graph ? '' : 'nograph' }, inp('graph', { list: 'graphProps', placeholder: 'not available', 'aria-label': 'Graph source' })),
-        el('td', null, inp('sample', { 'aria-label': 'Sample value' })),
+        el('td', null, inp('ad', { 'aria-label': t('AD attribute') })),
+        el('td', { class: f.graph ? '' : 'nograph' }, inp('graph', { list: 'graphProps', placeholder: t('not available'), 'aria-label': t('Graph source') })),
+        el('td', null, inp('sample', { 'aria-label': t('Sample value') })),
         el('td', null, del)));
     });
   }
   $('btnAddField').addEventListener('click', () => {
     let n = 1; while (S.config.fields.some((f) => f.key === 'field' + n)) n++;
-    S.config.fields.push({ key: 'field' + n, label: 'New field', ad: '', graph: '', sample: '' });
+    S.config.fields.push({ key: 'field' + n, label: t('New field'), ad: '', graph: '', sample: '' });
     changed({ list: false }); renderFields();
     const rows = $('fieldRows').querySelectorAll('tr'); rows[rows.length - 1].querySelector('input').focus();
   });
@@ -750,8 +750,8 @@
   // Settings
   // ---------------------------------------------------------------------------------------------
   function renderSettingsNotes(r) {
-    $('setFolderNote').textContent = !S.settings.folder ? 'Not set yet.' : r.folderFound ? 'Found.' : 'Not found on this PC: is the library synced?';
-    $('setPhotosNote').textContent = r.photosFound ? 'Found.' : 'No photos folder there (yet): the preview shows no photos.';
+    $('setFolderNote').textContent = !S.settings.folder ? t('Not set yet.') : r.folderFound ? t('Found.') : t('Not found on this PC: is the library synced?');
+    $('setPhotosNote').textContent = r.photosFound ? t('Found.') : t('No photos folder there (yet): the preview shows no photos.');
   }
   let lastSettings = {};
   $('btnSettings').addEventListener('click', () => {
@@ -765,10 +765,12 @@
     e.preventDefault();
     try {
       const r = await api('settings/save', { settings: { folder: $('setFolder').value, photosFolder: $('setPhotos').value } });
+      // Another language: the page starts again in it (the draft is saved, nothing is lost).
+      if ($('setLang').value !== I18N.lang) { await saving; I18N.setLang($('setLang').value); return; }
       S.settings = r.settings; lastSettings = r;
-      $('dlgSettings').close(); toast(r.folderFound || !r.settings.folder ? 'Settings saved.' : 'Saved, but the folder is not there on this PC.', !r.folderFound && !!r.settings.folder);
+      $('dlgSettings').close(); toast(r.folderFound || !r.settings.folder ? t('Settings saved.') : t('Saved, but the folder is not there on this PC.'), !r.folderFound && !!r.settings.folder);
       schedulePreview();
-    } catch (err) { $('setErr').textContent = err.message; }
+    } catch (err) { $('setErr').textContent = t(err.message); }
   });
 
   // ---------------------------------------------------------------------------------------------
@@ -777,35 +779,35 @@
   function publishChecks() {
     const c = S.config, out = [];
     const errs = core.validate(prepared());
-    errs.forEach((e) => out.push(['bad', e]));
-    if (!c.signatures.length) out.push(['bad', 'There is no signature.']);
+    errs.forEach((e) => out.push(['bad', t(e)]));
+    if (!c.signatures.length) out.push(['bad', t('There is no signature.')]);
     const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length);
-    if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', 'No signature is the default for new mail: users get none unless they pick one.']);
-    else if (!plain.some((s) => s.defaultNew)) out.push(['warn', 'The default for new mail is limited to some users: everyone else gets none.']);
-    if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', 'No signature is the default for replies.']);
-    if (!S.settings.folder) out.push(['bad', 'No folder to publish to: set the synced OSign folder in Settings.']);
-    if (core.groupsUsed(c).length) out.push(['warn', 'Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.']);
+    if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', t('No signature is the default for new mail: users get none unless they pick one.')]);
+    else if (!plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.')]);
+    if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
+    if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
+    if (core.groupsUsed(c).length) out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.')]);
     const perPerson = c.signatures.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
-    if (perPerson.length) out.push(['good', 'Photos per person (' + perPerson.join(', ') + ') come from photos\\<username>.jpg in the OSign folder; who has none gets the signature without.']);
+    if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; who has none gets the signature without.', perPerson.join(', '))]);
     const lost = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/|photos\/|https:)[^"]*"/i.test(s.html || '')).map((s) => s.name);
-    if (lost.length) out.push(['warn', 'Images that are no file of the signatures are left out in: ' + lost.join(', ') + '.']);
+    if (lost.length) out.push(['warn', t('Images that are no file of the signatures are left out in: {0}.', lost.join(', '))]);
     const keys = fieldKeys();
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
-    if (unknown.length) out.push(['warn', 'Not fields, left as typed: ' + unknown.map((k) => '@@' + k).join(', ')]);
+    if (unknown.length) out.push(['warn', t('Not fields, left as typed: {0}', unknown.map((k) => '@@' + k).join(', '))]);
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && !f.graph; });
-    if (noGraph.length) out.push(['warn', 'Empty in Outlook (no Graph source): ' + noGraph.map((k) => '@@' + k).join(', ')]);
+    if (noGraph.length) out.push(['warn', t('Empty in Outlook (no Graph source): {0}', noGraph.map((k) => '@@' + k).join(', '))]);
     const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
-    if (missing.length) out.push(['warn', 'Images not in the draft, left out until added: ' + missing.join(', ')]);
-    if (!out.some((x) => x[0] !== 'good')) out.push(['good', c.signatures.length + ' signature(s), ready.']);
+    if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', '))]);
+    if (!out.some((x) => x[0] !== 'good')) out.push(['good', t('{0} signature(s), ready.', c.signatures.length)]);
     return out;
   }
 
   $('btnPublish').addEventListener('click', () => {
     flushSource();
     $('pubWhere').textContent = S.settings.folder
-      ? 'To ' + S.settings.folder + '. OneDrive uploads it to SharePoint; new messages use it a minute or two later.'
-      : 'No folder set yet (Settings).';
+      ? t('To {0}. OneDrive uploads it to SharePoint; new messages use it a minute or two later.', S.settings.folder)
+      : t('No folder set yet (Settings).');
     const checks = publishChecks();
     $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
     $('pubGo').disabled = checks.some((c) => c[0] === 'bad');
@@ -814,21 +816,21 @@
   });
   $('pubGo').addEventListener('click', async (e) => {
     e.preventDefault();
-    $('pubGo').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = 'Publishing…';
+    $('pubGo').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
       await saving;
       const c = prepared(); c.updated = new Date().toISOString();
       const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
       S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
-      $('pubOk').textContent = r.changed ? 'Published to ' + r.folder + '.' : 'Nothing had changed.';
-    } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = err.message; }
+      $('pubOk').textContent = r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.');
+    } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
     finally { $('pubGo').disabled = false; }
   });
 
   $('btnLoad').addEventListener('click', async () => {
-    if (S.dirty && !confirm('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).')) return;
-    try { applyDraft(await api('load-published')); toast('Loaded the published signatures.'); }
-    catch (e) { toast(e.message, true); }
+    if (S.dirty && !confirm(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'))) return;
+    try { applyDraft(await api('load-published')); toast(t('Loaded the published signatures.')); }
+    catch (e) { toast(t(e.message), true); }
   });
 
   // ---------------------------------------------------------------------------------------------
@@ -853,7 +855,7 @@
 
   function applyDraft(r) {
     let c = null;
-    try { c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { toast('The saved draft could not be read; starting from an empty one.', true); }
+    try { c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { toast(t('The saved draft could not be read; starting from an empty one.'), true); }
     S.config = normalize(c);
     S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = +r.publishedAt || 0;
     renderStatus();
@@ -868,6 +870,10 @@
   }
 
   async function start() {
+    I18N.apply(document.body);
+    const langSel = $('setLang');
+    Object.entries(I18N.langs).forEach(([k, v]) => langSel.append(el('option', { value: k }, v)));
+    langSel.value = I18N.lang;
     initDesign();
     try {
       const [info, settings, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
@@ -875,10 +881,10 @@
       S.config = normalize(null);
       buildToolbar();
       applyDraft(draft);
-      if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = 'User from Active Directory (not reachable)';
+      if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
     } catch (e) {
       document.body.classList.add('failed');
-      $('main').replaceChildren(el('section', { class: 'view empty' }, el('h1', null, 'Not connected'), el('p', null, e.message)));
+      $('main').replaceChildren(el('section', { class: 'view empty' }, el('h1', null, t('Not connected')), el('p', null, t(e.message))));
     }
   }
   start();
