@@ -233,6 +233,7 @@ function Api-Info {
     if ($script:OnWindows) {
         try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue; $ad = [bool]([DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()) } catch { $ad = $false }
     }
+    if ($env:OSIGN_TEST_AD_JSON) { $ad = $true }
     return (Ok @{ backend = 'powershell'; version = $script:AppVersion; dataDir = $script:DataDir; features = @{ adLookup = $ad } })
 }
 
@@ -456,35 +457,114 @@ function Get-UserFileName([string]$Mail) {
     return (($m -replace '[^a-z0-9@._-]', '_') + '.json')
 }
 
-# Writes users\<mail>.json for everyone, only what changed, and removes the files of users that
-# are gone (left the company, disabled, mail removed).
-function Export-UsersToFolder([string]$Root, $Fields, [string[]]$GroupNames) {
+# What an export would do, without doing it: for every user the file it would write, and whether
+# that is new, changed or the same as what is in the folder now; and the files that would go.
+function New-UserSnapshot([string]$Root, $Fields, [string[]]$GroupNames) {
     $dir = Join-Path $Root 'users'
-    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $records = Get-AdUserRecords @($Fields | ForEach-Object { $_.ad } | Select-Object -Unique) $GroupNames
-    $keep = @{}; $written = 0; $same = 0; $removed = 0
+    $seen = @{}; $entries = @()
     foreach ($r in $records) {
         $name = Get-UserFileName $r.mail
-        if (-not $name -or $keep.ContainsKey($name)) { continue }
-        $keep[$name] = 1
+        if (-not $name -or $seen.ContainsKey($name)) { continue }
+        $seen[$name] = 1
         $values = [ordered]@{}
         foreach ($f in ($Fields | Sort-Object key)) { $values[$f.key] = [string]$r.attrs[$f.ad.ToLowerInvariant()] }
-        $json = To-Json ([ordered]@{ values = $values; groups = @($r.groups | Sort-Object) })
-        $path = Join-Path $dir $name
-        if ((Read-Text $path) -eq $json) { $same++ } else { Write-Text $path $json; $written++ }
+        $groups = @($r.groups | Sort-Object)
+        $json = To-Json ([ordered]@{ values = $values; groups = $groups })
+        $old = Read-Text (Join-Path $dir $name)
+        $status = $(if ($null -eq $old) { 'new' } elseif ($old -eq $json) { 'unchanged' } else { 'changed' })
+        $oldValues = $null
+        if ($status -eq 'changed') { try { $oldValues = ($old | ConvertFrom-Json) } catch { } }
+        $entries += [ordered]@{ file = $name; mail = $r.mail; status = $status; values = $values; groups = $groups; old = $oldValues; json = $json }
     }
+    $removed = @()
     foreach ($f in @(Get-ChildItem -LiteralPath $dir -File -Filter '*.json' -ErrorAction SilentlyContinue)) {
-        if (-not $keep.ContainsKey($f.Name)) { Remove-Item -LiteralPath $f.FullName -Force; $removed++ }
+        if (-not $seen.ContainsKey($f.Name)) { $removed += $f.Name }
     }
-    return @{ users = $keep.Count; written = $written; unchanged = $same; removed = $removed }
+    return @{ entries = $entries; removed = $removed }
 }
 
+# Writes what a snapshot holds: the new and changed files, and removes the ones that went. A file
+# that has changed in the folder since the snapshot was taken is written over all the same: the
+# snapshot is what was checked.
+function Write-UserSnapshot([string]$Root, $Snapshot) {
+    $dir = Join-Path $Root 'users'
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $written = 0; $same = 0; $removed = 0
+    foreach ($e in @($Snapshot.entries)) {
+        $path = Join-Path $dir ([string]$e.file)
+        if ((Read-Text $path) -eq [string]$e.json) { $same++ } else { Write-Text $path ([string]$e.json); $written++ }
+    }
+    foreach ($n in @($Snapshot.removed)) {
+        $path = Join-Path $dir ([string]$n)
+        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force; $removed++ }
+    }
+    return @{ users = @($Snapshot.entries).Count; written = $written; unchanged = $same; removed = $removed }
+}
+
+# The scheduled export (-ExportUsers): read and write in one go, unattended.
+function Export-UsersToFolder([string]$Root, $Fields, [string[]]$GroupNames) {
+    return (Write-UserSnapshot $Root (New-UserSnapshot $Root $Fields $GroupNames))
+}
+
+function Read-ExportRequest($data) {
+    $fields = @(); foreach ($f in @($data.fields)) { if ([string]$f.key -and ([string]$f.ad) -match '^[A-Za-z][A-Za-z0-9-]{0,63}$') { $fields += [pscustomobject]@{ key = [string]$f.key; ad = [string]$f.ad } } }
+    $groups = @(@($data.groups) | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ } | Sort-Object -Unique)
+    # What the snapshot was taken for: another set of fields or groups makes it another export.
+    $sig = (@($fields | Sort-Object key | ForEach-Object { "$($_.key)=$($_.ad)" }) -join ';') + '|' + ($groups -join ';')
+    return @{ fields = $fields; groups = $groups; sig = $sig }
+}
+
+$script:SnapshotFile = Join-Path $script:DataDir 'users-snapshot.json'
+
+# For the UI: the users as read, without the file contents.
+function Get-SnapshotSummary($snap) {
+    $users = @(@($snap.entries) | ForEach-Object { [ordered]@{ mail = $_.mail; status = $_.status; values = $_.values; groups = $_.groups; old = $(if ($_.old) { $_.old.values } else { $null }) } })
+    $count = { param($st) @(@($snap.entries) | Where-Object { $_.status -eq $st }).Count }
+    return @{
+        readAt = $snap.readAt; sig = $snap.sig; written = [bool]$snap.written; users = $users
+        removed = @(@($snap.removed) | ForEach-Object { ([string]$_) -replace '\.json$', '' })
+        counts = [ordered]@{ new = (& $count 'new'); changed = (& $count 'changed'); unchanged = (& $count 'unchanged'); removed = @($snap.removed).Count }
+    }
+}
+
+# Read the users from AD and keep what was read, for checking; nothing is written to the folder.
+function Api-AdRead($data) {
+    $s = Get-Settings
+    $err = Test-Settings $s -ForPublish; if ($err) { return (Fail $err) }
+    $req = Read-ExportRequest $data
+    try { $snap = New-UserSnapshot $s.folder $req.fields $req.groups } catch { return (Fail "Active Directory: $($_.Exception.Message)") }
+    $snap.readAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); $snap.sig = $req.sig; $snap.written = $false
+    Write-Text $script:SnapshotFile (To-Json $snap)
+    return (Ok (Get-SnapshotSummary $snap))
+}
+
+# The last read, if there is one: { ok, snapshot: null | summary, matches }. matches: it was
+# read for these fields and groups (the ones the UI sends), so Publish may write it.
+function Api-AdSnapshot($data) {
+    $raw = Read-Text $script:SnapshotFile
+    if (-not $raw) { return (Ok @{ snapshot = $null; matches = $false }) }
+    try {
+        $snap = $raw | ConvertFrom-Json
+        return (Ok @{ snapshot = (Get-SnapshotSummary $snap); matches = ([string]$snap.sig -eq (Read-ExportRequest $data).sig) })
+    } catch { return (Ok @{ snapshot = $null; matches = $false }) }
+}
+
+# Write the users as they were read and checked. Refused when nothing was read, when it was read
+# for other fields or groups, or when it was written already (then AD has to be read again: an old
+# read must not overwrite what a later export wrote).
 function Api-AdExport($data) {
     $s = Get-Settings
     $err = Test-Settings $s -ForPublish; if ($err) { return (Fail $err) }
-    $fields = @(); foreach ($f in @($data.fields)) { if ([string]$f.key -and ([string]$f.ad) -match '^[A-Za-z][A-Za-z0-9-]{0,63}$') { $fields += [pscustomobject]@{ key = [string]$f.key; ad = [string]$f.ad } } }
-    $groups = @(@($data.groups) | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ })
-    try { $r = Export-UsersToFolder $s.folder $fields $groups } catch { return (Fail "Active Directory: $($_.Exception.Message)") }
+    $req = Read-ExportRequest $data
+    $raw = Read-Text $script:SnapshotFile
+    if (-not $raw) { return (Fail 'Read the users from AD and check them first (Users).') }
+    $snap = $raw | ConvertFrom-Json
+    if ([string]$snap.sig -ne $req.sig) { return (Fail 'The fields or groups changed since the users were read: read them again (Users).') }
+    if ($snap.written) { return (Fail 'These users were written already: read them again to write newer values (Users).') }
+    try { $r = Write-UserSnapshot $s.folder $snap } catch { return (Fail "Writing the users: $($_.Exception.Message)") }
+    $snap.written = $true
+    Write-Text $script:SnapshotFile (To-Json $snap)
     return (Ok $r)
 }
 
@@ -585,6 +665,8 @@ function Invoke-Request($client) {
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }
             '/api/ad/groups'      { Api-AdGroups $data }
+            '/api/ad/read'        { Api-AdRead $data }
+            '/api/ad/snapshot'    { Api-AdSnapshot $data }
             '/api/ad/export'      { Api-AdExport $data }
             '/api/quit'           { $script:Quit = $true; Ok @{} }
             default               { $null }
@@ -674,6 +756,9 @@ if ($ExportUsers) {
     if ([string]$cfg.options.valueSource -notin @('ad', 'mixed')) { Write-Host 'The signatures take their values from Entra ID: nothing to export.'; exit 0 }
     try {
         $r = Export-UsersToFolder $s.folder (Get-AdExportFields $cfg) (Get-GroupsUsed $cfg)
+        # A read the editor still holds is older than what was just written: it must not go out.
+        $snapRaw = Read-Text $script:SnapshotFile
+        if ($snapRaw) { try { $sn = $snapRaw | ConvertFrom-Json; $sn.written = $true; Write-Text $script:SnapshotFile (To-Json $sn) } catch { } }
         Write-Host ("Exported {0} users to {1}: {2} written, {3} unchanged, {4} removed." -f $r.users, (Join-Path $s.folder 'users'), $r.written, $r.unchanged, $r.removed)
         exit 0
     } catch { Write-Host "Export failed: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }

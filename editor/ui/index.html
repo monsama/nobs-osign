@@ -36,6 +36,7 @@
     <ul class="nav-list">
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
+      <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
     </ul>
   </nav>
 
@@ -153,6 +154,22 @@
       <h2>Install</h2>
       <p class="lead" data-th="installLead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
         is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://&lt;owner&gt;.github.io/osign/manifest.xml</code>.</p>
+    </section>
+
+    <!-- users from AD -->
+    <section id="viewUsers" class="view" hidden>
+      <h1>Users</h1>
+      <p class="lead" data-th="usersLead">The values the signatures take from Active Directory, as they would go out. <b>Read from AD</b>
+        reads them now; nothing is written yet. <b>Publish</b> then writes exactly what was read here - nothing you have not seen.</p>
+      <p id="usersOff" class="callout" hidden></p>
+      <div class="users-bar">
+        <button id="btnAdRead" class="primary">Read from AD</button>
+        <label class="check"><input type="checkbox" id="usersChanges" checked> Only changes</label>
+        <input id="usersFilter" placeholder="Search name or mail" aria-label="Search name or mail">
+        <span id="usersInfo" class="users-info"></span>
+      </div>
+      <div class="table-wrap"><table class="fields users"><thead id="usersHead"></thead><tbody id="usersRows"></tbody></table></div>
+      <p id="usersMore" class="hint"></p>
     </section>
 
     <section id="viewEmpty" class="view empty" hidden>

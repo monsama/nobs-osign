@@ -169,6 +169,7 @@
     $('viewSig').hidden = view !== 'sig';
     $('viewFields').hidden = view !== 'fields';
     $('viewOptions').hidden = view !== 'options';
+    $('viewUsers').hidden = view !== 'users';
     $('viewEmpty').hidden = view !== 'empty';
     renderList();
   }
@@ -752,8 +753,68 @@
   document.querySelectorAll('.nav-list a').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault(); flushSource();
     show(a.dataset.view);
-    if (a.dataset.view === 'fields') renderFields(); else renderOptions();
+    if (a.dataset.view === 'fields') renderFields(); else if (a.dataset.view === 'users') renderUsers(); else renderOptions();
   }));
+
+  // ---------------------------------------------------------------------------------------------
+  // Users from AD: read, look at, and only then publish
+  // ---------------------------------------------------------------------------------------------
+  const adRequest = (c) => ({ fields: core.adFields(c).map((f) => ({ key: f.key, ad: f.ad })), groups: core.groupsUsed(c) });
+  S.snap = null; S.snapMatches = false;
+  async function loadSnapshot() {
+    try { const r = await api('ad/snapshot', adRequest(S.config)); S.snap = r.snapshot; S.snapMatches = !!r.matches; }
+    catch (e) { S.snap = null; S.snapMatches = false; }
+  }
+  const when = (ms) => new Date(ms).toLocaleString(I18N.lang);
+
+  function renderUsers() {
+    const mode = core.valueSource(S.config);
+    const fields = core.adFields(S.config);
+    const off = mode === 'graph' || !fields.length;
+    $('usersOff').hidden = !off;
+    $('usersOff').textContent = mode === 'graph'
+      ? t('The values come from Entra ID (Add-in → Where the users\' values come from): there is nothing to read from AD.')
+      : t('No field takes its value from AD (Fields: an AD attribute, and no Graph source in the mixed mode).');
+    $('btnAdRead').disabled = off;
+    const snap = S.snap;
+    const head = $('usersHead'), body = $('usersRows');
+    head.textContent = ''; body.textContent = ''; $('usersMore').textContent = '';
+    if (off || !snap) { $('usersInfo').textContent = off ? '' : t('Not read yet.'); return; }
+    const c = snap.counts;
+    $('usersInfo').textContent = t('Read {0}: {1} users - {2} new, {3} changed, {4} removed.', when(snap.readAt), snap.users.length, c.new, c.changed, c.removed) +
+      (!S.snapMatches ? ' ' + t('The fields or groups changed since: read again.') : snap.written ? ' ' + t('Published already.') : ' ' + t('Not published yet.'));
+    const showGroups = core.groupsUsed(S.config).length > 0;
+    head.append(el('tr', null, el('th', null, ''), el('th', null, t('Mail')), fields.map((f) => el('th', null, (f.label || f.key))), showGroups ? el('th', null, t('Groups')) : null));
+    const q = $('usersFilter').value.trim().toLowerCase();
+    const only = $('usersChanges').checked;
+    const rows = snap.users.filter((u) => (!only || u.status !== 'unchanged') &&
+      (!q || u.mail.toLowerCase().includes(q) || Object.values(u.values || {}).some((v) => String(v).toLowerCase().includes(q))));
+    const LIMIT = 500;
+    rows.slice(0, LIMIT).forEach((u) => {
+      body.append(el('tr', null,
+        el('td', null, el('span', { class: 'st ' + u.status }, t(u.status))),
+        el('td', null, u.mail),
+        fields.map((f) => {
+          const v = (u.values || {})[f.key] || '', was = u.old ? (u.old[f.key] || '') : null;
+          const chg = u.status === 'changed' && was !== null && was !== v;
+          return el('td', { class: chg ? 'chg' : '' }, v, chg ? el('span', { class: 'was' }, was || t('(empty)')) : null);
+        }),
+        showGroups ? el('td', null, (u.groups || []).join(', ')) : null));
+    });
+    snap.removed.filter((m) => !q || m.includes(q)).forEach((m) => {
+      body.append(el('tr', { class: 'removed' }, el('td', null, el('span', { class: 'st removed' }, t('removed'))), el('td', { colspan: fields.length + (showGroups ? 2 : 1) }, m)));
+    });
+    if (rows.length > LIMIT) $('usersMore').textContent = t('{0} more - narrow the search to see them.', rows.length - LIMIT);
+    if (!rows.length && !snap.removed.length) body.append(el('tr', null, el('td', { colspan: fields.length + 3 }, only ? t('No changes: everything is as published.') : t('No users found.'))));
+  }
+  $('btnAdRead').addEventListener('click', async () => {
+    $('btnAdRead').disabled = true; $('usersInfo').textContent = t('Reading…');
+    try { await saving; const r = await api('ad/read', adRequest(prepared())); S.snap = r; S.snapMatches = true; }
+    catch (e) { toast(t(e.message), true); }
+    finally { $('btnAdRead').disabled = false; renderUsers(); }
+  });
+  $('usersChanges').addEventListener('change', renderUsers);
+  $('usersFilter').addEventListener('input', renderUsers);
 
   // ---------------------------------------------------------------------------------------------
   // Settings
@@ -807,8 +868,10 @@
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
     if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map((k) => '@@' + k).join(', '))]);
     if (core.usesAdExport(c)) {
-      if (S.info && S.info.features && S.info.features.adLookup) out.push(['good', t('Users are exported from Active Directory on publishing ({0} field(s){1}).', core.adFields(c).length, core.groupsUsed(c).length ? t(', and the groups') : '')]);
-      else out.push(['warn', t('This PC cannot read Active Directory: the users are not exported now. Run OSign.ps1 -ExportUsers on a PC in the domain.')]);
+      const sn = S.snap;
+      if (sn && S.snapMatches && !sn.written) out.push(['good', t('The users as read {0} are written: {1} new, {2} changed, {3} removed.', when(sn.readAt), sn.counts.new, sn.counts.changed, sn.counts.removed)]);
+      else if (sn && S.snapMatches && sn.written) out.push(['warn', t('The users stay as published {0}. To update them, read and check them under Users first.', when(sn.readAt))]);
+      else out.push(['warn', t('The users are not written: read and check them under Users first. Until then they stay as they are in the folder.')]);
     }
     const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
     if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', '))]);
@@ -816,8 +879,9 @@
     return out;
   }
 
-  $('btnPublish').addEventListener('click', () => {
+  $('btnPublish').addEventListener('click', async () => {
     flushSource();
+    if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
     $('pubWhere').textContent = S.settings.folder
       ? t('To {0}. OneDrive uploads it to SharePoint; new messages use it a minute or two later.', S.settings.folder)
       : t('No folder set yet (Settings).');
@@ -834,12 +898,15 @@
       await saving;
       const c = prepared(); c.updated = new Date().toISOString();
       // Values from AD: the users first, so a signature never asks for a file that is not there yet.
+      // The users as read and checked under Users (never a fresh read nobody has seen), first, so a
+      // signature never asks for a file that is not there yet.
       let exported = '';
-      if (core.usesAdExport(c) && S.info && S.info.features && S.info.features.adLookup) {
+      if (core.usesAdExport(c) && S.snap && S.snapMatches && !S.snap.written) {
         try {
-          const x = await api('ad/export', { fields: core.adFields(c).map((f) => ({ key: f.key, ad: f.ad })), groups: core.groupsUsed(c) });
-          exported = ' ' + t('{0} users exported from AD ({1} changed, {2} removed).', x.users, x.written, x.removed);
-        } catch (err) { exported = ' ' + t('The users could not be exported from AD: {0}', t(err.message)); }
+          const x = await api('ad/export', adRequest(c));
+          exported = ' ' + t('{0} users written ({1} changed, {2} removed).', x.users, x.written, x.removed);
+          S.snap.written = true;
+        } catch (err) { exported = ' ' + t('The users could not be written: {0}', t(err.message)); }
       }
       const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
       S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
@@ -902,6 +969,7 @@
       S.config = normalize(null);
       buildToolbar();
       applyDraft(draft);
+      loadSnapshot();
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
     } catch (e) {
       document.body.classList.add('failed');
