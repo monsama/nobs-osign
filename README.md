@@ -2,9 +2,8 @@
 
 Central email signatures for **classic and new Outlook**, managed in one place.
 
-- **The editor** (`editor/OSign.ps1`): a PowerShell script, built like
-  [NOBS SQL Editor](https://github.com/monsama/nobs-sql-editor-powershell). It starts a small web
-  server on 127.0.0.1 and opens a web interface where you design the signatures, set who gets which
+- **The editor** (`editor/OSign.ps1`): a single PowerShell script, no installation needed. It
+  starts a small web server on 127.0.0.1 and opens a web interface where you design the signatures, set who gets which
   one, and publish them.
 - **The Outlook add-in** (`addin/`): it inserts the right signature by itself in every new message,
   reply and forward, and switches signatures when the From address changes. Its pane lets users pick

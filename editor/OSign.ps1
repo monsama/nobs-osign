@@ -371,7 +371,7 @@ function Api-AdGroups($data) {
 }
 
 # ---------------------------------------------------------------------------
-# HTTP server (the same small server as NOBS SQL Editor's: 127.0.0.1 only, a token per start)
+# HTTP server: 127.0.0.1 only, a token per start
 # ---------------------------------------------------------------------------
 $script:Token = -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Minimum 0 -Maximum 256) })
 try {
