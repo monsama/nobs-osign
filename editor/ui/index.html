@@ -1,11 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no" class="notranslate">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The editor brings its own languages: the browser is not to offer translating it. -->
+<meta name="google" content="notranslate">
 <title>OSign</title>
 <link rel="icon" href="/ui/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/ui/app.css">
+<script src="/ui/i18n.js"></script>
 <script src="/shared/signature-core.js"></script>
 <script src="/ui/app.js" defer></script>
 </head>
@@ -105,7 +108,7 @@
     <!-- fields -->
     <section id="viewFields" class="view" hidden>
       <h1>Fields</h1>
-      <p class="lead">A field is a placeholder in a signature, <code>@@givenName</code>, filled with the user's
+      <p class="lead" data-th="fieldsLead">A field is a placeholder in a signature, <code>@@givenName</code>, filled with the user's
         value when the add-in inserts it. The add-in reads the values from Microsoft Graph, the user's own
         profile in Entra ID. <b>AD attribute</b> is for the preview here, read from Active Directory.</p>
       <div class="table-wrap">
@@ -116,7 +119,7 @@
       </div>
       <button id="btnAddField" class="ghost">+ Add field</button>
       <datalist id="graphProps"></datalist>
-      <div class="callout">
+      <div class="callout" data-th="fieldsCallout">
         <b>Without a Graph source</b> a field stays empty in Outlook. Graph knows no <code>description</code>,
         <code>homePhone</code> or <code>info</code>. To use them, sync them from AD with Entra Connect,
         either into <code>onPremisesExtensionAttributes.extensionAttribute1</code>…<code>15</code> (Exchange
@@ -134,11 +137,11 @@
       <label class="check block"><input type="checkbox" id="optMeetings"> Sign new meetings too</label>
       <label class="check block"><input type="checkbox" id="optNoProfile"> Insert a signature even when the user's details could not be read (the fields stay empty)</label>
       <h2>Sign-in and permissions</h2>
-      <p class="lead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
+      <p class="lead" data-th="signinLead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
         details and groups from Entra ID and the signatures from the OSign folder in SharePoint. It uses one app registration,
         set where the add-in is built - not here, and not in the signatures. <a href="#" id="lnkSetup">How to register it</a></p>
       <h2>Install</h2>
-      <p class="lead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
+      <p class="lead" data-th="installLead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
         is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://&lt;owner&gt;.github.io/osign/manifest.xml</code>.</p>
     </section>
 
@@ -153,6 +156,7 @@
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg wide">
     <h2>Settings</h2>
+    <label>Language<select id="setLang"></select></label>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
       <input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign">
       <small id="setFolderNote"></small>
@@ -161,7 +165,7 @@
       <input id="setPhotos" placeholder="\\server\share\photos">
       <small id="setPhotosNote"></small>
     </label>
-    <p class="lead">In SharePoint, open the document library of your home site (https://&lt;tenant&gt;.sharepoint.com), make
+    <p class="lead" data-th="settingsLead">In SharePoint, open the document library of your home site (https://&lt;tenant&gt;.sharepoint.com), make
       a folder <b>OSign</b>, and choose <b>Sync</b> (or <b>Add shortcut to My files</b>). It then appears in File Explorer;
       its path goes in the first field. Publishing writes <code>signatures.json</code> and <code>assets\</code> there; the
       photos go in <code>photos\</code>, by hand.</p>
@@ -203,16 +207,16 @@
   <form method="dialog" class="dlg wide">
     <h2>Register the add-in in Entra ID</h2>
     <ol class="steps">
-      <li>Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>. Accounts:
+      <li data-th="help1">Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>. Accounts:
         <i>any organizational directory</i> (then no tenant ID is needed in the build).</li>
-      <li><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
+      <li data-th="help2"><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
         <code>brk-multihub://&lt;host the add-in is served from&gt;</code>, e.g. <code>brk-multihub://monsama.github.io</code>.</li>
-      <li><b>API permissions</b>, Microsoft Graph, delegated: <code>User.Read</code>, <code>Sites.Read.All</code> (the OSign
+      <li data-th="help3"><b>API permissions</b>, Microsoft Graph, delegated: <code>User.Read</code>, <code>Sites.Read.All</code> (the OSign
         folder) and, for signatures by AD group, <code>GroupMember.Read.All</code>. Then <b>Grant admin consent</b>, so no
         user is asked.</li>
-      <li>The <b>Application (client) ID</b> goes into the build: in GitHub, Settings → Secrets and variables → Actions →
+      <li data-th="help4">The <b>Application (client) ID</b> goes into the build: in GitHub, Settings → Secrets and variables → Actions →
         Variables, <code>OSIGN_CLIENT_ID</code>; then run the <i>pages</i> workflow.</li>
-      <li>The OSign folder has to be readable for everyone who signs: in SharePoint, share it (read) with all employees.</li>
+      <li data-th="help5">The OSign folder has to be readable for everyone who signs: in SharePoint, share it (read) with all employees.</li>
     </ol>
     <div class="dlg-foot"><button value="cancel" class="primary">OK</button></div>
   </form>
@@ -221,7 +225,7 @@
 <dialog id="dlgImport">
   <form method="dialog" class="dlg wide">
     <h2>Import templates</h2>
-    <p class="lead">Pick a folder, or the template files (<code>.htm</code>) together with their images. The images
+    <p class="lead" data-th="importLead">Pick a folder, or the template files (<code>.htm</code>) together with their images. The images
       a template uses (<code>images/logo.png</code>) are found among what you pick by their file name and become part
       of the signatures. Templates from CI-Sign and from classic Outlook (<code>%APPDATA%\Microsoft\Signatures</code>) work.</p>
     <div class="pick-row">

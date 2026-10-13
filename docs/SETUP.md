@@ -64,7 +64,8 @@ signature.
    powershell -ExecutionPolicy Bypass -File .\OSign.ps1          # from the release
    powershell -ExecutionPolicy Bypass -File .\editor\OSign.ps1   # from the repository
    ```
-   It opens in an Edge or Chrome app window. Closing that window stops it.
+   It opens in an Edge or Chrome app window, in German or English as Windows is set (change it
+   under Settings → Language). Closing that window stops it.
 3. **Settings**: *Publish to* = the synced OSign folder from step 1. *Photos for the preview*: leave
    it empty to use `OSign\photos`, or point it at the network share the photos are on now.
 4. **Signatures**: import the existing ones with **⤓** next to *Signatures*. Pick the folder, or the

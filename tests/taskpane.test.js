@@ -52,6 +52,38 @@ window.Office = {
   }
 };`;
 
+async function openPane(browser, dir, graph, displayLanguage) {
+  const page = await browser.newPage();
+  await page.route('https://appsforoffice.microsoft.com/**', (r) => r.fulfill({ contentType: 'text/javascript', body: OFFICE_STUB.replace("context: {", "context: { displayLanguage: '" + displayLanguage + "',") }));
+  const viaFake = async (r) => {
+    const res = await graph.fetch(r.request().url(), { headers: { Authorization: r.request().headers().authorization } });
+    await r.fulfill({ status: res.status, body: Buffer.from(await res.arrayBuffer()), headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization', 'Content-Type': 'application/json' } });
+  };
+  await page.route('https://graph.microsoft.com/**', viaFake);
+  await page.route('https://download.example/**', viaFake);
+  await page.route(HOST + '**', (r) => {
+    const file = path.join(dir, new URL(r.request().url()).pathname.slice(1));
+    return fs.existsSync(file) ? r.fulfill({ path: file }) : r.fulfill({ status: 404, body: '' });
+  });
+  await page.goto(HOST + 'taskpane.html');
+  await page.waitForSelector('.card');
+  return page;
+}
+
+test('the pane speaks German in a German Outlook', { skip }, async () => {
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(cfg), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch();
+  try {
+    const page = await openPane(browser, dir, graph, 'de-CH');
+    assert.equal(await page.textContent('h1'), 'Signaturen');
+    assert.match(await page.textContent('#choice'), /Für neue Mails.*Für Antworten und Weiterleitungen/s);
+    assert.deepEqual(await page.$$eval('.card button', (b) => b.map((x) => x.textContent)), ['Einfügen', 'Einfügen']);
+    assert.equal((await page.$$eval('#prefNew option', (o) => o.map((x) => x.textContent)))[0], 'Firmenstandard (Standard)');
+    assert.equal(await page.textContent('#refresh'), 'Meine Angaben neu lesen');
+  } finally { await browser.close(); }
+});
+
 test('the pane lists what is open to the user, with images, inserts, and saves the choice', { skip }, async () => {
   const dir = await buildTestAddin();
   const graph = fakeGraph({
