@@ -1,0 +1,53 @@
+# Builds the add-in and serves it on GitHub Pages. Only code goes there: the signatures, images and
+# photos stay in the company's own SharePoint, where the add-in reads them with the user's sign-in.
+#
+# Settings → Secrets and variables → Actions → Variables:
+#   OSIGN_CLIENT_ID   the Entra ID app registration's Application (client) ID (required)
+#   OSIGN_TENANT_ID   only for an app registration of a single organization
+#   OSIGN_SP_SITE     "root" (default: the tenant's home site) or "<host>.sharepoint.com:/sites/<name>:"
+#   OSIGN_SP_FOLDER   the folder in that site's document library (default: OSign)
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['addin/**', 'shared/**', 'package.json', 'package-lock.json', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Build
+        run: node addin/build.mjs
+        env:
+          BASE_URL: ${{ steps.pages.outputs.base_url }}/
+          OSIGN_CLIENT_ID: ${{ vars.OSIGN_CLIENT_ID }}
+          OSIGN_TENANT_ID: ${{ vars.OSIGN_TENANT_ID }}
+          OSIGN_SP_SITE: ${{ vars.OSIGN_SP_SITE }}
+          OSIGN_SP_FOLDER: ${{ vars.OSIGN_SP_FOLDER }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
