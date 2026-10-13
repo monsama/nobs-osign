@@ -73,7 +73,8 @@ test('the API wants the token, a JSON POST, and this machine as the host', opts,
   await get.text();
   const info = await api('info');
   assert.equal(info.json.backend, 'powershell');
-  assert.deepEqual(Object.keys(info.json.features), ['adLookup']);
+  assert.deepEqual(Object.keys(info.json.features).sort(), ['adLookup', 'addinFiles']);
+  assert.equal(info.json.features.addinFiles, true);
 });
 
 test('serves the UI and the shared engine, nothing outside them', opts, async () => {
@@ -254,6 +255,41 @@ test('-ExportUsers: the export alone, as the published signatures ask for', opts
     // Mixed: only the field without a Graph source comes from AD.
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder, 'users', 'beat@example.com.json'), 'utf8')), { values: { homePhone: '+41 41 000 00 02' }, groups: [] });
   } finally { fs.writeFileSync(cfgPath, saved); }
+});
+
+test('the add-in files: the template filled in, the same as addin/fill.mjs does it', opts, async () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-addin-out-'));
+  const base = { folder, photosFolder: '' };
+  const bad = await api('settings/save', { settings: { ...base, clientId: 'not-a-guid' } });
+  assert.equal(bad.json.ok, false);
+  assert.match(bad.json.error, /GUID/);
+  assert.match((await api('settings/save', { settings: { ...base, addinUrl: 'http://osign.example.com' } })).json.error, /https/);
+  assert.match((await api('settings/save', { settings: { ...base, spSite: 'contoso.sharepoint.com/sites/x' } })).json.error, /SharePoint site/);
+  await api('settings/save', { settings: { ...base, addinUrl: 'https://osign.example.com/' } });
+  assert.match((await api('addin/build')).json.error, /client ID/);
+  await api('settings/save', { settings: { ...base, addinUrl: 'https://osign.example.com/', clientId: '11111111-2222-3333-4444-555555555555', addinFolder: folder } });
+  assert.match((await api('addin/build')).json.error, /folder of their own/);
+
+  const setup = { addinUrl: 'https://osign.example.com/sign/', clientId: '11111111-2222-3333-4444-555555555555', tenantId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', spSite: 'contoso.sharepoint.com:/sites/Intranet:', spFolder: 'Vorlagen/Öffentlich OSign' };
+  assert.equal((await api('settings/save', { settings: { ...base, ...setup, addinFolder: out } })).json.ok, true);
+  const r = (await api('addin/build')).json;
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.manifestUrl, 'https://osign.example.com/sign/manifest.xml');
+  assert.equal(r.redirectUri, 'brk-multihub://osign.example.com');
+  assert.equal(r.version, require('../package.json').version);
+
+  const { fillTemplate } = await import('../addin/fill.mjs');
+  const ref = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-addin-ref-'));
+  const template = path.join(__dirname, '..', 'dist', 'template');
+  fillTemplate(template, ref, { base: setup.addinUrl, clientId: setup.clientId, tenantId: setup.tenantId, site: setup.spSite, folder: setup.spFolder });
+  const list = (d) => fs.readdirSync(d, { recursive: true }).filter((f) => fs.statSync(path.join(d, f)).isFile()).map((f) => f.split(path.sep).join('/')).sort();
+  assert.deepEqual(list(out), list(ref));
+  assert.equal(r.files, list(ref).length);
+  for (const f of list(ref)) assert.ok(fs.readFileSync(path.join(out, f)).equals(fs.readFileSync(path.join(ref, f))), f + ' differs');
+  for (const f of ['launchevent.js', 'taskpane.js', 'manifest.xml']) assert.doesNotMatch(fs.readFileSync(path.join(out, f), 'utf8'), /@@OSIGN_|\{\{[A-Z]+\}\}/, f);
+  assert.ok(fs.readFileSync(path.join(out, 'launchevent.js'), 'utf8').startsWith('var OSIGN_SETUP={clientId:"11111111-2222-3333-4444-555555555555",tenantId:"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",site:"contoso.sharepoint.com:/sites/Intranet:",folder:"Vorlagen/Öffentlich OSign"};'));
+  assert.match(fs.readFileSync(path.join(out, 'manifest.xml'), 'utf8'), /<SourceLocation DefaultValue="https:\/\/osign\.example\.com\/sign\/taskpane\.html"\/>/);
+  await api('settings/save', { settings: base });
 });
 
 test('AD lookup says plainly where it cannot work', opts, async () => {

@@ -1,4 +1,5 @@
-# Makes a release with the editor as one zip: OSign.ps1, its UI and the shared engine.
+# Makes a release as one zip: the editor (OSign.ps1, its UI, the shared engine) and the add-in's
+# files with blanks for a company's settings, which the editor fills in (Settings → Outlook add-in).
 #
 # Either push a tag v1.2.3, or run this workflow by hand (Actions → release → Run workflow) with
 # the version: it then makes the tag v1.2.3 itself, on the commit it runs on.
@@ -44,6 +45,7 @@ jobs:
           cp editor/OSign.ps1 out/OSign/
           cp -r editor/ui out/OSign/ui
           cp shared/signature-core.js out/OSign/shared/
+          cp -r dist/template out/OSign/addin
           cp LICENSE out/OSign/
           (cd out && zip -r "OSign-${TAG}.zip" OSign)
           (cd out && sha256sum "OSign-${TAG}.zip" > SHA256SUMS.txt)

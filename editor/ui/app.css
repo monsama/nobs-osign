@@ -152,6 +152,7 @@ dialog { border: 1px solid var(--line); border-radius: 12px; padding: 0; backgro
 dialog::backdrop { background: rgba(15, 20, 30, .45); }
 .dlg { padding: 18px 22px; }
 .dlg h2 { margin: 0 0 10px; font-size: 18px; }
+.dlg h3 { margin: 18px 0 4px; font-size: 15px; padding-top: 12px; border-top: 1px solid var(--line); }
 .dlg > label { margin: 10px 0; }
 .dlg fieldset { border: 0; padding: 0; margin: 0 0 6px; }
 .dlg legend { font-weight: 600; font-size: 13px; margin-bottom: 4px; }

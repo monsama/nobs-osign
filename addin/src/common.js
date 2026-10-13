@@ -4,7 +4,7 @@
  * and putting a signature into the item being written.
  *
  * Nothing of a company is in this code or where it is served: everything is read with the user's
- * own sign-in from the SharePoint home site of their tenant, folder OSign (see docs/SETUP.md).
+ * own sign-in from a folder in their tenant's SharePoint (see docs/SETUP.md).
  *
  * Runs in two places. In new Outlook, Outlook on the web and Outlook for Mac, in a browser
  * runtime. In classic Outlook on Windows, the event handler runs in a JavaScript-only runtime:
@@ -13,13 +13,14 @@
 import core from '../../shared/signature-core.js';
 import { getGraphToken } from './auth.js';
 
-/* global Office, OfficeRuntime, __SP_SITE__, __SP_FOLDER__ */
+/* global Office, OfficeRuntime, OSIGN_SETUP */
 export { core };
 
 // Where the editor publishes: a folder in the document library of a SharePoint site. "root" is the
 // tenant's home site (https://<tenant>.sharepoint.com), which every Microsoft 365 tenant has.
-const SITE = __SP_SITE__;
-const FOLDER = __SP_FOLDER__;
+// OSIGN_SETUP is the first line of the bundle, filled in by the editor (see addin/build.mjs).
+const SITE = OSIGN_SETUP.site;
+const FOLDER = OSIGN_SETUP.folder;
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 // Reading the folder needs Sites.Read.All; groups need GroupMember.Read.All. Both delegated, so the
 // add-in reads only what the user may read anyway, and both with admin consent, so nobody is asked.

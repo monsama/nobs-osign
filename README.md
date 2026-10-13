@@ -12,10 +12,11 @@ Central email signatures for **classic and new Outlook**, managed in one place.
 
 ![The editor](docs/editor.png)
 
-**Nothing of a company goes to GitHub.** GitHub holds only the code, and GitHub Pages serves only
-the add-in's code. The signatures, images and photos stay in the company's own Microsoft 365: in a
-folder `OSign` in the SharePoint home site. The add-in reads that folder with each user's own
-sign-in, and embeds the images in the mail.
+**It runs without GitHub.** GitHub only holds the source code and the releases. The add-in's
+files are made by the editor and served from a web server of the company's own choosing (its own
+web server, Azure Static Web Apps, an Azure storage account…). The signatures, images and photos
+stay in the company's own Microsoft 365: in a folder `OSign` in the SharePoint home site. The
+add-in reads that folder with each user's own sign-in, and embeds the images in the mail.
 
 ```
  OSign.ps1 (editor, admin PC)        Company SharePoint (home site)       Outlook (every user)
@@ -25,7 +26,7 @@ sign-in, and embeds the images in the mail.
  │ synced OSign folder      │ Drive) │ OSign\photos\<user>.jpg   │ sign-in│  details, groups ← Graph  │
  └──────────────────────────┘        └───────────────────────────┘        │  images embedded (cid:)   │
                                                                           └───────────────────────────┘
- GitHub: code only ──── GitHub Pages: the add-in's code (no data) ─────────────────────┘
+ The company's HTTPS web server: the add-in's code (no data), made by the editor ──────┘
 ```
 
 ## Where it works
@@ -82,17 +83,18 @@ number. This works for paragraphs, lines split by line breaks, and table rows.
    employees). Sync it to the admin PC (*Sync* or *Add shortcut to My files*). Copy the photos into
    `OSign\photos` (`<username>.jpg`).
 2. **Entra ID:** register an app (single-page application, redirect URI
-   `brk-multihub://<owner>.github.io`) with Graph `User.Read`, `Sites.Read.All` and, for groups,
+   `brk-multihub://<host of the add-in>`) with Graph `User.Read`, `Sites.Read.All` and, for groups,
    `GroupMember.Read.All`, delegated, with admin consent.
-3. **GitHub:** set the repository variable `OSIGN_CLIENT_ID` to the app's ID, set Pages to
-   *GitHub Actions*, run the **pages** workflow.
-4. **Editor:** on Windows, run
+3. **Editor:** unpack the release zip on Windows and run
    ```powershell
-   powershell -ExecutionPolicy Bypass -File .\editor\OSign.ps1
+   powershell -ExecutionPolicy Bypass -File .\OSign.ps1
    ```
    In Settings, pick the synced `OSign` folder. Import or make the signatures and click **Publish**.
+4. **The add-in's files:** in Settings → *Outlook add-in*, enter the address they will be served
+   from and the app's client ID, click **Make the add-in files**, and copy that folder to the web
+   server.
 5. **Microsoft 365 admin center:** Settings → Integrated apps → Upload custom apps, with
-   `https://<owner>.github.io/osign/manifest.xml`, and assign it to the users.
+   `https://<host of the add-in>/manifest.xml`, and assign it to the users.
 
 ## How a signature is chosen
 
@@ -117,8 +119,8 @@ becomes the photo from `OSign\photos`. Not imported (yet): CI-Sign's text blocks
 
 ## Privacy
 
-- GitHub and GitHub Pages hold only code. The add-in's app registration ID is built in (it is not
-  a secret); nothing else of the company is.
+- GitHub holds only code; nothing at run time comes from it. The add-in's files on the company's
+  web server are only code too, with the app registration ID filled in (it is not a secret).
 - The signatures, images and photos are in the company's SharePoint, readable for its employees.
   The add-in reads them, and each user's details and groups, with that user's own sign-in
   (delegated permissions): it can never read more than the user can.
@@ -128,16 +130,18 @@ becomes the photo from `OSign\photos`. Not imported (yet): CI-Sign's text blocks
 
 ## Hosting the add-in elsewhere
 
-GitHub Pages only serves the add-in's code. Any HTTPS web server can do the same:
+Any HTTPS web server can serve the add-in's files; [docs/SETUP.md](docs/SETUP.md) step 3 lists
+some. Moving them means: make the files again for the new address, add
+`brk-multihub://<new host>` to the app registration, and upload the new `manifest.xml` in the admin
+center. Without the editor, the build does the same:
 
 ```
 npm ci
 BASE_URL=https://intranet.example.com/osign/ OSIGN_CLIENT_ID=<app id> node addin/build.mjs
 ```
 
-Serve `dist/` there, add `brk-multihub://intranet.example.com` to the app registration, and upload
-the new `manifest.xml` in the admin center. `OSIGN_SP_SITE` and `OSIGN_SP_FOLDER` choose another
-SharePoint site or folder for the signatures.
+and serve `dist/site/`. `OSIGN_SP_SITE` and `OSIGN_SP_FOLDER` choose another SharePoint site or
+folder for the signatures.
 
 The editor is meant to move into a container later. The web UI talks to its backend only through
 the HTTP API in [docs/API.md](docs/API.md), so a second backend can replace `OSign.ps1` without the
@@ -148,7 +152,7 @@ UI changing. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes the parts.
 ```
 npm ci
 npx playwright install chromium   # once, for the browser tests
-npm test                          # builds dist/, then runs every test
+npm test                          # builds dist/template, then runs every test
 ```
 
 The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows PowerShell 5.1.
@@ -156,9 +160,9 @@ The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows Powe
 | Path | What |
 |---|---|
 | `shared/signature-core.js` | Placeholders, empty lines, who gets which signature. The editor's preview and the add-in both run this one file. |
-| `editor/OSign.ps1` | The editor's backend: local web server, draft, GitHub/folder publishing, AD lookup |
+| `editor/OSign.ps1` | The editor's backend: local web server, draft, folder publishing, AD lookup, the add-in's files |
 | `editor/ui/` | The editor's web UI |
-| `addin/` | The Outlook add-in: event handler, pane, manifest template, build |
+| `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
 | `tests/` | Engine, add-in runtime (with a stand-in Graph and SharePoint), backend API, editor and pane in a browser |
 
 ## License

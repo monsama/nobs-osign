@@ -16,7 +16,9 @@ Keeps the server from stopping when idle. → `{ ok }`
 
 ## info
 
-→ `{ ok, backend: "powershell", version, dataDir, features: { adLookup: bool } }`
+→ `{ ok, backend: "powershell", version, dataDir, features: { adLookup: bool, addinFiles: bool } }`
+
+`addinFiles`: the add-in's template is there, so `addin/build` can work.
 
 ## draft/get
 
@@ -46,15 +48,27 @@ the extension. If an image with the same name but other content exists, the uplo
 
 ## settings/get
 
-→ `{ ok, settings: { folder, photosFolder }, folderFound: bool, photosFound: bool }`
+→ `{ ok, settings: { folder, photosFolder, addinUrl, clientId, tenantId, spSite, spFolder, addinFolder }, folderFound: bool, photosFound: bool }`
 
 `folder`: where Publish writes (the synced OSign folder). `photosFolder`: where the preview finds
-the photos; empty means `<folder>\photos`.
+the photos; empty means `<folder>\photos`. The rest is for `addin/build`: the address the add-in is
+served from, the app registration (client ID, tenant ID or empty), the SharePoint site (`root` or
+`<host>.sharepoint.com:/sites/<name>:`) and folder the add-in reads, and where its files are written.
 
 ## settings/save
 
-`{ settings: { folder, photosFolder } }` → like `settings/get`. Paths have to be full paths; a folder
-that is not there (yet) is accepted, and Publish then says so.
+`{ settings: { … } }` → like `settings/get`. Every setting is sent; one left out gets its default.
+Paths have to be full paths; a folder that is not there (yet) is accepted, and Publish then says so.
+The add-in's settings are checked as they are (an https address, GUIDs) and may be empty.
+
+## addin/build
+
+`{}` → `{ ok, folder, files, version, manifestUrl, redirectUri }`
+
+Writes the Outlook add-in's files for the saved settings into `addinFolder`: the template
+(`addin` next to the script, `dist/template` in the repository) with its blanks filled in, as
+`addin/fill.mjs` does it. Files already in that folder are overwritten, others left alone. Needs
+the address, the client ID and a folder that is not the publish folder.
 
 ## publish
 
