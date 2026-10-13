@@ -12,7 +12,7 @@ editor backend  ── today: editor/OSign.ps1        later: a container (Node, 
 the OSign folder in the company's SharePoint (synced by OneDrive)   + photos/<user>.jpg (by hand)
    │  Microsoft Graph, with each user's own sign-in
    ▼
-addin (event handler + pane), served as code only from GitHub Pages
+addin (event handler + pane), served as code only from any HTTPS web server of the company's
    reads signatures.json, the images, the user's details and groups; embeds the images (cid:)
 ```
 

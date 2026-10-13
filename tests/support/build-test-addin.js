@@ -12,7 +12,7 @@ module.exports = async function buildTestAddin() {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-addin-'));
   const common = {
     bundle: true, format: 'iife', target: 'es2016', logLevel: 'error', plugins: [stub],
-    define: { __CLIENT_ID__: '"11111111-2222-3333-4444-555555555555"', __TENANT_ID__: '""', __SP_SITE__: '"root"', __SP_FOLDER__: '"OSign"' }
+    banner: { js: 'var OSIGN_SETUP={clientId:"11111111-2222-3333-4444-555555555555",tenantId:"",site:"root",folder:"OSign"};' }
   };
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'addin/src/launchevent.js')], outfile: path.join(out, 'launchevent.js') });
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'addin/src/taskpane.js')], outfile: path.join(out, 'taskpane.js') });

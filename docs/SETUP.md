@@ -2,8 +2,9 @@
 
 You do this once. Afterwards, changing a signature only means editing it and clicking **Publish**.
 
-Nothing of the company goes to GitHub: GitHub holds the code, GitHub Pages serves the add-in's code.
-The signatures, images and photos live in the company's own SharePoint.
+OSign does not need GitHub to run: you download the release once, and everything else is the
+company's own. The add-in's code is served from your own web server; the signatures, images and
+photos live in the company's own SharePoint.
 
 ## 1. The OSign folder in SharePoint
 
@@ -22,8 +23,9 @@ has that site, so the add-in finds it without being told.
    `photos/@@sAMAccountName.jpg` embed each sender's own photo; who has none gets the signature
    without one.
 
-Another site or folder: build the add-in with `OSIGN_SP_SITE` (`<host>.sharepoint.com:/sites/<name>:`)
-and `OSIGN_SP_FOLDER` (step 3).
+Another site or folder: set it in the editor under Settings → *Outlook add-in* (*SharePoint site*
+`<host>.sharepoint.com:/sites/<name>:`, *Folder in its library*) before making the add-in's files
+(step 3).
 
 ## 2. App registration in Entra ID
 
@@ -32,10 +34,11 @@ password, and reads with each user's own rights.
 
 1. Entra admin center → **Identity → Applications → App registrations → New registration**.
    - Name: `OSign`
-   - Supported account types: *Accounts in any organizational directory* (then the build needs no
-     tenant ID). *This organizational directory only* works too; then set `OSIGN_TENANT_ID` in step 3.
+   - Supported account types: *Accounts in any organizational directory* (then no tenant ID is
+     needed). *This organizational directory only* works too; then enter the tenant ID in step 3.
 2. **Authentication → Add a platform → Single-page application**. Redirect URI:
-   `brk-multihub://monsama.github.io` (the host the add-in is served from).
+   `brk-multihub://<host>`, the host the add-in is served from (step 3), e.g.
+   `brk-multihub://osign.contoso.com`. The editor shows it when it makes the files.
 3. **API permissions**, *Microsoft Graph → Delegated*:
    - `User.Read` (there by default): the user's name, title, phone…
    - `Sites.Read.All`: the OSign folder
@@ -45,21 +48,41 @@ password, and reads with each user's own rights.
    Then **Grant admin consent for …**.
 4. Copy the **Application (client) ID** from Overview, for step 3.
 
-## 3. Build and serve the add-in (GitHub Pages)
+## 3. Serve the add-in from your own web server
 
-1. In the repository: **Settings → Secrets and variables → Actions → Variables → New repository
-   variable**: `OSIGN_CLIENT_ID` = the Application (client) ID. Optionally `OSIGN_TENANT_ID`,
-   `OSIGN_SP_SITE`, `OSIGN_SP_FOLDER`.
-2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-3. **Actions → pages → Run workflow.** Then <https://monsama.github.io/osign/manifest.xml> serves
-   the manifest.
+The add-in is a few static files (HTML, JavaScript, icons, `manifest.xml`): only code, no data.
+Outlook loads them over HTTPS, from every device where someone writes mail.
 
-The add-in only has to be built again when its code or these variables change, never for a new
-signature.
+**Pick where they go.** Any web server that serves static files over HTTPS, with a certificate
+browsers trust, and without a sign-in in front of them. It has to be reachable from wherever Outlook
+is used: Outlook on the web and the new Outlook load the files on the user's own device, so a
+server only reachable inside the network means signatures only inside the network (or on VPN).
+
+| Where | How the files get there | Address |
+|---|---|---|
+| **Azure Storage, static website** (simplest in Azure; costs cents) | Storage account → *Data management → Static website → Enabled*. Upload the folder's content into the `$web` container (Azure Storage Explorer, or the portal's *Upload* with the `assets` folder kept). | `https://<account>.z<n>.web.core.windows.net/` (or your own domain via Azure Front Door) |
+| **Azure Static Web Apps** (Free plan) | Create one with deployment source *Other*. Upload with `npx @azure/static-web-apps-cli deploy <folder> --deployment-token <token> --env production`. | `https://<name>.azurestaticapps.net/`, own domain possible |
+| **Your own web server** (IIS, nginx, Apache, a container) | Copy the folder into a site or virtual directory with HTTPS. | e.g. `https://osign.contoso.com/` or `https://intranet.contoso.com/osign/` |
+
+**Make the files.** Start the editor (step 4.1–4.2), then **Settings → Outlook add-in**:
+
+- *Address of the add-in*: where the files will be served, e.g. `https://osign.contoso.com/`
+- *Write the files to*: a folder of its own on this PC, e.g. `C:\OSign-addin`
+- *Client ID* (and *Tenant ID*, if the app is for your organization only): from step 2
+- *SharePoint site* and *Folder*: leave `root` and `OSign` for the home site's OSign folder
+
+Click **Make the add-in files**, then copy the folder's content to the web server. Check that
+`https://<address>/manifest.xml` opens in a browser.
+
+The files only have to be made again for a new OSign version or when these settings change, never
+for a new signature. After a new version, upload the new `manifest.xml` in the admin center too
+(step 5).
 
 ## 4. The editor
 
-1. Download `OSign-vX.Y.Z.zip` from the releases and unpack it, or clone the repository.
+1. Download `OSign-vX.Y.Z.zip` from the releases once and unpack it, e.g. to `C:\Tools\OSign`. It
+   holds the editor and the add-in's files (`addin\`). From a clone of the repository, run
+   `npm ci` and `npm run build` first, so the add-in's files are there.
 2. Run:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\OSign.ps1          # from the release
@@ -115,7 +138,8 @@ changed, removes the files of users who are gone, and exits (code 0 when it work
 ## 5. Deploy the add-in
 
 1. Microsoft 365 admin center → **Settings → Integrated apps → Upload custom apps**.
-2. App type *Office Add-in*, link to the manifest: `https://monsama.github.io/osign/manifest.xml`
+2. App type *Office Add-in*, link to the manifest: `https://<address of the add-in>/manifest.xml`
+   (step 3)
 3. Assign it to everyone, or to a group to start with.
 
 It can take a few hours to reach every Outlook. To try it yourself first, sideload it: in Outlook on
@@ -131,7 +155,7 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 
 | What | Why, and what to do |
 |---|---|
-| No signature at all | Open the pane: it says what failed. Usually: no admin consent yet, the OSign folder not readable for that user, or `OSIGN_CLIENT_ID` not set when the add-in was built. |
+| No signature at all | Open the pane: it says what failed. Usually: no admin consent yet, the OSign folder not readable for that user, the redirect URI missing in the app registration, or no client ID when the add-in's files were made. |
 | "No signatures are published yet" | `OSign\signatures.json` is not in SharePoint: publish, and check that OneDrive has synced it. |
 | Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign\users\` (no mail address in AD, or not exported yet). |
 | No photo | No `OSign\photos\<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |

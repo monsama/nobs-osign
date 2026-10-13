@@ -150,10 +150,10 @@
       <h2>Sign-in and permissions</h2>
       <p class="lead" data-th="signinLead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
         details and groups from Entra ID and the signatures from the OSign folder in SharePoint. It uses one app registration,
-        set where the add-in is built - not here, and not in the signatures. <a href="#" id="lnkSetup">How to register it</a></p>
+        set in Settings → Outlook add-in, when the add-in's files are made - not in the signatures. <a href="#" id="lnkSetup">How to register it</a></p>
       <h2>Install</h2>
       <p class="lead" data-th="installLead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
-        is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://&lt;owner&gt;.github.io/osign/manifest.xml</code>.</p>
+        is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://osign.contoso.com/manifest.xml</code>. Settings → Outlook add-in makes the files.</p>
     </section>
 
     <!-- users from AD -->
@@ -196,6 +196,20 @@
       a folder <b>OSign</b>, and choose <b>Sync</b> (or <b>Add shortcut to My files</b>). It then appears in File Explorer;
       its path goes in the first field. Publishing writes <code>signatures.json</code> and <code>assets\</code> there; the
       photos go in <code>photos\</code>, by hand.</p>
+    <h3>Outlook add-in</h3>
+    <p class="lead" data-th="addinLead">The add-in's files go on an HTTPS web server of your own (your web server, Azure Static Web Apps, …):
+      they are only code, the signatures stay in SharePoint. This makes them for your server; copy the folder there and upload
+      its <code>manifest.xml</code> in the Microsoft 365 admin center.</p>
+    <div class="grid2">
+      <label>Address of the add-in <small>(where the files are served)</small><input id="setAddinUrl" placeholder="https://osign.contoso.com/"></label>
+      <label>Write the files to<input id="setAddinFolder" placeholder="C:\OSign-addin"></label>
+      <label>App registration: client ID<input id="setClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
+      <label>Tenant ID <small>(only for a single-organization app)</small><input id="setTenantId" placeholder="optional"></label>
+      <label>SharePoint site <small>(root: the home site)</small><input id="setSpSite" placeholder="root"></label>
+      <label>Folder in its library<input id="setSpFolder" placeholder="OSign"></label>
+    </div>
+    <p><button id="setAddinBuild" type="button">Make the add-in files</button></p>
+    <p id="setAddinOk" class="ok"></p>
     <p id="setErr" class="err"></p>
     <div class="dlg-foot">
       <button value="cancel" class="ghost" formnovalidate>Cancel</button>
@@ -235,14 +249,14 @@
     <h2>Register the add-in in Entra ID</h2>
     <ol class="steps">
       <li data-th="help1">Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>. Accounts:
-        <i>any organizational directory</i> (then no tenant ID is needed in the build).</li>
+        <i>any organizational directory</i> (then no tenant ID is needed).</li>
       <li data-th="help2"><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
-        <code>brk-multihub://&lt;host the add-in is served from&gt;</code>, e.g. <code>brk-multihub://monsama.github.io</code>.</li>
+        <code>brk-multihub://&lt;host the add-in is served from&gt;</code>, e.g. <code>brk-multihub://osign.contoso.com</code>.</li>
       <li data-th="help3"><b>API permissions</b>, Microsoft Graph, delegated: <code>User.Read</code>, <code>Sites.Read.All</code> (the OSign
         folder) and, for signatures by AD group, <code>GroupMember.Read.All</code>. Then <b>Grant admin consent</b>, so no
         user is asked.</li>
-      <li data-th="help4">The <b>Application (client) ID</b> goes into the build: in GitHub, Settings → Secrets and variables → Actions →
-        Variables, <code>OSIGN_CLIENT_ID</code>; then run the <i>pages</i> workflow.</li>
+      <li data-th="help4">The <b>Application (client) ID</b> goes into Settings → Outlook add-in; then <i>Make the add-in files</i>
+        and copy them to the web server.</li>
       <li data-th="help5">The OSign folder has to be readable for everyone who signs: in SharePoint, share it (read) with all employees.</li>
     </ol>
     <div class="dlg-foot"><button value="cancel" class="primary">OK</button></div>

@@ -44,6 +44,11 @@ $script:UiDir = Join-Path $PSScriptRoot 'ui'
 $script:CoreFile = @((Join-Path $PSScriptRoot 'shared\signature-core.js'), (Join-Path $PSScriptRoot '..\shared\signature-core.js')) |
     ForEach-Object { [IO.Path]::GetFullPath(($_ -replace '\\', [IO.Path]::DirectorySeparatorChar)) } |
     Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+# The add-in's files, with blanks for its settings (addin/build.mjs): OSign\addin in a release,
+# dist\template in the repo after npm run build.
+$script:AddinTemplateDir = @((Join-Path $PSScriptRoot 'addin'), (Join-Path $PSScriptRoot '..\dist\template')) |
+    ForEach-Object { [IO.Path]::GetFullPath(($_ -replace '\\', [IO.Path]::DirectorySeparatorChar)) } |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_ 'osign-addin.json') } | Select-Object -First 1
 
 function Get-DataDir {
     if ($env:OSIGN_DATA) { return $env:OSIGN_DATA }
@@ -116,7 +121,15 @@ function ConvertTo-LdapFilterValue([string]$Value) {
 #               (e.g. C:\Users\me\Contoso\Contoso - Documents\OSign). The add-in reads it there.
 # photosFolder: where the preview finds the photos per person (<username>.jpg). Empty: the
 #               photos folder inside the publish folder.
-function Get-DefaultSettings { return [ordered]@{ folder = ''; photosFolder = '' } }
+# The Outlook add-in's files (Build-AddinPackage):
+# addinUrl:     the HTTPS address they are served from, e.g. https://osign.contoso.com/
+# clientId:     the Entra ID app registration's Application (client) ID
+# tenantId:     only for an app registration of a single organization
+# spSite:       the SharePoint site holding the publish folder: root (the home site) or
+#               <host>.sharepoint.com:/sites/<name>:
+# spFolder:     that folder in the site's document library, e.g. OSign
+# addinFolder:  where the finished files are written, to be copied to the web server
+function Get-DefaultSettings { return [ordered]@{ folder = ''; photosFolder = ''; addinUrl = ''; clientId = ''; tenantId = ''; spSite = 'root'; spFolder = 'OSign'; addinFolder = '' } }
 
 function Get-Settings {
     $d = Get-DefaultSettings
@@ -131,14 +144,29 @@ function Get-Settings {
 }
 
 function Test-Settings($s, [switch]$ForPublish) {
-    foreach ($k in @('folder', 'photosFolder')) {
+    foreach ($k in @('folder', 'photosFolder', 'addinFolder')) {
         $v = [string]$s[$k]
         if ($v -and ($v.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0 -or -not [IO.Path]::IsPathRooted($v))) { return "The $k is a full path, like C:\Users\me\Contoso\Documents\OSign." }
     }
+    $err = Test-AddinSettings $s; if ($err) { return $err }
     if ($ForPublish) {
         if (-not $s.folder) { return 'Pick the folder to publish to in Settings: the OSign folder of SharePoint, synced to this PC.' }
         if (-not (Test-Path -LiteralPath $s.folder -PathType Container)) { return "The folder $($s.folder) is not there. Is the SharePoint library synced to this PC?" }
     }
+    return $null
+}
+
+# The same rules as checkSetup in addin/build.mjs. Empty values pass; Build-AddinPackage needs the
+# address.
+$script:GuidRx = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+function Test-AddinSettings($s) {
+    $u = [string]$s.addinUrl
+    if ($u -and $u -notmatch '^https://[^\s"<>''&]+$') { return 'The add-in address is an https:// address, like https://osign.contoso.com/.' }
+    if ($s.clientId -and $s.clientId -notmatch $script:GuidRx) { return "The client ID is the app registration's Application (client) ID, a GUID." }
+    if ($s.tenantId -and $s.tenantId -notmatch $script:GuidRx) { return 'The tenant ID is a Directory (tenant) ID, a GUID.' }
+    if ($s.spSite -and $s.spSite -cnotmatch '^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:/sites/[^:/"\\\s]+:$') { return 'The SharePoint site is root or <host>.sharepoint.com:/sites/<name>:' }
+    $f = ([string]$s.spFolder).Trim('/')
+    if ($s.spFolder -and ($f -match '["\\\x00-\x1f]' -or @($f -split '/' | Where-Object { -not $_ -or $_ -eq '.' -or $_ -eq '..' }).Count)) { return 'The SharePoint folder is a folder like OSign.' }
     return $null
 }
 
@@ -234,7 +262,7 @@ function Api-Info {
         try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue; $ad = [bool]([DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()) } catch { $ad = $false }
     }
     if ($env:OSIGN_TEST_AD_JSON) { $ad = $true }
-    return (Ok @{ backend = 'powershell'; version = $script:AppVersion; dataDir = $script:DataDir; features = @{ adLookup = $ad } })
+    return (Ok @{ backend = 'powershell'; version = $script:AppVersion; dataDir = $script:DataDir; features = @{ adLookup = $ad; addinFiles = [bool]$script:AddinTemplateDir } })
 }
 
 function Api-DraftGet {
@@ -293,6 +321,52 @@ function Api-SettingsSave($data) {
     $err = Test-Settings $s; if ($err) { return (Fail $err) }
     Write-Text $script:SettingsFile (To-Json $s)
     return (Api-SettingsGet)
+}
+
+# ---------------------------------------------------------------------------
+# The Outlook add-in's files: the template filled in with the settings, for any HTTPS web server
+# ---------------------------------------------------------------------------
+function ConvertTo-XmlText([string]$Text) { return [Security.SecurityElement]::Escape($Text) }
+
+function Build-AddinPackage($s) {
+    if (-not $script:AddinTemplateDir) { return @{ error = 'The add-in files are not next to OSign.ps1 (folder addin). Use the release zip, or run npm run build in the repository.' } }
+    $err = Test-AddinSettings $s; if ($err) { return @{ error = $err } }
+    if (-not $s.addinUrl) { return @{ error = 'Enter the address the add-in will be served from.' } }
+    if (-not $s.clientId) { return @{ error = 'Enter the app registration''s client ID: without it the add-in cannot sign in.' } }
+    if (-not $s.addinFolder) { return @{ error = 'Enter the folder to write the add-in''s files to.' } }
+    $out = [IO.Path]::GetFullPath($s.addinFolder)
+    foreach ($other in @($s.folder, $script:DataDir)) {
+        if ($other -and ($out.TrimEnd('\', '/') -eq [IO.Path]::GetFullPath($other).TrimEnd('\', '/'))) { return @{ error = 'Write the add-in''s files to a folder of their own, not the publish folder.' } }
+    }
+    $base = $s.addinUrl.TrimEnd('/') + '/'
+    $origin = ([Uri]$base).GetLeftPart([UriPartial]::Authority)
+    $js = [ordered]@{ '@@OSIGN_CLIENT_ID@@' = $s.clientId; '@@OSIGN_TENANT_ID@@' = $s.tenantId; '@@OSIGN_SP_SITE@@' = $(if ($s.spSite) { $s.spSite } else { 'root' }); '@@OSIGN_SP_FOLDER@@' = $(if ($s.spFolder) { $s.spFolder.Trim('/') } else { 'OSign' }) }
+    $xml = [ordered]@{ '{{BASE}}' = (ConvertTo-XmlText $base); '{{ORIGIN}}' = (ConvertTo-XmlText $origin); '{{SUPPORT}}' = (ConvertTo-XmlText $base) }
+    $fill = @{ 'launchevent.js' = $js; 'taskpane.js' = $js; 'manifest.xml' = $xml }
+    $root = $script:AddinTemplateDir.TrimEnd('\', '/')
+    $n = 0
+    foreach ($f in @(Get-ChildItem -LiteralPath $root -File -Recurse)) {
+        $rel = $f.FullName.Substring($root.Length + 1)
+        $dest = Join-Path $out $rel
+        $dir = Split-Path -Parent $dest
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        if ($fill.ContainsKey($rel)) {
+            $text = [IO.File]::ReadAllText($f.FullName, $script:Utf8)
+            foreach ($k in $fill[$rel].Keys) { $text = $text.Replace($k, [string]$fill[$rel][$k]) }
+            [IO.File]::WriteAllText($dest, $text, $script:Utf8)
+        } else {
+            [IO.File]::Copy($f.FullName, $dest, $true)
+        }
+        $n++
+    }
+    $version = ([string](Read-Text (Join-Path $root 'osign-addin.json')) | ConvertFrom-Json).version
+    return @{ folder = $out; files = $n; version = $version; manifestUrl = $base + 'manifest.xml'; redirectUri = 'brk-multihub://' + ([Uri]$base).Authority }
+}
+
+function Api-AddinBuild {
+    $r = Build-AddinPackage (Get-Settings)
+    if ($r.error) { return (Fail $r.error) }
+    return (Ok $r)
 }
 
 function Api-Publish($data) {
@@ -665,6 +739,7 @@ function Invoke-Request($client) {
             '/api/settings/get'   { Api-SettingsGet }
             '/api/settings/save'  { Api-SettingsSave $data }
             '/api/publish'        { Api-Publish $data }
+            '/api/addin/build'    { Api-AddinBuild }
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }
             '/api/ad/groups'      { Api-AdGroups $data }

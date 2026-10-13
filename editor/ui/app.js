@@ -824,9 +824,18 @@
     $('setPhotosNote').textContent = r.photosFound ? t('Found.') : t('No photos folder there (yet): the preview shows no photos.');
   }
   let lastSettings = {};
+  const ADDIN_FIELDS = [['setAddinUrl', 'addinUrl'], ['setAddinFolder', 'addinFolder'], ['setClientId', 'clientId'], ['setTenantId', 'tenantId'], ['setSpSite', 'spSite'], ['setSpFolder', 'spFolder']];
+  function settingsFromDialog() {
+    const s = { folder: $('setFolder').value, photosFolder: $('setPhotos').value };
+    for (const [id, k] of ADDIN_FIELDS) s[k] = $(id).value;
+    return s;
+  }
   $('btnSettings').addEventListener('click', () => {
     $('setFolder').value = S.settings.folder || '';
     $('setPhotos').value = S.settings.photosFolder || '';
+    for (const [id, k] of ADDIN_FIELDS) $(id).value = S.settings[k] || '';
+    $('setAddinBuild').disabled = !(S.info.features && S.info.features.addinFiles);
+    $('setAddinOk').textContent = $('setAddinBuild').disabled ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
     $('dlgSettings').showModal();
@@ -834,12 +843,22 @@
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
     try {
-      const r = await api('settings/save', { settings: { folder: $('setFolder').value, photosFolder: $('setPhotos').value } });
+      const r = await api('settings/save', { settings: settingsFromDialog() });
       // Another language: the page starts again in it (the draft is saved, nothing is lost).
       if ($('setLang').value !== I18N.lang) { await saving; I18N.setLang($('setLang').value); return; }
       S.settings = r.settings; lastSettings = r;
       $('dlgSettings').close(); toast(r.folderFound || !r.settings.folder ? t('Settings saved.') : t('Saved, but the folder is not there on this PC.'), !r.folderFound && !!r.settings.folder);
       schedulePreview();
+    } catch (err) { $('setErr').textContent = t(err.message); }
+  });
+
+  $('setAddinBuild').addEventListener('click', async () => {
+    $('setErr').textContent = ''; $('setAddinOk').textContent = '';
+    try {
+      const saved = await api('settings/save', { settings: settingsFromDialog() });
+      S.settings = saved.settings; lastSettings = saved;
+      const r = await api('addin/build');
+      $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
     } catch (err) { $('setErr').textContent = t(err.message); }
   });
 
