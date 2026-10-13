@@ -407,7 +407,10 @@ function Get-GroupsUsed($Config) {
 function Get-AdUserRecords([string[]]$Attributes, [string[]]$GroupNames) {
     if ($env:OSIGN_TEST_AD_JSON) {
         $out = @()
-        foreach ($r in @((Read-Text $env:OSIGN_TEST_AD_JSON) | ConvertFrom-Json)) {
+        # Assigned first: Windows PowerShell 5.1's ConvertFrom-Json hands a JSON list on as one
+        # object, so @(... | ConvertFrom-Json) would be a list holding the whole list once.
+        $list = (Read-Text $env:OSIGN_TEST_AD_JSON) | ConvertFrom-Json
+        foreach ($r in @($list)) {
             $attrs = @{}; foreach ($p in $r.attrs.PSObject.Properties) { $attrs[$p.Name.ToLowerInvariant()] = [string]$p.Value }
             $out += @{ mail = [string]$r.mail; attrs = $attrs; groups = @(@($r.groups) | ForEach-Object { ([string]$_).ToLowerInvariant() }) }
         }
