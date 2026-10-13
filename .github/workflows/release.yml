@@ -1,9 +1,17 @@
-# A tag v1.2.3 makes a release with the editor as one zip: OSign.ps1, its UI and the shared engine.
+# Makes a release with the editor as one zip: OSign.ps1, its UI and the shared engine.
+#
+# Either push a tag v1.2.3, or run this workflow by hand (Actions → release → Run workflow) with
+# the version: it then makes the tag v1.2.3 itself, on the commit it runs on.
 name: release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, e.g. 0.1.0 (must match editor/OSign.ps1 and package.json)'
+        required: true
 
 permissions:
   contents: write
@@ -11,13 +19,25 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - name: Check the version
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          v="${TAG#v}"
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Not a version: $v"; exit 1; }
           grep -q "AppVersion = '$v'" editor/OSign.ps1 || { echo "editor/OSign.ps1 is not version $v"; exit 1; }
           grep -q "\"version\": \"$v\"" package.json || { echo "package.json is not version $v"; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Test
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm test
       - name: Package
         run: |
           mkdir -p out/OSign/shared
@@ -25,11 +45,14 @@ jobs:
           cp -r editor/ui out/OSign/ui
           cp shared/signature-core.js out/OSign/shared/
           cp LICENSE out/OSign/
-          (cd out && zip -r "OSign-${GITHUB_REF_NAME}.zip" OSign)
-          (cd out && sha256sum "OSign-${GITHUB_REF_NAME}.zip" > SHA256SUMS.txt)
+          (cd out && zip -r "OSign-${TAG}.zip" OSign)
+          (cd out && sha256sum "OSign-${TAG}.zip" > SHA256SUMS.txt)
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: OSign ${{ env.TAG }}
           files: |
-            out/OSign-${{ github.ref_name }}.zip
+            out/OSign-${{ env.TAG }}.zip
             out/SHA256SUMS.txt
           generate_release_notes: true
