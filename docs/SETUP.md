@@ -29,8 +29,9 @@ has that site, so the add-in finds it without being told.
    without one.
 
 Another site or folder: set it in the editor (setup assistant step 1, or Settings → *Outlook
-add-in*) before making the add-in's files (step 3). *SharePoint site*: paste the site's address from
-the browser, or write it as `<host>.sharepoint.com:/sites/<name>:` (also `/teams/<name>`). *Folder in
+add-in*) before making the add-in's files (step 3). *SharePoint site*: paste the folder's address from
+the browser or a sharing link to it (*Share → Copy link*); OSign takes the site from it, and the
+folder where the address names it. Or write it as `<host>.sharepoint.com:/sites/<name>:` (also `/teams/<name>`). *Folder in
 its library*: the path within *Documents*, e.g. `General/OSign` in a team's channel folder.
 
 **For testing, your own OneDrive works too:** make the folder `OSign` in your OneDrive and paste

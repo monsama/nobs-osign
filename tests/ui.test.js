@@ -116,7 +116,7 @@ test('make, preview and publish a signature', { skip }, async () => {
   assert.match(s.html, /<img src="assets\/Logo\.png" width="1" alt="" style="border:0">/);
   assert.match(s.compiled, /<!--sig-if:department-->/);
   assert.ok(fs.readFileSync(path.join(folder, 'assets', 'Logo.png')).equals(PNG));
-  assert.match(await page.textContent('#status'), /Published/);
+  await page.waitForFunction(() => /Published/.test(document.querySelector('#status').textContent));
   assert.deepEqual(errors, []);
 });
 
@@ -259,7 +259,22 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   await page.click('#btnWizard');
   await next('The folder in SharePoint');
   assert.equal(await page.inputValue('#wizFolder'), folder);
-  // The OneDrive's address as copied from the browser becomes what Graph wants.
+  // Addresses as copied from the browser, and sharing links, become what Graph wants; where they
+  // name the folder too, that is filled in.
+  const where = async (address) => {
+    await page.fill('#wizSpFolder', 'OSign');
+    await page.fill('#wizSpSite', address);
+    await page.dispatchEvent('#wizSpSite', 'change');
+    return [await page.inputValue('#wizSpSite'), await page.inputValue('#wizSpFolder')];
+  };
+  assert.deepEqual(await where('https://contoso-my.sharepoint.com/:f:/g/personal/anna_contoso_com/IgDpY5m2CxbbRYgU2eNTaxZP?e=GOPGuO'), ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign']);
+  assert.deepEqual(await where('https://contoso.sharepoint.com/sites/IT/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FIT%2FShared%20Documents%2FGeneral%2FOSign&viewid=1'), ['contoso.sharepoint.com:/sites/IT:', 'General/OSign']);
+  assert.deepEqual(await where('https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fanna_contoso_com%2FDocuments%2FTests%2FOSign'), ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'Tests/OSign']);
+  assert.deepEqual(await where('https://contoso.sharepoint.com/:f:/s/IT/EaBcDe?e=x'), ['contoso.sharepoint.com:/sites/IT:', 'OSign']);
+  assert.deepEqual(await where('https://contoso.sharepoint.com/:f:/r/sites/IT/Shared%20Documents/General/OSign?csf=1'), ['contoso.sharepoint.com:/sites/IT:', 'General/OSign']);
+  assert.deepEqual(await where('https://contoso.sharepoint.com/Shared%20Documents/OSign'), ['root', 'OSign']);
+  assert.deepEqual(await where('contoso.sharepoint.com:/teams/IT:'), ['contoso.sharepoint.com:/teams/IT:', 'OSign']);
+  await page.fill('#wizSpFolder', 'OSign');
   await page.fill('#wizSpSite', 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx');
   await next("Where the users' values come from");
   await page.check('input[name=wvsrc][value=graph]');

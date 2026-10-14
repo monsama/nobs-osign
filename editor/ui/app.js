@@ -862,16 +862,56 @@
     } catch (err) { $('setErr').textContent = t(err.message); }
   });
 
-  // A site's or OneDrive's address as copied from the browser
-  // (https://contoso-my.sharepoint.com/personal/me_contoso_com/_layouts/…) becomes what Graph
-  // wants: contoso-my.sharepoint.com:/personal/me_contoso_com:
-  function siteFromAddress(v) {
-    const m = /^\s*https:\/\/([A-Za-z0-9.-]+\.sharepoint\.com)\/(sites|teams|personal)\/([^/?#\s]+)/i.exec(v);
-    if (m) return m[1].toLowerCase() + ':/' + m[2].toLowerCase() + '/' + decodeURIComponent(m[3]) + ':';
-    if (/^\s*https:\/\/[A-Za-z0-9-]+\.sharepoint\.com\/?\s*$/i.test(v)) return 'root';
-    return v.trim();
+  // A site's or OneDrive's address as copied from the browser, or a sharing link (Share → Copy
+  // link), becomes what Graph wants, e.g. contoso-my.sharepoint.com:/personal/me_contoso_com:.
+  // Where the address also names the folder (…?id=/personal/me/Documents/OSign, or a path in the
+  // library), that comes back too: the path within the default library ("OSign"); else null.
+  //   https://contoso.sharepoint.com/sites/IT/Shared Documents/Forms/AllItems.aspx?id=…
+  //   https://contoso-my.sharepoint.com/personal/me_contoso_com/_layouts/15/onedrive.aspx?id=…
+  //   https://contoso-my.sharepoint.com/:f:/g/personal/me_contoso_com/EaBc…?e=…
+  //   https://contoso.sharepoint.com/:f:/s/IT/EaBc…  (/s/ a site, /t/ a team, /p/ a OneDrive)
+  const LIBRARIES = ['shared documents', 'documents', 'freigegebene dokumente', 'dokumente'];
+  function parseSpAddress(v) {
+    let u;
+    try { u = new URL(String(v).trim()); } catch (e) { return { site: String(v).trim(), folder: null }; }
+    const host = u.hostname.toLowerCase();
+    if (u.protocol !== 'https:' || !/^[a-z0-9-]+(-my)?\.sharepoint\.com$/.test(host)) return { site: String(v).trim(), folder: null };
+    let parts = u.pathname.split('/').filter(Boolean).map((x) => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+    // A sharing link: /:f:/<kind>/…, with the site after it; its last part is a code, not a folder.
+    let shared = false;
+    if (parts.length && /^:[a-z]:$/i.test(parts[0])) {
+      parts = parts.slice(1);
+      const k = (parts[0] || '').toLowerCase();
+      // /r/ links carry the real path, folder included; the others end in a code.
+      shared = k !== 'r';
+      if (k === 'r' || k === 'g') parts = parts.slice(1);
+      else if (k === 's' || k === 't' || k === 'p') parts = [{ s: 'sites', t: 'teams', p: 'personal' }[k]].concat(parts.slice(1));
+    }
+    let site = 'root', rest = parts;
+    if (parts.length >= 2 && /^(sites|teams|personal)$/i.test(parts[0])) {
+      site = host + ':/' + parts[0].toLowerCase() + '/' + parts[1] + ':';
+      rest = parts.slice(2);
+    }
+    // The folder: from ?id= (the server-relative path), else from the path itself.
+    const sitePath = site === 'root' ? [] : parts.slice(0, 2).map((x) => x.toLowerCase());
+    const id = u.searchParams.get('id') || u.searchParams.get('RootFolder');
+    let path = id ? id.split('/').filter(Boolean) : (shared ? [] : rest);
+    if (id && sitePath.length && path.slice(0, 2).map((x) => x.toLowerCase()).join('/') === sitePath.join('/')) path = path.slice(2);
+    let folder = null;
+    const lib = path.findIndex((x) => LIBRARIES.includes(x.toLowerCase()));
+    if (lib === 0) {
+      const inLib = path.slice(1);
+      const forms = inLib.findIndex((x) => /^forms$/i.test(x) || /\.aspx$/i.test(x));
+      const f = (forms < 0 ? inLib : inLib.slice(0, forms)).join('/');
+      if (f) folder = f;
+    }
+    return { site, folder };
   }
-  ['setSpSite', 'wizSpSite'].forEach((id) => $(id).addEventListener('change', () => { $(id).value = siteFromAddress($(id).value); }));
+  [['setSpSite', 'setSpFolder'], ['wizSpSite', 'wizSpFolder']].forEach(([siteId, folderId]) => $(siteId).addEventListener('change', () => {
+    const r = parseSpAddress($(siteId).value);
+    $(siteId).value = r.site;
+    if (r.folder) $(folderId).value = r.folder;
+  }));
 
   // ---------------------------------------------------------------------------------------------
   // Setup assistant: opens by itself until it was finished once, while OSign is not set up
@@ -938,7 +978,9 @@
   const wizLeave = {
     async folder() {
       if (!$('wizFolder').value.trim()) throw new Error(t('Enter the path of the synced OSign folder.'));
-      $('wizSpSite').value = siteFromAddress($('wizSpSite').value);
+      const where = parseSpAddress($('wizSpSite').value);
+      $('wizSpSite').value = where.site;
+      if (where.folder) $('wizSpFolder').value = where.folder;
       const r = await wizSave({ folder: $('wizFolder').value, photosFolder: $('wizPhotos').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value || 'OSign' });
       if (!r.folderFound && wiz.warned !== 'folder') {
         wiz.warned = 'folder';
@@ -1065,6 +1107,8 @@
     e.preventDefault();
     $('pubGo').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
+      // A change still waiting for its save goes first, so the draft and what is published match.
+      if (saveTimer) save();
       await saving;
       const c = prepared(); c.updated = new Date().toISOString();
       // Values from AD: the users first, so a signature never asks for a file that is not there yet.
