@@ -32,7 +32,7 @@ test.before(async () => {
   ]));
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-pub-'));
   // Publishing goes to a folder: set before the start, as an admin would in Settings.
-  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ folder, photosFolder: '' }));
+  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ folder, photosFolder: '', setupDone: '1' }));
   // A photo for the sample user (mustera), as an admin would have copied it there.
   fs.mkdirSync(path.join(folder, 'photos'));
   fs.writeFileSync(path.join(folder, 'photos', 'mustera.jpg'), PNG);
@@ -237,5 +237,62 @@ test('users from AD: read, look, and publish exactly that', { skip }, async () =
   await page.waitForFunction(() => /users written/.test(document.querySelector('#pubOk').textContent));
   assert.deepEqual(fs.readdirSync(path.join(folder, 'users')).sort(), ['anna@example.com.json', 'beat@example.com.json']);
   await page.click('#dlgPublish button[value=cancel]');
+  assert.deepEqual(errors, []);
+});
+
+test('setup assistant: opens by itself until OSign is set up, and walks through every step', { skip }, async () => {
+  const api = (p, body) => fetch(url.replace(/\/#t=.*/, '/api/' + p), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + url.split('#t=')[1] }, body: JSON.stringify(body || {}) }).then((r) => r.json());
+  // Each step saves on Next: wait for where it leads, or for what it says.
+  const next = async (title) => { await page.click('#wizNext'); await page.waitForFunction((x) => document.querySelector('#wizTitle').textContent === x, title); };
+  const nextFails = async (rx) => { await page.click('#wizNext'); await page.waitForFunction((x) => new RegExp(x).test(document.querySelector('#wizErr').textContent), rx.source); };
+  // Not set up (no app registration yet), never finished: it opens; Later closes it.
+  await api('settings/save', { settings: { setupDone: '', clientId: '' } });
+  // The same address with only a #: reload, so the page really starts again.
+  await page.goto(url); await page.reload();
+  await page.waitForSelector('#dlgWizard[open]');
+  assert.equal(await page.textContent('#wizTitle'), 'Welcome to OSign');
+  await page.click('#wizLater');
+  assert.equal(await page.isVisible('#dlgWizard'), false);
+
+  // From Settings, step by step; each step keeps what it asks for.
+  await page.click('#btnSettings');
+  await page.click('#btnWizard');
+  await next('The folder in SharePoint');
+  assert.equal(await page.inputValue('#wizFolder'), folder);
+  await next("Where the users' values come from");
+  await page.check('input[name=wvsrc][value=graph]');
+  await next('Where the add-in is served');
+  await page.check('input[name=whost][value=cloudflare]');
+  await nextFails(/Enter the address/);
+  await page.fill('#wizUrl', 'https://osign.example.com');
+  await next('Register the app in Entra ID');
+  assert.equal(await page.textContent('#wizRedirect'), 'brk-multihub://osign.example.com');
+  assert.equal(await page.textContent('#wizPerms'), 'User.Read, Sites.Read.All, GroupMember.Read.All');
+  await page.fill('#wizClientId', 'nope');
+  await nextFails(/GUID/);
+  await page.fill('#wizClientId', '11111111-2222-3333-4444-555555555555');
+  await next("Make the add-in's files");
+  await nextFails(/Make the add-in files first/);
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-addin-'));
+  await page.fill('#wizAddinFolder', out);
+  await page.click('#wizMake');
+  await page.waitForSelector('#wizUpload:not([hidden])');
+  assert.equal(await page.isVisible('#wizUpload [data-host=cloudflare]'), true);
+  assert.equal(await page.isVisible('#wizUpload [data-host=azure]'), false);
+  assert.ok(fs.existsSync(path.join(out, '_headers')));
+  assert.match(fs.readFileSync(path.join(out, 'manifest.xml'), 'utf8'), /https:\/\/osign\.example\.com\/taskpane\.html/);
+  await next("Into everyone's Outlook");
+  assert.equal(await page.textContent('#wizManifest'), 'https://osign.example.com/manifest.xml');
+  await next('Ready');
+  assert.equal(await page.textContent('#wizNext'), 'Finish');
+  await page.click('#wizNext');
+  await page.waitForSelector('#dlgWizard', { state: 'hidden' });
+  const s = (await api('settings/get')).settings;
+  assert.deepEqual([s.setupDone, s.addinHost, s.addinUrl, s.clientId], ['1', 'cloudflare', 'https://osign.example.com', '11111111-2222-3333-4444-555555555555']);
+  // Finished: it does not open by itself any more.
+  await page.reload();
+  await page.waitForSelector('#btnPublish');
+  await page.waitForTimeout(300);
+  assert.equal(await page.isVisible('#dlgWizard'), false);
   assert.deepEqual(errors, []);
 });

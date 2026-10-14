@@ -2,6 +2,11 @@
 
 You do this once. Afterwards, changing a signature only means editing it and clicking **Publish**.
 
+**The quick way:** start the editor (step 4.1–4.2). On the first start its **setup assistant** opens
+and walks through steps 1–3 and 5, saving each one, with what to do in SharePoint, Entra ID, the web
+host and the admin center. It can be opened again any time: **Settings → Setup assistant**. This
+page has the same steps in full.
+
 OSign does not need GitHub to run: you download the release once, and everything else is the
 company's own. The add-in's code is served from your own web server; the signatures, images and
 photos live in the company's own SharePoint.
@@ -60,6 +65,8 @@ server only reachable inside the network means signatures only inside the networ
 
 | Where | How the files get there | Address |
 |---|---|---|
+| **Cloudflare Pages** (free, no credit card) | dash.cloudflare.com → *Workers & Pages → Create → Pages → Upload assets*: drag in the folder's content, *Deploy*. Updates: *Create new deployment*. | `https://<project>.pages.dev/`, own domain under *Custom domains* |
+| **Your website's web host** (Apache, most providers) | A subdomain with HTTPS; upload by FTP/SFTP, `.htaccess` included. | e.g. `https://osign.contoso.com/` |
 | **Azure Storage, static website** (simplest in Azure; costs cents) | Storage account → *Data management → Static website → Enabled*. Upload the folder's content into the `$web` container (Azure Storage Explorer, or the portal's *Upload* with the `assets` folder kept). | `https://<account>.z<n>.web.core.windows.net/` (or your own domain via Azure Front Door) |
 | **Azure Static Web Apps** (Free plan) | Create one with deployment source *Other*. Upload with `npx @azure/static-web-apps-cli deploy <folder> --deployment-token <token> --env production`. | `https://<name>.azurestaticapps.net/`, own domain possible |
 | **Your own web server** (IIS, nginx, Apache, a container) | Copy the folder into a site or virtual directory with HTTPS. | e.g. `https://osign.contoso.com/` or `https://intranet.contoso.com/osign/` |
@@ -71,8 +78,14 @@ server only reachable inside the network means signatures only inside the networ
 - *Client ID* (and *Tenant ID*, if the app is for your organization only): from step 2
 - *SharePoint site* and *Folder*: leave `root` and `OSign` for the home site's OSign folder
 
-Click **Make the add-in files**, then copy the folder's content to the web server. Check that
-`https://<address>/manifest.xml` opens in a browser.
+- *Web server*: the kind of host. Its caching file comes along with the files: `_headers`
+  (Cloudflare Pages), `staticwebapp.config.json` (Azure), `web.config` (IIS) or `.htaccess` (Apache).
+  It makes Outlook check for a newer version before using its copy, so updates arrive within
+  minutes. For another server, have it send `Cache-Control: no-cache`.
+
+Click **Make the add-in files**, then copy the folder's content to the web server. The setup
+assistant's last step, **Check the address**, then confirms that the files there are the ones made
+here.
 
 The files only have to be made again for a new OSign version or when these settings change, never
 for a new signature. After a new version, upload the new `manifest.xml` in the admin center too

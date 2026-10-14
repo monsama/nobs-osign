@@ -9,7 +9,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn, execFileSync } = require('node:child_process');
+const { spawn, execFile, execFileSync } = require('node:child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'editor', 'OSign.ps1');
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
@@ -270,7 +270,7 @@ test('the add-in files: the template filled in, the same as addin/fill.mjs does 
   await api('settings/save', { settings: { ...base, addinUrl: 'https://osign.example.com/', clientId: '11111111-2222-3333-4444-555555555555', addinFolder: folder } });
   assert.match((await api('addin/build')).json.error, /folder of their own/);
 
-  const setup = { addinUrl: 'https://osign.example.com/sign/', clientId: '11111111-2222-3333-4444-555555555555', tenantId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', spSite: 'contoso.sharepoint.com:/sites/Intranet:', spFolder: 'Vorlagen/Öffentlich OSign' };
+  const setup = { addinUrl: 'https://osign.example.com/sign/', clientId: '11111111-2222-3333-4444-555555555555', tenantId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', spSite: 'contoso.sharepoint.com:/sites/Intranet:', spFolder: 'Vorlagen/Öffentlich OSign', addinHost: 'cloudflare' };
   assert.equal((await api('settings/save', { settings: { ...base, ...setup, addinFolder: out } })).json.ok, true);
   const r = (await api('addin/build')).json;
   assert.equal(r.ok, true, r.error);
@@ -281,15 +281,52 @@ test('the add-in files: the template filled in, the same as addin/fill.mjs does 
   const { fillTemplate } = await import('../addin/fill.mjs');
   const ref = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-addin-ref-'));
   const template = path.join(__dirname, '..', 'dist', 'template');
-  fillTemplate(template, ref, { base: setup.addinUrl, clientId: setup.clientId, tenantId: setup.tenantId, site: setup.spSite, folder: setup.spFolder });
+  fillTemplate(template, ref, { base: setup.addinUrl, clientId: setup.clientId, tenantId: setup.tenantId, site: setup.spSite, folder: setup.spFolder, host: setup.addinHost });
   const list = (d) => fs.readdirSync(d, { recursive: true }).filter((f) => fs.statSync(path.join(d, f)).isFile()).map((f) => f.split(path.sep).join('/')).sort();
   assert.deepEqual(list(out), list(ref));
   assert.equal(r.files, list(ref).length);
   for (const f of list(ref)) assert.ok(fs.readFileSync(path.join(out, f)).equals(fs.readFileSync(path.join(ref, f))), f + ' differs');
   for (const f of ['launchevent.js', 'taskpane.js', 'manifest.xml']) assert.doesNotMatch(fs.readFileSync(path.join(out, f), 'utf8'), /@@OSIGN_|\{\{[A-Z]+\}\}/, f);
   assert.ok(fs.readFileSync(path.join(out, 'launchevent.js'), 'utf8').startsWith('var OSIGN_SETUP={clientId:"11111111-2222-3333-4444-555555555555",tenantId:"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",site:"contoso.sharepoint.com:/sites/Intranet:",folder:"Vorlagen/Öffentlich OSign"};'));
+  // Cloudflare's caching file goes with them; the other web servers' files do not.
+  assert.equal(fs.readFileSync(path.join(out, '_headers'), 'utf8'), '/*\n  Cache-Control: no-cache\n');
+  assert.ok(!list(out).some((f) => /^hosting\/|web\.config|\.htaccess|staticwebapp/.test(f)), list(out).join(', '));
+  assert.match((await api('settings/save', { settings: { addinHost: 'netlify' } })).json.error, /web server/);
   assert.match(fs.readFileSync(path.join(out, 'manifest.xml'), 'utf8'), /<SourceLocation DefaultValue="https:\/\/osign\.example\.com\/sign\/taskpane\.html"\/>/);
-  await api('settings/save', { settings: base });
+  // Saving sends only what changes; the rest stays.
+  const kept = await api('settings/save', { settings: { photosFolder: '' } });
+  assert.equal(kept.json.settings.clientId, setup.clientId);
+  assert.equal(kept.json.settings.addinHost, 'cloudflare');
+
+  // Checking the address: the same files are there, or not, and the caching header.
+  const served = {};
+  const srv = http.createServer((req, res) => {
+    const f = served[req.url];
+    if (!f) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': f.type, 'Cache-Control': f.cc || 'max-age=3600' }); res.end(f.body);
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  try {
+    for (const f of ['manifest.xml', 'launchevent.js', 'taskpane.js', 'taskpane.html']) served['/' + f] = { type: f.endsWith('.xml') ? 'text/xml' : 'text/plain', body: fs.readFileSync(path.join(out, f)), cc: 'no-cache' };
+    served['/taskpane.js'].body = Buffer.from('old');
+    // Not execFileSync: the server above has to answer while PowerShell asks.
+    const check = (base) => new Promise((resolve, reject) => execFile(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+      `$env:OSIGN_DATA='${dataDir}'; . '${SCRIPT}'; ConvertTo-Json -Compress -Depth 5 -InputObject (Test-AddinOnline '${base}' '${out}')`], { encoding: 'utf8' },
+    (err, stdout) => (err ? reject(err) : resolve(JSON.parse(stdout)))));
+    const r1 = await check('http://127.0.0.1:' + srv.address().port + '/');
+    const by = Object.fromEntries(r1.map((c) => [c.what, c]));
+    assert.equal(by['manifest.xml'].ok, true, by['manifest.xml'].detail);
+    assert.equal(by['launchevent.js'].ok, true, by['launchevent.js'].detail);
+    assert.equal(by['taskpane.js'].ok, false);
+    assert.match(by['taskpane.js'].detail, /upload them again/);
+    assert.equal(by['Cache-Control'].ok, true);
+    delete served['/taskpane.html'];
+    served['/manifest.xml'].cc = 'max-age=3600';
+    const by2 = Object.fromEntries((await check('http://127.0.0.1:' + srv.address().port)).map((c) => [c.what, c]));
+    assert.match(by2['taskpane.html'].detail, /cannot be loaded/);
+    assert.equal(by2['Cache-Control'].ok, false);
+  } finally { srv.close(); }
+  await api('settings/save', { settings: { addinUrl: '', clientId: '', tenantId: '', spSite: 'root', spFolder: 'OSign', addinFolder: '', addinHost: '' } });
 });
 
 test('AD lookup says plainly where it cannot work', opts, async () => {

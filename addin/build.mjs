@@ -14,10 +14,12 @@
 // OSIGN_SP_SITE    the SharePoint site whose document library holds the folder: "root" (default,
 //                  the tenant's home site) or "<host>.sharepoint.com:/sites/<name>:"
 // OSIGN_SP_FOLDER  the folder in that library (default: OSign)
+// OSIGN_HOST       cloudflare, azure, iis or apache: adds that web server's caching file
 //
 // The blanks: in launchevent.js and taskpane.js the strings @@OSIGN_CLIENT_ID@@,
 // @@OSIGN_TENANT_ID@@, @@OSIGN_SP_SITE@@ and @@OSIGN_SP_FOLDER@@ (in the first line, var OSIGN_SETUP);
-// in manifest.xml {{BASE}}, {{ORIGIN}} and {{SUPPORT}}. editor/OSign.ps1 (Build-AddinPackage)
+// in manifest.xml {{BASE}}, {{ORIGIN}} and {{SUPPORT}}. hosting/<host>/ holds the caching file for
+// each kind of web server (Cloudflare Pages, Azure Static Web Apps, IIS, Apache). editor/OSign.ps1 (Build-AddinPackage)
 // fills them the same way as fillTemplate in addin/fill.mjs.
 import { build } from 'esbuild';
 import fs from 'node:fs';
@@ -70,13 +72,26 @@ fs.writeFileSync(path.join(template, 'index.html'), `<!doctype html><html lang="
 <p>The Outlook add-in that inserts the company signature. Version ${xmlEscape(pkg.version)}.</p>
 <p>Admins: upload <a href="manifest.xml">manifest.xml</a> in the Microsoft 365 admin center, under Settings → Integrated apps → Upload custom apps.</p>
 </body></html>`);
+// What each kind of web server needs to tell Outlook to check for a newer file before using its
+// copy (so a new version reaches everyone within minutes). The editor copies the one for the host
+// chosen into the add-in's folder; the rest of hosting/ is never copied.
+const HOSTING = {
+  cloudflare: { '_headers': '/*\n  Cache-Control: no-cache\n' },
+  azure: { 'staticwebapp.config.json': JSON.stringify({ globalHeaders: { 'Cache-Control': 'no-cache' } }, null, 2) + '\n' },
+  iis: { 'web.config': '<?xml version="1.0" encoding="utf-8"?>\n<configuration>\n  <system.webServer>\n    <staticContent>\n      <clientCache cacheControlMode="DisableCache" />\n    </staticContent>\n  </system.webServer>\n</configuration>\n' },
+  apache: { '.htaccess': '<IfModule mod_headers.c>\n  Header set Cache-Control "no-cache"\n</IfModule>\n' }
+};
+for (const [host, files] of Object.entries(HOSTING)) {
+  fs.mkdirSync(path.join(template, 'hosting', host), { recursive: true });
+  for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(template, 'hosting', host, name), text);
+}
 fs.writeFileSync(path.join(template, 'osign-addin.json'), JSON.stringify({ version: pkg.version, id: addin.id }) + '\n');
 console.log('Built dist/template/ (version ' + pkg.version + ').');
 
 if (process.env.BASE_URL) {
   const s = fillTemplate(template, path.join(dist, 'site'), {
     base: process.env.BASE_URL, clientId: process.env.OSIGN_CLIENT_ID, tenantId: process.env.OSIGN_TENANT_ID,
-    site: process.env.OSIGN_SP_SITE, folder: process.env.OSIGN_SP_FOLDER
+    site: process.env.OSIGN_SP_SITE, folder: process.env.OSIGN_SP_FOLDER, host: process.env.OSIGN_HOST
   });
   console.log('Built dist/site/ for ' + s.base + ' (signatures from SharePoint ' + s.site + ', folder ' + s.folder + (s.clientId ? '' : '; no app registration') + ').');
 }
