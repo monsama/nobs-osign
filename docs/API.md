@@ -53,7 +53,8 @@ the extension. If an image with the same name but other content exists, the uplo
 `folder`: where Publish writes (the synced OSign folder). `photosFolder`: where the preview finds
 the photos; empty means `<folder>\photos`. The rest is for `addin/build`: the address the add-in is
 served from, the app registration (client ID, tenant ID or empty), the SharePoint site (`root` or
-`<host>.sharepoint.com:/sites/<name>:`) and folder the add-in reads, where its files are written,
+`<host>.sharepoint.com:/sites/<name>:`, `…:/teams/<name>:`, or a OneDrive,
+`<host>-my.sharepoint.com:/personal/<name>:`) and folder the add-in reads, where its files are written,
 and the kind of web server (`cloudflare`, `azure`, `iis`, `apache`, `other` or empty), whose caching
 file goes with them. `setupDone` is `"1"` once the setup assistant was finished; until then the UI
 opens it by itself while `folder` or `clientId` is empty.

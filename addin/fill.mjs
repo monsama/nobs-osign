@@ -17,7 +17,8 @@ export function checkSetup(s) {
   if (clientId && !GUID.test(clientId)) throw new Error('The client ID is the app registration\'s Application (client) ID, a GUID.');
   if (tenantId && !GUID.test(tenantId)) throw new Error('The tenant ID is a Directory (tenant) ID, a GUID.');
   const site = String(s.site || 'root').trim();
-  if (!/^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/sites\/[^:/"\\\s]+:$/.test(site)) throw new Error('The SharePoint site is "root" or "<host>.sharepoint.com:/sites/<name>:".');
+  // A site (/sites/ or /teams/) or someone's OneDrive (/personal/), as Graph addresses it.
+  if (!/^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/(?:sites|teams|personal)\/[^:/"\\\s]+:$/i.test(site)) throw new Error('The SharePoint site is root, <host>.sharepoint.com:/sites/<name>: or, for a OneDrive, <host>-my.sharepoint.com:/personal/<name>:');
   const folder = String(s.folder || 'OSign').trim().replace(/^\/+|\/+$/g, '');
   if (!folder || /["\\\u0000-\u001f]/.test(folder) || folder.split('/').some((p) => !p || p === '.' || p === '..')) throw new Error('The SharePoint folder is a folder like "OSign".');
   return { base, clientId, tenantId, site, folder };

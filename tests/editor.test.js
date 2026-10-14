@@ -265,6 +265,10 @@ test('the add-in files: the template filled in, the same as addin/fill.mjs does 
   assert.match(bad.json.error, /GUID/);
   assert.match((await api('settings/save', { settings: { ...base, addinUrl: 'http://osign.example.com' } })).json.error, /https/);
   assert.match((await api('settings/save', { settings: { ...base, spSite: 'contoso.sharepoint.com/sites/x' } })).json.error, /SharePoint site/);
+  // A OneDrive, and /teams/ sites, are addressed the same way.
+  for (const spSite of ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'contoso.sharepoint.com:/teams/IT:']) assert.equal((await api('settings/save', { settings: { ...base, spSite } })).json.ok, true, spSite);
+  assert.match((await api('settings/save', { settings: { ...base, spSite: 'contoso-my.sharepoint.com:/personal/a/b:' } })).json.error, /OneDrive/);
+  await api('settings/save', { settings: { spSite: 'root' } });
   await api('settings/save', { settings: { ...base, addinUrl: 'https://osign.example.com/' } });
   assert.match((await api('addin/build')).json.error, /client ID/);
   await api('settings/save', { settings: { ...base, addinUrl: 'https://osign.example.com/', clientId: '11111111-2222-3333-4444-555555555555', addinFolder: folder } });

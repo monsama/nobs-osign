@@ -862,6 +862,17 @@
     } catch (err) { $('setErr').textContent = t(err.message); }
   });
 
+  // A site's or OneDrive's address as copied from the browser
+  // (https://contoso-my.sharepoint.com/personal/me_contoso_com/_layouts/…) becomes what Graph
+  // wants: contoso-my.sharepoint.com:/personal/me_contoso_com:
+  function siteFromAddress(v) {
+    const m = /^\s*https:\/\/([A-Za-z0-9.-]+\.sharepoint\.com)\/(sites|teams|personal)\/([^/?#\s]+)/i.exec(v);
+    if (m) return m[1].toLowerCase() + ':/' + m[2].toLowerCase() + '/' + decodeURIComponent(m[3]) + ':';
+    if (/^\s*https:\/\/[A-Za-z0-9-]+\.sharepoint\.com\/?\s*$/i.test(v)) return 'root';
+    return v.trim();
+  }
+  ['setSpSite', 'wizSpSite'].forEach((id) => $(id).addEventListener('change', () => { $(id).value = siteFromAddress($(id).value); }));
+
   // ---------------------------------------------------------------------------------------------
   // Setup assistant: opens by itself until it was finished once, while OSign is not set up
   // (no publish folder or no app registration). Each step saves what it asks for.
@@ -927,7 +938,8 @@
   const wizLeave = {
     async folder() {
       if (!$('wizFolder').value.trim()) throw new Error(t('Enter the path of the synced OSign folder.'));
-      const r = await wizSave({ folder: $('wizFolder').value, photosFolder: $('wizPhotos').value });
+      $('wizSpSite').value = siteFromAddress($('wizSpSite').value);
+      const r = await wizSave({ folder: $('wizFolder').value, photosFolder: $('wizPhotos').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value || 'OSign' });
       if (!r.folderFound && wiz.warned !== 'folder') {
         wiz.warned = 'folder';
         $('wizFolderNote').textContent = t('Not found on this PC: is the library synced? Next again to go on anyway.');
@@ -945,7 +957,7 @@
     },
     async app() {
       if (!$('wizClientId').value.trim()) throw new Error(t('Enter the app registration\'s client ID: without it the add-in cannot sign in.'));
-      await wizSave({ clientId: $('wizClientId').value, tenantId: $('wizTenantId').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value || 'OSign' });
+      await wizSave({ clientId: $('wizClientId').value, tenantId: $('wizTenantId').value });
     },
     async files() {
       if (!wiz.built) throw new Error(t('Make the add-in files first.'));

@@ -12,7 +12,8 @@
 // OSIGN_CLIENT_ID  the Entra ID app registration the add-in signs in with (not a secret)
 // OSIGN_TENANT_ID  only for an app registration of a single organization; empty: the user's own
 // OSIGN_SP_SITE    the SharePoint site whose document library holds the folder: "root" (default,
-//                  the tenant's home site) or "<host>.sharepoint.com:/sites/<name>:"
+//                  the tenant's home site), "<host>.sharepoint.com:/sites/<name>:" or a OneDrive,
+//                  "<host>-my.sharepoint.com:/personal/<name>:"
 // OSIGN_SP_FOLDER  the folder in that library (default: OSign)
 // OSIGN_HOST       cloudflare, azure, iis or apache: adds that web server's caching file
 //

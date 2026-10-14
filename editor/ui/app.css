@@ -236,12 +236,35 @@ dialog:has(.wiz) { width: min(860px, 94vw); }
 .wiz-bar { height: 4px; border-radius: 2px; background: var(--panel-2); overflow: hidden; }
 .wiz-bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 .wiz-step { flex: 1; }
-.wiz-step > label { margin: 10px 0; }
 .wiz .dlg-foot { align-items: center; }
-.wiz ul.need li { margin: 6px 0; }
 .wiz details { margin: 10px 0; }
 .wiz details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .copyline { display: inline-flex; align-items: center; gap: 6px; margin-left: 4px; flex-wrap: wrap; }
 .copyline code { user-select: all; }
 button.copy { padding: 1px 8px; font-size: 12px; }
-.upload { margin-top: 12px; }
+
+/* setup assistant: one column, left-aligned, numbered steps */
+.wiz-step { color: var(--text); }
+.wiz-intro { margin: 2px 0 14px; font-size: 14px; line-height: 1.6; max-width: 760px; }
+.wiz .wiz-h { margin: 18px 0 8px; padding: 0; border: 0; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.wiz-fields .wiz-h { margin-top: 14px; }
+.wiz-list { list-style: none; counter-reset: wl; padding: 0; margin: 0; }
+.wiz-list > li { counter-increment: wl; position: relative; padding: 0 0 10px 32px; line-height: 1.55; }
+.wiz-list > li::before { content: counter(wl); position: absolute; left: 0; top: 1px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.wiz-list.ticks > li::before { content: "✓"; }
+.wiz-fields { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 14px 0; }
+.wiz-fields > label, .wiz-fields .grid2 { margin: 0 0 10px; }
+.wiz-fields > :last-child { margin-bottom: 0; }
+.wiz-fields.grid2 { display: grid; }
+.wiz-opt { display: flex; gap: 10px; align-items: flex-start; font-weight: normal; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 8px; cursor: pointer; }
+.wiz-opt:hover { border-color: var(--muted); }
+.wiz-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.wiz-opt input { margin-top: 3px; flex: none; }
+.wiz-opt em { font-style: normal; font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+.wiz-opt .sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.5; }
+.wiz-note { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 12px 0 0; padding-left: 10px; border-left: 3px solid var(--line); max-width: 760px; }
+.wiz-fields .wiz-note { margin: 0 0 10px; }
+.wiz-actions { margin: 4px 0 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.wiz code { overflow-wrap: anywhere; }
+.wiz .copyline { margin: 4px 0 0; display: flex; }
