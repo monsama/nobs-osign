@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.3.0'
+$script:AppVersion = '0.3.1'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
@@ -126,7 +126,8 @@ function ConvertTo-LdapFilterValue([string]$Value) {
 # clientId:     the Entra ID app registration's Application (client) ID
 # tenantId:     only for an app registration of a single organization
 # spSite:       the SharePoint site holding the publish folder: root (the home site) or
-#               <host>.sharepoint.com:/sites/<name>:
+#               <host>.sharepoint.com:/sites/<name>: (or /teams/<name>), or someone's OneDrive:
+#               <host>-my.sharepoint.com:/personal/<name>:
 # spFolder:     that folder in the site's document library, e.g. OSign
 # addinFolder:  where the finished files are written, to be copied to the web server
 # addinHost:    the kind of web server (cloudflare, azure, iis, apache, other): its caching file
@@ -167,7 +168,7 @@ function Test-AddinSettings($s) {
     if ($u -and $u -notmatch '^https://[^\s"<>''&]+$') { return 'The add-in address is an https:// address, like https://osign.contoso.com/.' }
     if ($s.clientId -and $s.clientId -notmatch $script:GuidRx) { return "The client ID is the app registration's Application (client) ID, a GUID." }
     if ($s.tenantId -and $s.tenantId -notmatch $script:GuidRx) { return 'The tenant ID is a Directory (tenant) ID, a GUID.' }
-    if ($s.spSite -and $s.spSite -cnotmatch '^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:/sites/[^:/"\\\s]+:$') { return 'The SharePoint site is root or <host>.sharepoint.com:/sites/<name>:' }
+    if ($s.spSite -and $s.spSite -notmatch '^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:/(sites|teams|personal)/[^:/"\\\s]+:$') { return 'The SharePoint site is root, <host>.sharepoint.com:/sites/<name>: or, for a OneDrive, <host>-my.sharepoint.com:/personal/<name>:' }
     $f = ([string]$s.spFolder).Trim('/')
     if ($s.addinHost -and @('cloudflare', 'azure', 'iis', 'apache', 'other') -notcontains $s.addinHost) { return 'The web server is cloudflare, azure, iis, apache or other.' }
     if ($s.spFolder -and ($f -match '["\\\x00-\x1f]' -or @($f -split '/' | Where-Object { -not $_ -or $_ -eq '.' -or $_ -eq '..' }).Count)) { return 'The SharePoint folder is a folder like OSign.' }

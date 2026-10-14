@@ -259,6 +259,8 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   await page.click('#btnWizard');
   await next('The folder in SharePoint');
   assert.equal(await page.inputValue('#wizFolder'), folder);
+  // The OneDrive's address as copied from the browser becomes what Graph wants.
+  await page.fill('#wizSpSite', 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx');
   await next("Where the users' values come from");
   await page.check('input[name=wvsrc][value=graph]');
   await next('Where the add-in is served');
@@ -288,7 +290,8 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   await page.click('#wizNext');
   await page.waitForSelector('#dlgWizard', { state: 'hidden' });
   const s = (await api('settings/get')).settings;
-  assert.deepEqual([s.setupDone, s.addinHost, s.addinUrl, s.clientId], ['1', 'cloudflare', 'https://osign.example.com', '11111111-2222-3333-4444-555555555555']);
+  assert.deepEqual([s.setupDone, s.addinHost, s.addinUrl, s.clientId, s.spSite, s.spFolder], ['1', 'cloudflare', 'https://osign.example.com', '11111111-2222-3333-4444-555555555555', 'contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign']);
+  assert.match(fs.readFileSync(path.join(out, 'launchevent.js'), 'utf8'), /site:"contoso-my\.sharepoint\.com:\/personal\/anna_contoso_com:"/);
   // Finished: it does not open by itself any more.
   await page.reload();
   await page.waitForSelector('#btnPublish');

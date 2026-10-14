@@ -28,9 +28,15 @@ has that site, so the add-in finds it without being told.
    `photos/@@sAMAccountName.jpg` embed each sender's own photo; who has none gets the signature
    without one.
 
-Another site or folder: set it in the editor under Settings → *Outlook add-in* (*SharePoint site*
-`<host>.sharepoint.com:/sites/<name>:`, *Folder in its library*) before making the add-in's files
-(step 3).
+Another site or folder: set it in the editor (setup assistant step 1, or Settings → *Outlook
+add-in*) before making the add-in's files (step 3). *SharePoint site*: paste the site's address from
+the browser, or write it as `<host>.sharepoint.com:/sites/<name>:` (also `/teams/<name>`). *Folder in
+its library*: the path within *Documents*, e.g. `General/OSign` in a team's channel folder.
+
+**For testing, your own OneDrive works too:** make the folder `OSign` in your OneDrive and paste
+the OneDrive's address (`https://<tenant>-my.sharepoint.com/personal/<you>/…`); it becomes
+`<tenant>-my.sharepoint.com:/personal/<you>:`. Nobody else can read it, so only you get signatures.
+For the rollout, move to a site everyone can read.
 
 ## 2. App registration in Entra ID
 
