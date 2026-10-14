@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.2.0'
+$script:AppVersion = '0.3.0'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
@@ -129,7 +129,10 @@ function ConvertTo-LdapFilterValue([string]$Value) {
 #               <host>.sharepoint.com:/sites/<name>:
 # spFolder:     that folder in the site's document library, e.g. OSign
 # addinFolder:  where the finished files are written, to be copied to the web server
-function Get-DefaultSettings { return [ordered]@{ folder = ''; photosFolder = ''; addinUrl = ''; clientId = ''; tenantId = ''; spSite = 'root'; spFolder = 'OSign'; addinFolder = '' } }
+# addinHost:    the kind of web server (cloudflare, azure, iis, apache, other): its caching file
+#               goes with the files
+# setupDone:    '1' once the setup assistant was finished; until then it opens by itself
+function Get-DefaultSettings { return [ordered]@{ folder = ''; photosFolder = ''; addinUrl = ''; clientId = ''; tenantId = ''; spSite = 'root'; spFolder = 'OSign'; addinFolder = ''; addinHost = ''; setupDone = '' } }
 
 function Get-Settings {
     $d = Get-DefaultSettings
@@ -166,6 +169,7 @@ function Test-AddinSettings($s) {
     if ($s.tenantId -and $s.tenantId -notmatch $script:GuidRx) { return 'The tenant ID is a Directory (tenant) ID, a GUID.' }
     if ($s.spSite -and $s.spSite -cnotmatch '^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:/sites/[^:/"\\\s]+:$') { return 'The SharePoint site is root or <host>.sharepoint.com:/sites/<name>:' }
     $f = ([string]$s.spFolder).Trim('/')
+    if ($s.addinHost -and @('cloudflare', 'azure', 'iis', 'apache', 'other') -notcontains $s.addinHost) { return 'The web server is cloudflare, azure, iis, apache or other.' }
     if ($s.spFolder -and ($f -match '["\\\x00-\x1f]' -or @($f -split '/' | Where-Object { -not $_ -or $_ -eq '.' -or $_ -eq '..' }).Count)) { return 'The SharePoint folder is a folder like OSign.' }
     return $null
 }
@@ -315,8 +319,9 @@ function Api-SettingsGet {
     return (Ok @{ settings = $s; folderFound = [bool]($s.folder -and (Test-Path -LiteralPath $s.folder -PathType Container)); photosFound = [bool]($pd -and (Test-Path -LiteralPath $pd -PathType Container)) })
 }
 
+# Only what is sent changes; the rest stays as it was.
 function Api-SettingsSave($data) {
-    $s = Get-DefaultSettings
+    $s = Get-Settings
     foreach ($k in @($s.Keys)) { if ($null -ne $data.settings.$k) { $s[$k] = ([string]$data.settings.$k).Trim().TrimEnd('\', '/') } }
     $err = Test-Settings $s; if ($err) { return (Fail $err) }
     Write-Text $script:SettingsFile (To-Json $s)
@@ -345,8 +350,16 @@ function Build-AddinPackage($s) {
     $fill = @{ 'launchevent.js' = $js; 'taskpane.js' = $js; 'manifest.xml' = $xml }
     $root = $script:AddinTemplateDir.TrimEnd('\', '/')
     $n = 0
-    foreach ($f in @(Get-ChildItem -LiteralPath $root -File -Recurse)) {
+    $sep = [IO.Path]::DirectorySeparatorChar
+    $hostDir = $(if ($s.addinHost) { 'hosting' + $sep + $s.addinHost + $sep } else { $null })
+    foreach ($f in @(Get-ChildItem -LiteralPath $root -File -Recurse -Force)) {
         $rel = $f.FullName.Substring($root.Length + 1)
+        # hosting\<host>\ holds each kind of web server's caching file: only the one chosen goes,
+        # next to the others.
+        if ($rel.StartsWith('hosting' + $sep)) {
+            if (-not $hostDir -or -not $rel.StartsWith($hostDir)) { continue }
+            $rel = $rel.Substring($hostDir.Length)
+        }
         $dest = Join-Path $out $rel
         $dir = Split-Path -Parent $dest
         if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
@@ -361,6 +374,37 @@ function Build-AddinPackage($s) {
     }
     $version = ([string](Read-Text (Join-Path $root 'osign-addin.json')) | ConvertFrom-Json).version
     return @{ folder = $out; files = $n; version = $version; manifestUrl = $base + 'manifest.xml'; redirectUri = 'brk-multihub://' + ([Uri]$base).Authority }
+}
+
+# Whether the address serves the files made here: the manifest and both bundles as they are in the
+# add-in's folder, and the caching header. Answers a list of { what, ok, detail }.
+function Test-AddinOnline([string]$Base, [string]$Dir) {
+    $Base = $Base.TrimEnd('/') + '/'
+    $checks = @()
+    foreach ($name in @('manifest.xml', 'launchevent.js', 'taskpane.js', 'taskpane.html')) {
+        $local = Join-Path $Dir $name
+        try {
+            $r = Invoke-WebRequest -Uri ($Base + $name) -UseBasicParsing -TimeoutSec 20 -MaximumRedirection 5 -Headers @{ 'Cache-Control' = 'no-cache' }
+            # Byte for byte: the text as decoded would depend on the charset the server names.
+            $same = (Test-Path -LiteralPath $local) -and ((Get-Sha256Hex $r.RawContentStream.ToArray()) -eq (Get-Sha256Hex ([IO.File]::ReadAllBytes($local))))
+            $checks += [ordered]@{ what = $name; ok = $same; detail = $(if ($same) { 'the same as made here' } else { 'there, but not the files made here: upload them again' }) }
+            if ($name -eq 'manifest.xml') {
+                $cc = [string]$r.Headers['Cache-Control']
+                $checks += [ordered]@{ what = 'Cache-Control'; ok = ($cc -match 'no-cache|max-age=0'); detail = $(if ($cc) { $cc } else { 'not sent: updates can take a while to reach everyone' }) }
+            }
+        } catch {
+            $checks += [ordered]@{ what = $name; ok = $false; detail = 'cannot be loaded: ' + $_.Exception.Message }
+        }
+    }
+    return , $checks
+}
+
+function Api-AddinCheck {
+    $s = Get-Settings
+    if (-not $s.addinUrl) { return (Fail 'Enter the address the add-in will be served from.') }
+    if (-not $s.addinFolder -or -not (Test-Path -LiteralPath (Join-Path $s.addinFolder 'manifest.xml'))) { return (Fail 'Make the add-in files first.') }
+    $checks = Test-AddinOnline $s.addinUrl $s.addinFolder
+    return (Ok @{ checks = $checks; allOk = -not @($checks | Where-Object { -not $_.ok -and $_.what -ne 'Cache-Control' }).Count })
 }
 
 function Api-AddinBuild {
@@ -740,6 +784,7 @@ function Invoke-Request($client) {
             '/api/settings/save'  { Api-SettingsSave $data }
             '/api/publish'        { Api-Publish $data }
             '/api/addin/build'    { Api-AddinBuild }
+            '/api/addin/check'    { Api-AddinCheck }
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }
             '/api/ad/groups'      { Api-AdGroups $data }

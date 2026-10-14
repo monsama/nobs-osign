@@ -824,7 +824,7 @@
     $('setPhotosNote').textContent = r.photosFound ? t('Found.') : t('No photos folder there (yet): the preview shows no photos.');
   }
   let lastSettings = {};
-  const ADDIN_FIELDS = [['setAddinUrl', 'addinUrl'], ['setAddinFolder', 'addinFolder'], ['setClientId', 'clientId'], ['setTenantId', 'tenantId'], ['setSpSite', 'spSite'], ['setSpFolder', 'spFolder']];
+  const ADDIN_FIELDS = [['setAddinUrl', 'addinUrl'], ['setAddinFolder', 'addinFolder'], ['setAddinHost', 'addinHost'], ['setClientId', 'clientId'], ['setTenantId', 'tenantId'], ['setSpSite', 'spSite'], ['setSpFolder', 'spFolder']];
   function settingsFromDialog() {
     const s = { folder: $('setFolder').value, photosFolder: $('setPhotos').value };
     for (const [id, k] of ADDIN_FIELDS) s[k] = $(id).value;
@@ -861,6 +861,145 @@
       $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
     } catch (err) { $('setErr').textContent = t(err.message); }
   });
+
+  // ---------------------------------------------------------------------------------------------
+  // Setup assistant: opens by itself until it was finished once, while OSign is not set up
+  // (no publish folder or no app registration). Each step saves what it asks for.
+  // ---------------------------------------------------------------------------------------------
+  const WIZ = Array.from(document.querySelectorAll('#dlgWizard .wiz-step')).map((sec) => sec.dataset.step);
+  const WIZ_KEY = 'osign.wizStep';
+  const wiz = { step: 0, built: false, warned: '' };
+  const stored = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no storage */ } return null; };
+  const radio = (name) => (document.querySelector('input[name=' + name + ']:checked') || {}).value || '';
+  const setRadio = (name, v) => document.querySelectorAll('input[name=' + name + ']').forEach((r) => { r.checked = r.value === v; });
+  // The address as typed, if it is one: https://host/path/
+  const addinBase = () => {
+    const u = $('wizUrl').value.trim().replace(/\/+$/, '') + '/';
+    try { return /^https:\/\//.test(u) && new URL(u).host ? u : ''; } catch (e) { return ''; }
+  };
+  const URL_HINTS = { cloudflare: '(e.g. https://company-osign.pages.dev/ or https://osign.company.ch/)', azure: '(e.g. https://<name>.azurestaticapps.net/ or https://osign.company.ch/)', apache: '(e.g. https://osign.company.ch/)', iis: '(e.g. https://osign.company.ch/)', other: '(https://…/)' };
+
+  function wizFill() {
+    const st = S.settings;
+    $('wizFolder').value = st.folder || ''; $('wizPhotos').value = st.photosFolder || '';
+    // Nothing made yet: the recommended one; otherwise what is set.
+    setRadio('wvsrc', S.config.signatures.length || S.settings.setupDone === '1' ? core.valueSource(S.config) : 'mixed');
+    setRadio('whost', st.addinHost || 'cloudflare');
+    $('wizUrl').value = st.addinUrl || '';
+    $('wizClientId').value = st.clientId || ''; $('wizTenantId').value = st.tenantId || '';
+    $('wizSpSite').value = st.spSite || 'root'; $('wizSpFolder').value = st.spFolder || 'OSign';
+    $('wizAddinFolder').value = st.addinFolder || (S.info.backend === 'powershell' && navigator.platform.startsWith('Win') ? 'C:\\OSign-addin' : '');
+  }
+  function wizRender() {
+    const name = WIZ[wiz.step];
+    document.querySelectorAll('#dlgWizard .wiz-step').forEach((sec) => { sec.hidden = sec.dataset.step !== name; });
+    const sec = document.querySelector('#dlgWizard .wiz-step[data-step=' + name + ']');
+    $('wizTitle').textContent = t(sec.dataset.title);
+    $('wizCount').textContent = wiz.step && wiz.step < WIZ.length - 1 ? t('Step {0} of {1}', wiz.step, WIZ.length - 2) : '';
+    $('wizBar').style.width = Math.round(100 * wiz.step / (WIZ.length - 1)) + '%';
+    $('wizBack').hidden = wiz.step === 0;
+    $('wizNext').textContent = name === 'welcome' ? t('Start') : name === 'done' ? t('Finish') : t('Next');
+    $('wizLater').hidden = name === 'done';
+    $('wizErr').textContent = '';
+    const host = radio('whost'), base = addinBase();
+    $('wizUrlHint').textContent = t(URL_HINTS[host] || URL_HINTS.other);
+    $('wizRedirect').textContent = base ? 'brk-multihub://' + new URL(base).host : t('(enter the address in the step before)');
+    $('wizManifest').textContent = base ? base + 'manifest.xml' : '';
+    const perms = ['User.Read', 'Sites.Read.All'];
+    if (radio('wvsrc') === 'graph') perms.push('GroupMember.Read.All');
+    $('wizPerms').textContent = perms.join(', ');
+    $('wizUpload').hidden = !wiz.built;
+    document.querySelectorAll('#wizUpload [data-host]').forEach((p) => { p.hidden = p.dataset.host !== (host || 'other'); });
+  }
+  function wizOpen(step) {
+    wizFill();
+    wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
+    $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
+    wizRender();
+    if (!$('dlgWizard').open) $('dlgWizard').showModal();
+  }
+  async function wizSave(settings) {
+    const r = await api('settings/save', { settings });
+    S.settings = r.settings; lastSettings = r;
+    return r;
+  }
+  // What a step does on Next; throws to stay on it.
+  const wizLeave = {
+    async folder() {
+      if (!$('wizFolder').value.trim()) throw new Error(t('Enter the path of the synced OSign folder.'));
+      const r = await wizSave({ folder: $('wizFolder').value, photosFolder: $('wizPhotos').value });
+      if (!r.folderFound && wiz.warned !== 'folder') {
+        wiz.warned = 'folder';
+        $('wizFolderNote').textContent = t('Not found on this PC: is the library synced? Next again to go on anyway.');
+        throw new Error('');
+      }
+      schedulePreview();
+    },
+    async values() {
+      const v = radio('wvsrc') || 'graph';
+      if (core.valueSource(S.config) !== v) { S.config.options.valueSource = v; changed({ list: false }); renderOptions(); }
+    },
+    async host() {
+      if (!$('wizUrl').value.trim()) throw new Error(t('Enter the address the add-in will be served from.'));
+      await wizSave({ addinHost: radio('whost'), addinUrl: $('wizUrl').value });
+    },
+    async app() {
+      if (!$('wizClientId').value.trim()) throw new Error(t('Enter the app registration\'s client ID: without it the add-in cannot sign in.'));
+      await wizSave({ clientId: $('wizClientId').value, tenantId: $('wizTenantId').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value || 'OSign' });
+    },
+    async files() {
+      if (!wiz.built) throw new Error(t('Make the add-in files first.'));
+    },
+    async done() {
+      await wizSave({ setupDone: '1' });
+    }
+  };
+  $('wizNext').addEventListener('click', async () => {
+    $('wizErr').textContent = '';
+    const name = WIZ[wiz.step];
+    $('wizNext').disabled = true;
+    try {
+      if (wizLeave[name]) await wizLeave[name]();
+      if (name === 'done') { $('dlgWizard').close(); toast(t('OSign is set up.')); return; }
+      wiz.step++; wiz.warned = ''; wizRender();
+    } catch (err) { $('wizErr').textContent = err.message ? t(err.message) : ''; }
+    finally { $('wizNext').disabled = false; }
+  });
+  $('wizBack').addEventListener('click', () => { if (wiz.step) { wiz.step--; wizRender(); } });
+  $('wizLater').addEventListener('click', () => $('dlgWizard').close());
+  // Closed in any way (Later, Esc, finished): it opens by itself again at the next start only if
+  // OSign is still not set up.
+  $('dlgWizard').addEventListener('close', () => stored(WIZ_KEY, null));
+  document.querySelectorAll('input[name=whost], input[name=wvsrc]').forEach((r) => r.addEventListener('change', wizRender));
+  $('wizUrl').addEventListener('input', wizRender);
+  $('wizFolder').addEventListener('input', () => { $('wizFolderNote').textContent = ''; wiz.warned = ''; });
+  $('wizMake').addEventListener('click', async () => {
+    $('wizErr').textContent = ''; $('wizMakeOk').textContent = '';
+    try {
+      await wizSave({ addinFolder: $('wizAddinFolder').value });
+      const r = await api('addin/build');
+      wiz.built = true;
+      $('wizMakeOk').textContent = t('{0} files (version {1}) in {2}.', r.files, r.version, r.folder);
+      wizRender();
+    } catch (err) { $('wizErr').textContent = t(err.message); }
+  });
+  $('wizCheck').addEventListener('click', async () => {
+    $('wizErr').textContent = '';
+    const ul = $('wizChecks');
+    ul.replaceChildren(el('li', null, t('Checking…')));
+    try {
+      const r = await api('addin/check');
+      ul.replaceChildren(...r.checks.map((c) => el('li', { class: c.ok ? 'good' : c.what === 'Cache-Control' ? 'warn' : 'bad' }, c.what + ': ' + t(c.detail))));
+    } catch (err) { ul.replaceChildren(); $('wizErr').textContent = t(err.message); }
+  });
+  document.querySelectorAll('#dlgWizard button.copy').forEach((b) => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($(b.dataset.copy).textContent); b.textContent = t('Copied'); setTimeout(() => { b.textContent = t('Copy'); }, 1500); } catch (e) { /* select it by hand */ }
+  }));
+  // Another language: the page starts again in it, and the assistant with it, on this step.
+  $('wizLang').addEventListener('change', async () => { await saving; stored(WIZ_KEY, String(wiz.step)); I18N.setLang($('wizLang').value); });
+  $('wizImport').addEventListener('click', async () => { await wizLeave.done(); $('dlgWizard').close(); $('btnImportOpen').click(); });
+  $('wizNewSig').addEventListener('click', async () => { await wizLeave.done(); $('dlgWizard').close(); $('btnNew').click(); });
+  $('btnWizard').addEventListener('click', () => { $('dlgSettings').close(); wizOpen(0); });
 
   // ---------------------------------------------------------------------------------------------
   // Publish and load
@@ -989,6 +1128,12 @@
       buildToolbar();
       applyDraft(draft);
       loadSnapshot();
+      const wl = $('wizLang');
+      Object.entries(I18N.langs).forEach(([k, v]) => wl.append(el('option', { value: k }, v)));
+      wl.value = I18N.lang;
+      // A step stored: the assistant was open when the page started again (another language).
+      const resume = stored(WIZ_KEY);
+      if (resume !== null || (S.settings.setupDone !== '1' && (!S.settings.folder || !S.settings.clientId))) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
     } catch (e) {
       document.body.classList.add('failed');

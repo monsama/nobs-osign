@@ -48,16 +48,19 @@ the extension. If an image with the same name but other content exists, the uplo
 
 ## settings/get
 
-→ `{ ok, settings: { folder, photosFolder, addinUrl, clientId, tenantId, spSite, spFolder, addinFolder }, folderFound: bool, photosFound: bool }`
+→ `{ ok, settings: { folder, photosFolder, addinUrl, clientId, tenantId, spSite, spFolder, addinFolder, addinHost, setupDone }, folderFound: bool, photosFound: bool }`
 
 `folder`: where Publish writes (the synced OSign folder). `photosFolder`: where the preview finds
 the photos; empty means `<folder>\photos`. The rest is for `addin/build`: the address the add-in is
 served from, the app registration (client ID, tenant ID or empty), the SharePoint site (`root` or
-`<host>.sharepoint.com:/sites/<name>:`) and folder the add-in reads, and where its files are written.
+`<host>.sharepoint.com:/sites/<name>:`) and folder the add-in reads, where its files are written,
+and the kind of web server (`cloudflare`, `azure`, `iis`, `apache`, `other` or empty), whose caching
+file goes with them. `setupDone` is `"1"` once the setup assistant was finished; until then the UI
+opens it by itself while `folder` or `clientId` is empty.
 
 ## settings/save
 
-`{ settings: { … } }` → like `settings/get`. Every setting is sent; one left out gets its default.
+`{ settings: { … } }` → like `settings/get`. Only the settings sent change; the others stay as they are.
 Paths have to be full paths; a folder that is not there (yet) is accepted, and Publish then says so.
 The add-in's settings are checked as they are (an https address, GUIDs) and may be empty.
 
@@ -68,7 +71,18 @@ The add-in's settings are checked as they are (an https address, GUIDs) and may 
 Writes the Outlook add-in's files for the saved settings into `addinFolder`: the template
 (`addin` next to the script, `dist/template` in the repository) with its blanks filled in, as
 `addin/fill.mjs` does it. Files already in that folder are overwritten, others left alone. Needs
-the address, the client ID and a folder that is not the publish folder.
+the address, the client ID and a folder that is not the publish folder. With `addinHost`, that web
+server's caching file comes along (`_headers`, `staticwebapp.config.json`, `web.config` or
+`.htaccess`, from `hosting/<host>/` in the template), so a new version reaches every Outlook within
+minutes.
+
+## addin/check
+
+`{}` → `{ ok, checks: [{ what, ok, detail }], allOk }`
+
+Loads `manifest.xml`, `launchevent.js`, `taskpane.js` and `taskpane.html` from the add-in's address
+and compares each, byte for byte, with the files in `addinFolder`; also whether the manifest comes
+with `Cache-Control: no-cache`. `allOk` leaves the caching header out.
 
 ## publish
 

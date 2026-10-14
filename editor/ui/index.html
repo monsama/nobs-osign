@@ -183,6 +183,7 @@
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg wide">
     <h2>Settings</h2>
+    <p><button id="btnWizard" type="button">Setup assistant…</button> <small>Step by step through the SharePoint folder, the app registration and the add-in.</small></p>
     <label>Language<select id="setLang"></select></label>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
       <input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign">
@@ -203,6 +204,9 @@
     <div class="grid2">
       <label>Address of the add-in <small>(where the files are served)</small><input id="setAddinUrl" placeholder="https://osign.contoso.com/"></label>
       <label>Write the files to<input id="setAddinFolder" placeholder="C:\OSign-addin"></label>
+      <label>Web server <small>(its caching file goes with the files)</small><select id="setAddinHost">
+        <option value="">-</option><option value="cloudflare">Cloudflare Pages</option><option value="azure">Azure Static Web Apps</option>
+        <option value="iis">IIS</option><option value="apache">Web host (Apache)</option><option value="other">Another web server</option></select></label>
       <label>App registration: client ID<input id="setClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
       <label>Tenant ID <small>(only for a single-organization app)</small><input id="setTenantId" placeholder="optional"></label>
       <label>SharePoint site <small>(root: the home site)</small><input id="setSpSite" placeholder="root"></label>
@@ -244,12 +248,155 @@
   </form>
 </dialog>
 
+<dialog id="dlgWizard">
+  <form method="dialog" class="dlg wide wiz">
+    <div class="wiz-head">
+      <span id="wizCount" class="wiz-count"></span>
+      <h2 id="wizTitle"></h2>
+      <div class="wiz-bar"><span id="wizBar"></span></div>
+    </div>
+
+    <section class="wiz-step" data-step="welcome" data-title="Welcome to OSign">
+      <p class="lead" data-th="wizWelcome">OSign puts the company's signatures into every mail: in classic and new Outlook, and on the web.
+        This assistant sets it up in six steps and says, for each one, what to do outside OSign. You can stop at any time and go on
+        later: <b>Settings → Setup assistant</b>.</p>
+      <h3>What you need</h3>
+      <ul class="need">
+        <li data-th="wizNeed1">A <b>Microsoft 365 admin</b> account: for the app registration and to give everyone the add-in.</li>
+        <li data-th="wizNeed2">A <b>folder in SharePoint</b> for the signatures. Step 1 makes it.</li>
+        <li data-th="wizNeed3">A <b>place on the web</b> for the add-in's files, e.g. Cloudflare Pages: free, no credit card.</li>
+        <li data-th="wizNeed4">About <b>an hour</b>. Afterwards, the add-in takes up to a day to reach every Outlook.</li>
+      </ul>
+      <label>Language<select id="wizLang"></select></label>
+    </section>
+
+    <section class="wiz-step" data-step="folder" data-title="The folder in SharePoint">
+      <p class="lead" data-th="wizFolderLead">The signatures, their images and the photos live here. Outlook reads them with each user's own sign-in;
+        nothing goes anywhere else.</p>
+      <ol class="steps">
+        <li data-th="wizFolder1">Open <code>https://&lt;tenant&gt;.sharepoint.com</code> (the home site) → <b>Documents</b> → <b>New → Folder</b>:
+          <b>OSign</b>.</li>
+        <li data-th="wizFolder2">On the folder: <b>Share</b> → <i>Everyone except external users</i> → <b>Can view</b>. Only the admins who publish need
+          to edit.</li>
+        <li data-th="wizFolder3">Open the folder and choose <b>Sync</b> (or <b>Add shortcut to My files</b>). It appears in File Explorer.</li>
+        <li data-th="wizFolder4">Copy its path from File Explorer's address bar into the field below.</li>
+      </ol>
+      <label>The synced OSign folder<input id="wizFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><small id="wizFolderNote"></small></label>
+      <label>Photos for the preview <small>(optional: one &lt;username&gt;.jpg per person; empty: the photos folder in it)</small><input id="wizPhotos" placeholder="\\server\share\photos"></label>
+    </section>
+
+    <section class="wiz-step" data-step="values" data-title="Where the users' values come from">
+      <p class="lead" data-th="wizValuesLead">The placeholders (<code>@@givenName</code>, <code>@@mobile</code>, …) are filled with each sender's
+        details. Where from:</p>
+      <label class="check block"><input type="radio" name="wvsrc" value="mixed"> <span data-th="wizVsrcMixed"><b>Entra ID and Active Directory</b> (recommended):
+        what Entra ID has from there, the rest (description, homePhone, info) from AD. The editor exports those values to SharePoint when you publish;
+        you check them first under <i>Users</i>.</span></label>
+      <label class="check block"><input type="radio" name="wvsrc" value="graph"> <span data-th="wizVsrcGraph"><b>Entra ID only</b>: nothing is exported. Fields
+        Entra ID does not have stay empty, unless Entra Connect syncs them.</span></label>
+      <label class="check block"><input type="radio" name="wvsrc" value="ad"> <span data-th="wizVsrcAd"><b>Active Directory only</b>: every value from AD,
+        exported when you publish.</span></label>
+      <p class="lead" data-th="wizValuesNote">This can be changed at any time under <b>Add-in</b>. Exporting from AD needs this PC in the domain.</p>
+    </section>
+
+    <section class="wiz-step" data-step="host" data-title="Where the add-in is served">
+      <p class="lead" data-th="wizHostLead">The add-in is a few files of code that Outlook loads from a web address. They hold no data, and only change
+        with a new OSign version. Pick where they go:</p>
+      <label class="check block"><input type="radio" name="whost" value="cloudflare"> <span data-th="wizHostCf"><b>Cloudflare Pages</b> (recommended): free,
+        no credit card, upload by drag and drop.</span></label>
+      <label class="check block"><input type="radio" name="whost" value="azure"> <span data-th="wizHostAz"><b>Azure Static Web Apps</b>: free plan, needs an
+        Azure subscription.</span></label>
+      <label class="check block"><input type="radio" name="whost" value="apache"> <span data-th="wizHostAp"><b>Your website's web host</b> (most hosting
+        providers): a subdomain with HTTPS, upload by FTP.</span></label>
+      <label class="check block"><input type="radio" name="whost" value="iis"> <span data-th="wizHostIis"><b>Your own IIS server</b>, reachable from the internet
+        with HTTPS.</span></label>
+      <label class="check block"><input type="radio" name="whost" value="other"> <span data-th="wizHostOther"><b>Another web server</b>.</span></label>
+      <label>Address of the add-in <small id="wizUrlHint"></small><input id="wizUrl" placeholder="https://osign.contoso.com/"></label>
+      <p class="lead" data-th="wizHostNote">It has to be reachable from the internet: Outlook loads the files on each user's own device. An address of your
+        own domain (<code>osign.&lt;company&gt;.ch</code>, a CNAME to the host) lets you move to another host later without touching Microsoft 365.</p>
+    </section>
+
+    <section class="wiz-step" data-step="app" data-title="Register the app in Entra ID">
+      <p class="lead" data-th="wizAppLead">The add-in signs in through Outlook - nobody is asked for a password - with an app registration of your own.</p>
+      <ol class="steps">
+        <li data-th="wizApp1"><code>https://entra.microsoft.com</code> → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>.
+          Accounts: <i>this organizational directory only</i>. <b>Register</b>.</li>
+        <li><span data-th="wizApp2"><b>Authentication</b> → <b>Add a platform</b> → <b>Single-page application</b>, redirect URI:</span>
+          <span class="copyline"><code id="wizRedirect"></code><button type="button" class="copy" data-copy="wizRedirect">Copy</button></span></li>
+        <li><span data-th="wizApp3"><b>API permissions</b> → <b>Add a permission</b> → <b>Microsoft Graph</b> → <b>Delegated</b>:</span>
+          <code id="wizPerms"></code>. <span data-th="wizApp3b">Then <b>Grant admin consent</b>, so no user is asked.</span></li>
+        <li data-th="wizApp4">On <b>Overview</b>: copy the <b>Application (client) ID</b> and the <b>Directory (tenant) ID</b> into the fields below.</li>
+      </ol>
+      <div class="grid2">
+        <label>Application (client) ID<input id="wizClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
+        <label>Directory (tenant) ID<input id="wizTenantId" placeholder="00000000-0000-0000-0000-000000000000"></label>
+      </div>
+      <details>
+        <summary>Another SharePoint site or folder</summary>
+        <div class="grid2">
+          <label>SharePoint site <small>(root: the home site)</small><input id="wizSpSite" placeholder="root"></label>
+          <label>Folder in its library<input id="wizSpFolder" placeholder="OSign"></label>
+        </div>
+      </details>
+    </section>
+
+    <section class="wiz-step" data-step="files" data-title="Make the add-in's files">
+      <p class="lead" data-th="wizFilesLead">OSign writes the add-in's files for your address and app into a folder on this PC. Then they go onto the web server.</p>
+      <label>Write the files to<input id="wizAddinFolder" placeholder="C:\OSign-addin"></label>
+      <p><button type="button" id="wizMake" class="primary">Make the add-in files</button></p>
+      <p id="wizMakeOk" class="ok"></p>
+      <div id="wizUpload" class="upload" hidden>
+        <h3>Upload them</h3>
+        <p class="lead" data-host="cloudflare" data-th="upCf"><code>https://dash.cloudflare.com</code> → <b>Workers &amp; Pages</b> → <b>Create</b> → <b>Pages</b> →
+          <b>Upload assets</b>. A project name (e.g. <i>company-osign</i>), drag in the folder's content, <b>Deploy</b>. Your own domain: project →
+          <b>Custom domains</b>. Later versions: <b>Create new deployment</b>, upload again. The file <code>_headers</code> makes updates arrive
+          within minutes.</p>
+        <p class="lead" data-host="azure" data-th="upAz">Azure portal → <b>Create a resource</b> → <b>Static Web App</b>, plan <i>Free</i>, deployment source
+          <i>Other</i>. <b>Manage deployment token</b>, copy it. Then in PowerShell (needs Node.js):
+          <code>$env:SWA_CLI_DEPLOYMENT_TOKEN='&lt;token&gt;'; npx @azure/static-web-apps-cli deploy &lt;folder&gt; --env production</code></p>
+        <p class="lead" data-host="apache" data-th="upAp">Upload the folder's content by FTP/SFTP into the directory of the (sub)domain, with HTTPS switched on
+          at the host. Include <code>.htaccess</code>: some FTP programs hide files starting with a dot.</p>
+        <p class="lead" data-host="iis" data-th="upIis">Copy the folder's content into the site or a virtual directory with HTTPS. Its <code>web.config</code>
+          sets the caching; if IIS then answers with error 500, that section is locked on the server: delete <code>web.config</code>.</p>
+        <p class="lead" data-host="other" data-th="upOther">Copy the folder's content there. Have the server send <code>Cache-Control: no-cache</code>
+          (nginx: <code>add_header Cache-Control no-cache;</code>), so updates arrive within minutes.</p>
+      </div>
+    </section>
+
+    <section class="wiz-step" data-step="deploy" data-title="Into everyone's Outlook">
+      <p><button type="button" id="wizCheck">Check the address</button> <small data-th="wizCheckHint">Is everything there, and the same as made here?</small></p>
+      <ul id="wizChecks" class="checks"></ul>
+      <ol class="steps">
+        <li data-th="wizDeploy1"><code>https://admin.microsoft.com</code> → <b>Settings</b> → <b>Integrated apps</b> → <b>Upload custom apps</b>.</li>
+        <li><span data-th="wizDeploy2">App type <i>Office Add-in</i>, <b>Provide link to the manifest file</b>:</span>
+          <span class="copyline"><code id="wizManifest"></code><button type="button" class="copy" data-copy="wizManifest">Copy</button></span></li>
+        <li data-th="wizDeploy3"><b>Assign users</b>: first a pilot group (IT and a few colleagues with classic, new and web Outlook), later everyone.</li>
+        <li data-th="wizDeploy4">Up to a day later it is in every Outlook. To try it now: in Outlook on the web, <b>Get Add-ins</b> → <b>My add-ins</b> →
+          <b>Add a custom add-in</b> → <b>Add from URL</b>, with the same link.</li>
+      </ol>
+    </section>
+
+    <section class="wiz-step" data-step="done" data-title="Ready">
+      <p class="lead" data-th="wizDone">OSign is set up. Now the signatures: import the ones you have (from CI-Sign or classic Outlook), or start a new one;
+        set who gets which; then <b>Publish</b>. New signatures never need the add-in's files again.</p>
+      <p><button type="button" id="wizImport">Import templates…</button> <button type="button" id="wizNewSig">New signature</button></p>
+    </section>
+
+    <p id="wizErr" class="err"></p>
+    <div class="dlg-foot">
+      <button type="button" id="wizLater" class="ghost">Later</button>
+      <span class="spacer"></span>
+      <button type="button" id="wizBack">Back</button>
+      <button type="button" id="wizNext" class="primary">Next</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlgHelp">
   <form method="dialog" class="dlg wide">
     <h2>Register the add-in in Entra ID</h2>
     <ol class="steps">
       <li data-th="help1">Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>. Accounts:
-        <i>any organizational directory</i> (then no tenant ID is needed).</li>
+        <i>this organizational directory only</i> (then enter the tenant ID too, in Settings → Outlook add-in).</li>
       <li data-th="help2"><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
         <code>brk-multihub://&lt;host the add-in is served from&gt;</code>, e.g. <code>brk-multihub://osign.contoso.com</code>.</li>
       <li data-th="help3"><b>API permissions</b>, Microsoft Graph, delegated: <code>User.Read</code>, <code>Sites.Read.All</code> (the OSign

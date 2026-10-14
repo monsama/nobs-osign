@@ -23,13 +23,20 @@ export function checkSetup(s) {
   return { base, clientId, tenantId, site, folder };
 }
 
-// Copies the template `from` into outDir, with the blanks filled in.
+export const HOSTS = ['cloudflare', 'azure', 'iis', 'apache', 'other'];
+
+// Copies the template `from` into outDir, with the blanks filled in, and the caching file for the
+// web server setup.host (if it has one).
 export function fillTemplate(from, outDir, setup) {
   const s = checkSetup(setup);
+  const host = String(setup.host || '');
+  if (host && !HOSTS.includes(host)) throw new Error('The web server is one of ' + HOSTS.join(', ') + '.');
   const js = { '@@OSIGN_CLIENT_ID@@': s.clientId, '@@OSIGN_TENANT_ID@@': s.tenantId, '@@OSIGN_SP_SITE@@': s.site, '@@OSIGN_SP_FOLDER@@': s.folder };
   const xml = { '{{BASE}}': xmlEscape(s.base), '{{ORIGIN}}': xmlEscape(new URL(s.base).origin), '{{SUPPORT}}': xmlEscape(s.base) };
   fs.mkdirSync(outDir, { recursive: true });
-  fs.cpSync(from, outDir, { recursive: true });
+  fs.cpSync(from, outDir, { recursive: true, filter: (src) => path.relative(from, src).split(path.sep)[0] !== 'hosting' });
+  const hosting = path.join(from, 'hosting', host);
+  if (host && fs.existsSync(hosting)) fs.cpSync(hosting, outDir, { recursive: true });
   const fill = (file, map) => {
     let text = fs.readFileSync(path.join(outDir, file), 'utf8');
     for (const [k, v] of Object.entries(map)) text = text.split(k).join(v);
@@ -38,6 +45,6 @@ export function fillTemplate(from, outDir, setup) {
   fill('launchevent.js', js);
   fill('taskpane.js', js);
   fill('manifest.xml', xml);
-  return s;
+  return { ...s, host };
 }
 

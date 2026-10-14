@@ -77,6 +77,7 @@ number. This works for paragraphs, lines split by line breaks, and table rows.
 
 ## Getting started
 
+On the first start, the editor's **setup assistant** walks through all of it.
 [docs/SETUP.md](docs/SETUP.md) has every step. In short:
 
 1. **SharePoint:** in the home site's document library, make a folder `OSign` (readable for all
