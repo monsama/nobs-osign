@@ -348,31 +348,40 @@ function Api-FolderCreate($data) {
     return (Ok @{ path = $dir; location = (Resolve-SpLocation $dir) })
 }
 
-# The Windows folder dialog, for the folder fields. In a Windows PowerShell of its own: the dialog
-# needs a single-threaded apartment, which PowerShell 7 does not have. The path comes back through
-# a file, so names with umlauts arrive as they are.
+# The Windows folder dialog, for the folder fields. It needs a single-threaded apartment, which
+# PowerShell 7 does not have by default: so it runs in a runspace of its own, set to STA, in this
+# same process - no second PowerShell, no encoded command line (both of which security software
+# rightly treats as suspicious).
 function Api-PickFolder($data) {
     if (-not $script:OnWindows) { return (Fail 'Choosing a folder needs Windows.') }
-    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $tmp = [IO.Path]::GetTempFileName()
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.ApartmentState = [Threading.ApartmentState]::STA
+    $rs.ThreadOptions = [Management.Automation.Runspaces.PSThreadOptions]::UseNewThread
+    $ps = $null
     try {
-        $start = ([string]$data.start).Replace("'", "''")
-        $title = ([string]$data.title).Replace("'", "''")
-        $outFile = $tmp.Replace("'", "''")
-        $code = @"
-Add-Type -AssemblyName System.Windows.Forms
-`$owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = `$true; ShowInTaskbar = `$false }
-`$d = New-Object System.Windows.Forms.FolderBrowserDialog
-`$d.Description = '$title'
-`$d.ShowNewFolderButton = `$true
-if ('$start' -and (Test-Path -LiteralPath '$start')) { `$d.SelectedPath = '$start' }
-if (`$d.ShowDialog(`$owner) -eq [System.Windows.Forms.DialogResult]::OK) { [IO.File]::WriteAllText('$outFile', `$d.SelectedPath, (New-Object System.Text.UTF8Encoding(`$false))) }
-"@
-        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
-        & $ps -NoProfile -NonInteractive -STA -ExecutionPolicy Bypass -EncodedCommand $enc | Out-Null
-        $picked = [IO.File]::ReadAllText($tmp, $script:Utf8)
-        return (Ok @{ path = $picked })
-    } finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
+        $rs.Open()
+        $ps = [powershell]::Create()
+        $ps.Runspace = $rs
+        [void]$ps.AddScript({
+            param([string]$Title, [string]$Start)
+            Add-Type -AssemblyName System.Windows.Forms
+            $owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false }
+            $d = New-Object System.Windows.Forms.FolderBrowserDialog
+            $d.Description = $Title
+            $d.ShowNewFolderButton = $true
+            if ($Start -and (Test-Path -LiteralPath $Start -PathType Container)) { $d.SelectedPath = $Start }
+            try { if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath } else { '' } }
+            finally { $d.Dispose(); $owner.Dispose() }
+        }).AddArgument([string]$data.title).AddArgument([string]$data.start)
+        $out = @($ps.Invoke())
+        if ($ps.HadErrors -and -not $out.Count) { return (Fail ('The folder dialog could not be shown: ' + $ps.Streams.Error[0])) }
+        return (Ok @{ path = $(if ($out.Count) { [string]$out[-1] } else { '' }) })
+    } catch {
+        return (Fail ('The folder dialog could not be shown: ' + $_.Exception.Message))
+    } finally {
+        if ($ps) { $ps.Dispose() }
+        $rs.Dispose()
+    }
 }
 
 function Api-Info {

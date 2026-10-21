@@ -193,3 +193,22 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 | No photo | No `OSign\photos\<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |
+
+## Security software (EDR / XDR)
+
+OSign is a plain PowerShell script; it starts no other PowerShell, and runs no encoded or downloaded
+code. What it does that security software looks at:
+
+- It listens on `127.0.0.1` (ports 17690–17697) for its own window; nothing from the network can
+  reach it, and every request needs a random token.
+- It opens Edge or Chrome as an app window, with a browser profile of its own in `%APPDATA%\OSign`
+  (and turns translation off in that profile).
+- With values from AD it reads users and groups from Active Directory (LDAP), as Users and Publish
+  ask for.
+- It reads OneDrive's list of synced libraries (`HKCU\Software\SyncEngines\Providers\OneDrive`) to
+  show where a folder is in SharePoint.
+
+If it is blocked, look at the alert's rule and the process it names. The clean way to allow it is
+to sign `OSign.ps1` with the company's code-signing certificate and allow that signer (or the
+file's hash) in the security software, rather than excluding a folder.
+
