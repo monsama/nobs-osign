@@ -80,7 +80,7 @@ minutes.
 
 ## sp/resolve
 
-`{ path }` → `{ ok, found, location: { site, siteName, host, library, folder, url, defaultLibrary } }`
+`{ path }` → `{ ok, found, location: { site, siteName, host, library, folder, url, defaultLibrary, uncertain } }`
 
 Where the local folder `path` is in SharePoint, from what OneDrive notes about the libraries it
 syncs to this PC (`HKCU\Software\SyncEngines\Providers\OneDrive`: each library's local folder
@@ -88,19 +88,14 @@ and address). `site` and `folder` are what the add-in's settings take; `defaultL
 whether it is the site's main library (the only one the add-in reads). `found: false` when no
 synced library holds the folder.
 
-## sp/libraries
+## sp/local
 
-`{}` → `{ ok, libraries: [{ path, exists, location }] }`
+`{ url }` → `{ ok, found, path, exists }`
 
-The places OneDrive syncs to this PC (as in `sp/resolve`), each with where it is in SharePoint; the
-OneDrive first.
-
-## folder/create
-
-`{ parent }` → `{ ok, path, location }`
-
-Makes the folder `OSign`, with `photos` in it, in `parent` (or takes it, if it is there), and answers
-its path and where it is in SharePoint.
+Where the SharePoint folder at `url` (`https://<host>/sites/<site>/<library>/<folder>`) is on this
+PC: in the place OneDrive syncs it to. Shortcuts (*Add shortcut to My files*) are left out: OneDrive
+notes only their library, not which folder of it they are. `sp/resolve` answers
+`location.uncertain: true` for a folder in one.
 
 ## pick-folder
 

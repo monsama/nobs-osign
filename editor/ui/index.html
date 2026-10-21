@@ -18,6 +18,7 @@
   <div id="status" class="status" title=""></div>
   <div class="spacer"></div>
   <button id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button>
+  <button id="btnWizard" class="ghost" title="Step by step through the SharePoint folder, the app registration and the add-in">Setup assistant</button>
   <button id="btnSettings" class="ghost">Settings</button>
   <button id="btnPublish" class="primary">Publish…</button>
 </header>
@@ -184,7 +185,6 @@
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg wide">
     <h2>Settings</h2>
-    <p><button id="btnWizard" type="button">Setup assistant…</button> <small>Step by step through the SharePoint folder, the app registration and the add-in.</small></p>
     <label>Language<select id="setLang"></select></label>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
       <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
@@ -274,34 +274,22 @@
 
     <section class="wiz-step" data-step="folder" data-title="Where the signatures are kept">
       <p class="wiz-intro" data-th="wizFolderLead">OSign keeps the signatures, their images and the photos in a folder in your company's SharePoint,
-        where Outlook reads them with each user's own sign-in. Choose where: OSign creates the folder <b>OSign</b> there, and OneDrive
-        uploads it. This is not the folder you unpacked OSign itself into.</p>
-      <h3 class="wiz-h">Synced with OneDrive on this PC</h3>
-      <div id="wizLibs"></div>
-      <p id="wizNoLibs" class="wiz-note" data-th="wizNoLibs" hidden>OneDrive does not sync any SharePoint library to this PC yet. In SharePoint,
-        open the site's <b>Documents</b> and choose <b>Sync</b>; then select <b>Look again</b>. Or choose an existing folder below.</p>
-      <label class="wiz-opt"><input type="radio" name="wlib" value="own"> <span data-th="wizLibOwn"><b>An existing folder on this PC</b><span class="sub">A folder
-        that is already synced with SharePoint, e.g. one you made yourself.</span></span></label>
+        where Outlook reads them with each user's own sign-in. Make a folder <b>OSign</b> there (with a folder <b>photos</b> in it), and tell
+        OSign which one. This is not the folder you unpacked OSign itself into.</p>
+      <label class="wiz-opt"><input type="radio" name="wlib" value="link"> <span data-th="wizLibLink"><b>SharePoint link</b><span class="sub">Open the
+        folder in SharePoint in the browser and copy the address from the address bar.</span></span></label>
+      <div id="wizLinkBox" class="wiz-fields" hidden>
+        <label>Address of the folder in SharePoint<input id="wizLink" placeholder="https://contoso.sharepoint.com/sites/IT/Shared Documents/Forms/AllItems.aspx?id=…"></label>
+        <p id="wizLinkNote" class="where"></p>
+      </div>
+      <label class="wiz-opt"><input type="radio" name="wlib" value="own"> <span data-th="wizLibOwn"><b>An existing folder on this PC</b><span class="sub">The
+        folder as OneDrive shows it in File Explorer, synced with SharePoint.</span></span></label>
       <div id="wizOwnBox" class="wiz-fields" hidden>
         <label>The folder<span class="pick"><input id="wizFolder" placeholder="C:\Users\me\Contoso\IT - Documents\OSign"><button type="button" class="pick-btn" data-for="wizFolder">Choose folder…</button></span><small id="wizFolderNote"></small></label>
         <p id="wizWhereFound" class="where"></p>
-        <details id="wizWhereEdit">
-          <summary>Set the place in SharePoint by hand</summary>
-          <p class="wiz-note" data-th="wizWhere">Only needed if OSign cannot find it by itself. Paste the folder's address from the browser, or a
-            sharing link to it (<b>Share → Copy link</b>), into <i>SharePoint site</i>; OSign takes the site and, where the address names it,
-            the folder from it. <i>Folder in its library</i> is the path within <i>Documents</i>, e.g. <code>General/OSign</code>.</p>
-          <div class="grid2">
-            <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button><input id="wizSpSite" placeholder="root"></label>
-            <label>Folder in its library<input id="wizSpFolder" placeholder="OSign"></label>
-          </div>
-        </details>
       </div>
-      <p class="wiz-actions"><button type="button" id="wizLibsAgain" class="ghost">Look again</button></p>
+      <input type="hidden" id="wizSpSite"><input type="hidden" id="wizSpFolder">
       <p id="wizPerm" class="wiz-note" hidden></p>
-      <details class="wiz-more">
-        <summary>Photos for the preview</summary>
-        <label>Folder with one &lt;username&gt;.jpg per person <small>(empty: the folder photos in it)</small><span class="pick"><input id="wizPhotos" placeholder="\\server\share\photos"><button type="button" class="pick-btn" data-for="wizPhotos">Choose folder…</button></span></label>
-      </details>
     </section>
 
     <section class="wiz-step" data-step="values" data-title="Where the users' values come from">

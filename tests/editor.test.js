@@ -47,7 +47,10 @@ test.before(async () => {
     { MountPoint: path.join(dataDir, 'Contoso', 'IT - Documents'), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/' },
     { MountPoint: path.join(dataDir, 'Contoso', 'IT - Documents', 'General'), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/' },
     { MountPoint: path.join(dataDir, 'OneDrive - Contoso'), UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' },
-    { MountPoint: path.join(dataDir, 'Contoso', 'Home - Site Assets'), UrlNamespace: 'https://contoso.sharepoint.com/SiteAssets/' }
+    { MountPoint: path.join(dataDir, 'Contoso', 'Home - Site Assets'), UrlNamespace: 'https://contoso.sharepoint.com/SiteAssets/' },
+    // OneDrive notes some places twice; and a shortcut to another site's library, inside the OneDrive.
+    { MountPoint: path.join(dataDir, 'OneDrive - Contoso'), UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' },
+    { MountPoint: path.join(dataDir, 'OneDrive - Contoso', 'Sales - Team'), UrlNamespace: 'https://contoso.sharepoint.com/sites/Sales/Shared Documents/' }
   ]));
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-sp-'));
   proc = spawn(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-NoBrowser', '-Port', String(PORT)], {
@@ -356,26 +359,20 @@ test('where a synced folder is in SharePoint, from what OneDrive notes', opts, a
   assert.equal((await api('sp/resolve', { path: '' })).json.found, false);
 });
 
-test('the places OneDrive syncs, and making the folder OSign in one', opts, async () => {
-  const od = path.join(dataDir, 'OneDrive - Contoso');
-  fs.mkdirSync(od, { recursive: true });
-  const libs = (await api('sp/libraries')).json.libraries;
-  // The OneDrive first; each with where it is in SharePoint, and whether it is on this PC.
-  assert.equal(libs[0].path, od);
-  assert.equal(libs[0].exists, true);
-  assert.equal(libs[0].location.site, 'contoso-my.sharepoint.com:/personal/anna_contoso_com:');
-  assert.equal(libs.length, 4);
-  assert.deepEqual(libs.filter((l) => !l.location.defaultLibrary).map((l) => l.location.library), ['SiteAssets']);
-  const r = (await api('folder/create', { parent: od })).json;
-  assert.equal(r.path, path.join(od, 'OSign'));
-  assert.ok(fs.statSync(path.join(od, 'OSign', 'photos')).isDirectory());
-  assert.deepEqual([r.location.site, r.location.folder], ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign']);
-  // There already: taken as it is.
-  fs.writeFileSync(path.join(od, 'OSign', 'keep.txt'), 'x');
-  assert.equal((await api('folder/create', { parent: od })).json.ok, true);
-  assert.ok(fs.existsSync(path.join(od, 'OSign', 'keep.txt')));
-  assert.match((await api('folder/create', { parent: path.join(dataDir, 'not-there') })).json.error, /not there/);
-  assert.match((await api('folder/create', { parent: 'relative' })).json.error, /not there/);
+test('a SharePoint folder\'s address: where OneDrive syncs it to on this PC; shortcuts are not guessed', opts, async () => {
+  const local = async (url) => (await api('sp/local', { url })).json;
+  let r = await local('https://contoso.sharepoint.com/sites/IT/Shared%20Documents/General/OSign');
+  // The longest match: the General folder's own sync.
+  assert.deepEqual([r.found, r.path, r.exists], [true, path.join(dataDir, 'Contoso', 'IT - Documents', 'General', 'OSign'), false]);
+  r = await local('https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/Tests/OSign');
+  assert.equal(r.path, path.join(dataDir, 'OneDrive - Contoso', 'Tests', 'OSign'));
+  // A shortcut in the OneDrive to another site's library: which folder of it is not known, so it
+  // is never taken, neither for a link nor for a folder in it.
+  r = await local('https://contoso.sharepoint.com/sites/Sales/Shared%20Documents/Team/OSign');
+  assert.equal(r.found, false);
+  const where = (await api('sp/resolve', { path: path.join(dataDir, 'OneDrive - Contoso', 'Sales - Team', 'OSign') })).json;
+  assert.deepEqual([where.found, where.location.uncertain, where.location.site, where.location.folder], [true, true, 'contoso.sharepoint.com:/sites/Sales:', '']);
+  assert.equal((await local('https://contoso.sharepoint.com/sites/Other/Shared%20Documents/OSign')).found, false);
 });
 
 test('AD lookup says plainly where it cannot work', opts, async () => {

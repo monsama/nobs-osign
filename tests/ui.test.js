@@ -34,10 +34,14 @@ test.before(async () => {
   // OneDrive's notes: the publish folder is synced from a team site's library.
   syncJson = path.join(dataDir, 'sync.json');
   oneDrive = path.join(dataDir, 'OneDrive - Contoso');
-  fs.mkdirSync(oneDrive);
+  fs.mkdirSync(path.join(oneDrive, 'OSign', 'photos'), { recursive: true });
+  fs.mkdirSync(path.join(oneDrive, 'IT - General', 'OSign'), { recursive: true });
+  // As OneDrive notes them: the OneDrive twice, and a shortcut in it to a site's library.
   fs.writeFileSync(syncJson, JSON.stringify([
-    { MountPoint: path.dirname(folder), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/' },
-    { MountPoint: oneDrive, UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' }
+    { MountPoint: folder, UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/OSign/' },
+    { MountPoint: oneDrive, UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' },
+    { MountPoint: oneDrive, UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' },
+    { MountPoint: path.join(oneDrive, 'IT - General'), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/' }
   ]));
   // Publishing goes to a folder: set before the start, as an admin would in Settings.
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ folder, photosFolder: '', setupDone: '1' }));
@@ -263,48 +267,44 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   assert.equal(await page.isVisible('#dlgWizard'), false);
 
   // From Settings, step by step; each step keeps what it asks for.
-  await page.click('#btnSettings');
   await page.click('#btnWizard');
   await next('Where the signatures are kept');
-  // The places OneDrive syncs, as choices, the OneDrive first; the folder set already is taken as
-  // a folder of one's own.
-  await page.waitForFunction(() => document.querySelectorAll('#wizLibs .wiz-opt').length === 2);
-  assert.deepEqual(await page.$$eval('#wizLibs .wiz-opt b', (bs) => bs.map((b) => b.textContent)), ['OneDrive › Documents', 'IT › Documents › General']);
+  // The folder set already: taken as a folder on this PC, with where it is in SharePoint found out
+  // from OneDrive's notes and said in plain words.
   assert.equal(await page.isChecked('input[name=wlib][value=own]'), true);
   assert.equal(await page.inputValue('#wizFolder'), folder);
-  // Where it is in SharePoint: found out from OneDrive's notes, said in plain words, filled in.
   await page.waitForFunction(() => /In SharePoint/.test(document.querySelector('#wizWhereFound').textContent));
-  assert.equal(await page.textContent('#wizWhereFound'), '✓ In SharePoint: IT › Documents › General › ' + path.basename(folder));
+  assert.equal(await page.textContent('#wizWhereFound'), '✓ In SharePoint: IT › Documents › General › OSign');
   assert.equal(await page.inputValue('#wizSpSite'), 'contoso.sharepoint.com:/sites/IT:');
-  assert.equal(await page.inputValue('#wizSpFolder'), 'General/' + path.basename(folder));
-  assert.equal(await page.isVisible('#wizSpSite'), false, 'the fields stay folded away');
-  // A folder OneDrive does not sync: it says so and opens the fields.
-  await page.fill('#wizFolder', path.join(path.parse(os.tmpdir()).root, 'elsewhere', 'OSign'));
-  await page.dispatchEvent('#wizFolder', 'change');
-  await page.waitForFunction(() => /cannot tell/.test(document.querySelector('#wizWhereFound').textContent));
-  assert.equal(await page.isVisible('#wizSpSite'), true);
-  await page.fill('#wizFolder', folder);
-  // Addresses as copied from the browser, and sharing links, become what Graph wants; where they
-  // name the folder too, that is filled in.
-  const where = async (address) => {
-    await page.fill('#wizSpFolder', 'OSign');
-    await page.fill('#wizSpSite', address);
-    await page.dispatchEvent('#wizSpSite', 'change');
-    return [await page.inputValue('#wizSpSite'), await page.inputValue('#wizSpFolder')];
+  assert.equal(await page.inputValue('#wizSpFolder'), 'General/OSign');
+  // A folder OneDrive does not sync, and one in a shortcut: it says so, and points to the link.
+  const own = async (p) => {
+    await page.fill('#wizFolder', p); await page.dispatchEvent('#wizFolder', 'change');
+    await page.waitForFunction(() => /SharePoint link/.test(document.querySelector('#wizWhereFound').textContent));
+    return page.textContent('#wizWhereFound');
   };
-  assert.deepEqual(await where('https://contoso-my.sharepoint.com/:f:/g/personal/anna_contoso_com/IgDpY5m2CxbbRYgU2eNTaxZP?e=GOPGuO'), ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign']);
-  assert.deepEqual(await where('https://contoso.sharepoint.com/sites/IT/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FIT%2FShared%20Documents%2FGeneral%2FOSign&viewid=1'), ['contoso.sharepoint.com:/sites/IT:', 'General/OSign']);
-  assert.deepEqual(await where('https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fanna_contoso_com%2FDocuments%2FTests%2FOSign'), ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'Tests/OSign']);
-  assert.deepEqual(await where('https://contoso.sharepoint.com/:f:/s/IT/EaBcDe?e=x'), ['contoso.sharepoint.com:/sites/IT:', 'OSign']);
-  assert.deepEqual(await where('https://contoso.sharepoint.com/:f:/r/sites/IT/Shared%20Documents/General/OSign?csf=1'), ['contoso.sharepoint.com:/sites/IT:', 'General/OSign']);
-  assert.deepEqual(await where('https://contoso.sharepoint.com/Shared%20Documents/OSign'), ['root', 'OSign']);
-  assert.deepEqual(await where('contoso.sharepoint.com:/teams/IT:'), ['contoso.sharepoint.com:/teams/IT:', 'OSign']);
-  // Choosing the OneDrive: OSign makes the folder OSign in it, and knows where it is.
-  await page.check('input[name=wlib][value=lib0]');
-  assert.match(await page.textContent('#wizPerm'), /Only you/);
+  assert.match(await own(path.join(path.parse(os.tmpdir()).root, 'elsewhere', 'OSign')), /does not sync it/);
+  assert.match(await own(path.join(oneDrive, 'IT - General', 'OSign')), /shortcut/);
+  await nextFails(/cannot tell where this folder is/);
+
+  // The SharePoint link: OSign finds the synced folder on this PC for it.
+  await page.check('input[name=wlib][value=link]');
   assert.equal(await page.isVisible('#wizFolder'), false);
+  const link = async (address, rx) => {
+    await page.fill('#wizLink', address); await page.dispatchEvent('#wizLink', 'change');
+    await page.waitForFunction((x) => new RegExp(x).test(document.querySelector('#wizLinkNote').textContent), rx.source);
+    return [await page.inputValue('#wizSpSite'), await page.inputValue('#wizSpFolder'), await page.inputValue('#wizFolder')];
+  };
+  assert.deepEqual(await link('https://contoso-my.sharepoint.com/:f:/g/personal/anna_contoso_com/IgDpY5m2CxbbRYgU2eNTaxZP?e=GOPGuO', /does not say which folder/), ['', '', '']);
+  assert.deepEqual(await link('https://example.com/x', /not an address in SharePoint/), ['', '', '']);
+  // A folder of a library synced to this PC, but not there (yet).
+  assert.deepEqual(await link('https://contoso.sharepoint.com/sites/IT/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FIT%2FShared%20Documents%2FGeneral%2FArchiv&viewid=1', /not on this PC yet/), ['contoso.sharepoint.com:/sites/IT:', 'General/Archiv', '']);
+  await nextFails(/not on this PC yet/);
+  assert.deepEqual(await link('https://contoso.sharepoint.com/:f:/r/sites/IT/Shared%20Documents/General/OSign?csf=1', /On this PC/), ['contoso.sharepoint.com:/sites/IT:', 'General/OSign', folder]);
+  // The OneDrive's folder, by its address from the browser.
+  assert.deepEqual(await link('https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fanna_contoso_com%2FDocuments%2FOSign', /On this PC/), ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign', path.join(oneDrive, 'OSign')]);
+  assert.match(await page.textContent('#wizPerm'), /Only you/);
   await next("Where the users' values come from");
-  assert.ok(fs.statSync(path.join(oneDrive, 'OSign', 'photos')).isDirectory());
   assert.equal((await api('settings/get')).settings.folder, path.join(oneDrive, 'OSign'));
   await page.check('input[name=wvsrc][value=graph]');
   await next('Where the add-in is served');
