@@ -268,3 +268,13 @@ button.copy { padding: 1px 8px; font-size: 12px; }
 .wiz-actions { margin: 4px 0 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .wiz code { overflow-wrap: anywhere; }
 .wiz .copyline { margin: 4px 0 0; display: flex; }
+
+/* help: a ? next to a label, and its explanation */
+button.help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; padding: 0; margin: 0 2px;
+  border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700;
+  line-height: 1; vertical-align: 1px; cursor: help; flex: none; }
+button.help:hover, button.help:focus-visible { border-color: var(--accent); color: var(--accent); }
+.help-pop { position: fixed; inset: auto; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  color: var(--text); box-shadow: 0 10px 30px rgba(0,0,0,.18); font-size: 13px; font-weight: normal; line-height: 1.55; text-transform: none; letter-spacing: 0; }
+.help-pop code { font-size: 12px; }
+th button.help { text-transform: none; }

@@ -52,13 +52,13 @@
       <div class="sig-props">
         <label class="check"><input type="checkbox" id="sigNew"> Default for new mail</label>
         <label class="check"><input type="checkbox" id="sigReply"> Default for replies &amp; forwards</label>
-        <label class="check" title="A line whose fields are all empty for a user is left out: no &quot;Mobile:&quot; without a number"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines</label>
+        <label class="check"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines <button type="button" class="help" data-help="hRemoveEmpty" aria-label="Help">?</button></label>
         <details class="audience">
           <summary>Who gets it: <span id="audienceSummary">everyone</span></summary>
           <div class="grid3">
-            <label>AD groups <small>(any of them; nested groups count)</small><input id="sigGroups" list="adGroups" placeholder="SG-Signatur-Verkauf"></label>
-            <label>Departments <small>(comma separated)</small><input id="sigDeps" placeholder="Informatik, Verkauf"></label>
-            <label>Sender domains <small>(the From address)</small><input id="sigDoms" placeholder="example.com"></label>
+            <label>AD groups <button type="button" class="help" data-help="hGroups" aria-label="Help">?</button> <small>(any of them; nested groups count)</small><input id="sigGroups" list="adGroups" placeholder="SG-Signatur-Verkauf"></label>
+            <label>Departments <button type="button" class="help" data-help="hDeps" aria-label="Help">?</button> <small>(comma separated)</small><input id="sigDeps" placeholder="Informatik, Verkauf"></label>
+            <label>Sender domains <button type="button" class="help" data-help="hDoms" aria-label="Help">?</button> <small>(the From address)</small><input id="sigDoms" placeholder="example.com"></label>
           </div>
           <p class="hint">Empty means everyone. When several are filled in, a user has to match each of them.</p>
           <datalist id="adGroups"></datalist>
@@ -90,6 +90,7 @@
               <option value="empty">All fields empty</option>
               <option value="ad">User from Active Directory…</option>
             </select>
+            <button type="button" class="help" data-help="hPreview" aria-label="Help">?</button>
             <span id="pvAd" class="pv-ad" hidden>
               <input id="pvUser" placeholder="user name or mail">
               <button id="pvLookup" class="ghost small">Look up</button>
@@ -114,7 +115,7 @@
         profile in Entra ID. <b>AD attribute</b> is for the preview here, read from Active Directory.</p>
       <div class="table-wrap">
         <table class="fields">
-          <thead><tr><th>Field</th><th>Placeholder</th><th>AD attribute</th><th>Graph source</th><th>Sample value</th><th></th></tr></thead>
+          <thead><tr><th>Field</th><th>Placeholder</th><th>AD attribute <button type="button" class="help" data-help="hAdAttr" aria-label="Help">?</button></th><th>Graph source <button type="button" class="help" data-help="hGraph" aria-label="Help">?</button></th><th>Sample value</th><th></th></tr></thead>
           <tbody id="fieldRows"></tbody>
         </table>
       </div>
@@ -133,11 +134,11 @@
     <section id="viewOptions" class="view" hidden>
       <h1>Add-in</h1>
       <h2>Behaviour</h2>
-      <label class="check block"><input type="checkbox" id="optDisable"> Switch off Outlook's own signature in the messages the add-in signs, so no mail gets two</label>
-      <label class="check block"><input type="checkbox" id="optChoice"> Users may choose which signature they use for new mail and for replies (in the add-in's pane)</label>
+      <label class="check block"><input type="checkbox" id="optDisable"> Switch off Outlook's own signature in the messages the add-in signs, so no mail gets two <button type="button" class="help" data-help="hDisable" aria-label="Help">?</button></label>
+      <label class="check block"><input type="checkbox" id="optChoice"> Users may choose which signature they use for new mail and for replies (in the add-in's pane) <button type="button" class="help" data-help="hChoice" aria-label="Help">?</button></label>
       <label class="check block"><input type="checkbox" id="optMeetings"> Sign new meetings too</label>
-      <label class="check block"><input type="checkbox" id="optNoProfile"> Insert a signature even when the user's details could not be read (the fields stay empty)</label>
-      <h2>Where the users' values come from</h2>
+      <label class="check block"><input type="checkbox" id="optNoProfile"> Insert a signature even when the user's details could not be read (the fields stay empty) <button type="button" class="help" data-help="hNoProfile" aria-label="Help">?</button></label>
+      <h2>Where the users' values come from <button type="button" class="help" data-help="hVsrc" aria-label="Help">?</button></h2>
       <fieldset class="sources">
         <label class="check block"><input type="radio" name="vsrc" value="graph"> <span data-th="vsrcGraph"><b>Entra ID</b> (Microsoft Graph): each field by its Graph source.</span></label>
         <label class="check block"><input type="radio" name="vsrc" value="mixed"> <span data-th="vsrcMixed"><b>Entra ID and Active Directory</b>: fields with a Graph source from Entra ID, the others (e.g. description, homePhone, info) from AD. Groups from AD.</span></label>
@@ -209,7 +210,7 @@
         <option value="iis">IIS</option><option value="apache">Web host (Apache)</option><option value="other">Another web server</option></select></label>
       <label>App registration: client ID<input id="setClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
       <label>Tenant ID <small>(only for a single-organization app)</small><input id="setTenantId" placeholder="optional"></label>
-      <label>SharePoint site <small>(root: the home site; or paste the address of a site or OneDrive)</small><input id="setSpSite" placeholder="root"></label>
+      <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button> <small>(root: the home site; or paste the address of a site or OneDrive)</small><input id="setSpSite" placeholder="root"></label>
       <label>Folder in its library<input id="setSpFolder" placeholder="OSign"></label>
     </div>
     <p><button id="setAddinBuild" type="button">Make the add-in files</button></p>
@@ -294,7 +295,7 @@
           OSign takes the site from it, and the folder too where the address names it; otherwise give the folder's path within
           <i>Documents</i>, e.g. <code>General/OSign</code>.</p>
         <div class="grid2">
-          <label>SharePoint site<input id="wizSpSite" placeholder="root"></label>
+          <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button><input id="wizSpSite" placeholder="root"></label>
           <label>Folder in its library<input id="wizSpFolder" placeholder="OSign"></label>
         </div>
         <label>Photos for the preview <small>(optional: one &lt;username&gt;.jpg per person; empty: the photos folder in it)</small><input id="wizPhotos" placeholder="\\server\share\photos"></label>
@@ -479,6 +480,21 @@
   </form>
 </dialog>
 
+<div id="helpTexts" hidden>
+  <div data-help-text="hRemoveEmpty" data-th="hRemoveEmpty">A line whose placeholders are all empty for a user is removed, label included. Example: <code>Mobile: @@mobile</code> disappears for someone without a mobile number, instead of showing «Mobile:» with nothing after it. Lines without placeholders always stay. Works for paragraphs, line breaks and table rows.</div>
+  <div data-help-text="hGroups" data-th="hGroups">The signature is offered only to members of at least one of these groups. Members of nested groups count too: someone in «SG-Sales-Zurich», itself a member of «SG-Sales», gets the signature for «SG-Sales». Enter the group names as in Active Directory, separated by commas. With values from Entra ID only, the groups must be synchronised to Entra ID and the app needs <code>GroupMember.Read.All</code>.</div>
+  <div data-help-text="hDeps" data-th="hDeps">The signature is offered only to users whose <b>department</b> attribute is one of these, compared as a whole and regardless of capitals: <code>Sales</code> matches «sales», but not «Sales Europe». Separate several with commas.</div>
+  <div data-help-text="hDoms" data-th="hDoms">The signature is used only when the message is sent from an address in one of these domains, e.g. <code>example.com</code> for <code>anna@example.com</code>. Useful for shared mailboxes or several companies in one tenant. A subdomain such as <code>mail.example.com</code> has to be listed itself.</div>
+  <div data-help-text="hAdAttr" data-th="hAdAttr">The attribute's name in Active Directory (the <i>lDAPDisplayName</i>, as in <i>Attribute Editor</i>), e.g. <code>telephoneNumber</code> or <code>extensionAttribute1</code>. Used for the preview, and for what the add-in shows when the values come from Active Directory.</div>
+  <div data-help-text="hGraph" data-th="hGraph">Where the add-in finds the value in Entra ID, as Microsoft Graph names it, e.g. <code>mobilePhone</code>, <code>onPremisesExtensionAttributes.extensionAttribute1</code> or <code>extension_&lt;appId&gt;_description</code>. Leave it empty for fields Entra ID does not have; with <i>Entra ID and Active Directory</i> they then come from AD.</div>
+  <div data-help-text="hDisable" data-th="hDisable">Outlook may insert the user's own signature as well (from Outlook's own signature settings). When this is on, the add-in switches it off in every message it signs, so no mail ends up with two. Users' own signatures are not deleted.</div>
+  <div data-help-text="hChoice" data-th="hChoice">When this is on, users can pick another signature in the add-in's pane (<i>OSign → Signatures</i>), for new mail and for replies separately, from the ones they are allowed. When it is off, everyone gets the default, and the pane only inserts.</div>
+  <div data-help-text="hNoProfile" data-th="hNoProfile">If the user's details cannot be read (offline, sign-in not yet possible), the add-in normally inserts nothing and tries again with the next message. When this is on, it inserts the signature anyway, with empty fields; only the mail address is filled in. Lines with empty fields are left out as usual.</div>
+  <div data-help-text="hVsrc" data-th="hVsrc">Decides where the add-in reads each sender's details. <b>Entra ID</b> needs nothing exported but lacks some AD attributes. <b>Active Directory</b> values are exported to SharePoint when you publish (and, if set up, by a scheduled task); you review them first under <i>Users</i>. Groups for <i>Who gets it</i> come from the same source.</div>
+  <div data-help-text="hPreview" data-th="hPreview"><b>Sample values</b>: each field's sample value (see <i>Fields</i>). <b>All fields empty</b>: shows which lines disappear. <b>User from Active Directory</b>: a real user's values and groups, read from AD on this PC (only in the domain); shows which signature they would get.</div>
+  <div data-help-text="hSpSite" data-th="hSpSite">Where the add-in finds the OSign folder in SharePoint. <code>root</code> is the home site (<code>https://&lt;tenant&gt;.sharepoint.com</code>). For another site or a OneDrive, paste its address or a sharing link to the folder; OSign converts it, e.g. to <code>contoso.sharepoint.com:/sites/IT:</code>.</div>
+</div>
+<div id="helpPop" class="help-pop" popover="auto" role="tooltip"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

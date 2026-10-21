@@ -914,6 +914,37 @@
   }));
 
   // ---------------------------------------------------------------------------------------------
+  // Help: a ? next to a label opens a short explanation (the texts are in #helpTexts, so they are
+  // translated with the page). A popover, so it shows above everything; a click elsewhere or Esc
+  // closes it, a second click on the same ? as well.
+  // ---------------------------------------------------------------------------------------------
+  const helpPop = $('helpPop');
+  let helpFor = null, helpClosedAt = 0;
+  // beforetoggle, not toggle: it comes at once, before the click that closed it.
+  helpPop.addEventListener('beforetoggle', (e) => { if (e.newState === 'closed') helpClosedAt = Date.now(); });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('button.help');
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    // The click that closed it (outside the popover, on this same ?) does not open it again.
+    if (helpFor === b && Date.now() - helpClosedAt < 400) { helpFor = null; return; }
+    const src = document.querySelector('[data-help-text="' + b.dataset.help + '"]');
+    if (!src) return;
+    if (helpPop.matches(':popover-open')) helpPop.hidePopover();
+    // Inside the open dialog, if the ? is in one: outside it, an open modal dialog makes it inert.
+    const home = b.closest('dialog') || document.body;
+    if (helpPop.parentNode !== home) home.append(helpPop);
+    helpPop.innerHTML = src.innerHTML;
+    helpPop.showPopover();
+    helpFor = b;
+    const r = b.getBoundingClientRect(), w = Math.min(380, window.innerWidth - 24);
+    helpPop.style.width = w + 'px';
+    helpPop.style.left = Math.max(12, Math.min(r.left - 12, window.innerWidth - w - 12)) + 'px';
+    const h = helpPop.offsetHeight;
+    helpPop.style.top = (r.bottom + 8 + h < window.innerHeight ? r.bottom + 8 : Math.max(12, r.top - 8 - h)) + 'px';
+  }, true);
+
+  // ---------------------------------------------------------------------------------------------
   // Setup assistant: opens by itself until it was finished once, while OSign is not set up
   // (no publish folder or no app registration). Each step saves what it asks for.
   // ---------------------------------------------------------------------------------------------

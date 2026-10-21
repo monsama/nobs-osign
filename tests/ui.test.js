@@ -314,3 +314,32 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   assert.equal(await page.isVisible('#dlgWizard'), false);
   assert.deepEqual(errors, []);
 });
+
+test('help: a ? opens a short explanation, above dialogs too, and closes again', { skip }, async () => {
+  await page.goto(url); await page.reload();
+  await page.waitForSelector('#btnPublish');
+  await page.click('a[data-view=fields]');
+  await page.click('button.help[data-help=hGraph]');
+  await page.waitForSelector('#helpPop:popover-open');
+  assert.match(await page.textContent('#helpPop'), /as Microsoft Graph names it/);
+  // A second click on the same ? closes it.
+  await page.click('button.help[data-help=hGraph]');
+  await page.waitForFunction(() => !document.querySelector('#helpPop').matches(':popover-open'));
+  // In a dialog: shown over it, Esc closes the help, not the dialog.
+  await page.click('#btnSettings');
+  await page.click('#dlgSettings button.help[data-help=hSpSite]');
+  await page.waitForSelector('#helpPop:popover-open');
+  assert.match(await page.textContent('#helpPop'), /sharing link/);
+  assert.equal(await page.evaluate(() => document.elementFromPoint(...(() => { const r = document.querySelector('#helpPop').getBoundingClientRect(); return [r.left + 5, r.top + 5]; })()).closest('#helpPop') !== null), true);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#helpPop').matches(':popover-open'));
+  assert.equal(await page.isVisible('#dlgSettings'), true);
+  await page.click('#dlgSettings button[value=cancel]');
+  // Every ? has its text, in both languages.
+  const missing = await page.evaluate(() => [...document.querySelectorAll('button.help')].map((b) => b.dataset.help).filter((k) => !document.querySelector('[data-help-text="' + k + '"]')));
+  assert.deepEqual(missing, []);
+  const keys = await page.evaluate(() => [...document.querySelectorAll('[data-help-text]')].map((d) => d.dataset.helpText));
+  const i18n = fs.readFileSync(path.join(__dirname, '..', 'editor', 'ui', 'i18n.js'), 'utf8');
+  assert.deepEqual(keys.filter((k) => !new RegExp('\\n    ' + k + ': ').test(i18n)), [], 'German help texts');
+  assert.deepEqual(errors, []);
+});
