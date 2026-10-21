@@ -206,7 +206,7 @@ test('German: in a German browser the editor speaks German, and offers no transl
   assert.equal((await de.textContent('#btnPublish')).trim(), 'Veröffentlichen…');
   assert.equal((await de.textContent('#btnSettings')).trim(), 'Einstellungen');
   assert.match(await de.textContent('.side'), /Signaturen.*Einrichtung.*Felder/s);
-  assert.match(await de.textContent('#toolbar'), /@@ Feld einfügen/);
+  assert.match(await de.textContent('#toolbar'), /\+ Feld einfügen/);
   await de.click('a[data-view=fields]');
   assert.match(await de.textContent('#viewFields'), /Ein Feld ist ein Platzhalter.*Ohne Graph-Quelle/s);
   // English can be chosen, and stays chosen.
@@ -372,3 +372,37 @@ test('help: a ? opens a short explanation, above dialogs too, and closes again',
   assert.deepEqual(keys.filter((k) => !new RegExp('\\n    ' + k + ': ').test(i18n)), [], 'German help texts');
   assert.deepEqual(errors, []);
 });
+
+test('fields: chips with their names in the design view, @@key in the signature', { skip }, async () => {
+  await page.goto(url); await page.reload();
+  await page.waitForSelector('#sigList a');
+  await page.click('#sigList a');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  const dd = () => page.frameLocator('#design');
+  // The starter template's placeholders, shown by name; a link's mailto:@@mail stays as it is.
+  await page.waitForFunction(() => document.querySelector('#design').contentDocument.querySelectorAll('span.osf').length > 3);
+  const chips = await page.evaluate(() => [...document.querySelector('#design').contentDocument.querySelectorAll('span.osf')].map((c) => c.dataset.f + '=' + c.textContent));
+  assert.ok(chips.includes('givenName=Vorname'), chips.join(', '));
+  assert.equal(await page.evaluate(() => document.querySelector('#design').contentDocument.body.textContent.includes('@@givenName')), false);
+  assert.equal(await page.evaluate(() => document.querySelector('#design').contentDocument.querySelector('a[href^="mailto:"]').getAttribute('href')), 'mailto:@@mail');
+  // Inserted from the list: a chip in the design, @@key in the signature.
+  await dd().locator('body').click();
+  await page.keyboard.press('Control+End');
+  await page.selectOption('#toolbar select.field-pick', 'mobile');
+  await page.waitForFunction(() => [...document.querySelector('#design').contentDocument.querySelectorAll('span.osf')].pop().dataset.f === 'mobile');
+  // Typed by hand: a chip once it is complete.
+  await page.keyboard.type(' @@title ');
+  await page.waitForFunction(() => [...document.querySelector('#design').contentDocument.querySelectorAll('span.osf')].pop().dataset.f === 'title');
+  await page.keyboard.type('@@nope ');
+  await page.waitForFunction(() => document.querySelector('#design').contentDocument.querySelector('span.osf.unknown[data-f=nope]'));
+  await page.click('.tab[data-mode=html]');
+  const src = await page.inputValue('#source');
+  // (a space beside a chip is kept as &nbsp;, as browsers do when editing)
+  assert.match(src, /@@mobile(&nbsp;| )@@title(&nbsp;| )@@nope/);
+  assert.doesNotMatch(src, /osf|contenteditable|data-f/);
+  // Removed again, through the HTML tab, and back in the design.
+  await page.fill('#source', src.replace(/@@mobile(&nbsp;| )@@title(&nbsp;| )@@nope(&nbsp;| )?/, ''));
+  await page.click('.tab[data-mode=design]');
+  assert.deepEqual(errors, []);
+});
+
