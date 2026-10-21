@@ -28,6 +28,12 @@ has that site, so the add-in finds it without being told.
    `photos/@@sAMAccountName.jpg` embed each sender's own photo; who has none gets the signature
    without one.
 
+**The setup assistant can make the folder for you.** Its step 1 lists the places OneDrive syncs to
+this PC (your OneDrive, and each SharePoint library you chose *Sync* for); pick one, and OSign makes
+the folder `OSign` with `photos` in it there, OneDrive uploads it. Your OneDrive is readable only
+by you: good for testing. For the rollout, take a site's *Documents* and share the folder (read)
+with everyone.
+
 **The editor finds out where the folder is in SharePoint by itself.** In the setup assistant
 (step 1) or Settings, choose the synced folder with **Choose folder…**; from OneDrive's own notes
 on this PC, OSign shows where it is (e.g. *✓ In SharePoint: IT › Documents › General › OSign*) and

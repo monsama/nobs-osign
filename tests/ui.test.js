@@ -19,7 +19,7 @@ const skip = (!pwshOk && PS + ' is not installed') || (!chromium && 'playwright 
 
 const PORT = 17782;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
-let proc, url, browser, page, folder, dataDir, adJson, syncJson;
+let proc, url, browser, page, folder, dataDir, adJson, syncJson, oneDrive;
 const errors = [], notFound = [];
 
 test.before(async () => {
@@ -33,7 +33,12 @@ test.before(async () => {
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-pub-'));
   // OneDrive's notes: the publish folder is synced from a team site's library.
   syncJson = path.join(dataDir, 'sync.json');
-  fs.writeFileSync(syncJson, JSON.stringify([{ MountPoint: path.dirname(folder), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/' }]));
+  oneDrive = path.join(dataDir, 'OneDrive - Contoso');
+  fs.mkdirSync(oneDrive);
+  fs.writeFileSync(syncJson, JSON.stringify([
+    { MountPoint: path.dirname(folder), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/' },
+    { MountPoint: oneDrive, UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' }
+  ]));
   // Publishing goes to a folder: set before the start, as an admin would in Settings.
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ folder, photosFolder: '', setupDone: '1' }));
   // A photo for the sample user (mustera), as an admin would have copied it there.
@@ -260,7 +265,12 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   // From Settings, step by step; each step keeps what it asks for.
   await page.click('#btnSettings');
   await page.click('#btnWizard');
-  await next('The folder in SharePoint');
+  await next('Where the signatures are kept');
+  // The places OneDrive syncs, as choices, the OneDrive first; the folder set already is taken as
+  // a folder of one's own.
+  await page.waitForFunction(() => document.querySelectorAll('#wizLibs .wiz-opt').length === 2);
+  assert.deepEqual(await page.$$eval('#wizLibs .wiz-opt b', (bs) => bs.map((b) => b.textContent)), ['OneDrive › Documents', 'IT › Documents › General']);
+  assert.equal(await page.isChecked('input[name=wlib][value=own]'), true);
   assert.equal(await page.inputValue('#wizFolder'), folder);
   // Where it is in SharePoint: found out from OneDrive's notes, said in plain words, filled in.
   await page.waitForFunction(() => /In SharePoint/.test(document.querySelector('#wizWhereFound').textContent));
@@ -289,9 +299,13 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   assert.deepEqual(await where('https://contoso.sharepoint.com/:f:/r/sites/IT/Shared%20Documents/General/OSign?csf=1'), ['contoso.sharepoint.com:/sites/IT:', 'General/OSign']);
   assert.deepEqual(await where('https://contoso.sharepoint.com/Shared%20Documents/OSign'), ['root', 'OSign']);
   assert.deepEqual(await where('contoso.sharepoint.com:/teams/IT:'), ['contoso.sharepoint.com:/teams/IT:', 'OSign']);
-  await page.fill('#wizSpFolder', 'OSign');
-  await page.fill('#wizSpSite', 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx');
+  // Choosing the OneDrive: OSign makes the folder OSign in it, and knows where it is.
+  await page.check('input[name=wlib][value=lib0]');
+  assert.match(await page.textContent('#wizPerm'), /Only you/);
+  assert.equal(await page.isVisible('#wizFolder'), false);
   await next("Where the users' values come from");
+  assert.ok(fs.statSync(path.join(oneDrive, 'OSign', 'photos')).isDirectory());
+  assert.equal((await api('settings/get')).settings.folder, path.join(oneDrive, 'OSign'));
   await page.check('input[name=wvsrc][value=graph]');
   await next('Where the add-in is served');
   await page.check('input[name=whost][value=cloudflare]');

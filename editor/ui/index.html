@@ -272,23 +272,18 @@
       <div class="wiz-fields"><label>Language<select id="wizLang"></select></label></div>
     </section>
 
-    <section class="wiz-step" data-step="folder" data-title="The folder in SharePoint">
-      <p class="wiz-intro" data-th="wizFolderLead">Signatures, images and photos are stored in a SharePoint folder in your own tenant.
-        Outlook reads it with each user's own sign-in; no data leaves Microsoft 365.</p>
-      <h3 class="wiz-h">What to do</h3>
-      <ol class="wiz-list">
-        <li data-th="wizFolder1"><b>Create the folder.</b> Open the SharePoint site (e.g. <code>https://&lt;tenant&gt;.sharepoint.com</code>), go to
-          <b>Documents</b> and choose <b>New → Folder</b>. Name it <b>OSign</b> and create a folder <b>photos</b> inside it.</li>
-        <li data-th="wizFolder2"><b>Set the permissions.</b> Everyone who is to receive a signature needs read access (<b>Share</b> →
-          <i>Everyone except external users</i> → <b>Can view</b>). Only the administrators who publish need to edit. While testing,
-          give access to yourself only.</li>
-        <li data-th="wizFolder3"><b>Connect it to this PC.</b> Open the folder and choose <b>Add shortcut to My files</b> (or <b>Sync</b>).
-          OneDrive then shows it in File Explorer.</li>
-        <li data-th="wizFolder4"><b>Choose it below.</b> Select <b>Choose folder…</b> and pick the OSign folder; it is in File Explorer
-          under your company's name or under <i>OneDrive</i>. OSign then finds out by itself where it is in SharePoint.</li>
-      </ol>
-      <div class="wiz-fields">
-        <label>The OSign folder on this PC<span class="pick"><input id="wizFolder" placeholder="C:\Users\me\OneDrive - Contoso\OSign"><button type="button" class="pick-btn" data-for="wizFolder">Choose folder…</button></span><small id="wizFolderNote"></small></label>
+    <section class="wiz-step" data-step="folder" data-title="Where the signatures are kept">
+      <p class="wiz-intro" data-th="wizFolderLead">OSign keeps the signatures, their images and the photos in a folder in your company's SharePoint,
+        where Outlook reads them with each user's own sign-in. Choose where: OSign creates the folder <b>OSign</b> there, and OneDrive
+        uploads it. This is not the folder you unpacked OSign itself into.</p>
+      <h3 class="wiz-h">Synced with OneDrive on this PC</h3>
+      <div id="wizLibs"></div>
+      <p id="wizNoLibs" class="wiz-note" data-th="wizNoLibs" hidden>OneDrive does not sync any SharePoint library to this PC yet. In SharePoint,
+        open the site's <b>Documents</b> and choose <b>Sync</b>; then select <b>Look again</b>. Or choose an existing folder below.</p>
+      <label class="wiz-opt"><input type="radio" name="wlib" value="own"> <span data-th="wizLibOwn"><b>An existing folder on this PC</b><span class="sub">A folder
+        that is already synced with SharePoint, e.g. one you made yourself.</span></span></label>
+      <div id="wizOwnBox" class="wiz-fields" hidden>
+        <label>The folder<span class="pick"><input id="wizFolder" placeholder="C:\Users\me\Contoso\IT - Documents\OSign"><button type="button" class="pick-btn" data-for="wizFolder">Choose folder…</button></span><small id="wizFolderNote"></small></label>
         <p id="wizWhereFound" class="where"></p>
         <details id="wizWhereEdit">
           <summary>Set the place in SharePoint by hand</summary>
@@ -300,8 +295,13 @@
             <label>Folder in its library<input id="wizSpFolder" placeholder="OSign"></label>
           </div>
         </details>
-        <label>Photos for the preview <small>(optional: one &lt;username&gt;.jpg per person; empty: the photos folder in it)</small><input id="wizPhotos" placeholder="\\server\share\photos"></label>
       </div>
+      <p class="wiz-actions"><button type="button" id="wizLibsAgain" class="ghost">Look again</button></p>
+      <p id="wizPerm" class="wiz-note" hidden></p>
+      <details class="wiz-more">
+        <summary>Photos for the preview</summary>
+        <label>Folder with one &lt;username&gt;.jpg per person <small>(empty: the folder photos in it)</small><span class="pick"><input id="wizPhotos" placeholder="\\server\share\photos"><button type="button" class="pick-btn" data-for="wizPhotos">Choose folder…</button></span></label>
+      </details>
     </section>
 
     <section class="wiz-step" data-step="values" data-title="Where the users' values come from">

@@ -287,3 +287,10 @@ th button.help { text-transform: none; }
 .where:empty { display: none; }
 .where.good { color: var(--ok); }
 .where.warn { color: var(--warn); }
+
+.wiz-opt.off { opacity: .6; cursor: default; }
+.wiz-opt.off:hover { border-color: var(--line); }
+.wiz-opt .sub.warn { color: var(--warn); }
+.wiz-more { margin-top: 14px; }
+.wiz-more > label { margin-top: 8px; }
+#wizLibs + .wiz-note { margin-bottom: 8px; }
