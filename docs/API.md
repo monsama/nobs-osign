@@ -88,6 +88,20 @@ and address). `site` and `folder` are what the add-in's settings take; `defaultL
 whether it is the site's main library (the only one the add-in reads). `found: false` when no
 synced library holds the folder.
 
+## sp/libraries
+
+`{}` → `{ ok, libraries: [{ path, exists, location }] }`
+
+The places OneDrive syncs to this PC (as in `sp/resolve`), each with where it is in SharePoint; the
+OneDrive first.
+
+## folder/create
+
+`{ parent }` → `{ ok, path, location }`
+
+Makes the folder `OSign`, with `photos` in it, in `parent` (or takes it, if it is there), and answers
+its path and where it is in SharePoint.
+
 ## pick-folder
 
 `{ start, title }` → `{ ok, path }`

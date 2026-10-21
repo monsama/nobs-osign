@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.4.0'
+$script:AppVersion = '0.4.1'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
@@ -324,31 +324,64 @@ function Api-SpResolve($data) {
     return (Ok @{ found = $true; location = $r })
 }
 
-# The Windows folder dialog, for the folder fields. In a Windows PowerShell of its own: the dialog
-# needs a single-threaded apartment, which PowerShell 7 does not have. The path comes back through
-# a file, so names with umlauts arrive as they are.
+# The places OneDrive syncs to this PC, each with where it is in SharePoint: the choices for
+# where the signatures go. The OneDrive first, then by name.
+function Api-SpLibraries {
+    $list = @()
+    foreach ($l in (Get-SyncedLibraries)) {
+        $loc = Resolve-SpLocation $l.MountPoint
+        if ($loc) { $list += [ordered]@{ path = ([string]$l.MountPoint).TrimEnd('\', '/'); exists = (Test-Path -LiteralPath $l.MountPoint -PathType Container); location = $loc } }
+    }
+    $list = @($list | Sort-Object @{ Expression = { $_.location.site -notlike '*:/personal/*' } }, @{ Expression = { $_.path } })
+    return (Ok @{ libraries = $list })
+}
+
+# Makes the folder OSign, with photos in it, in a folder OneDrive syncs (or uses it if it is
+# there); OneDrive then uploads it to SharePoint. Answers its path and where it is in SharePoint.
+function Api-FolderCreate($data) {
+    $parent = [string]$data.parent
+    if (-not $parent -or -not [IO.Path]::IsPathRooted($parent) -or -not (Test-Path -LiteralPath $parent -PathType Container)) { return (Fail 'That folder is not there on this PC.') }
+    $dir = Join-Path $parent 'OSign'
+    try {
+        foreach ($d in @($dir, (Join-Path $dir 'photos'))) { if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d | Out-Null } }
+    } catch { return (Fail ('The folder could not be made: ' + $_.Exception.Message)) }
+    return (Ok @{ path = $dir; location = (Resolve-SpLocation $dir) })
+}
+
+# The Windows folder dialog, for the folder fields. It needs a single-threaded apartment, which
+# PowerShell 7 does not have by default: so it runs in a runspace of its own, set to STA, in this
+# same process - no second PowerShell, no encoded command line (both of which security software
+# rightly treats as suspicious).
 function Api-PickFolder($data) {
     if (-not $script:OnWindows) { return (Fail 'Choosing a folder needs Windows.') }
-    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $tmp = [IO.Path]::GetTempFileName()
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.ApartmentState = [Threading.ApartmentState]::STA
+    $rs.ThreadOptions = [Management.Automation.Runspaces.PSThreadOptions]::UseNewThread
+    $ps = $null
     try {
-        $start = ([string]$data.start).Replace("'", "''")
-        $title = ([string]$data.title).Replace("'", "''")
-        $outFile = $tmp.Replace("'", "''")
-        $code = @"
-Add-Type -AssemblyName System.Windows.Forms
-`$owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = `$true; ShowInTaskbar = `$false }
-`$d = New-Object System.Windows.Forms.FolderBrowserDialog
-`$d.Description = '$title'
-`$d.ShowNewFolderButton = `$true
-if ('$start' -and (Test-Path -LiteralPath '$start')) { `$d.SelectedPath = '$start' }
-if (`$d.ShowDialog(`$owner) -eq [System.Windows.Forms.DialogResult]::OK) { [IO.File]::WriteAllText('$outFile', `$d.SelectedPath, (New-Object System.Text.UTF8Encoding(`$false))) }
-"@
-        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
-        & $ps -NoProfile -NonInteractive -STA -ExecutionPolicy Bypass -EncodedCommand $enc | Out-Null
-        $picked = [IO.File]::ReadAllText($tmp, $script:Utf8)
-        return (Ok @{ path = $picked })
-    } finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
+        $rs.Open()
+        $ps = [powershell]::Create()
+        $ps.Runspace = $rs
+        [void]$ps.AddScript({
+            param([string]$Title, [string]$Start)
+            Add-Type -AssemblyName System.Windows.Forms
+            $owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false }
+            $d = New-Object System.Windows.Forms.FolderBrowserDialog
+            $d.Description = $Title
+            $d.ShowNewFolderButton = $true
+            if ($Start -and (Test-Path -LiteralPath $Start -PathType Container)) { $d.SelectedPath = $Start }
+            try { if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath } else { '' } }
+            finally { $d.Dispose(); $owner.Dispose() }
+        }).AddArgument([string]$data.title).AddArgument([string]$data.start)
+        $out = @($ps.Invoke())
+        if ($ps.HadErrors -and -not $out.Count) { return (Fail ('The folder dialog could not be shown: ' + $ps.Streams.Error[0])) }
+        return (Ok @{ path = $(if ($out.Count) { [string]$out[-1] } else { '' }) })
+    } catch {
+        return (Fail ('The folder dialog could not be shown: ' + $_.Exception.Message))
+    } finally {
+        if ($ps) { $ps.Dispose() }
+        $rs.Dispose()
+    }
 }
 
 function Api-Info {
@@ -877,6 +910,8 @@ function Invoke-Request($client) {
             '/api/addin/build'    { Api-AddinBuild }
             '/api/addin/check'    { Api-AddinCheck }
             '/api/sp/resolve'     { Api-SpResolve $data }
+            '/api/sp/libraries'   { Api-SpLibraries }
+            '/api/folder/create'  { Api-FolderCreate $data }
             '/api/pick-folder'    { Api-PickFolder $data }
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }

@@ -983,7 +983,7 @@
     return loc;
   }
   $('setFolder').addEventListener('change', () => detectWhere($('setFolder').value, 'setSpSite', 'setSpFolder', $('setWhere'), null));
-  $('wizFolder').addEventListener('change', () => detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), $('wizWhereEdit')));
+  $('wizFolder').addEventListener('change', () => detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), $('wizWhereEdit')).then(wizPermNote));
 
   // ---------------------------------------------------------------------------------------------
   // Setup assistant: opens by itself until it was finished once, while OSign is not set up
@@ -991,7 +991,7 @@
   // ---------------------------------------------------------------------------------------------
   const WIZ = Array.from(document.querySelectorAll('#dlgWizard .wiz-step')).map((sec) => sec.dataset.step);
   const WIZ_KEY = 'osign.wizStep';
-  const wiz = { step: 0, built: false, warned: '' };
+  const wiz = { step: 0, built: false, warned: '', libs: [] };
   const stored = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no storage */ } return null; };
   const radio = (name) => (document.querySelector('input[name=' + name + ']:checked') || {}).value || '';
   const setRadio = (name, v) => document.querySelectorAll('input[name=' + name + ']').forEach((r) => { r.checked = r.value === v; });
@@ -1034,12 +1034,59 @@
     $('wizUpload').hidden = !wiz.built;
     document.querySelectorAll('#wizUpload [data-host]').forEach((p) => { p.hidden = p.dataset.host !== (host || 'other'); });
   }
+  // Step 1: the places OneDrive syncs to this PC, as choices; OSign makes the folder OSign in the
+  // one chosen. Or a folder of one's own.
+  const isPersonal = (site) => /:\/personal\//.test(site || '');
+  function wizPermNote() {
+    const choice = radio('wlib'), lib = choice.startsWith('lib') ? wiz.libs[+choice.slice(3)] : null;
+    const site = lib ? lib.location.site : choice === 'own' ? $('wizSpSite').value : '';
+    $('wizPerm').hidden = !choice;
+    $('wizPerm').innerHTML = !choice ? '' : isPersonal(site)
+      ? t('<b>Only you</b> can read your OneDrive, so only you get signatures: good for testing. For everyone, choose a SharePoint site later.')
+      : t('<b>Everyone who gets a signature</b> needs read access to the folder OSign: in SharePoint, on the folder, <b>Share</b> → <i>Everyone except external users</i> → <b>Can view</b>. While testing, leave it to yourself.');
+  }
+  function wizLibsRender() {
+    const box = $('wizLibs'); box.replaceChildren();
+    wiz.libs.forEach((l, i) => {
+      const ok = l.exists && l.location.defaultLibrary;
+      const sub = el('span', { class: 'sub' }, l.path);
+      const title = el('b', null, describeWhere(l.location));
+      const kids = [title];
+      if (isPersonal(l.location.site)) kids.push(el('em', null, t('only you – for testing')));
+      kids.push(sub);
+      if (!ok) kids.push(el('span', { class: 'sub warn' }, !l.exists ? t('Not on this PC right now.') : t('Not the main library (Documents): the add-in cannot read it.')));
+      const input = el('input', { type: 'radio', name: 'wlib', value: 'lib' + i });
+      input.disabled = !ok;
+      box.append(el('label', { class: 'wiz-opt' + (ok ? '' : ' off') }, input, el('span', null, ...kids)));
+    });
+    $('wizNoLibs').hidden = wiz.libs.length > 0;
+    box.querySelectorAll('input[name=wlib]').forEach((r) => r.addEventListener('change', wizLibChanged));
+  }
+  function wizLibChanged() {
+    $('wizOwnBox').hidden = radio('wlib') !== 'own';
+    $('wizErr').textContent = '';
+    wizPermNote();
+  }
+  async function wizLibsLoad() {
+    try { wiz.libs = (await api('sp/libraries')).libraries || []; } catch (e) { wiz.libs = []; }
+    const keep = radio('wlib');
+    wizLibsRender();
+    // A folder set already: that one, as a folder of one's own; otherwise what was chosen.
+    if (keep) setRadio('wlib', keep);
+    else if (S.settings.folder) setRadio('wlib', 'own');
+    wizLibChanged();
+  }
+  document.querySelector('input[name=wlib][value=own]').addEventListener('change', wizLibChanged);
+  $('wizLibsAgain').addEventListener('click', wizLibsLoad);
+
   function wizOpen(step) {
     wizFill();
     wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
     $('wizWhereEdit').open = false; $('wizWhereFound').textContent = '';
-    if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null);
+    setRadio('wlib', '');
+    if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null).then(wizPermNote);
+    wizLibsLoad();
     wizRender();
     if (!$('dlgWizard').open) $('dlgWizard').showModal();
   }
@@ -1051,6 +1098,14 @@
   // What a step does on Next; throws to stay on it.
   const wizLeave = {
     async folder() {
+      const choice = radio('wlib');
+      if (!choice) throw new Error(t('Choose where the signatures are kept.'));
+      if (choice.startsWith('lib')) {
+        // OSign makes the folder there (or takes it, if it is there already).
+        const r = await api('folder/create', { parent: wiz.libs[+choice.slice(3)].path });
+        $('wizFolder').value = r.path;
+        if (r.location) { $('wizSpSite').value = r.location.site; $('wizSpFolder').value = r.location.folder; }
+      }
       if (!$('wizFolder').value.trim()) throw new Error(t('Enter the path of the synced OSign folder.'));
       const where = parseSpAddress($('wizSpSite').value);
       $('wizSpSite').value = where.site;

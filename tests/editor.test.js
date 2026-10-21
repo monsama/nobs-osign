@@ -356,6 +356,28 @@ test('where a synced folder is in SharePoint, from what OneDrive notes', opts, a
   assert.equal((await api('sp/resolve', { path: '' })).json.found, false);
 });
 
+test('the places OneDrive syncs, and making the folder OSign in one', opts, async () => {
+  const od = path.join(dataDir, 'OneDrive - Contoso');
+  fs.mkdirSync(od, { recursive: true });
+  const libs = (await api('sp/libraries')).json.libraries;
+  // The OneDrive first; each with where it is in SharePoint, and whether it is on this PC.
+  assert.equal(libs[0].path, od);
+  assert.equal(libs[0].exists, true);
+  assert.equal(libs[0].location.site, 'contoso-my.sharepoint.com:/personal/anna_contoso_com:');
+  assert.equal(libs.length, 4);
+  assert.deepEqual(libs.filter((l) => !l.location.defaultLibrary).map((l) => l.location.library), ['SiteAssets']);
+  const r = (await api('folder/create', { parent: od })).json;
+  assert.equal(r.path, path.join(od, 'OSign'));
+  assert.ok(fs.statSync(path.join(od, 'OSign', 'photos')).isDirectory());
+  assert.deepEqual([r.location.site, r.location.folder], ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign']);
+  // There already: taken as it is.
+  fs.writeFileSync(path.join(od, 'OSign', 'keep.txt'), 'x');
+  assert.equal((await api('folder/create', { parent: od })).json.ok, true);
+  assert.ok(fs.existsSync(path.join(od, 'OSign', 'keep.txt')));
+  assert.match((await api('folder/create', { parent: path.join(dataDir, 'not-there') })).json.error, /not there/);
+  assert.match((await api('folder/create', { parent: 'relative' })).json.error, /not there/);
+});
+
 test('AD lookup says plainly where it cannot work', opts, async () => {
   const r = await api('ad/lookup', { query: 'x', fields: [] });
   if (process.platform !== 'win32') { assert.equal(r.json.ok, false); assert.match(r.json.error, /Windows/); }
