@@ -19,7 +19,7 @@ const skip = (!pwshOk && PS + ' is not installed') || (!chromium && 'playwright 
 
 const PORT = 17782;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
-let proc, url, browser, page, folder, dataDir, adJson;
+let proc, url, browser, page, folder, dataDir, adJson, syncJson;
 const errors = [], notFound = [];
 
 test.before(async () => {
@@ -31,13 +31,16 @@ test.before(async () => {
     { mail: 'beat@example.com', attrs: { description: '', homePhone: '+41 41 000 00 02', info: '' }, groups: [] }
   ]));
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-pub-'));
+  // OneDrive's notes: the publish folder is synced from a team site's library.
+  syncJson = path.join(dataDir, 'sync.json');
+  fs.writeFileSync(syncJson, JSON.stringify([{ MountPoint: path.dirname(folder), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/' }]));
   // Publishing goes to a folder: set before the start, as an admin would in Settings.
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ folder, photosFolder: '', setupDone: '1' }));
   // A photo for the sample user (mustera), as an admin would have copied it there.
   fs.mkdirSync(path.join(folder, 'photos'));
   fs.writeFileSync(path.join(folder, 'photos', 'mustera.jpg'), PNG);
   proc = spawn(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, '..', 'editor', 'OSign.ps1'), '-NoBrowser', '-Port', String(PORT)], {
-    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, GITHUB_TOKEN: '', OSIGN_TEST_AD_JSON: adJson })
+    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, GITHUB_TOKEN: '', OSIGN_TEST_AD_JSON: adJson, OSIGN_TEST_SYNC_JSON: syncJson })
   });
   url = await new Promise((resolve, reject) => {
     let out = '';
@@ -259,6 +262,18 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   await page.click('#btnWizard');
   await next('The folder in SharePoint');
   assert.equal(await page.inputValue('#wizFolder'), folder);
+  // Where it is in SharePoint: found out from OneDrive's notes, said in plain words, filled in.
+  await page.waitForFunction(() => /In SharePoint/.test(document.querySelector('#wizWhereFound').textContent));
+  assert.equal(await page.textContent('#wizWhereFound'), '✓ In SharePoint: IT › Documents › General › ' + path.basename(folder));
+  assert.equal(await page.inputValue('#wizSpSite'), 'contoso.sharepoint.com:/sites/IT:');
+  assert.equal(await page.inputValue('#wizSpFolder'), 'General/' + path.basename(folder));
+  assert.equal(await page.isVisible('#wizSpSite'), false, 'the fields stay folded away');
+  // A folder OneDrive does not sync: it says so and opens the fields.
+  await page.fill('#wizFolder', path.join(path.parse(os.tmpdir()).root, 'elsewhere', 'OSign'));
+  await page.dispatchEvent('#wizFolder', 'change');
+  await page.waitForFunction(() => /cannot tell/.test(document.querySelector('#wizWhereFound').textContent));
+  assert.equal(await page.isVisible('#wizSpSite'), true);
+  await page.fill('#wizFolder', folder);
   // Addresses as copied from the browser, and sharing links, become what Graph wants; where they
   // name the folder too, that is filled in.
   const where = async (address) => {

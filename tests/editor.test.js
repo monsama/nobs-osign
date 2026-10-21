@@ -21,7 +21,7 @@ let pwshOk = true;
 try { execFileSync(PS, ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }); } catch (e) { pwshOk = false; }
 
 const PORT = 17781;
-let proc, token, dataDir, folder, adJson;
+let proc, token, dataDir, folder, adJson, syncJson;
 // The directory, for the AD export: what Get-AdUserRecords would find.
 const AD_USERS = [
   { mail: 'Anna.Muster@example.com', attrs: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: ['sg-field'] },
@@ -41,9 +41,17 @@ test.before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-test-'));
   adJson = path.join(dataDir, 'ad-users.json');
   fs.writeFileSync(adJson, JSON.stringify(AD_USERS));
+  // What OneDrive notes about the libraries it syncs to this PC.
+  syncJson = path.join(dataDir, 'sync.json');
+  fs.writeFileSync(syncJson, JSON.stringify([
+    { MountPoint: path.join(dataDir, 'Contoso', 'IT - Documents'), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/' },
+    { MountPoint: path.join(dataDir, 'Contoso', 'IT - Documents', 'General'), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/' },
+    { MountPoint: path.join(dataDir, 'OneDrive - Contoso'), UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' },
+    { MountPoint: path.join(dataDir, 'Contoso', 'Home - Site Assets'), UrlNamespace: 'https://contoso.sharepoint.com/SiteAssets/' }
+  ]));
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-sp-'));
   proc = spawn(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-NoBrowser', '-Port', String(PORT)], {
-    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, OSIGN_TEST_AD_JSON: adJson })
+    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, OSIGN_TEST_AD_JSON: adJson, OSIGN_TEST_SYNC_JSON: syncJson })
   });
   token = await new Promise((resolve, reject) => {
     let out = '';
@@ -73,7 +81,7 @@ test('the API wants the token, a JSON POST, and this machine as the host', opts,
   await get.text();
   const info = await api('info');
   assert.equal(info.json.backend, 'powershell');
-  assert.deepEqual(Object.keys(info.json.features).sort(), ['adLookup', 'addinFiles']);
+  assert.deepEqual(Object.keys(info.json.features).sort(), ['adLookup', 'addinFiles', 'pickFolder']);
   assert.equal(info.json.features.addinFiles, true);
 });
 
@@ -240,7 +248,7 @@ test('AD users: read first (nothing written), check, then exactly that is writte
 test('-ExportUsers: the export alone, as the published signatures ask for', opts, async () => {
   const cfgPath = path.join(folder, 'signatures.json');
   const saved = fs.readFileSync(cfgPath, 'utf8');
-  const run = () => { try { return { code: 0, out: execFileSync(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-ExportUsers'], { env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, OSIGN_TEST_AD_JSON: adJson }), encoding: 'utf8' }) }; } catch (e) { return { code: e.status, out: String(e.stdout) + String(e.stderr) }; } };
+  const run = () => { try { return { code: 0, out: execFileSync(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, '-ExportUsers'], { env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, OSIGN_TEST_AD_JSON: adJson, OSIGN_TEST_SYNC_JSON: syncJson }), encoding: 'utf8' }) }; } catch (e) { return { code: e.status, out: String(e.stdout) + String(e.stderr) }; } };
   try {
     fs.writeFileSync(cfgPath, JSON.stringify({ schemaVersion: 1, options: { valueSource: 'graph' }, fields: [], signatures: [] }));
     assert.match(run().out, /Entra ID: nothing to export/);
@@ -331,6 +339,21 @@ test('the add-in files: the template filled in, the same as addin/fill.mjs does 
     assert.equal(by2['Cache-Control'].ok, false);
   } finally { srv.close(); }
   await api('settings/save', { settings: { addinUrl: '', clientId: '', tenantId: '', spSite: 'root', spFolder: 'OSign', addinFolder: '', addinHost: '' } });
+});
+
+test('where a synced folder is in SharePoint, from what OneDrive notes', opts, async () => {
+  const at = async (...p) => (await api('sp/resolve', { path: path.join(dataDir, ...p) })).json;
+  let r = await at('Contoso', 'IT - Documents', 'General', 'OSign');
+  assert.equal(r.found, true);
+  // The longest match: the General library sync, not the whole library's.
+  assert.deepEqual([r.location.site, r.location.siteName, r.location.library, r.location.folder, r.location.defaultLibrary], ['contoso.sharepoint.com:/sites/IT:', 'IT', 'Shared Documents', 'General/OSign', true]);
+  assert.equal(r.location.url, 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/OSign');
+  r = await at('OneDrive - Contoso', 'Tests', 'OSign');
+  assert.deepEqual([r.location.site, r.location.folder], ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'Tests/OSign']);
+  r = await at('Contoso', 'Home - Site Assets', 'OSign');
+  assert.deepEqual([r.location.site, r.location.library, r.location.folder, r.location.defaultLibrary], ['root', 'SiteAssets', 'OSign', false]);
+  assert.equal((await at('Elsewhere', 'OSign')).found, false);
+  assert.equal((await api('sp/resolve', { path: '' })).json.found, false);
 });
 
 test('AD lookup says plainly where it cannot work', opts, async () => {

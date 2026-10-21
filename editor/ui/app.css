@@ -278,3 +278,12 @@ button.help:hover, button.help:focus-visible { border-color: var(--accent); colo
   color: var(--text); box-shadow: 0 10px 30px rgba(0,0,0,.18); font-size: 13px; font-weight: normal; line-height: 1.55; text-transform: none; letter-spacing: 0; }
 .help-pop code { font-size: 12px; }
 th button.help { text-transform: none; }
+
+/* a folder field with its "Choose folder…", and where it is in SharePoint */
+.pick { display: flex; gap: 6px; margin-top: 4px; }
+.pick > input { flex: 1; margin-top: 0; min-width: 0; }
+.pick > button { flex: none; font-weight: normal; }
+.where { display: block; font-size: 13px; font-weight: normal; margin: 6px 0 0; line-height: 1.5; }
+.where:empty { display: none; }
+.where.good { color: var(--ok); }
+.where.warn { color: var(--warn); }

@@ -187,8 +187,8 @@
     <p><button id="btnWizard" type="button">Setup assistant…</button> <small>Step by step through the SharePoint folder, the app registration and the add-in.</small></p>
     <label>Language<select id="setLang"></select></label>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
-      <input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign">
-      <small id="setFolderNote"></small>
+      <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
+      <small id="setFolderNote"></small> <small id="setWhere" class="where"></small>
     </label>
     <label>Photos for the preview <small>(one &lt;username&gt;.jpg per person; empty: the photos folder in the folder above)</small>
       <input id="setPhotos" placeholder="\\server\share\photos">
@@ -204,7 +204,7 @@
       its <code>manifest.xml</code> in the Microsoft 365 admin center.</p>
     <div class="grid2">
       <label>Address of the add-in <small>(where the files are served)</small><input id="setAddinUrl" placeholder="https://osign.contoso.com/"></label>
-      <label>Write the files to<input id="setAddinFolder" placeholder="C:\OSign-addin"></label>
+      <label>Write the files to<span class="pick"><input id="setAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="setAddinFolder">Choose folder…</button></span></label>
       <label>Web server <small>(its caching file goes with the files)</small><select id="setAddinHost">
         <option value="">-</option><option value="cloudflare">Cloudflare Pages</option><option value="azure">Azure Static Web Apps</option>
         <option value="iis">IIS</option><option value="apache">Web host (Apache)</option><option value="other">Another web server</option></select></label>
@@ -284,20 +284,22 @@
           give access to yourself only.</li>
         <li data-th="wizFolder3"><b>Connect it to this PC.</b> Open the folder and choose <b>Add shortcut to My files</b> (or <b>Sync</b>).
           OneDrive then shows it in File Explorer.</li>
-        <li data-th="wizFolder4"><b>Copy the path.</b> In File Explorer, right-click the folder → <b>Copy as path</b>, and paste it below
-          without the quotation marks.</li>
+        <li data-th="wizFolder4"><b>Choose it below.</b> Select <b>Choose folder…</b> and pick the OSign folder; it is in File Explorer
+          under your company's name or under <i>OneDrive</i>. OSign then finds out by itself where it is in SharePoint.</li>
       </ol>
       <div class="wiz-fields">
-        <label>The synced OSign folder on this PC<input id="wizFolder" placeholder="C:\Users\me\OneDrive - Contoso\OSign"><small id="wizFolderNote"></small></label>
-        <h3 class="wiz-h">Where the add-in finds it in SharePoint</h3>
-        <p class="wiz-note" data-th="wizWhere">Leave <b>root</b> and <b>OSign</b> if the folder is in <i>Documents</i> of the home site. Otherwise paste
-          the folder's address from the browser, or a sharing link to it (<b>Share → Copy link</b>), into <i>SharePoint site</i>.
-          OSign takes the site from it, and the folder too where the address names it; otherwise give the folder's path within
-          <i>Documents</i>, e.g. <code>General/OSign</code>.</p>
-        <div class="grid2">
-          <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button><input id="wizSpSite" placeholder="root"></label>
-          <label>Folder in its library<input id="wizSpFolder" placeholder="OSign"></label>
-        </div>
+        <label>The OSign folder on this PC<span class="pick"><input id="wizFolder" placeholder="C:\Users\me\OneDrive - Contoso\OSign"><button type="button" class="pick-btn" data-for="wizFolder">Choose folder…</button></span><small id="wizFolderNote"></small></label>
+        <p id="wizWhereFound" class="where"></p>
+        <details id="wizWhereEdit">
+          <summary>Set the place in SharePoint by hand</summary>
+          <p class="wiz-note" data-th="wizWhere">Only needed if OSign cannot find it by itself. Paste the folder's address from the browser, or a
+            sharing link to it (<b>Share → Copy link</b>), into <i>SharePoint site</i>; OSign takes the site and, where the address names it,
+            the folder from it. <i>Folder in its library</i> is the path within <i>Documents</i>, e.g. <code>General/OSign</code>.</p>
+          <div class="grid2">
+            <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button><input id="wizSpSite" placeholder="root"></label>
+            <label>Folder in its library<input id="wizSpFolder" placeholder="OSign"></label>
+          </div>
+        </details>
         <label>Photos for the preview <small>(optional: one &lt;username&gt;.jpg per person; empty: the photos folder in it)</small><input id="wizPhotos" placeholder="\\server\share\photos"></label>
       </div>
     </section>
@@ -367,7 +369,7 @@
       <p class="wiz-intro" data-th="wizFilesLead">OSign now generates the add-in's files for your address, app registration and SharePoint folder,
         and saves them in a folder on this PC.</p>
       <div class="wiz-fields">
-        <label>Write the files to<input id="wizAddinFolder" placeholder="C:\OSign-addin"></label>
+        <label>Write the files to<span class="pick"><input id="wizAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="wizAddinFolder">Choose folder…</button></span></label>
         <p class="wiz-actions"><button type="button" id="wizMake" class="primary">Make the add-in files</button></p>
         <p id="wizMakeOk" class="ok"></p>
       </div>
@@ -492,7 +494,7 @@
   <div data-help-text="hNoProfile" data-th="hNoProfile">If the user's details cannot be read (offline, sign-in not yet possible), the add-in normally inserts nothing and tries again with the next message. When this is on, it inserts the signature anyway, with empty fields; only the mail address is filled in. Lines with empty fields are left out as usual.</div>
   <div data-help-text="hVsrc" data-th="hVsrc">Decides where the add-in reads each sender's details. <b>Entra ID</b> needs nothing exported but lacks some AD attributes. <b>Active Directory</b> values are exported to SharePoint when you publish (and, if set up, by a scheduled task); you review them first under <i>Users</i>. Groups for <i>Who gets it</i> come from the same source.</div>
   <div data-help-text="hPreview" data-th="hPreview"><b>Sample values</b>: each field's sample value (see <i>Fields</i>). <b>All fields empty</b>: shows which lines disappear. <b>User from Active Directory</b>: a real user's values and groups, read from AD on this PC (only in the domain); shows which signature they would get.</div>
-  <div data-help-text="hSpSite" data-th="hSpSite">Where the add-in finds the OSign folder in SharePoint. <code>root</code> is the home site (<code>https://&lt;tenant&gt;.sharepoint.com</code>). For another site or a OneDrive, paste its address or a sharing link to the folder; OSign converts it, e.g. to <code>contoso.sharepoint.com:/sites/IT:</code>.</div>
+  <div data-help-text="hSpSite" data-th="hSpSite">Where the add-in finds the OSign folder in SharePoint. OSign fills it in by itself from the folder you choose on this PC, if OneDrive syncs it. <code>root</code> is the home site (<code>https://&lt;tenant&gt;.sharepoint.com</code>). To set it by hand, paste the folder's address from the browser or a sharing link to it; OSign converts it, e.g. to <code>contoso.sharepoint.com:/sites/IT:</code>.</div>
 </div>
 <div id="helpPop" class="help-pop" popover="auto" role="tooltip"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
