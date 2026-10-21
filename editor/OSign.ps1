@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.4.1'
+$script:AppVersion = '0.4.2'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
@@ -283,6 +283,51 @@ function Get-SyncedLibraries {
     return , $out
 }
 
+# Each place once (OneDrive notes some twice), and which are shortcuts: a folder added with "Add
+# shortcut to My files" sits inside the OneDrive, but OneDrive notes only its library's address,
+# not which folder of it the shortcut is - so where a path in it is in SharePoint cannot be told.
+function Get-SyncPlaces {
+    $norm = { param($x) ([string]$x).Replace('/', '\').TrimEnd('\') }
+    $seen = @{}; $list = @()
+    foreach ($l in (Get-SyncedLibraries)) {
+        $k = (& $norm $l.MountPoint).ToLowerInvariant()
+        if (-not $k -or $seen.ContainsKey($k)) { continue }
+        $seen[$k] = $true
+        $list += [pscustomobject]@{ MountPoint = (& $norm $l.MountPoint); UrlNamespace = ([Uri]::UnescapeDataString($l.UrlNamespace)).TrimEnd('/'); Shortcut = $false }
+    }
+    foreach ($e in $list) {
+        foreach ($o in $list) {
+            if ($o -ne $e -and $e.MountPoint.StartsWith($o.MountPoint + '\', [StringComparison]::OrdinalIgnoreCase) -and
+                -not ($e.UrlNamespace + '/').StartsWith($o.UrlNamespace + '/', [StringComparison]::OrdinalIgnoreCase)) { $e.Shortcut = $true }
+        }
+    }
+    return , $list
+}
+
+# Where a SharePoint folder (its address, https://<host>/sites/<site>/<library>/<folder>) is on this
+# PC: in the place OneDrive syncs it to (shortcuts left out: their folder is not known).
+function Find-LocalFolder([string]$Url) {
+    $u = ([Uri]::UnescapeDataString($Url)).TrimEnd('/')
+    $best = $null
+    foreach ($l in (Get-SyncPlaces)) {
+        if ($l.Shortcut) { continue }
+        if ($u.Equals($l.UrlNamespace, [StringComparison]::OrdinalIgnoreCase) -or $u.StartsWith($l.UrlNamespace + '/', [StringComparison]::OrdinalIgnoreCase)) {
+            if (-not $best -or $l.UrlNamespace.Length -gt $best.UrlNamespace.Length) { $best = $l }
+        }
+    }
+    if (-not $best) { return $null }
+    $path = $best.MountPoint
+    foreach ($part in @($u.Substring($best.UrlNamespace.Length).Split('/') | Where-Object { $_ })) { $path = Join-Path $path $part }
+    if (-not $script:OnWindows) { $path = $path.Replace('\', '/') }
+    return $path
+}
+
+function Api-SpLocal($data) {
+    $p = Find-LocalFolder ([string]$data.url)
+    if (-not $p) { return (Ok @{ found = $false }) }
+    return (Ok @{ found = $true; path = $p; exists = (Test-Path -LiteralPath $p -PathType Container) })
+}
+
 # The names the default library's address has: "Shared Documents" on a site, "Documents" in a
 # OneDrive (also in German tenants; older German sites may have "Freigegebene Dokumente").
 $script:DefaultLibraries = @('shared documents', 'documents', 'freigegebene dokumente', 'dokumente')
@@ -292,7 +337,7 @@ function Resolve-SpLocation([string]$Path) {
     $norm = { param($x) ([string]$x).Replace('/', '\').TrimEnd('\') }
     $full = & $norm $Path
     $best = $null
-    foreach ($l in (Get-SyncedLibraries)) {
+    foreach ($l in (Get-SyncPlaces)) {
         $mp = & $norm $l.MountPoint
         if (-not $mp) { continue }
         if ($full.Equals($mp, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($mp + '\', [StringComparison]::OrdinalIgnoreCase)) {
@@ -301,6 +346,9 @@ function Resolve-SpLocation([string]$Path) {
     }
     if (-not $best) { return $null }
     $rel = $full.Substring((& $norm $best.MountPoint).Length).Trim('\')
+    # In a shortcut: the site is known, the folder not.
+    $uncertain = [bool]$best.Shortcut
+    if ($uncertain) { $rel = '' }
     $url = $best.UrlNamespace.TrimEnd('/') + '/' + ($rel -replace '\\', '/')
     $u = [Uri]$url.TrimEnd('/')
     $parts = @($u.AbsolutePath.Split('/') | Where-Object { $_ } | ForEach-Object { [Uri]::UnescapeDataString($_) })
@@ -314,7 +362,7 @@ function Resolve-SpLocation([string]$Path) {
     $folder = (@($parts | Select-Object -Skip 1) -join '/')
     return [ordered]@{
         site = $site; siteName = $siteName; host = $u.Host.ToLowerInvariant(); library = $library; folder = $folder
-        url = $url.TrimEnd('/'); defaultLibrary = ($script:DefaultLibraries -contains $library.ToLowerInvariant())
+        url = $url.TrimEnd('/'); defaultLibrary = ($script:DefaultLibraries -contains $library.ToLowerInvariant()); uncertain = $uncertain
     }
 }
 
@@ -322,30 +370,6 @@ function Api-SpResolve($data) {
     $r = Resolve-SpLocation ([string]$data.path)
     if (-not $r) { return (Ok @{ found = $false }) }
     return (Ok @{ found = $true; location = $r })
-}
-
-# The places OneDrive syncs to this PC, each with where it is in SharePoint: the choices for
-# where the signatures go. The OneDrive first, then by name.
-function Api-SpLibraries {
-    $list = @()
-    foreach ($l in (Get-SyncedLibraries)) {
-        $loc = Resolve-SpLocation $l.MountPoint
-        if ($loc) { $list += [ordered]@{ path = ([string]$l.MountPoint).TrimEnd('\', '/'); exists = (Test-Path -LiteralPath $l.MountPoint -PathType Container); location = $loc } }
-    }
-    $list = @($list | Sort-Object @{ Expression = { $_.location.site -notlike '*:/personal/*' } }, @{ Expression = { $_.path } })
-    return (Ok @{ libraries = $list })
-}
-
-# Makes the folder OSign, with photos in it, in a folder OneDrive syncs (or uses it if it is
-# there); OneDrive then uploads it to SharePoint. Answers its path and where it is in SharePoint.
-function Api-FolderCreate($data) {
-    $parent = [string]$data.parent
-    if (-not $parent -or -not [IO.Path]::IsPathRooted($parent) -or -not (Test-Path -LiteralPath $parent -PathType Container)) { return (Fail 'That folder is not there on this PC.') }
-    $dir = Join-Path $parent 'OSign'
-    try {
-        foreach ($d in @($dir, (Join-Path $dir 'photos'))) { if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d | Out-Null } }
-    } catch { return (Fail ('The folder could not be made: ' + $_.Exception.Message)) }
-    return (Ok @{ path = $dir; location = (Resolve-SpLocation $dir) })
 }
 
 # The Windows folder dialog, for the folder fields. It needs a single-threaded apartment, which
@@ -910,8 +934,7 @@ function Invoke-Request($client) {
             '/api/addin/build'    { Api-AddinBuild }
             '/api/addin/check'    { Api-AddinCheck }
             '/api/sp/resolve'     { Api-SpResolve $data }
-            '/api/sp/libraries'   { Api-SpLibraries }
-            '/api/folder/create'  { Api-FolderCreate $data }
+            '/api/sp/local'       { Api-SpLocal $data }
             '/api/pick-folder'    { Api-PickFolder $data }
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }

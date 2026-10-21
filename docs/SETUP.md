@@ -28,17 +28,20 @@ has that site, so the add-in finds it without being told.
    `photos/@@sAMAccountName.jpg` embed each sender's own photo; who has none gets the signature
    without one.
 
-**The setup assistant can make the folder for you.** Its step 1 lists the places OneDrive syncs to
-this PC (your OneDrive, and each SharePoint library you chose *Sync* for); pick one, and OSign makes
-the folder `OSign` with `photos` in it there, OneDrive uploads it. Your OneDrive is readable only
-by you: good for testing. For the rollout, take a site's *Documents* and share the folder (read)
-with everyone.
+**The setup assistant asks for the folder one of two ways** (step 1), and finds the other half
+itself:
 
-**The editor finds out where the folder is in SharePoint by itself.** In the setup assistant
-(step 1) or Settings, choose the synced folder with **Choose folder…**; from OneDrive's own notes
-on this PC, OSign shows where it is (e.g. *✓ In SharePoint: IT › Documents › General › OSign*) and
-fills in the site and folder the add-in reads. Only when it cannot tell (the folder is not synced
-by OneDrive) set it by hand under *Set the place in SharePoint by hand*.
+- **SharePoint link:** open the folder in SharePoint in the browser and paste the address from the
+  address bar. OSign finds the folder on this PC that OneDrive syncs it to. The library has to be
+  synced with *Sync* (OSign publishes through OneDrive). Sharing links (*Copy link*) usually do not
+  say which folder they are; use the address bar.
+- **An existing folder on this PC:** choose it with **Choose folder…**; OSign finds out where it is in
+  SharePoint from OneDrive's own notes and shows it (e.g. *✓ In SharePoint: IT › Documents ›
+  General › OSign*). For a folder added with *Add shortcut to My files* OneDrive does not note which
+  folder it is: use the SharePoint link instead.
+
+Your OneDrive is readable only by you: good for testing. For the rollout, take a site's
+*Documents* and share the folder (read) with everyone.
 
 Another site or folder by hand: set it in the editor (setup assistant step 1, or Settings →
 *Outlook add-in*) before making the add-in's files (step 3). *SharePoint site*: paste the folder's address from

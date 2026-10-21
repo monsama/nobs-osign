@@ -898,15 +898,16 @@
     const id = u.searchParams.get('id') || u.searchParams.get('RootFolder');
     let path = id ? id.split('/').filter(Boolean) : (shared ? [] : rest);
     if (id && sitePath.length && path.slice(0, 2).map((x) => x.toLowerCase()).join('/') === sitePath.join('/')) path = path.slice(2);
-    let folder = null;
+    let folder = null, url = null;
     const lib = path.findIndex((x) => LIBRARIES.includes(x.toLowerCase()));
     if (lib === 0) {
       const inLib = path.slice(1);
       const forms = inLib.findIndex((x) => /^forms$/i.test(x) || /\.aspx$/i.test(x));
-      const f = (forms < 0 ? inLib : inLib.slice(0, forms)).join('/');
-      if (f) folder = f;
+      const f = (forms < 0 ? inLib : inLib.slice(0, forms));
+      // The folder's own address: what OneDrive notes for the library, and the folder in it.
+      if (f.length) { folder = f.join('/'); url = 'https://' + host + (site === 'root' ? '' : '/' + parts.slice(0, 2).join('/')) + '/' + [path[0]].concat(f).join('/'); }
     }
-    return { site, folder };
+    return { site, folder, url };
   }
   [['setSpSite', 'setSpFolder'], ['wizSpSite', 'wizSpFolder']].forEach(([siteId, folderId]) => $(siteId).addEventListener('change', () => {
     const r = parseSpAddress($(siteId).value);
@@ -969,8 +970,10 @@
     if (!String(path || '').trim()) return null;
     let r;
     try { r = await api('sp/resolve', { path }); } catch (e) { return null; }
-    if (!r.found) {
-      out.textContent = t('OSign cannot tell where this folder is in SharePoint. Is it connected with OneDrive (Add shortcut to My files, or Sync)? Otherwise set the place by hand.');
+    if (!r.found || r.location.uncertain) {
+      out.textContent = !r.found
+        ? t('OSign cannot tell where this folder is in SharePoint: OneDrive does not sync it. Choose «SharePoint link» instead, or a folder OneDrive syncs.')
+        : t('This is a shortcut in your OneDrive («Add shortcut to My files»): OSign cannot tell which SharePoint folder it is. Choose «SharePoint link» and paste the folder\'s address.');
       out.classList.add('warn');
       if (details) details.open = true;
       return null;
@@ -983,7 +986,10 @@
     return loc;
   }
   $('setFolder').addEventListener('change', () => detectWhere($('setFolder').value, 'setSpSite', 'setSpFolder', $('setWhere'), null));
-  $('wizFolder').addEventListener('change', () => detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), $('wizWhereEdit')).then(wizPermNote));
+  $('wizFolder').addEventListener('change', () => {
+    $('wizSpSite').value = ''; $('wizSpFolder').value = '';
+    wiz.checking = detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null).then(wizPermNote);
+  });
 
   // ---------------------------------------------------------------------------------------------
   // Setup assistant: opens by itself until it was finished once, while OSign is not set up
@@ -991,7 +997,7 @@
   // ---------------------------------------------------------------------------------------------
   const WIZ = Array.from(document.querySelectorAll('#dlgWizard .wiz-step')).map((sec) => sec.dataset.step);
   const WIZ_KEY = 'osign.wizStep';
-  const wiz = { step: 0, built: false, warned: '', libs: [] };
+  const wiz = { step: 0, built: false, warned: '', checking: null };
   const stored = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no storage */ } return null; };
   const radio = (name) => (document.querySelector('input[name=' + name + ']:checked') || {}).value || '';
   const setRadio = (name, v) => document.querySelectorAll('input[name=' + name + ']').forEach((r) => { r.checked = r.value === v; });
@@ -1004,7 +1010,8 @@
 
   function wizFill() {
     const st = S.settings;
-    $('wizFolder').value = st.folder || ''; $('wizPhotos').value = st.photosFolder || '';
+    $('wizFolder').value = st.folder || ''; $('wizLink').value = '';
+    $('wizSpSite').value = st.spSite || 'root'; $('wizSpFolder').value = st.folder ? st.spFolder || 'OSign' : '';
     // Nothing made yet: the recommended one; otherwise what is set.
     setRadio('wvsrc', S.config.signatures.length || S.settings.setupDone === '1' ? core.valueSource(S.config) : 'mixed');
     setRadio('whost', st.addinHost || 'cloudflare');
@@ -1034,59 +1041,55 @@
     $('wizUpload').hidden = !wiz.built;
     document.querySelectorAll('#wizUpload [data-host]').forEach((p) => { p.hidden = p.dataset.host !== (host || 'other'); });
   }
-  // Step 1: the places OneDrive syncs to this PC, as choices; OSign makes the folder OSign in the
-  // one chosen. Or a folder of one's own.
+  // Step 1: where the folder is, given one way or the other - its SharePoint address (OSign finds
+  // the synced folder on this PC), or the folder on this PC (OSign finds where it is in SharePoint).
   const isPersonal = (site) => /:\/personal\//.test(site || '');
   function wizPermNote() {
-    const choice = radio('wlib'), lib = choice.startsWith('lib') ? wiz.libs[+choice.slice(3)] : null;
-    const site = lib ? lib.location.site : choice === 'own' ? $('wizSpSite').value : '';
-    $('wizPerm').hidden = !choice;
-    $('wizPerm').innerHTML = !choice ? '' : isPersonal(site)
+    const site = $('wizSpFolder').value ? $('wizSpSite').value : '';
+    $('wizPerm').hidden = !site;
+    $('wizPerm').innerHTML = !site ? '' : isPersonal(site)
       ? t('<b>Only you</b> can read your OneDrive, so only you get signatures: good for testing. For everyone, choose a SharePoint site later.')
       : t('<b>Everyone who gets a signature</b> needs read access to the folder OSign: in SharePoint, on the folder, <b>Share</b> → <i>Everyone except external users</i> → <b>Can view</b>. While testing, leave it to yourself.');
   }
-  function wizLibsRender() {
-    const box = $('wizLibs'); box.replaceChildren();
-    wiz.libs.forEach((l, i) => {
-      const ok = l.exists && l.location.defaultLibrary;
-      const sub = el('span', { class: 'sub' }, l.path);
-      const title = el('b', null, describeWhere(l.location));
-      const kids = [title];
-      if (isPersonal(l.location.site)) kids.push(el('em', null, t('only you – for testing')));
-      kids.push(sub);
-      if (!ok) kids.push(el('span', { class: 'sub warn' }, !l.exists ? t('Not on this PC right now.') : t('Not the main library (Documents): the add-in cannot read it.')));
-      const input = el('input', { type: 'radio', name: 'wlib', value: 'lib' + i });
-      input.disabled = !ok;
-      box.append(el('label', { class: 'wiz-opt' + (ok ? '' : ' off') }, input, el('span', null, ...kids)));
-    });
-    $('wizNoLibs').hidden = wiz.libs.length > 0;
-    box.querySelectorAll('input[name=wlib]').forEach((r) => r.addEventListener('change', wizLibChanged));
-  }
   function wizLibChanged() {
+    $('wizLinkBox').hidden = radio('wlib') !== 'link';
     $('wizOwnBox').hidden = radio('wlib') !== 'own';
     $('wizErr').textContent = '';
     wizPermNote();
   }
-  async function wizLibsLoad() {
-    try { wiz.libs = (await api('sp/libraries')).libraries || []; } catch (e) { wiz.libs = []; }
-    const keep = radio('wlib');
-    wizLibsRender();
-    // A folder set already: that one, as a folder of one's own; otherwise what was chosen.
-    if (keep) setRadio('wlib', keep);
-    else if (S.settings.folder) setRadio('wlib', 'own');
-    wizLibChanged();
+  document.querySelectorAll('input[name=wlib]').forEach((r) => r.addEventListener('change', wizLibChanged));
+  async function wizLinkCheck() {
+    const out = $('wizLinkNote'), v = $('wizLink').value.trim();
+    out.textContent = ''; out.className = 'where';
+    $('wizSpSite').value = ''; $('wizSpFolder').value = ''; $('wizFolder').value = '';
+    if (!v) { wizPermNote(); return; }
+    const p = parseSpAddress(v);
+    const warn = (msg) => { out.textContent = msg; out.classList.add('warn'); wizPermNote(); };
+    if (!/^https:\/\/[^/]+\.sharepoint\.com/i.test(v)) return warn(t('That is not an address in SharePoint (https://….sharepoint.com/…).'));
+    if (!p.folder) return warn(t('This link does not say which folder it is (sharing links usually do not). Open the folder in the browser and copy the address from the address bar.'));
+    $('wizSpSite').value = p.site; $('wizSpFolder').value = p.folder;
+    let r = { found: false };
+    try { r = await api('sp/local', { url: p.url }); } catch (e) { /* said below */ }
+    if (r.found && r.exists) {
+      $('wizFolder').value = r.path;
+      out.textContent = '✓ ' + t('On this PC: {0}', r.path); out.classList.add('good');
+    } else {
+      warn(t('This folder is not on this PC yet: OSign publishes through OneDrive. In SharePoint, open the library and choose Sync, wait until the folder is there, then paste the link again.'));
+    }
+    wizPermNote();
   }
-  document.querySelector('input[name=wlib][value=own]').addEventListener('change', wizLibChanged);
-  $('wizLibsAgain').addEventListener('click', wizLibsLoad);
+  // Next may come right after the change (a click on it ends the field): it waits for the check.
+  $('wizLink').addEventListener('change', () => { wiz.checking = wizLinkCheck(); });
 
   function wizOpen(step) {
     wizFill();
     wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
-    $('wizWhereEdit').open = false; $('wizWhereFound').textContent = '';
-    setRadio('wlib', '');
-    if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null).then(wizPermNote);
-    wizLibsLoad();
+    $('wizWhereFound').textContent = ''; $('wizLinkNote').textContent = '';
+    // A folder set already: that one, with where it is in SharePoint as set.
+    setRadio('wlib', S.settings.folder ? 'own' : '');
+    if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null);
+    wizLibChanged();
     wizRender();
     if (!$('dlgWizard').open) $('dlgWizard').showModal();
   }
@@ -1098,19 +1101,13 @@
   // What a step does on Next; throws to stay on it.
   const wizLeave = {
     async folder() {
+      await wiz.checking;
       const choice = radio('wlib');
       if (!choice) throw new Error(t('Choose where the signatures are kept.'));
-      if (choice.startsWith('lib')) {
-        // OSign makes the folder there (or takes it, if it is there already).
-        const r = await api('folder/create', { parent: wiz.libs[+choice.slice(3)].path });
-        $('wizFolder').value = r.path;
-        if (r.location) { $('wizSpSite').value = r.location.site; $('wizSpFolder').value = r.location.folder; }
-      }
-      if (!$('wizFolder').value.trim()) throw new Error(t('Enter the path of the synced OSign folder.'));
-      const where = parseSpAddress($('wizSpSite').value);
-      $('wizSpSite').value = where.site;
-      if (where.folder) $('wizSpFolder').value = where.folder;
-      const r = await wizSave({ folder: $('wizFolder').value, photosFolder: $('wizPhotos').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value || 'OSign' });
+      if (choice === 'link' && !$('wizSpFolder').value) throw new Error(t('Paste the address of the folder in SharePoint.'));
+      if (!$('wizFolder').value.trim()) throw new Error(choice === 'link' ? t('This folder is not on this PC yet: OSign publishes through OneDrive. In SharePoint, open the library and choose Sync, wait until the folder is there, then paste the link again.') : t('Choose the folder on this PC.'));
+      if (!$('wizSpFolder').value) throw new Error(t('OSign cannot tell where this folder is in SharePoint. Choose «SharePoint link» and paste the folder\'s address.'));
+      const r = await wizSave({ folder: $('wizFolder').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value });
       if (!r.folderFound && wiz.warned !== 'folder') {
         wiz.warned = 'folder';
         $('wizFolderNote').textContent = t('Not found on this PC: is the library synced? Next again to go on anyway.');
@@ -1182,7 +1179,7 @@
   $('wizLang').addEventListener('change', async () => { await saving; stored(WIZ_KEY, String(wiz.step)); I18N.setLang($('wizLang').value); });
   $('wizImport').addEventListener('click', async () => { await wizLeave.done(); $('dlgWizard').close(); $('btnImportOpen').click(); });
   $('wizNewSig').addEventListener('click', async () => { await wizLeave.done(); $('dlgWizard').close(); $('btnNew').click(); });
-  $('btnWizard').addEventListener('click', () => { $('dlgSettings').close(); wizOpen(0); });
+  $('btnWizard').addEventListener('click', () => wizOpen(0));
 
   // ---------------------------------------------------------------------------------------------
   // Publish and load
