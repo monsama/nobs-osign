@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.3.3'
+$script:AppVersion = '0.4.0'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
@@ -261,13 +261,103 @@ function Read-FolderPublished([string]$Root) {
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Where a synced folder is in SharePoint: OneDrive notes, for each library it syncs to this PC,
+# the local folder (MountPoint) and the library's address (UrlNamespace). From the longest one the
+# path starts with, the folder's address in SharePoint follows, and from that what the add-in needs:
+# the site (as Graph names it) and the folder within the site's default library.
+# ---------------------------------------------------------------------------
+function Get-SyncedLibraries {
+    if ($env:OSIGN_TEST_SYNC_JSON) {
+        $list = (Read-Text $env:OSIGN_TEST_SYNC_JSON) | ConvertFrom-Json
+        return , @(@($list) | ForEach-Object { [pscustomobject]@{ MountPoint = [string]$_.MountPoint; UrlNamespace = [string]$_.UrlNamespace } })
+    }
+    $out = @()
+    if (-not $script:OnWindows) { return , $out }
+    foreach ($k in @(Get-ChildItem -Path 'HKCU:\Software\SyncEngines\Providers\OneDrive' -ErrorAction SilentlyContinue)) {
+        try {
+            $p = Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction Stop
+            if ($p.MountPoint -and $p.UrlNamespace) { $out += [pscustomobject]@{ MountPoint = [string]$p.MountPoint; UrlNamespace = [string]$p.UrlNamespace } }
+        } catch { }
+    }
+    return , $out
+}
+
+# The names the default library's address has: "Shared Documents" on a site, "Documents" in a
+# OneDrive (also in German tenants; older German sites may have "Freigegebene Dokumente").
+$script:DefaultLibraries = @('shared documents', 'documents', 'freigegebene dokumente', 'dokumente')
+
+function Resolve-SpLocation([string]$Path) {
+    if (-not $Path) { return $null }
+    $norm = { param($x) ([string]$x).Replace('/', '\').TrimEnd('\') }
+    $full = & $norm $Path
+    $best = $null
+    foreach ($l in (Get-SyncedLibraries)) {
+        $mp = & $norm $l.MountPoint
+        if (-not $mp) { continue }
+        if ($full.Equals($mp, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($mp + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            if (-not $best -or $mp.Length -gt (& $norm $best.MountPoint).Length) { $best = $l }
+        }
+    }
+    if (-not $best) { return $null }
+    $rel = $full.Substring((& $norm $best.MountPoint).Length).Trim('\')
+    $url = $best.UrlNamespace.TrimEnd('/') + '/' + ($rel -replace '\\', '/')
+    $u = [Uri]$url.TrimEnd('/')
+    $parts = @($u.AbsolutePath.Split('/') | Where-Object { $_ } | ForEach-Object { [Uri]::UnescapeDataString($_) })
+    $site = 'root'; $siteName = ''
+    if ($parts.Count -ge 2 -and $parts[0] -match '^(sites|teams|personal)$') {
+        $site = $u.Host.ToLowerInvariant() + ':/' + $parts[0].ToLowerInvariant() + '/' + $parts[1] + ':'
+        $siteName = $parts[1]
+        $parts = @($parts | Select-Object -Skip 2)
+    }
+    $library = $(if ($parts.Count) { $parts[0] } else { '' })
+    $folder = (@($parts | Select-Object -Skip 1) -join '/')
+    return [ordered]@{
+        site = $site; siteName = $siteName; host = $u.Host.ToLowerInvariant(); library = $library; folder = $folder
+        url = $url.TrimEnd('/'); defaultLibrary = ($script:DefaultLibraries -contains $library.ToLowerInvariant())
+    }
+}
+
+function Api-SpResolve($data) {
+    $r = Resolve-SpLocation ([string]$data.path)
+    if (-not $r) { return (Ok @{ found = $false }) }
+    return (Ok @{ found = $true; location = $r })
+}
+
+# The Windows folder dialog, for the folder fields. In a Windows PowerShell of its own: the dialog
+# needs a single-threaded apartment, which PowerShell 7 does not have. The path comes back through
+# a file, so names with umlauts arrive as they are.
+function Api-PickFolder($data) {
+    if (-not $script:OnWindows) { return (Fail 'Choosing a folder needs Windows.') }
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $tmp = [IO.Path]::GetTempFileName()
+    try {
+        $start = ([string]$data.start).Replace("'", "''")
+        $title = ([string]$data.title).Replace("'", "''")
+        $outFile = $tmp.Replace("'", "''")
+        $code = @"
+Add-Type -AssemblyName System.Windows.Forms
+`$owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = `$true; ShowInTaskbar = `$false }
+`$d = New-Object System.Windows.Forms.FolderBrowserDialog
+`$d.Description = '$title'
+`$d.ShowNewFolderButton = `$true
+if ('$start' -and (Test-Path -LiteralPath '$start')) { `$d.SelectedPath = '$start' }
+if (`$d.ShowDialog(`$owner) -eq [System.Windows.Forms.DialogResult]::OK) { [IO.File]::WriteAllText('$outFile', `$d.SelectedPath, (New-Object System.Text.UTF8Encoding(`$false))) }
+"@
+        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
+        & $ps -NoProfile -NonInteractive -STA -ExecutionPolicy Bypass -EncodedCommand $enc | Out-Null
+        $picked = [IO.File]::ReadAllText($tmp, $script:Utf8)
+        return (Ok @{ path = $picked })
+    } finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
+}
+
 function Api-Info {
     $ad = $false
     if ($script:OnWindows) {
         try { Add-Type -AssemblyName System.DirectoryServices -ErrorAction SilentlyContinue; $ad = [bool]([DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()) } catch { $ad = $false }
     }
     if ($env:OSIGN_TEST_AD_JSON) { $ad = $true }
-    return (Ok @{ backend = 'powershell'; version = $script:AppVersion; dataDir = $script:DataDir; features = @{ adLookup = $ad; addinFiles = [bool]$script:AddinTemplateDir } })
+    return (Ok @{ backend = 'powershell'; version = $script:AppVersion; dataDir = $script:DataDir; features = @{ adLookup = $ad; addinFiles = [bool]$script:AddinTemplateDir; pickFolder = [bool]$script:OnWindows } })
 }
 
 function Api-DraftGet {
@@ -786,6 +876,8 @@ function Invoke-Request($client) {
             '/api/publish'        { Api-Publish $data }
             '/api/addin/build'    { Api-AddinBuild }
             '/api/addin/check'    { Api-AddinCheck }
+            '/api/sp/resolve'     { Api-SpResolve $data }
+            '/api/pick-folder'    { Api-PickFolder $data }
             '/api/load-published' { Api-LoadPublished }
             '/api/ad/lookup'      { Api-AdLookup $data }
             '/api/ad/groups'      { Api-AdGroups $data }

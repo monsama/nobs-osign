@@ -838,6 +838,7 @@
     $('setAddinOk').textContent = $('setAddinBuild').disabled ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
+    $('setWhere').textContent = '';
     $('dlgSettings').showModal();
   });
   $('setSave').addEventListener('click', async (e) => {
@@ -945,6 +946,46 @@
   }, true);
 
   // ---------------------------------------------------------------------------------------------
+  // Folders: the Windows folder dialog behind each "Choose folder…", and where a synced folder is
+  // in SharePoint, found out from OneDrive's own notes (sp/resolve) and said in plain words.
+  // ---------------------------------------------------------------------------------------------
+  document.querySelectorAll('button.pick-btn').forEach((b) => b.addEventListener('click', async () => {
+    const input = $(b.dataset.for);
+    b.disabled = true;
+    try {
+      const r = await api('pick-folder', { start: input.value.trim(), title: t('Choose the folder') });
+      if (r.path) { input.value = r.path; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('change')); }
+    } catch (err) { toast(t(err.message), true); }
+    finally { b.disabled = false; }
+  }));
+  function describeWhere(loc) {
+    const site = loc.site === 'root' ? t('Home site') : /:\/personal\//.test(loc.site) ? 'OneDrive' : loc.siteName;
+    return [site, loc.defaultLibrary ? t('Documents') : loc.library].concat(loc.folder ? loc.folder.split('/') : []).join(' › ');
+  }
+  // Fills the SharePoint site and folder fields from where the folder at `path` is synced from,
+  // and says so in `out`; when it cannot tell, opens `details` (the fields to set by hand).
+  async function detectWhere(path, siteId, folderId, out, details) {
+    out.textContent = ''; out.className = 'where';
+    if (!String(path || '').trim()) return null;
+    let r;
+    try { r = await api('sp/resolve', { path }); } catch (e) { return null; }
+    if (!r.found) {
+      out.textContent = t('OSign cannot tell where this folder is in SharePoint. Is it connected with OneDrive (Add shortcut to My files, or Sync)? Otherwise set the place by hand.');
+      out.classList.add('warn');
+      if (details) details.open = true;
+      return null;
+    }
+    const loc = r.location;
+    $(siteId).value = loc.site; $(folderId).value = loc.folder;
+    if (!loc.defaultLibrary) { out.textContent = t('In SharePoint: {0}. The add-in reads only the main library (Documents): move the folder there.', describeWhere(loc)); out.classList.add('warn'); }
+    else if (!loc.folder) { out.textContent = t('This is a whole library, not a folder in it: make a folder OSign in it and choose that.'); out.classList.add('warn'); }
+    else { out.textContent = '✓ ' + t('In SharePoint: {0}', describeWhere(loc)); out.classList.add('good'); }
+    return loc;
+  }
+  $('setFolder').addEventListener('change', () => detectWhere($('setFolder').value, 'setSpSite', 'setSpFolder', $('setWhere'), null));
+  $('wizFolder').addEventListener('change', () => detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), $('wizWhereEdit')));
+
+  // ---------------------------------------------------------------------------------------------
   // Setup assistant: opens by itself until it was finished once, while OSign is not set up
   // (no publish folder or no app registration). Each step saves what it asks for.
   // ---------------------------------------------------------------------------------------------
@@ -997,6 +1038,8 @@
     wizFill();
     wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
+    $('wizWhereEdit').open = false; $('wizWhereFound').textContent = '';
+    if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null);
     wizRender();
     if (!$('dlgWizard').open) $('dlgWizard').showModal();
   }
@@ -1215,6 +1258,7 @@
       buildToolbar();
       applyDraft(draft);
       loadSnapshot();
+      document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
       const wl = $('wizLang');
       Object.entries(I18N.langs).forEach(([k, v]) => wl.append(el('option', { value: k }, v)));
       wl.value = I18N.lang;

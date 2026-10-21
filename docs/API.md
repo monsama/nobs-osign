@@ -16,9 +16,10 @@ Keeps the server from stopping when idle. → `{ ok }`
 
 ## info
 
-→ `{ ok, backend: "powershell", version, dataDir, features: { adLookup: bool, addinFiles: bool } }`
+→ `{ ok, backend: "powershell", version, dataDir, features: { adLookup: bool, addinFiles: bool, pickFolder: bool } }`
 
-`addinFiles`: the add-in's template is there, so `addin/build` can work.
+`addinFiles`: the add-in's template is there, so `addin/build` can work. `pickFolder`: `pick-folder`
+can show the Windows folder dialog.
 
 ## draft/get
 
@@ -76,6 +77,23 @@ the address, the client ID and a folder that is not the publish folder. With `ad
 server's caching file comes along (`_headers`, `staticwebapp.config.json`, `web.config` or
 `.htaccess`, from `hosting/<host>/` in the template), so a new version reaches every Outlook within
 minutes.
+
+## sp/resolve
+
+`{ path }` → `{ ok, found, location: { site, siteName, host, library, folder, url, defaultLibrary } }`
+
+Where the local folder `path` is in SharePoint, from what OneDrive notes about the libraries it
+syncs to this PC (`HKCU\Software\SyncEngines\Providers\OneDrive`: each library's local folder
+and address). `site` and `folder` are what the add-in's settings take; `defaultLibrary` says
+whether it is the site's main library (the only one the add-in reads). `found: false` when no
+synced library holds the folder.
+
+## pick-folder
+
+`{ start, title }` → `{ ok, path }`
+
+Shows the Windows folder dialog on this PC and answers the folder chosen, or `""` when cancelled.
+Windows only (`features.pickFolder`).
 
 ## addin/check
 
