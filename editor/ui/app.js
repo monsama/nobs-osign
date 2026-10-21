@@ -223,7 +223,11 @@
   let ddoc = null, designReady = null;
   const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;min-height:380px;outline:none;word-wrap:break-word}' +
     'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
-    'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}';
+    'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}' +
+    // A field, shown by its name in a soft chip; in the signature it is the placeholder @@key.
+    'span.osf{display:inline-block;padding:0 .45em;margin:0 .05em;border-radius:.7em;background:#e8f0fd;color:#1f4fae;' +
+    'line-height:1.3;white-space:nowrap;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #c9daf8}' +
+    'span.osf.unknown{background:#fdecea;color:#a12a1f;box-shadow:inset 0 0 0 1px #f3c3bd}';
 
   function initDesign() {
     designReady = new Promise((resolve) => {
@@ -246,18 +250,72 @@
   async function loadDesign(html) {
     await designReady;
     ddoc.body.innerHTML = html || '';
+    chipify(ddoc.body);
     hideImgBar();
+  }
+
+  // Fields in the design view: each @@key in the text becomes a chip with the field's name
+  // (<span class="osf" data-f="key">Vorname</span>), moved and deleted as one; in the signature
+  // it is @@key again (designHtml). Placeholders in attributes (mailto:@@mail, a photo's address)
+  // stay as they are.
+  // A field as people read it: its name (Vorname), or @@key for what is not a field.
+  const fieldName = (k) => { const f = S.config.fields.find((x) => x.key === k); return f ? (f.label || f.key) : '@@' + k; };
+  const FIELD_RE = /@@([A-Za-z0-9_]+)/g;
+  function fieldChip(doc, key) {
+    const f = S.config.fields.find((x) => x.key === key);
+    const c = doc.createElement('span');
+    c.className = 'osf' + (f ? '' : ' unknown');
+    c.dataset.f = key;
+    c.contentEditable = 'false';
+    c.title = '@@' + key + (f ? '' : ' - ' + t('not a field'));
+    c.textContent = f ? (f.label || f.key) : '@@' + key;
+    return c;
+  }
+  // Makes chips of the placeholders in the text under root (and re-arms chips pasted or copied in);
+  // answers the last chip made, for the caret to go after it.
+  function chipify(root) {
+    const doc = root.ownerDocument;
+    root.querySelectorAll('span.osf[data-f]').forEach((c) => { c.replaceWith(fieldChip(doc, c.dataset.f)); });
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT), texts = [];
+    while (walker.nextNode()) if (walker.currentNode.nodeValue.indexOf('@@') >= 0 && !walker.currentNode.parentNode.closest('span.osf')) texts.push(walker.currentNode);
+    let last = null;
+    texts.forEach((n) => {
+      const v = n.nodeValue, frag = doc.createDocumentFragment();
+      let at = 0, m, made = false;
+      FIELD_RE.lastIndex = 0;
+      while ((m = FIELD_RE.exec(v))) {
+        if (m.index > at) frag.append(v.slice(at, m.index));
+        last = fieldChip(doc, m[1]); frag.append(last); made = true;
+        at = m.index + m[0].length;
+      }
+      if (made) { if (at < v.length) frag.append(v.slice(at)); n.replaceWith(frag); }
+    });
+    return last;
+  }
+  // The design view's HTML as it goes into the signature: chips back to @@key, the editor's own
+  // marks (a selected image's outline) gone.
+  function designHtml() {
+    const copy = ddoc.body.cloneNode(true);
+    copy.querySelectorAll('span.osf[data-f]').forEach((c) => {
+      const extra = [...c.childNodes].filter((n) => n.nodeType === 1);
+      c.replaceWith(ddoc.createTextNode('@@' + c.dataset.f), ...extra);
+    });
+    copy.querySelectorAll('img.sel').forEach((i) => { i.classList.remove('sel'); if (!i.className) i.removeAttribute('class'); });
+    return copy.innerHTML;
   }
 
   function onDesignInput() {
     const s = sig(); if (!s) return;
-    s.html = cleanEditorHtml(ddoc.body.innerHTML);
+    // A placeholder typed by hand becomes a chip once it is complete (a space or punctuation after it).
+    const sel = ddoc.getSelection(), node = sel.rangeCount ? sel.anchorNode : null;
+    if (node && node.nodeType === 3 && /@@[A-Za-z0-9_]+[^A-Za-z0-9_]/.test(node.nodeValue) && !node.parentNode.closest('span.osf')) {
+      const holder = node.parentNode;
+      const tail = node.nodeValue.slice(sel.anchorOffset);
+      const last = chipify(holder);
+      if (last && !tail) { const r = ddoc.createRange(); r.setStartAfter(last.nextSibling || last); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
+    }
+    s.html = designHtml();
     changed({ list: false });
-  }
-
-  // The editor's own marks (a selected image's outline) never go into the signature.
-  function cleanEditorHtml(html) {
-    return html.replace(/\sclass="sel"/g, '').replace(/(<img[^>]*?)\sclass="([^"]*)\bsel\b([^"]*)"/g, '$1 class="$2$3"');
   }
 
   function onPaste(e) {
@@ -267,6 +325,8 @@
     const body = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html);
     const clean = sanitize((body ? body[1] : html).replace(/<!--StartFragment-->|<!--EndFragment-->/g, ''));
     ddoc.execCommand('insertHTML', false, clean);
+    chipify(ddoc.body);
+    onDesignInput();
   }
 
   function exec(cmd, val) {
@@ -294,7 +354,12 @@
     const sel = ddoc.getSelection();
     if (!sel.rangeCount || !ddoc.body.contains(sel.getRangeAt(0).commonAncestorContainer)) ddoc.body.append(frag);
     else {
-      const r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(frag);
+      const r = sel.getRangeAt(0);
+      // Never inside a field's chip (the caret can end up there, e.g. with Ctrl+End): after it.
+      const inChip = (n) => (n.nodeType === 1 ? n : n.parentNode).closest('span.osf');
+      const chip = inChip(r.startContainer) || inChip(r.endContainer);
+      if (chip) { r.setStartAfter(chip); r.collapse(true); }
+      r.deleteContents(); r.insertNode(frag);
       if (last) { r.setStartAfter(last); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
     }
     onDesignInput();
@@ -334,7 +399,8 @@
     fieldSel.addEventListener('change', () => {
       const k = fieldSel.value; fieldSel.value = '';
       if (!k) return;
-      if (S.mode === 'html') insertAtCursor($('source'), '@@' + k); else exec('insertText', '@@' + k);
+      if (S.mode === 'html') insertAtCursor($('source'), '@@' + k);
+      else { const c = fieldChip(ddoc, k); insertHtml(c.outerHTML); }
     });
     fillFieldSelect(fieldSel);
     tb.append(
@@ -348,8 +414,8 @@
 
   function fillFieldSelect(sel) {
     sel.textContent = '';
-    sel.append(el('option', { value: '' }, t('@@ Insert field')));
-    S.config && S.config.fields.forEach((f) => sel.append(el('option', { value: f.key }, (f.label || f.key) + '  @@' + f.key)));
+    sel.append(el('option', { value: '' }, t('+ Insert field')));
+    S.config && S.config.fields.forEach((f) => sel.append(el('option', { value: f.key }, f.label || f.key)));
   }
 
   function insertAtCursor(ta, text) {
@@ -496,8 +562,8 @@
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && core.fieldSource(S.config, f) === 'none'; });
     if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', '))));
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
-      ? t('No Graph source, so empty in Outlook: {0}. See Fields.', noGraph.map((k) => '@@' + k).join(', '))
-      : t('No source (neither Graph nor AD attribute), so empty in Outlook: {0}. See Fields.', noGraph.map((k) => '@@' + k).join(', '))));
+      ? t('No Graph source, so empty in Outlook: {0}. See Fields.', noGraph.map(fieldName).join(', '))
+      : t('No source (neither Graph nor AD attribute), so empty in Outlook: {0}. See Fields.', noGraph.map(fieldName).join(', '))));
     if ($('pvSource').value === 'ad' && S.adName) {
       // What this user would get, as the add-in decides it (the From address being their own).
       const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
@@ -739,6 +805,10 @@
   const OPTS = { optDisable: 'disableOutlookSignature', optChoice: 'allowUserChoice', optMeetings: 'meetings', optNoProfile: 'insertWithoutProfile' };
   function renderOptions() {
     Object.entries(OPTS).forEach(([id, k]) => { $(id).checked = !!S.config.options[k]; });
+    // The manifest's address, as the add-in's files were made for it.
+    const base = S.settings && S.settings.addinUrl ? S.settings.addinUrl.replace(/\/+$/, '') + '/' : '';
+    $('installManifest').textContent = base ? base + 'manifest.xml' : '';
+    $('installLink').hidden = !base; $('installNone').hidden = !!base;
     const mode = core.valueSource(S.config);
     document.querySelectorAll('input[name=vsrc]').forEach((r) => { r.checked = r.value === mode; });
     $('vsrcNote').hidden = mode === 'graph';
@@ -1172,7 +1242,7 @@
       ul.replaceChildren(...r.checks.map((c) => el('li', { class: c.ok ? 'good' : c.what === 'Cache-Control' ? 'warn' : 'bad' }, c.what + ': ' + t(c.detail))));
     } catch (err) { ul.replaceChildren(); $('wizErr').textContent = t(err.message); }
   });
-  document.querySelectorAll('#dlgWizard button.copy').forEach((b) => b.addEventListener('click', async () => {
+  document.querySelectorAll('button.copy').forEach((b) => b.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($(b.dataset.copy).textContent); b.textContent = t('Copied'); setTimeout(() => { b.textContent = t('Copy'); }, 1500); } catch (e) { /* select it by hand */ }
   }));
   // Another language: the page starts again in it, and the assistant with it, on this step.
@@ -1204,7 +1274,7 @@
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     if (unknown.length) out.push(['warn', t('Not fields, left as typed: {0}', unknown.map((k) => '@@' + k).join(', '))]);
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
-    if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map((k) => '@@' + k).join(', '))]);
+    if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map(fieldName).join(', '))]);
     if (core.usesAdExport(c)) {
       const sn = S.snap;
       if (sn && S.snapMatches && !sn.written) out.push(['good', t('The users as read {0} are written: {1} new, {2} changed, {3} removed.', when(sn.readAt), sn.counts.new, sn.counts.changed, sn.counts.removed)]);
