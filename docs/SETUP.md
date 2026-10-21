@@ -195,6 +195,7 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 | Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign\users\` (no mail address in AD, or not exported yet). |
 | No photo | No `OSign\photos\<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
+| The editor shows plain text, no layout | Its server had stopped right after the page: an OSign window of an earlier start was still open, and the browser opened the new one in it. Fixed in 0.4.3; with an older version, close every OSign window (and a leftover Edge in Task Manager), then start OSign again. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |
 
 ## Security software (EDR / XDR)

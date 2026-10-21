@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.4.2'
+$script:AppVersion = '0.4.3'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
@@ -847,7 +847,9 @@ try {
 } catch { }
 
 function Read-Request($client) {
-    $ns = $client.GetStream(); $ns.ReadTimeout = 8000
+    # Browsers open connections ahead of time and may send nothing on them: waiting for one holds
+    # up every other request, so not long.
+    $ns = $client.GetStream(); $ns.ReadTimeout = 3000
     $ms = New-Object System.IO.MemoryStream; $buf = New-Object byte[] 65536; $headerEnd = -1; $scan = 0
     try {
         while ($true) {
@@ -1012,6 +1014,7 @@ function Start-AppWindow([string]$Url) {
     $profileDir = Join-Path $env:LOCALAPPDATA 'OSign\browser'
     if (-not (Test-Path -LiteralPath $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
     Set-BrowserPrefs $profileDir
+    $script:BrowserStarted = Get-Date
     $script:BrowserProcess = Start-Process $exe -ArgumentList @("--app=$Url", "--user-data-dir=`"$profileDir`"", '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-features=Translate,TranslateUI,msEdgeTranslate', '--window-size=1400,900') -PassThru
     return $true
 }
@@ -1072,7 +1075,16 @@ while (-not $script:Quit) {
             finally { try { $client.Close() } catch { } }
         }
     }
-    if ($script:BrowserProcess -and $script:BrowserProcess.HasExited) { break }
+    if ($script:BrowserProcess -and $script:BrowserProcess.HasExited) {
+        # Gone within seconds: Edge or Chrome handed the window to a process already running with
+        # this profile (an OSign window left open, e.g. of an older version), and the window lives on
+        # there. Then the page's own pings say whether it is still open.
+        if (((Get-Date) - $script:BrowserStarted).TotalSeconds -lt 20) {
+            $script:BrowserProcess = $null; $script:WatchPings = $true
+            Write-Host 'The window runs in a browser that was open already; OSign stops a few minutes after it is closed.'
+        } else { break }
+    }
+    if ($script:WatchPings -and ((Get-Date) - $script:LastPing).TotalMinutes -gt 3) { break }
     if (((Get-Date) - $script:LastPing).TotalHours -gt 6) { break }
 }
 try { $listener.Stop() } catch { }
