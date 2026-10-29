@@ -169,6 +169,17 @@
       ul.append(el('li', null, a));
     });
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
+    renderStatusBar();
+  }
+  // The status bar: how many signatures, where publishing goes, which version runs where.
+  function renderStatusBar() {
+    const n = S.config.signatures.length;
+    $('stSigs').textContent = n === 1 ? t('1 signature') : t('{0} signatures', n);
+    const f = (S.info && S.info.features) || {};
+    $('stTarget').textContent = !S.settings ? '' : onServer()
+      ? (f.publishTarget === 'sharepoint' ? t('Publishes to {0}', S.settings.folder) : t('Publishes into the server\'s own folder (not SharePoint)'))
+      : S.settings.folder ? t('Publishes to {0}', S.settings.folder) : t('No folder to publish to yet');
+    $('verFoot').textContent = S.info ? 'NOBS OSign ' + S.info.version + ' · ' + (onServer() ? t('Server') : t('Windows')) : '';
   }
 
   function show(view) {
@@ -969,6 +980,7 @@
       if ($('setLang').value !== I18N.lang) { await saving; I18N.setLang($('setLang').value); return; }
       S.settings = r.settings; lastSettings = r;
       $('dlgSettings').close();
+      renderStatusBar();
       if (onServer()) toast(r.folderError ? t('SharePoint cannot be reached: {0}', t(r.folderError)) : t('Settings saved.'), !!r.folderError);
       else toast(r.folderFound || !r.settings.folder ? t('Settings saved.') : t('Saved, but the folder is not there on this PC.'), !r.folderFound && !!r.settings.folder);
       schedulePreview();
@@ -1067,6 +1079,7 @@
       const [info, st] = await Promise.all([api('info'), api('settings/get')]);
       S.info = info; S.settings = st.settings; lastSettings = st;
       wizConn = r; wizConnRender();
+      renderStatusBar();
       if ($('dlgSettings').open) renderSettingsNotes(st);
       $('dlgConn').close();
       toast(t('Server connections saved.'));

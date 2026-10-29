@@ -401,6 +401,12 @@
     'Name the folder in the site, like OSign.': 'Den Ordner in der Site angeben, z. B. OSign.',
     'Publishing to SharePoint is not set up on the server (Settings → Server connections).': 'Veröffentlichen nach SharePoint ist auf dem Server nicht eingerichtet (Einstellungen → Server-Verbindungen).',
     // server connections
+    '1 signature': '1 Signatur',
+    '{0} signatures': '{0} Signaturen',
+    'Publishes to {0}': 'Veröffentlicht nach {0}',
+    "Publishes into the server's own folder (not SharePoint)": 'Veröffentlicht in den eigenen Ordner des Servers (nicht SharePoint)',
+    'No folder to publish to yet': 'Noch kein Ordner zum Veröffentlichen',
+    'Windows': 'Windows',
     'Active Directory is not set up on the server.': 'Active Directory ist auf dem Server nicht eingerichtet.',
     'Uploading to Cloudflare Pages is not set up on the server.': 'Hochladen zu Cloudflare Pages ist auf dem Server nicht eingerichtet.',
     'The server has no service account for Active Directory.': 'Der Server hat kein Dienstkonto für Active Directory.',

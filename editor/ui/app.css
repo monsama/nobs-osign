@@ -106,6 +106,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 
 /* layout */
 .layout { flex: 1; display: flex; min-height: 0; }
+/* The status bar at the foot, as in NOBS Inventory: small, quiet, the version at the right. */
+.statusbar { display: flex; gap: 14px; padding: 3px 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line-2); background: var(--panel); flex: none; white-space: nowrap; overflow: hidden; }
+.statusbar span { overflow: hidden; text-overflow: ellipsis; }
+.statusbar .sb-right { margin-left: auto; }
 .side { width: 250px; flex: none; background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 12px 8px; }
 .side-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; margin: 8px 0 4px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .sig-list, .nav-list { list-style: none; margin: 0; padding: 0; }
