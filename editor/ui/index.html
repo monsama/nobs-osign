@@ -384,6 +384,14 @@
             application</b> with this redirect URI, the delegated permission <b>Sites.FullControl.All</b>, and no client secret.
             You can delete it once the site is granted.</p>
           <span class="copyline"><code id="wizGrantRedirect"></code><button type="button" class="copy" data-copy="wizGrantRedirect">Copy</button></span>
+          <ul class="wiz-list" data-th="wizGrantMsSafe">
+            <li><b>Only for you:</b> grant no admin consent for it in Entra, and when you sign in, leave <i>Consent on behalf of
+              your organization</i> unticked. The consent then holds for your account only.</li>
+            <li><b>Only you may sign in:</b> Entra → Enterprise applications → NOBS OSign setup → Properties → <i>Assignment
+              required?</i> = Yes, and under Users and groups add only yourself.</li>
+            <li><b>Off afterwards:</b> once the site is granted, set <i>Enabled for users to sign-in?</i> = No, or delete the app.
+              Then the right exists only for the minute you need it.</li>
+          </ul>
           <div class="wiz-fields"><label>Client ID of NOBS OSign setup<span class="pick"><input id="wizSetupClient" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"><button type="button" id="wizGrantGo">Sign in with Microsoft and grant</button></span></label></div>
           <p id="wizGrantMsNote" class="where"></p>
           <p data-th="wizGrantOr">Or by hand, in Graph Explorer:</p>

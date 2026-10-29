@@ -259,7 +259,14 @@ server writes with its own.
    sign-in. For that, once, a third, small app registration *NOBS OSign setup*: platform
    **Single-page application** with the redirect URI the assistant shows
    (`https://<editor>/ui/signin.html`), the **delegated** permission `Sites.FullControl.All`, no
-   client secret. Delete it once the site is granted, if you like.
+   client secret. `Sites.FullControl.All` is a strong right (Microsoft asks for it to grant a
+   site, in Graph Explorer and PnP too); keep it as narrow as this:
+   - **Only for you:** no admin consent for it in Entra, and *Consent on behalf of your
+     organization* left unticked when you sign in: the consent holds for your account only.
+   - **Only you may sign in:** Enterprise applications → *NOBS OSign setup* → Properties →
+     *Assignment required?* = Yes, and only yourself under Users and groups.
+   - **Off afterwards:** once the site is granted, *Enabled for users to sign-in?* = No, or delete
+     the app. The right then exists only for the minute it is needed.
 
    `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every
    site of the tenant.
