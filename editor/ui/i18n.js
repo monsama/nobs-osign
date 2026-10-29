@@ -401,6 +401,11 @@
     'Name the folder in the site, like OSign.': 'Den Ordner in der Site angeben, z. B. OSign.',
     'Publishing to SharePoint is not set up on the server (Settings → Server connections).': 'Veröffentlichen nach SharePoint ist auf dem Server nicht eingerichtet (Einstellungen → Server-Verbindungen).',
     // server connections
+    'Client secret valid until': 'Geheimer Clientschlüssel gültig bis',
+    '(as Entra shows it; set by the setup script by itself. The editor warns 30 days before)': '(wie Entra es anzeigt; das Setup-Skript setzt es selbst. Der Editor warnt 30 Tage vorher)',
+    'The client secret ran out on {0}: publishing fails. Run the setup script again.': 'Der geheime Clientschlüssel ist am {0} abgelaufen: das Veröffentlichen scheitert. Führen Sie das Setup-Skript erneut aus.',
+    'The client secret runs out on {0} (in {1} days): run the setup script again.': 'Der geheime Clientschlüssel läuft am {0} ab (in {1} Tagen): Führen Sie das Setup-Skript erneut aus.',
+    'The date the client secret runs out is a date, like 2027-10-31.': 'Das Ablaufdatum des Clientschlüssels ist ein Datum, z. B. 2027-10-31.',
     'Keyboard shortcuts': 'Tastenkürzel',
     '? Shortcuts': '? Tastenkürzel',
     'Save the draft now': 'Den Entwurf jetzt speichern',

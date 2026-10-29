@@ -106,6 +106,9 @@ function createApp(opts) {
   // Where publishing goes: SharePoint through Graph when the server's app registration is set
   // up, its own folder otherwise (development, tests).
   let graph = null;
+  // When the client secret runs out, and how many days are left (null: not known).
+  let secretExpires = '';
+  const secretDaysLeft = () => (secretExpires && !isNaN(Date.parse(secretExpires)) ? Math.floor((Date.parse(secretExpires) - Date.now()) / 86400000) : null);
   const spFolder = (s) => String(s.spFolder || 'OSign').replace(/^\/+|\/+$/g, '');
   const local = folderTarget(publishDir);
   const targetFor = (s) => (graph ? graph.target(s.spSite || 'root', spFolder(s)) : local);
@@ -157,6 +160,9 @@ function createApp(opts) {
   function configure() {
     const e = connections.effectiveEnv();
     refill(graphCfg, graphConfig(e));
+    secretExpires = String(e.OSIGN_GRAPH_CLIENT_SECRET_EXPIRES || '').trim();
+    const left = secretDaysLeft();
+    if (left !== null && left <= 30) log.warn(left < 0 ? 'The server\'s client secret ran out on ' + secretExpires + ': publishing to SharePoint fails until a new one is set.' : 'The server\'s client secret runs out on ' + secretExpires + ' (in ' + left + ' days).');
     graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch }) : null;
     if (graphProblem(graphCfg)) log.warn('Publishing to SharePoint is not set up right: ' + graphProblem(graphCfg));
     refill(ldapCfg, Object.assign(ldapConfig(e), (opts && opts.ldap) || {}));
@@ -177,7 +183,9 @@ function createApp(opts) {
   const setup = createSetup();
   // Its result goes where the admin would type it, and takes effect at once.
   async function setupApply(r) {
-    const c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId }, secrets: { graphClientSecret: r.secret } });
+    const when = Date.parse(r.secretExpires);
+    const expires = isNaN(when) ? '' : new Date(when).toISOString().slice(0, 10);
+    const c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId, graphSecretExpires: expires }, secrets: { graphClientSecret: r.secret } });
     if (c.error) return c;
     const s = await settings.save({ clientId: r.addinClientId, tenantId: r.tenantId });
     if (s.error) return s;
@@ -213,6 +221,8 @@ function createApp(opts) {
         // 'sharepoint': publishing goes through Graph; 'folder': into the server's folder.
         publishTarget: graph ? 'sharepoint' : 'folder',
         graphClientId: graph ? graphCfg.clientId : '',
+        // The client secret: until when, and the days left (warned of from 30 on).
+        secretExpires: graph ? secretExpires : '', secretDaysLeft: graph ? secretDaysLeft() : null,
         graphTenantId: graph ? graphCfg.tenantId : '',
         graphProblem: graphProblem(graphCfg),
         // AD with the server's service account; the scheduled export, and how its last run went.

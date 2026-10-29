@@ -110,6 +110,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 .statusbar { display: flex; gap: 14px; padding: 3px 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line-2); background: var(--panel); flex: none; white-space: nowrap; overflow: hidden; }
 .statusbar span { overflow: hidden; text-overflow: ellipsis; }
 .statusbar .sb-right { margin-left: auto; }
+.statusbar .sb-warn { color: var(--warn); font-weight: 600; }
 .statusbar .sb-keys { height: auto; padding: 0 2px; border: 0; background: none; color: var(--muted); font-size: 12px; }
 .statusbar .sb-keys:hover { color: var(--text); filter: none; }
 table.keys { border-collapse: collapse; width: 100%; margin: 4px 0 10px; }

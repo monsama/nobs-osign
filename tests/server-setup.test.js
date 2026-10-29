@@ -96,6 +96,8 @@ test('the setup script: both apps, the site, the result to the server, the right
   const info = await api('info');
   assert.equal(info.features.publishTarget, 'sharepoint');
   assert.equal(info.features.graphClientId, server.appId);
+  // The secret's end, from Entra, so the editor warns in time.
+  assert.equal(info.features.secretExpires, st.passwords[0].endDateTime.slice(0, 10));
   const settings = (await api('settings/get')).settings;
   assert.equal(settings.clientId, addin.appId);
   assert.equal(settings.tenantId, TENANT);

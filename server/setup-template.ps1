@@ -245,7 +245,7 @@ try {
     if (-not $has) { Graph POST "/sites/$($s.id)/permissions" @{ roles = @('write'); grantedToIdentities = @(@{ application = @{ id = $srv.appId; displayName = $ServerName } }) } -Retries 6 | Out-Null }
     Step "Write access for ""$ServerName"" on $($s.webUrl)" "Schreibzugriff für ""$ServerName"" auf $($s.webUrl)"
 
-    $result = @{ token = $Token; tenantId = $tenant; siteUrl = $s.webUrl; addin = @{ clientId = $app.appId }; server = @{ clientId = $srv.appId; secret = $secret.secretText; secretExpires = [string]$secret.endDateTime } }
+    $result = @{ token = $Token; tenantId = $tenant; siteUrl = $s.webUrl; addin = @{ clientId = $app.appId }; server = @{ clientId = $srv.appId; secret = $secret.secretText; secretExpires = $(if ($secret.endDateTime -is [datetime]) { $secret.endDateTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } else { [string]$secret.endDateTime }) } }
 } catch {
     $failure = $_.Exception.Message
     Say '' ''

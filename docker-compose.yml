@@ -41,6 +41,7 @@ services:
       # Publishing into SharePoint (server/graph.js)
       OSIGN_GRAPH_TENANT_ID: ${OSIGN_GRAPH_TENANT_ID:-}
       OSIGN_GRAPH_CLIENT_ID: ${OSIGN_GRAPH_CLIENT_ID:-}
+      OSIGN_GRAPH_CLIENT_SECRET_EXPIRES: ${OSIGN_GRAPH_CLIENT_SECRET_EXPIRES:-}
       OSIGN_GRAPH_CLIENT_SECRET_FILE: /run/secrets/graph_client_secret
       # The add-in's files to Cloudflare Pages (server/addin.js)
       OSIGN_CF_ACCOUNT_ID: ${OSIGN_CF_ACCOUNT_ID:-}

@@ -180,6 +180,11 @@
       ? (f.publishTarget === 'sharepoint' ? t('Publishes to {0}', S.settings.folder) : t('Publishes into the server\'s own folder (not SharePoint)'))
       : S.settings.folder ? t('Publishes to {0}', S.settings.folder) : t('No folder to publish to yet');
     $('verFoot').textContent = S.info ? 'NOBS OSign ' + S.info.version + ' · ' + (onServer() ? t('Server') : t('Windows')) : '';
+    // The server's client secret, in time: from 30 days before it runs out.
+    const left = f.secretDaysLeft;
+    $('stSecret').hidden = !(typeof left === 'number' && left <= 30);
+    $('stSecret').textContent = typeof left !== 'number' ? '' : left < 0 ? t('The client secret ran out on {0}: publishing fails. Run the setup script again.', day(f.secretExpires))
+      : t('The client secret runs out on {0} (in {1} days): run the setup script again.', day(f.secretExpires), left);
   }
 
   function show(view) {
@@ -1005,10 +1010,10 @@
   // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
   // saved wins over .env, an empty field takes .env's value (its placeholder). Secrets are only
   // ever sent, never shown: the server says where each comes from.
-  const CONN_FIELDS = ['ldapUrl', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
+  const CONN_FIELDS = ['ldapUrl', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'graphSecretExpires', 'cfAccountId', 'cfProject'];
   const CONN_SECRETS = ['ldapServicePassword', 'graphClientSecret', 'cfApiToken'];
   let connDrop = {}, connCa;
-  const day = (iso) => (iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '');
+  function day(iso) { return iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : ''; }
   function renderConnections(r) {
     $('connKey').hidden = r.keyOk;
     for (const k of CONN_FIELDS) {

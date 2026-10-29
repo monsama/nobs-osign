@@ -192,6 +192,7 @@
 <footer class="statusbar">
   <span id="stSigs"></span>
   <span id="stTarget"></span>
+  <span id="stSecret" class="sb-warn" hidden></span>
   <span id="verFoot" class="sb-right"></span>
   <button type="button" id="keysBtn" class="sb-keys" title="Keyboard shortcuts">? Shortcuts</button>
 </footer>
@@ -334,6 +335,9 @@
           <small>(the server's app registration, not the add-in's)</small></div>
         <label for="cs_graphClientSecret">Client secret</label>
         <div><span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span><small id="cx_graphClientSecret"></small></div>
+        <label for="cn_graphSecretExpires">Client secret valid until</label>
+        <div><input id="cn_graphSecretExpires" type="date" data-ph="">
+          <small>(as Entra shows it; set by the setup script by itself. The editor warns 30 days before)</small></div>
       </div>
     </section>
 

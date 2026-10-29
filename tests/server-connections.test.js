@@ -108,6 +108,13 @@ test('Graph set in the editor: publishing goes into SharePoint at once', async (
   assert.equal((await api(admin, 'info')).features.publishTarget, 'sharepoint');
   const found = await api(admin, 'sp/check', { spSite: SITE, spFolder: 'OSign' });
   assert.equal(found.ok, true, found.error);
+  // When the secret runs out: said from 30 days before (the setup script sets the date itself).
+  const soon = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+  assert.equal((await api(admin, 'connections/save', { values: { graphSecretExpires: soon } })).ok, true);
+  let f = (await api(admin, 'info')).features;
+  assert.equal(f.secretExpires, soon);
+  assert.ok(f.secretDaysLeft >= 9 && f.secretDaysLeft <= 10, String(f.secretDaysLeft));
+  assert.match((await api(admin, 'connections/save', { values: { graphSecretExpires: '31.10.2027' } })).error, /is a date/);
   // Removed again: back to the server's folder.
   await api(admin, 'connections/save', { values: { graphTenantId: '', graphClientId: '' }, secrets: { graphClientSecret: null } });
   assert.equal((await api(admin, 'info')).features.publishTarget, 'folder');
