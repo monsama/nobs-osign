@@ -239,7 +239,7 @@
   // ---------------------------------------------------------------------------------------------
   const design = $('design');
   let ddoc = null, designReady = null;
-  const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;min-height:380px;outline:none;word-wrap:break-word}' +
+  const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;outline:none;word-wrap:break-word}' +
     'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
     'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}' +
     // A field, shown by its name in a plain token; in the signature it is the placeholder @@key.
