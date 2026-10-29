@@ -79,7 +79,9 @@ step_start() {
     if docker pull "$image" >/dev/null 2>&1; then info "Pulled $image"
     else warn "Could not pull $image - building it from this folder instead."; docker build -t "$image" . >/dev/null; fi
     proxy_network
-    compose up -d --no-build
+    # Recreated every time: the app reads .env and the secrets when it starts, so a run after they were
+    # filled in (or changed) has to start it anew to take them.
+    compose up -d --no-build --force-recreate
     wait_healthy || fail "The app did not become healthy. See: docker logs nobs-osign"
     info "App healthy"
 }
