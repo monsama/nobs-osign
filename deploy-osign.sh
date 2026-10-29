@@ -44,7 +44,7 @@ step_env() {
     [ -n "$host" ] || host="$(env_get OSIGN_HOST)"
     if [ -z "$host" ] || [ "$host" = osign.example.ch ]; then
         if [ -t 0 ]; then read -r -p "Name people will type (e.g. osign.example.ch): " host; fi
-        [ -n "$host" ] && [ "$host" != osign.example.ch ] || fail "Set OSIGN_HOST, e.g. OSIGN_HOST=osign.example.ch sudo ./deploy-osign.sh"
+        if [ -z "$host" ] || [ "$host" = osign.example.ch ]; then fail "Set OSIGN_HOST, e.g. OSIGN_HOST=osign.example.ch sudo ./deploy-osign.sh"; fi
     fi
     env_set OSIGN_HOST "$host"
     # The image follows the release that was installed. A custom image name is kept as it is.
