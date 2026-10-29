@@ -166,6 +166,18 @@ The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows Powe
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
 | `tests/` | Engine, add-in runtime (with a stand-in Graph and SharePoint), backend API, editor and pane in a browser |
 
+## Releases
+
+Each version is a tag (`v0.5.0`) with the zip `OSign-v0.5.0.zip` and its checksum on the GitHub
+releases page. The version is kept in `package.json`, `package-lock.json` and `editor/OSign.ps1`;
+the add-in's manifest takes it from `package.json`.
+
+To release, raise the version on main (`node scripts/bump-version.mjs 0.5.0`), then either push
+the tag with `scripts/release.sh 0.5.0`, or run the **release** workflow by hand on main (Actions →
+release → Run workflow): it tags the version in `package.json` and publishes it. The tests have to
+pass first, and a version that is already tagged is refused. `gh attestation verify <zip> --repo
+monsama/osign` checks that a zip was built by that workflow.
+
 ## License
 
 GPL-3.0-or-later, see [LICENSE](LICENSE).

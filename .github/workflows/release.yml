@@ -1,60 +1,105 @@
 # Makes a release as one zip: the editor (OSign.ps1, its UI, the shared engine) and the add-in's
 # files with blanks for a company's settings, which the editor fills in (Settings → Outlook add-in).
 #
-# Either push a tag v1.2.3, or run this workflow by hand (Actions → release → Run workflow) with
-# the version: it then makes the tag v1.2.3 itself, on the commit it runs on.
+# Runs on a version tag such as v0.5.0 (scripts/release.sh pushes one), or by hand (Actions →
+# release → Run workflow) on main, which tags the version in package.json first. Tests must pass
+# first. A version that is already tagged is refused.
 name: release
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version, e.g. 0.1.0 (must match editor/OSign.ps1 and package.json)'
-        required: true
 
+# Read only by default; only the publishing job may write (the tag, the release).
 permissions:
-  contents: write
+  contents: read
+
+# Two releases never run at once; one started is never cancelled halfway through publishing.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  release:
+  test:
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+    timeout-minutes: 20
+    # By hand, only main is released: a release from another branch would publish code that is not on main.
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
-      - name: Check the version
-        run: |
-          v="${TAG#v}"
-          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Not a version: $v"; exit 1; }
-          grep -q "AppVersion = '$v'" editor/OSign.ps1 || { echo "editor/OSign.ps1 is not version $v"; exit 1; }
-          grep -q "\"version\": \"$v\"" package.json || { echo "package.json is not version $v"; exit 1; }
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
-      - name: Test
+      # A dropped connection to the npm registry (ECONNRESET) is tried once more before the job fails.
+      - run: npm ci || (sleep 15 && npm ci)
+      - run: npx playwright install --with-deps chromium
+      # pwsh comes with the runner, so the editor's tests run too.
+      - run: npm test
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      # A signed statement of where the zip was built (GitHub artifact attestation, Sigstore).
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: One version everywhere, and the tag's
+        id: v
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          npm test
+          v="$(node -p 'require("./package.json").version')"
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Not a version: $v"; exit 1; }
+          grep -q "AppVersion = '$v'" editor/OSign.ps1 || { echo "editor/OSign.ps1 is not version $v: node scripts/bump-version.mjs $v"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            [ "${GITHUB_REF_NAME#v}" = "$v" ] || { echo "Tag $GITHUB_REF_NAME does not match package.json $v"; exit 1; }
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      # Run by hand: a version that is already tagged is refused, so a release is never published twice.
+      - name: The version is not released yet
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          t="v${{ steps.v.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$t" > /dev/null; then echo "$t is already released. Raise the version first."; exit 1; fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build the add-in's template
+        run: |
+          npm ci || (sleep 15 && npm ci)
+          node addin/build.mjs
       - name: Package
         run: |
+          TAG="v${{ steps.v.outputs.version }}"
           mkdir -p out/OSign/shared
           cp editor/OSign.ps1 out/OSign/
           cp -r editor/ui out/OSign/ui
           cp shared/signature-core.js out/OSign/shared/
           cp -r dist/template out/OSign/addin
           cp LICENSE out/OSign/
-          (cd out && zip -r "OSign-${TAG}.zip" OSign)
-          (cd out && sha256sum "OSign-${TAG}.zip" > SHA256SUMS.txt)
-      - uses: softprops/action-gh-release@v2
+          (cd out && zip -r "OSign-$TAG.zip" OSign)
+          (cd out && sha256sum "OSign-$TAG.zip" > SHA256SUMS.txt)
+      # Signs that this zip was built here, from this commit, by this workflow: `gh attestation verify <zip>
+      # --repo <owner>/osign` checks it. A plan that has no attestations for this repository does not stop the release.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        continue-on-error: true
         with:
-          tag_name: ${{ env.TAG }}
-          target_commitish: ${{ github.sha }}
-          name: OSign ${{ env.TAG }}
+          subject-path: out/OSign-v${{ steps.v.outputs.version }}.zip
+      - name: Tag the version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          t="v${{ steps.v.outputs.version }}"
+          git tag "$t" "$GITHUB_SHA" && git push origin "$t"
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: OSign v${{ steps.v.outputs.version }}
           files: |
-            out/OSign-${{ env.TAG }}.zip
+            out/OSign-v${{ steps.v.outputs.version }}.zip
             out/SHA256SUMS.txt
           generate_release_notes: true
