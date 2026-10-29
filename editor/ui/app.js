@@ -231,10 +231,10 @@
   const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;min-height:380px;outline:none;word-wrap:break-word}' +
     'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
     'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}' +
-    // A field, shown by its name in a soft chip; in the signature it is the placeholder @@key.
-    'span.osf{display:inline-block;padding:0 .45em;margin:0 .05em;border-radius:.7em;background:#e8f0fd;color:#1f4fae;' +
-    'line-height:1.3;white-space:nowrap;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #c9daf8}' +
-    'span.osf.unknown{background:#fdecea;color:#a12a1f;box-shadow:inset 0 0 0 1px #f3c3bd}';
+    // A field, shown by its name in a plain token; in the signature it is the placeholder @@key.
+    'span.osf{display:inline-block;padding:0 .35em;margin:0 .05em;border-radius:3px;background:#f2f4f7;color:#344054;' +
+    'line-height:1.35;white-space:nowrap;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #d0d5dd}' +
+    'span.osf.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}';
 
   function initDesign() {
     designReady = new Promise((resolve) => {
