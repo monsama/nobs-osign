@@ -511,10 +511,21 @@
     'The server cannot open sharing links before publishing to SharePoint is set up.': 'Der Server kann Freigabelinks erst öffnen, wenn das Veröffentlichen nach SharePoint eingerichtet ist.',
     'The server may not open sharing links (its app registration may only reach the sites granted to it).': 'Der Server darf keine Freigabelinks öffnen (seine App-Registrierung erreicht nur die ihr freigegebenen Sites).',
     'This sharing link leads nowhere: it was removed or has expired.': 'Dieser Freigabelink führt nirgends hin: er wurde entfernt oder ist abgelaufen.',
-    "(the server's Pages project {0}, made on the first upload; or your own domain set up on it)": '(das Pages-Projekt {0} des Servers, angelegt beim ersten Hochladen; oder Ihre eigene Domain darauf)'
+    "(the server's Pages project {0}, made on the first upload; or your own domain set up on it)": '(das Pages-Projekt {0} des Servers, angelegt beim ersten Hochladen; oder Ihre eigene Domain darauf)',
+    "The server's connections": 'Die Verbindungen des Servers',
+    'Set up the connections…': 'Verbindungen einrichten…',
+    'SharePoint (Microsoft Graph): publishing': 'SharePoint (Microsoft Graph): Veröffentlichen',
+    'Active Directory: signing in with Windows accounts': 'Active Directory: Anmelden mit Windows-Konten',
+    "Active Directory: the users' values, with the service account": 'Active Directory: die Werte der Benutzer, mit dem Dienstkonto',
+    "Cloudflare Pages: uploading the add-in's files": 'Cloudflare Pages: Hochladen der Dateien des Add-ins',
+    '(optional)': '(optional)',
+    'ready': 'bereit',
+    'Publishing to SharePoint is not set up yet: the server cannot publish. Next again to go on anyway.': 'Das Veröffentlichen nach SharePoint ist noch nicht eingerichtet: der Server kann nicht veröffentlichen. Nochmals Weiter, um trotzdem fortzufahren.'
   };
 
   DE.html = {
+    wizConnLead: 'Der Server meldet Personen mit Active Directory an, schreibt die Signaturen nach SharePoint und lädt die Dateien des Add-ins selbst hoch. Richten Sie ein, was Sie nutzen: zum Veröffentlichen braucht es nur <b>SharePoint</b>. Alles lässt sich später unter <b>Einstellungen → Server-Verbindungen</b> ändern.',
+    wizConnApp: 'Für SharePoint braucht der Server <b>eine eigene App-Registrierung</b> in Entra ID (nicht die des Add-ins): <b>Anwendungsberechtigungen</b> → <b>Sites.Selected</b> mit Administratorzustimmung, und einen geheimen Clientschlüssel. Der nächste Schritt zeigt, wie Sie ihr die eine Site freigeben.',
     wizFilesServer: 'NOBS OSign erstellt jetzt die Dateien des Add-ins für Ihre Adresse, App-Registrierung und Ihren SharePoint-Ordner, auf dem Server. Es lädt sie selbst zu Cloudflare Pages hoch, oder Sie laden sie als ZIP herunter.',
     wizGrantLead: '<b>Dem Server Schreibzugriff auf diese Site geben</b>, einmalig, als SharePoint- oder globaler Administrator. Seine App-Registrierung braucht die Anwendungsberechtigung <b>Sites.Selected</b> (mit Administratorzustimmung); damit erhält sie genau diese eine Site und keine andere:',
     wizGrant1: '<code>https://aka.ms/ge</code> (Graph Explorer) öffnen, anmelden und diese Abfrage ausführen. Die <b>id</b> aus der Antwort kopieren:',

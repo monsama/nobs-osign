@@ -1046,6 +1046,7 @@
       // What the server can do now (publishing, AD, the upload) follows from what was saved.
       S.info = await api('info');
       renderConnections(r);
+      wizConn = r; wizConnRender();
       toast(t('Server connections saved.'));
     } catch (err) { $('connErr').textContent = t(err.message); }
   });
@@ -1206,7 +1207,9 @@
   const ALL_WIZ = Array.from(document.querySelectorAll('#dlgWizard .wiz-step')).map((sec) => sec.dataset.step);
   // The steps for this backend: the server version cannot make the add-in's files yet.
   let WIZ = ALL_WIZ;
-  const wizSteps = () => ALL_WIZ.filter((n) => !(onServer() && (n === 'files' || n === 'deploy') && !S.info.features.addinFiles));
+  const wizSteps = () => ALL_WIZ.filter((n) => !(onServer() && (n === 'files' || n === 'deploy') && !S.info.features.addinFiles)
+    // The server's connections: only on the server, and only for who may set them.
+    && !(n === 'connect' && !(onServer() && S.info.user && S.info.user.local)));
   const WIZ_KEY = 'osign.wizStep';
   const wiz = { step: 0, built: false, warned: '', checking: null, spOk: false };
   const stored = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no storage */ } return null; };
@@ -1374,9 +1377,32 @@
     if (onServer() && S.settings.spFolder) wiz.checking = wizServerCheck(S.settings.spSite || 'root', S.settings.spFolder);
     if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null);
     wizLibChanged();
+    if (WIZ.includes('connect')) wizConnLoad();
     wizRender();
     if (!$('dlgWizard').open) $('dlgWizard').showModal();
   }
+  // The server's connections, as the step shows them: ready, or what is missing.
+  let wizConn = null;
+  function wizConnRender() {
+    const p = wizConn && wizConn.problems;
+    if (!p) { $('wizConnList').replaceChildren(); return; }
+    const rows = [
+      ['graph', t('SharePoint (Microsoft Graph): publishing'), true],
+      ['signIn', t('Active Directory: signing in with Windows accounts'), false],
+      ['directory', t('Active Directory: the users\' values, with the service account'), false],
+      ['pages', t('Cloudflare Pages: uploading the add-in\'s files'), false]
+    ];
+    $('wizConnList').replaceChildren(...rows.map(([k, what, needed]) => el('li', { class: p[k] ? (needed ? 'bad' : 'warn') : 'good' },
+      what + (p[k] ? ' – ' + t(p[k]) + (needed ? '' : ' ' + t('(optional)')) : ' – ' + t('ready')))));
+  }
+  async function wizConnLoad() {
+    try { wizConn = await api('connections/get'); } catch (e) { wizConn = null; }
+    wizConnRender();
+  }
+  $('wizConnOpen').addEventListener('click', async () => {
+    $('wizErr').textContent = '';
+    try { renderConnections(await api('connections/get')); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
+  });
   async function wizSave(settings) {
     const r = await api('settings/save', { settings });
     S.settings = r.settings; lastSettings = r;
@@ -1384,6 +1410,12 @@
   }
   // What a step does on Next; throws to stay on it.
   const wizLeave = {
+    async connect() {
+      if (wizConn && wizConn.problems.graph && wiz.warned !== 'connect') {
+        wiz.warned = 'connect';
+        throw new Error(t('Publishing to SharePoint is not set up yet: the server cannot publish. Next again to go on anyway.'));
+      }
+    },
     async folder() {
       await wiz.checking;
       if (onServer()) {

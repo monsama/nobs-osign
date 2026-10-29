@@ -342,6 +342,18 @@
       <div class="wiz-fields"><label>Language<select id="wizLang"></select></label></div>
     </section>
 
+    <!-- The server version, for the local account admin: what the server reaches by itself. -->
+    <section class="wiz-step" data-step="connect" data-title="The server's connections">
+      <p class="wiz-intro" data-th="wizConnLead">The server signs in people with Active Directory, writes the signatures into SharePoint
+        and uploads the add-in's files itself. Set up what you use: only <b>SharePoint</b> is needed to publish. All of it can be
+        changed later under <b>Settings → Server connections</b>.</p>
+      <ul id="wizConnList" class="checks"></ul>
+      <p><button type="button" id="wizConnOpen" class="primary">Set up the connections…</button></p>
+      <p class="wiz-note" data-th="wizConnApp">For SharePoint the server needs <b>an app registration of its own</b> in Entra ID (not the
+        add-in's): <b>Application permissions</b> → <b>Sites.Selected</b> with admin consent, and a client secret. The next step
+        shows how to give it the one site.</p>
+    </section>
+
     <section class="wiz-step" data-step="folder" data-title="Where the signatures are kept">
       <p class="wiz-intro" data-th="wizFolderLead">NOBS OSign keeps the signatures, their images and the photos in a folder in your company's SharePoint,
         where Outlook reads them with each user's own sign-in. Make a folder <b>OSign</b> there (with a folder <b>photos</b> in it), and tell
