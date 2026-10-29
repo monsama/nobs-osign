@@ -198,7 +198,7 @@ Pages. Nothing on the server is reachable from the internet.
 
 ```bash
 mkdir -p /opt/nobs-osign && cd /opt/nobs-osign
-curl -fsSLO https://github.com/monsama/osign/releases/download/vX.Y.Z/nobs-osign-server-X.Y.Z.tar.gz
+curl -fsSLO https://github.com/monsama/nobs-osign/releases/download/vX.Y.Z/nobs-osign-server-X.Y.Z.tar.gz
 tar -xzf nobs-osign-server-X.Y.Z.tar.gz --strip-components=1
 sudo OSIGN_HOST=osign.example.ch ./deploy-nobs-osign.sh
 ```

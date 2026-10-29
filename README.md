@@ -186,7 +186,7 @@ To release, raise the version on main (`node scripts/bump-version.mjs 0.5.0`), t
 the tag with `scripts/release.sh 0.5.0`, or run the **release** workflow by hand on main (Actions →
 release → Run workflow): it tags the version in `package.json` and publishes it. The tests have to
 pass first, and a version that is already tagged is refused. `gh attestation verify <zip> --repo
-monsama/osign` checks that a zip was built by that workflow.
+monsama/nobs-osign` checks that a zip was built by that workflow.
 
 ## License
 

@@ -16,8 +16,8 @@ trap 'rm -f "$OSIGN_UPDATE_COPY"' EXIT
 cd "$BASE_DIR"
 # shellcheck source=scripts/osign-lib.sh
 . scripts/osign-lib.sh
-# The repository as it was first named: GitHub forwards it once it is renamed.
-REPO=monsama/osign
+# Where the releases are (the repository was osign before; GitHub still forwards that address).
+REPO=monsama/nobs-osign
 
 command -v curl >/dev/null || fail "curl is missing."
 want="${1:-}"; want="${want#v}"

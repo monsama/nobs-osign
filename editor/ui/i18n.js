@@ -16,6 +16,8 @@
     'Load published': 'Veröffentlichte laden',
     'Settings': 'Einstellungen',
     'Publish…': 'Veröffentlichen…',
+    'Buy me a coffee: if NOBS OSign saves you some time': 'Buy me a coffee: wenn Ihnen NOBS OSign Zeit spart',
+    'If NOBS OSign saves you some time': 'Wenn Ihnen NOBS OSign Zeit spart',
     'Signatures': 'Signaturen',
     'Setup': 'Einrichtung',
     'Fields': 'Felder',
