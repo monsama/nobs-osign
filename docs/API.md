@@ -36,6 +36,12 @@ in words (`SharePoint contoso.sharepoint.com/sites/IT › OSign`); `folder`, `ph
 `addinFolder` sent are ignored. `settings/get` also answers `folderError` when SharePoint cannot be
 asked.
 
+- **ad/lookup**, **ad/groups**, **ad/read**, **ad/snapshot**, **ad/export** work as above, with the
+  server's service account over LDAP (`features.adLookup`; `features.adProblem` says what is
+  missing). An empty `query` in `ad/lookup` means the one signed in. `users/` is in the same
+  SharePoint folder; the server keeps a copy of what it holds (`users-mirror.json`), so a read asks
+  SharePoint only for the files that changed since. `features.adExport` is `{ at, last }` when the
+  server exports by itself every day (`OSIGN_AD_EXPORT_AT`); `last` is `{ at, ok, result | error }`.
 - **sp/check** `{ spSite, spFolder }` → `{ ok, found, photos, where }`: whether the server reaches
   that folder, before it is saved (the setup assistant). `found: false` means the site is reached
   and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,

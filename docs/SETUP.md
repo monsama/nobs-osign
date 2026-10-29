@@ -225,7 +225,16 @@ server writes with its own.
 | `OSIGN_LDAP_BIND`, `OSIGN_LDAP_BASE` | `{login}@example.ch`, `OU=Users,DC=example,DC=ch` |
 | `OSIGN_LDAP_GROUP` | who may sign in: `CN=OSign-Admins,OU=Groups,DC=example,DC=ch` (as a DN, nested groups count) |
 | `OSIGN_LDAP_CA` | the CA certificate the domain controller's certificate comes from, if it is not a public one |
+| `OSIGN_LDAP_SERVICE_DN` | a read-only account for the preview, the group list and the users' values: `CN=svc-osign,OU=Service,DC=example,DC=ch` |
+| `OSIGN_LDAP_SERVICE_PASSWORD_FILE` | a file holding its password |
+| `OSIGN_LDAP_DIRECTORY_BASE` | where users and groups are searched; empty: the whole domain of `OSIGN_LDAP_BASE` |
+| `OSIGN_AD_EXPORT_AT` | `06:00`: the users' values are exported every day at that time (`TZ`), as `-ExportUsers` does from the Task Scheduler |
 | `OSIGN_DATA` | the draft, its images and the settings (`/data`) |
+
+With values from AD, the server reads them with the service account and writes `users/<mail>.json`
+into the same SharePoint folder: on **Publish**, exactly what was read and checked under **Users**,
+and every day at `OSIGN_AD_EXPORT_AT` by itself (Add-in → *Where the users' values come from*
+shows how its last run went). A read that finds nobody writes nothing.
 
 Where it publishes is the SharePoint site and folder of the add-in (Settings → *SharePoint site*,
 *Folder in its library*), so the editor writes exactly where Outlook reads. The folder and its

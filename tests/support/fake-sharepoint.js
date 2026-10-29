@@ -2,6 +2,9 @@
 // for the server's publishing (server/graph.js). Like an app with Sites.Selected, it reaches only
 // the sites it was granted; any other answers 403.
 const http = require('node:http');
+const crypto = require('node:crypto');
+// A file's eTag changes when its content does.
+const etag = (buf) => '"{' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 32) + '},1"';
 
 const SITE_RE = /^\/v1\.0\/sites\/(root|[^/]+:\/(?:sites|teams|personal)\/[^:/]+:)\/drive\/root(?::\/([^:]*):)?(\/children|\/content)?$/;
 
@@ -45,7 +48,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
     if (req.method === 'GET' && suffix === '/children') {
       if (!exists(rel)) return json(404, { error: { code: 'itemNotFound', message: 'not found' } });
       const value = [];
-      for (const p of site.files.keys()) if (parentOf(p) === rel) value.push({ name: p.split('/').pop(), file: {} });
+      for (const [p, buf] of site.files) if (parentOf(p) === rel) value.push({ name: p.split('/').pop(), file: {}, eTag: etag(buf) });
       for (const p of site.folders) if (parentOf(p) === rel) value.push({ name: p.split('/').pop(), folder: {} });
       return json(200, { value });
     }
@@ -65,7 +68,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
       // As SharePoint: the folder the file goes in has to be there.
       if (!exists(parentOf(rel))) return json(404, { error: { code: 'itemNotFound', message: 'parent not found' } });
       site.files.set(rel, body);
-      return json(201, { id: rel, name: rel.split('/').pop(), file: {} });
+      return json(201, { id: rel, name: rel.split('/').pop(), file: {}, eTag: etag(body) });
     }
     if (req.method === 'DELETE' && !suffix) {
       if (!site.files.delete(rel) && !site.folders.delete(rel)) return json(404, { error: { code: 'itemNotFound', message: 'not found' } });
