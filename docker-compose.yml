@@ -7,7 +7,7 @@ services:
   app:
     container_name: nobs-osign
     # Pinned release image (set OSIGN_IMAGE in .env). Built locally only if the pull is not possible.
-    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.5.1}
+    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.6.0}
     build: .
     restart: unless-stopped
     # No extra rights, and no writing outside its data: it needs neither.
@@ -22,6 +22,8 @@ services:
       TZ: ${TZ:-Europe/Zurich}
       OSIGN_SECURE_COOKIE: ${OSIGN_SECURE_COOKIE:-1}
       OSIGN_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      # The key the passwords set in the editor (Settings → Server connections) are kept with.
+      OSIGN_APP_KEY_FILE: /run/secrets/app_key
       # Sign-in and AD (server/ldap.js, server/directory.js)
       OSIGN_LDAP_URL: ${OSIGN_LDAP_URL:-}
       OSIGN_LDAP_STARTTLS: ${OSIGN_LDAP_STARTTLS:-}
@@ -30,6 +32,8 @@ services:
       OSIGN_LDAP_GROUP: ${OSIGN_LDAP_GROUP:-}
       OSIGN_LDAP_LOGIN_ATTR: ${OSIGN_LDAP_LOGIN_ATTR:-}
       OSIGN_LDAP_CA: ${OSIGN_LDAP_CA:-}
+      # Ports besides 389, 636, 3268 and 3269 a domain controller set in the editor may use.
+      OSIGN_LDAP_PORTS: ${OSIGN_LDAP_PORTS:-}
       OSIGN_LDAP_SERVICE_DN: ${OSIGN_LDAP_SERVICE_DN:-}
       OSIGN_LDAP_SERVICE_PASSWORD_FILE: /run/secrets/ldap_service_password
       OSIGN_LDAP_DIRECTORY_BASE: ${OSIGN_LDAP_DIRECTORY_BASE:-}
@@ -44,6 +48,7 @@ services:
       OSIGN_CF_API_TOKEN_FILE: /run/secrets/cf_api_token
     secrets:
       - admin_password
+      - app_key
       - ldap_service_password
       - graph_client_secret
       - cf_api_token
@@ -70,6 +75,8 @@ services:
 secrets:
   admin_password:
     file: ./secrets/admin_password
+  app_key:
+    file: ./secrets/app_key
   ldap_service_password:
     file: ./secrets/ldap_service_password
   graph_client_secret:

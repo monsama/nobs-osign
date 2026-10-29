@@ -29,15 +29,18 @@ function directoryConfig(env, ldapCfg) {
   else pw = String(env.OSIGN_LDAP_SERVICE_PASSWORD || '').trim();
   // The domain the sign-in base is in: its DC= parts.
   const dcs = String(ldapCfg.searchBase || '').split(',').map((x) => x.trim()).filter((x) => /^DC=/i.test(x)).join(',');
-  return Object.assign({}, ldapCfg, { serviceDn: String(env.OSIGN_LDAP_SERVICE_DN || '').trim(), servicePassword: pw, base: String(env.OSIGN_LDAP_DIRECTORY_BASE || '').trim() || dcs || ldapCfg.searchBase });
+  return Object.assign({}, ldapCfg, { serviceDn: String(env.OSIGN_LDAP_SERVICE_DN || '').trim(), servicePassword: pw, base: String(env.OSIGN_LDAP_DIRECTORY_BASE || '').trim() || dcs || ldapCfg.searchBase,
+    // The password in ./secrets is for this domain controller only (server/connections.js).
+    pinnedTo: String(env.OSIGN_PASSWORD_PINNED || '') });
 }
 const directoryEnabled = (c) => !!(c.url && c.serviceDn);
 function directoryProblem(c) {
-  if (!c.url) return 'Active Directory is not set up on the server (OSIGN_LDAP_URL).';
-  if (!c.serviceDn) return 'The server has no service account for Active Directory (OSIGN_LDAP_SERVICE_DN).';
+  if (!c.url) return 'Active Directory is not set up on the server (Settings → Server connections).';
+  if (!c.serviceDn) return 'The server has no service account for Active Directory (Settings → Server connections).';
   // An empty password is an anonymous sign-in to AD, which reads nothing or the wrong things.
-  if (!c.servicePassword) return "The service account's password is missing (secrets/ldap_service_password).";
-  if (!c.base) return 'OSIGN_LDAP_DIRECTORY_BASE is not set (where users and groups are, like DC=example,DC=ch).';
+  if (!c.servicePassword && c.pinnedTo) return "The service account's password in secrets/ldap_service_password is for " + c.pinnedTo + ', not for this domain controller. Enter it in Server connections.';
+  if (!c.servicePassword) return "The service account's password is missing (secrets/ldap_service_password, or Server connections).";
+  if (!c.base) return 'Where users and groups are read is not set (like DC=example,DC=ch).';
   return ldapProblem(c);
 }
 

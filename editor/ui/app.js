@@ -826,7 +826,7 @@
       const f = S.info.features, x = f.adExport;
       let text = t('With AD, the users are written into users/ in the OSign folder on Publish: one small file per person with their fields and groups. The add-in reads only the file of whoever writes.');
       if (!f.adLookup) text += ' ' + t('Active Directory is not set up on the server: {0}', t(f.adProblem));
-      else if (!x) text += ' ' + t('The server does not export them by itself (OSIGN_AD_EXPORT_AT is not set): the values change only when you publish.');
+      else if (!x) text += ' ' + t('The server does not export them by itself (no daily time in Settings → Server connections): the values change only when you publish.');
       else {
         text += ' ' + t('The server exports them every day at {0}.', x.at);
         if (x.last) text += ' ' + (x.last.ok ? t('Last run {0}: fine.', new Date(x.last.at).toLocaleString(I18N.lang)) : t('Last run {0} failed: {1}', new Date(x.last.at).toLocaleString(I18N.lang), x.last.error));
@@ -945,6 +945,8 @@
     for (const id of ['setFolder', 'setPhotos', 'setAddinFolder']) $(id).closest('label').hidden = onServer();
     document.querySelector('#dlgSettings [data-th=settingsLead]').hidden = onServer();
     $('setAddinBuild').closest('p').hidden = onServer() && $('setAddinBuild').disabled;
+    // The server's connections: the local account admin's alone (server/connections.js).
+    $('setConnRow').hidden = !(onServer() && S.info.user && S.info.user.local);
     $('setAddinUpload').hidden = true; $('setAddinZip').hidden = true;
     $('setAddinOk').textContent = $('setAddinBuild').disabled ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
@@ -978,6 +980,74 @@
         $('setAddinOk').textContent = t('{0} files (version {1}) made. Upload them, add the redirect URI {2} to the app registration, and upload {3} in the admin center.', r.files, r.version, r.redirectUri, r.manifestUrl);
       } else $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
     } catch (err) { $('setErr').textContent = t(err.message); }
+  });
+
+  // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
+  // saved wins over .env, an empty field takes .env's value (its placeholder). Secrets are only
+  // ever sent, never shown: the server says where each comes from.
+  const CONN_FIELDS = ['ldapUrl', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
+  const CONN_SECRETS = ['ldapServicePassword', 'graphClientSecret', 'cfApiToken'];
+  let connDrop = {}, connCa;
+  const day = (iso) => (iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '');
+  function renderConnections(r) {
+    $('connKey').hidden = r.keyOk;
+    for (const k of CONN_FIELDS) {
+      const el = $('cn_' + k), f = r.fields[k];
+      el.value = f.value;
+      if (el.tagName === 'SELECT') el.options[0].textContent = f.env ? t('As in .env ({0})', t(f.env === 'on' ? 'On' : 'Off')) : t('As in .env');
+      else el.placeholder = f.env || el.dataset.ph;
+    }
+    for (const k of CONN_SECRETS) {
+      const x = r.secrets[k];
+      $('cs_' + k).value = '';
+      $('cs_' + k).placeholder = x.saved ? '••••••••' : '';
+      document.querySelector('#dlgConn [data-drop=' + k + ']').hidden = !x.saved;
+      $('cx_' + k).textContent = x.saved ? (x.readable ? t('Set here on {0}.', day(x.saved)) : t('Set here, but the server cannot read it any more (another secrets/app_key): enter it again.'))
+        : x.file ? t('From {0}.', x.fileName) : t('Not set.');
+      $('cx_' + k).className = x.saved && !x.readable ? 'err' : '';
+    }
+    $('connCaRemove').hidden = !r.ca.saved;
+    $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
+      : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
+    $('connCaFile').value = '';
+    const line = (id, problem, okText) => { $(id).textContent = problem ? t(problem) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
+    line('connSignIn', r.problems.signIn, 'Ready: members of the sign-in group can sign in.');
+    line('connDirectory', r.problems.directory, 'Ready: the editor reads the users\' values from AD.');
+    line('connGraph', r.problems.graph, 'Ready: publishing goes into SharePoint.');
+    line('connPages', r.problems.pages, 'Ready: the add-in\'s files can be uploaded from here.');
+    connDrop = {}; connCa = undefined;
+    $('connErr').textContent = '';
+  }
+  $('setConn').addEventListener('click', async () => {
+    $('setErr').textContent = '';
+    try { renderConnections(await api('connections/get')); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+  });
+  $('dlgConn').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-drop]');
+    if (!b) return;
+    connDrop[b.dataset.drop] = true; b.hidden = true;
+    $('cx_' + b.dataset.drop).textContent = t('Removed when you save.');
+  });
+  $('connCaRemove').addEventListener('click', () => { connCa = null; $('connCaRemove').hidden = true; $('connCa').textContent = t('Removed when you save.'); });
+  $('connCaFile').addEventListener('change', async () => {
+    const f = $('connCaFile').files[0];
+    if (!f) return;
+    connCa = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+  });
+  $('connSave').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const values = {}, secrets = {};
+    for (const k of CONN_FIELDS) values[k] = $('cn_' + k).value;
+    for (const k of CONN_SECRETS) { if ($('cs_' + k).value) secrets[k] = $('cs_' + k).value; else if (connDrop[k]) secrets[k] = null; }
+    const body = { values, secrets };
+    if (connCa !== undefined) body.ca = connCa;
+    try {
+      const r = await api('connections/save', body);
+      // What the server can do now (publishing, AD, the upload) follows from what was saved.
+      S.info = await api('info');
+      renderConnections(r);
+      toast(t('Server connections saved.'));
+    } catch (err) { $('connErr').textContent = t(err.message); }
   });
 
   // The server version: the files made go to Cloudflare Pages from the server.

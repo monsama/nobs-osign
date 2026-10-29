@@ -12,9 +12,10 @@ const { createStore, ASSET_TYPES } = require('./store');
 const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
-const { ldapConfig } = require('./ldap');
+const { ldapConfig, ldapProblem } = require('./ldap');
 const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith } = require('./directory');
 const { createUsers, nextAt } = require('./users');
+const { createConnections } = require('./connections');
 const addin = require('./addin');
 
 const VERSION = require('../package.json').version;
@@ -83,14 +84,18 @@ function createApp(opts) {
   const log = (opts && opts.log) || console;
   const dataDir = env.OSIGN_DATA || '/data';
   const publishDir = env.OSIGN_PUBLISH_DIR || path.join(dataDir, 'publish');
-  if (graphProblem(graphConfig(env))) log.warn('Publishing to SharePoint is not set up right: ' + graphProblem(graphConfig(env)));
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(publishDir, { recursive: true });
   const store = createStore(dataDir);
+  // The connections (AD, Graph, Cloudflare): .env, with what the admin saved in the editor on top.
+  // Each is read anew when that changes (configure, below), so no restart is needed.
+  const connections = createConnections({ dataDir, env });
+  // Filled in by configure(); the same objects throughout, so what holds them sees the change.
+  const graphCfg = {}, ldapCfg = {}, dir = {}, pages = {};
+  const refill = (obj, fresh) => { for (const k of Object.keys(obj)) delete obj[k]; Object.assign(obj, fresh); };
   // Where publishing goes: SharePoint through Graph when the server's app registration is set
   // up, its own folder otherwise (development, tests).
-  const graphCfg = graphConfig(env);
-  const graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch }) : null;
+  let graph = null;
   const spFolder = (s) => String(s.spFolder || 'OSign').replace(/^\/+|\/+$/g, '');
   const local = folderTarget(publishDir);
   const targetFor = (s) => (graph ? graph.target(s.spSite || 'root', spFolder(s)) : local);
@@ -107,21 +112,17 @@ function createApp(opts) {
     photos.set(key, { at: Date.now(), bytes });
     return bytes;
   }
-  const ldapCfg = Object.assign(ldapConfig(env), (opts && opts.ldap) || {});
   const auth = createAuth({ env, ldap: ldapCfg, log });
-  // Active Directory with the service account: the preview's users and groups, and the users'
-  // values for signatures that take them from AD.
-  const dir = directoryConfig(env, ldapCfg);
-  const adOn = directoryEnabled(dir) && !directoryProblem(dir);
-  if (directoryEnabled(dir) && directoryProblem(dir)) log.warn('Active Directory is not set up right: ' + directoryProblem(dir));
+  // Active Directory with the service account (dir): the preview's users and groups, and the
+  // users' values for signatures that take them from AD.
+  let adOn = false;
   const users = createUsers({ dataDir, directory: dir, log });
   // The add-in's files, as last made; and where they go (Cloudflare Pages).
   const addinDir = path.join(dataDir, 'addin');
-  const pages = addin.pagesConfig(env);
   const fetchFn = (opts && opts.fetch) || fetch;
   // The scheduled export (OSIGN_AD_EXPORT_AT, hh:mm in TZ): every day, what the published
   // signatures ask for, so the values stay as current as AD without anyone publishing.
-  const exportAt = String(env.OSIGN_AD_EXPORT_AT || '').trim();
+  let exportAt = '';
   let lastExport = null, exportTimer = null;
   async function runExport() {
     const at = Date.now();
@@ -142,9 +143,37 @@ function createApp(opts) {
     // The timer alone never keeps the process (or a test) running.
     if (exportTimer.unref) exportTimer.unref();
   }
-  if (adOn && exportAt) {
-    if (nextAt(exportAt, Date.now())) scheduleExport();
-    else log.warn('OSIGN_AD_EXPORT_AT is a time of day like 06:00: ' + exportAt);
+  // Reads the connections (again): at the start, and when the admin saved them.
+  function configure() {
+    const e = connections.effectiveEnv();
+    refill(graphCfg, graphConfig(e));
+    graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch }) : null;
+    if (graphProblem(graphCfg)) log.warn('Publishing to SharePoint is not set up right: ' + graphProblem(graphCfg));
+    refill(ldapCfg, Object.assign(ldapConfig(e), (opts && opts.ldap) || {}));
+    refill(dir, directoryConfig(e, ldapCfg));
+    adOn = directoryEnabled(dir) && !directoryProblem(dir);
+    if (directoryEnabled(dir) && directoryProblem(dir)) log.warn('Active Directory is not set up right: ' + directoryProblem(dir));
+    refill(pages, addin.pagesConfig(e));
+    exportAt = String(e.OSIGN_AD_EXPORT_AT || '').trim();
+    if (exportTimer) { clearTimeout(exportTimer); exportTimer = null; }
+    if (adOn && exportAt) {
+      if (nextAt(exportAt, Date.now())) scheduleExport();
+      else log.warn('OSIGN_AD_EXPORT_AT is a time of day like 06:00: ' + exportAt);
+    }
+    settings.forget(); photos.clear();
+  }
+  configure();
+  // The connections are the local account admin's alone: whoever sets the directory's address
+  // gets the passwords people sign in with.
+  const adminOnly = (s) => (s.user.local ? '' : 'Only the local account admin can change the server\'s connections.');
+  function connectionsAnswer() {
+    return Object.assign(connections.answer(), {
+      problems: {
+        signIn: ldapProblem(ldapCfg) || (ldapCfg.url ? '' : 'Signing in with Active Directory is not set up.'),
+        directory: directoryProblem(dir), graph: graphProblem(graphCfg) || (graphEnabled(graphCfg) ? '' : 'Publishing to SharePoint is not set up.'),
+        pages: addin.pagesProblem(pages)
+      }
+    });
   }
 
   const routes = {
@@ -166,7 +195,7 @@ function createApp(opts) {
         adProblem: adOn ? '' : directoryProblem(dir),
         adExport: adOn && exportAt ? { at: exportAt, last: lastExport } : null
       },
-      user: { login: s.user.login, name: s.user.name }
+      user: { login: s.user.login, name: s.user.name, local: !!s.user.local }
     }),
     'draft/get': () => store.getDraft(),
     'draft/save': (d) => store.saveDraft(typeof d.configJson === 'string' ? d.configJson : ''),
@@ -174,6 +203,16 @@ function createApp(opts) {
     'assets/delete': (d) => store.deleteAsset(d.name),
     'settings/get': () => settings.answer(),
     'settings/save': (d) => settings.save(d.settings || {}),
+    // The server's connections (Settings → Server connections), for the local account admin.
+    'connections/get': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : connectionsAnswer()),
+    'connections/save': (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
+      const r = connections.save({ values: d.values, secrets: d.secrets && typeof d.secrets === 'object' ? d.secrets : {}, ca: d.ca });
+      if (r.error) return r;
+      configure();
+      log.info('connections: changed by ' + s.user.login);
+      return connectionsAnswer();
+    },
     publish: async (d) => {
       const t = settings.target();
       let r;
@@ -224,7 +263,7 @@ function createApp(opts) {
       const s = Object.assign(settings.get(), { spSite: String(d.spSite || 'root').trim(), spFolder: String(d.spFolder || '').trim() });
       if (!s.spFolder) return { error: 'Name the folder in the site, like OSign.' };
       const err = checkSettings(s); if (err) return { error: err };
-      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up on the server (OSIGN_GRAPH_* in .env).' };
+      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up on the server (Settings → Server connections).' };
       const t = targetFor(s);
       try { return { found: await t.exists(''), photos: await t.exists('photos'), where: t.describe() }; }
       catch (e) {

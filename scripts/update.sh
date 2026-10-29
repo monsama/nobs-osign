@@ -43,6 +43,8 @@ tar -xzf "$work/$name" -C "$work"
 src="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'nobs-osign-server-*' | head -1)"
 [ -n "$src" ] || fail "The archive does not hold the server's files."
 cp -a "$src"/. "$BASE_DIR"/
+# A release from before 0.6.0 had no key for the passwords set in the editor.
+app_key_ensure
 env_set OSIGN_IMAGE "ghcr.io/monsama/nobs-osign:$want"
 docker pull "$(env_get OSIGN_IMAGE)" >/dev/null || fail "The image of $want could not be pulled."
 compose up -d --no-build >/dev/null

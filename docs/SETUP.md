@@ -206,9 +206,20 @@ sudo OSIGN_HOST=osign.example.ch ./deploy-nobs-osign.sh
 `deploy-nobs-osign.sh` creates `.env` and `secrets/` (the password of the local account `admin`, shown
 once), starts the release image `ghcr.io/monsama/nobs-osign:X.Y.Z`, adds `nobs-osign.caddy` to the shared
 proxy's sites (with its default certificate; your own with NOBS Inventory's
-`scripts/install-cert.sh nobs-osign <bundle.pem>`), and a daily backup at 03:25. Then fill in `.env` and
-the files in `secrets/` as below, run `sudo ./deploy-nobs-osign.sh` again, sign in as `admin` and let the
-setup assistant do the rest.
+`scripts/install-cert.sh nobs-osign <bundle.pem>`), and a daily backup at 03:25. Then sign in as
+`admin` and set the connections in **Settings → Server connections** (Active Directory, the service
+account, Microsoft Graph, Cloudflare Pages, as below); they take effect when saved, without a
+restart. The setup assistant does the rest.
+
+The connections can also go in `.env` and `secrets/` (the variables below, then `sudo
+./deploy-nobs-osign.sh` again): what is saved in Settings wins, and a field left empty there takes the
+value from `.env`. Only the local account `admin` may see or change them: whoever sets the domain
+controller's address gets the passwords people sign in with. The passwords and the token set there
+are kept encrypted in the data volume, with the key in `secrets/app_key` (made by the deploy script;
+the backup holds both), and are never shown again. The service account's password in
+`secrets/ldap_service_password` only goes to the domain controller `.env` names (`OSIGN_LDAP_URL`);
+another one set in Settings needs it entered there. A domain controller set in Settings has to use
+an LDAP port (389, 636, 3268, 3269; others with `OSIGN_LDAP_PORTS` in `.env`).
 
 | Task | Command |
 |---|---|
@@ -219,9 +230,10 @@ setup assistant do the rest.
 | Logs | `docker logs -f nobs-osign` |
 
 **The add-in's files on Cloudflare Pages.** In Cloudflare: **My Profile → API Tokens → Create
-Token**, with the permission *Account → Cloudflare Pages → Edit* for your account. Put it in
-`secrets/cf_api_token`, the account ID (on the account's overview page) and a project name in
-`.env` (`OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT`; the project is made on the first upload). The
+Token**, with the permission *Account → Cloudflare Pages → Edit* for your account. Put it, the
+account ID (on the account's overview page) and a project name in Settings → Server connections (or
+`secrets/cf_api_token`, `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT` in `.env`); the project is made on
+the first upload. The
 setup assistant's step *Make the add-in's files* then uploads them; *Download as ZIP* is there for
 an upload by hand.
 
@@ -245,13 +257,15 @@ server writes with its own.
    `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every
    site of the tenant.
 
-**Settings of the server** (environment variables; the secrets as files):
+**Settings of the server** (in Settings → Server connections, or as environment variables with the
+secrets as files):
 
 | Variable | |
 |---|---|
 | `OSIGN_GRAPH_TENANT_ID`, `OSIGN_GRAPH_CLIENT_ID` | the tenant, and the client ID of *NOBS OSign server* |
 | `OSIGN_GRAPH_CLIENT_SECRET_FILE` | a file holding its client secret |
-| `OSIGN_ADMIN_PASSWORD_FILE` | a file holding the password of the local account `admin` |
+| `OSIGN_ADMIN_PASSWORD_FILE` | a file holding the password of the local account `admin` (only here) |
+| `OSIGN_APP_KEY_FILE` | a file holding the key the passwords set in Settings are kept with (only here) |
 | `OSIGN_LDAP_URL` | `ldaps://dc01.example.ch` (or `ldap://…` with `OSIGN_LDAP_STARTTLS=1`) |
 | `OSIGN_LDAP_BIND`, `OSIGN_LDAP_BASE` | `{login}@example.ch`, `OU=Users,DC=example,DC=ch` |
 | `OSIGN_LDAP_GROUP` | who may sign in: `CN=OSign-Admins,OU=Groups,DC=example,DC=ch` (as a DN, nested groups count) |
