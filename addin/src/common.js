@@ -286,7 +286,8 @@ async function loadImages(refs, interactive) {
         b64 = base64(await download(meta, tok, 'Loading ' + w.name));
         if (b64.length < IMAGE_CACHE_MAX * 4 / 3) await store.set(ck, JSON.stringify({ etag: meta.eTag || '', b64 }));
       }
-      out[w.key] = { b64, type: typeOf(w.name), file: ATTACHMENT_PREFIX + w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-') };
+      // The attachment's name, without its osign-<tag>- prefix (insertSignature puts that in front).
+      out[w.key] = { b64, type: typeOf(w.name), file: w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-') };
     } catch (e) {
       console.log('OSign: image ' + w.key + ': ' + (e && e.message ? e.message : e));
     }
@@ -347,14 +348,29 @@ export async function fromAddress(item) {
   return (Office.context.mailbox.userProfile || {}).emailAddress || '';
 }
 
+// A reply or forward also carries the images of the mail it quotes, and that may be signed by OSign
+// too (osign-assets-logo.png). So this message's own images are named osign-<tag>-…, with a tag of
+// its own kept with the message (sessionData, which the event handler and the pane share): only
+// those are ever taken out, and none has the name, and so the cid, of an image in the quoted mail.
+// Without sessionData there is no tag, and every osign- image goes, as before.
+const TAG_KEY = 'osign.tag';
+async function attachmentPrefix(item) {
+  const sd = item.sessionData;
+  if (!sd || !sd.getAsync || !sd.setAsync) return ATTACHMENT_PREFIX;
+  try { const v = await call(sd.getAsync.bind(sd), TAG_KEY); if (/^[0-9a-f]{8}$/.test(v)) return ATTACHMENT_PREFIX + v + '-'; } catch (e) { /* none yet */ }
+  const tag = (Math.random().toString(16).slice(2) + '00000000').slice(0, 8);
+  try { await call(sd.setAsync.bind(sd), TAG_KEY, tag); } catch (e) { return ATTACHMENT_PREFIX; }
+  return ATTACHMENT_PREFIX + tag + '-';
+}
+
 // The images an earlier signature attached go when another one is put in (a changed sender, a
 // signature picked in the pane), so a mail never carries a logo it no longer shows.
-async function removeOwnAttachments(item) {
+async function removeOwnAttachments(item, prefix) {
   if (!item.getAttachmentsAsync) return;
   let list = [];
   try { list = await call(item.getAttachmentsAsync.bind(item)); } catch (e) { return; }
   for (const a of list || []) {
-    if (a.isInline && String(a.name || '').indexOf(ATTACHMENT_PREFIX) === 0) {
+    if (a.isInline && String(a.name || '').indexOf(prefix) === 0) {
       try { await call(item.removeAttachmentAsync.bind(item), a.id); } catch (e) { /* leave it */ }
     }
   }
@@ -365,7 +381,8 @@ export async function insertSignature(item, cfg, sig, values, asHtml, opts) {
   if (cfg.options && cfg.options.disableOutlookSignature && isMessage(item) && item.disableClientSignatureAsync) {
     try { await call(item.disableClientSignatureAsync.bind(item)); } catch (e) { /* insert ours anyway */ }
   }
-  await removeOwnAttachments(item);
+  const prefix = await attachmentPrefix(item);
+  await removeOwnAttachments(item, prefix);
   let content = '';
   if (sig) {
     const html = renderHtml(sig, values);
@@ -373,6 +390,7 @@ export async function insertSignature(item, cfg, sig, values, asHtml, opts) {
       let images = {};
       try { images = await loadImages(core.localImages(html), !!(opts && opts.interactive)); } catch (e) { console.log('OSign: images: ' + e.message); }
       for (const key of Object.keys(images)) {
+        images[key] = Object.assign({}, images[key], { file: prefix + images[key].file });
         try { await call(item.addFileAttachmentFromBase64Async.bind(item), images[key].b64, images[key].file, { isInline: true }); }
         catch (e) { delete images[key]; }
       }

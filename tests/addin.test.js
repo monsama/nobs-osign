@@ -37,7 +37,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], deny, signInFails } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, deny, signInFails } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -51,6 +51,11 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
     getAttachmentsAsync: (cb) => ok(atts.slice())(cb),
     removeAttachmentAsync: (id, cb) => { calls.push(['remove', id]); atts.splice(atts.findIndex((a) => a.id === id), 1); ok()(cb); },
     addFileAttachmentFromBase64Async: (b64, name, opts, cb) => { calls.push(['attach', name, b64, opts.isInline]); atts.push({ id: 'a' + (++n), name, isInline: opts.isInline }); ok('a' + n)(cb); },
+    // sessionData (Mailbox 1.11), when the test gives one: a missing key answers an error, as in Outlook.
+    sessionData: session && {
+      getAsync: (k, cb) => cb(k in session ? { status: 'succeeded', value: session[k] } : { status: 'failed', error: new Error('not found') }),
+      setAsync: (k, v, cb) => { session[k] = v; ok()(cb); }
+    },
     body: {
       getTypeAsync: (cb) => ok(coercion)(cb),
       setSignatureAsync: (content, opts, cb) => { calls.push(['set', content, opts.coercionType]); ok()(cb); }
@@ -124,6 +129,22 @@ test('the images of an earlier signature go when another one is put in; the user
   await r.fire('onMessageFromChangedHandler');
   assert.deepEqual(r.calls.filter((c) => c[0] === 'remove'), [['remove', 'old1']]);
   assert.deepEqual(r.atts.map((a) => a.name).sort(), ['offer.pdf', 'osign-assets-logo.png', 'osign-photos-mustera.jpg']);
+});
+
+test('a reply keeps the images of the OSign signature it quotes; its own carry a tag of the message', async () => {
+  const session = {};
+  const quoted = [{ id: 'q1', name: 'osign-assets-logo.png', isInline: true }, { id: 'q2', name: 'osign-1a2b3c4d-photos-muellerb.jpg', isInline: true }];
+  const config = makeConfig((c) => { c.signatures[0].defaultReply = true; c.signatures[1].defaultReply = false; });
+  const r = runtime({ config, composeType: 'reply', attachments: quoted, session });
+  await r.fire('onNewMessageComposeHandler');
+  assert.match(session['osign.tag'], /^[0-9a-f]{8}$/);
+  const p = 'osign-' + session['osign.tag'] + '-';
+  assert.ok(!r.calls.some((c) => c[0] === 'remove'));
+  assert.equal(setCall(r)[1], '<p><b>Anna Muster</b></p><p><img src="cid:' + p + 'assets-logo.png" width="90"><img src="cid:' + p + 'photos-mustera.jpg" width="100"></p>');
+  // Put in again (a changed sender): its own images are replaced, under the same tag; the quoted ones stay.
+  await r.fire('onMessageFromChangedHandler');
+  assert.deepEqual(r.calls.filter((c) => c[0] === 'remove').map((c) => c[1]).sort(), ['a1', 'a2']);
+  assert.deepEqual(r.atts.map((a) => a.name).sort(), ['osign-1a2b3c4d-photos-muellerb.jpg', 'osign-assets-logo.png', p + 'assets-logo.png', p + 'photos-mustera.jpg'].sort());
 });
 
 test('a reply gets the reply signature; plain text gets text and no images', async () => {
