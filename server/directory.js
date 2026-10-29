@@ -117,4 +117,10 @@ async function userRecords(c, attributes, groupNames) {
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
-module.exports = { attrOk, directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, userRecords, sha256 };
+// Whether the service account signs in and sees users ("Test" in Server connections): how many,
+// up to 5 (the first few are enough to know).
+async function testService(c) {
+  return withService(c, async (client) => ({ users: (await search(client, c.base, ACTIVE_USERS, ['samaccountname'], 5)).length }));
+}
+
+module.exports = { testService, attrOk, directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, userRecords, sha256 };

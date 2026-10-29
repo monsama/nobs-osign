@@ -2,197 +2,21 @@
 
 You do this once. Afterwards, changing a signature only means editing it and clicking **Publish**.
 
-**The quick way:** start the editor (step 4.1–4.2). On the first start its **setup assistant** opens
-and walks through steps 1–3 and 5, saving each one, with what to do in SharePoint, Entra ID, the web
-host and the admin center. It can be opened again any time: **Settings → Setup assistant**. This
-page has the same steps in full.
+**The quick way:** install the server (step 1), sign in as `admin`. The **setup assistant** opens
+by itself and walks through steps 2–6, saving each one. It can be opened again any time with
+**Setup assistant** at the top. This page has the same steps in full.
 
-NOBS OSign does not need GitHub to run: you download the release once, and everything else is the
-company's own. The add-in's code is served from your own web server; the signatures, images and
-photos live in the company's own SharePoint.
+NOBS OSign does not need GitHub to run: the server is installed from a release once, and everything
+else is the company's own. The editor runs on the company's server, the add-in's code is served
+from a web server of its choosing, and the signatures, images and photos live in the company's own
+SharePoint. Nothing on the server is reachable from the internet.
 
-## 1. The OSign folder in SharePoint
+## 1. Install the server
 
-The add-in looks for its data in the **home site** of your tenant (`https://<tenant>.sharepoint.com`),
-in its document library (*Documents* / *Dokumente*), folder **`OSign`**. Every Microsoft 365 tenant
-has that site, so the add-in finds it without being told.
-
-1. Open `https://<tenant>.sharepoint.com` → *Documents*, and make a folder **OSign**.
-2. **Who may read it:** everyone who sends mail with a signature. Share the folder (or the library)
-   with *Everyone except external users*, read only. Only the admins who publish need to edit.
-3. **On the admin PC:** open the folder and choose **Sync** (or **Add shortcut to My files**).
-   OneDrive then shows it in File Explorer, e.g.
-   `C:\Users\<you>\<Company>\<Site> - Documents\OSign`. That path goes into the editor in step 4.
-4. **Photos:** copy one photo per person into `OSign\photos`, named by the username
-   (`<sAMAccountName>.jpg`), as the network share has them now. Templates that show
-   `photos/@@sAMAccountName.jpg` embed each sender's own photo; who has none gets the signature
-   without one.
-
-**The setup assistant asks for the folder one of two ways** (step 1), and finds the other half
-itself:
-
-- **SharePoint link:** open the folder in SharePoint in the browser and paste the address from the
-  address bar. NOBS OSign finds the folder on this PC that OneDrive syncs it to. The library has to be
-  synced with *Sync* (NOBS OSign publishes through OneDrive). Sharing links (*Copy link*) usually do not
-  say which folder they are; use the address bar.
-- **An existing folder on this PC:** choose it with **Choose folder…**; NOBS OSign finds out where it is in
-  SharePoint from OneDrive's own notes and shows it (e.g. *✓ In SharePoint: IT › Documents ›
-  General › OSign*). For a folder added with *Add shortcut to My files* OneDrive does not note which
-  folder it is: use the SharePoint link instead.
-
-Your OneDrive is readable only by you: good for testing. For the rollout, take a site's
-*Documents* and share the folder (read) with everyone.
-
-Another site or folder by hand: set it in the editor (setup assistant step 1, or Settings →
-*Outlook add-in*) before making the add-in's files (step 3). *SharePoint site*: paste the folder's address from
-the browser or a sharing link to it (*Share → Copy link*); NOBS OSign takes the site from it, and the
-folder where the address names it. Or write it as `<host>.sharepoint.com:/sites/<name>:` (also `/teams/<name>`). *Folder in
-its library*: the path within *Documents*, e.g. `General/OSign` in a team's channel folder.
-
-**For testing, your own OneDrive works too:** make the folder `OSign` in your OneDrive and paste
-the OneDrive's address (`https://<tenant>-my.sharepoint.com/personal/<you>/…`); it becomes
-`<tenant>-my.sharepoint.com:/personal/<you>:`. Nobody else can read it, so only you get signatures.
-For the rollout, move to a site everyone can read.
-
-## 2. App registration in Entra ID
-
-The add-in signs in through Outlook itself (nested app authentication), so nobody is asked for a
-password, and reads with each user's own rights.
-
-1. Entra admin center → **Identity → Applications → App registrations → New registration**.
-   - Name: `OSign`
-   - Supported account types: *Accounts in any organizational directory* (then no tenant ID is
-     needed). *This organizational directory only* works too; then enter the tenant ID in step 3.
-2. **Authentication → Add a platform → Single-page application**. Redirect URI:
-   `brk-multihub://<host>`, the host the add-in is served from (step 3), e.g.
-   `brk-multihub://osign.contoso.com`. The editor shows it when it makes the files.
-3. **API permissions**, *Microsoft Graph → Delegated*:
-   - `User.Read` (there by default): the user's name, title, phone…
-   - `Sites.Read.All`: the OSign folder
-   - `GroupMember.Read.All`: only if signatures go to AD groups and the values come from Entra ID
-     (with values from AD, the groups come from AD too)
-
-   Then **Grant admin consent for …**.
-4. Copy the **Application (client) ID** from Overview, for step 3.
-
-## 3. Serve the add-in from your own web server
-
-The add-in is a few static files (HTML, JavaScript, icons, `manifest.xml`): only code, no data.
-Outlook loads them over HTTPS, from every device where someone writes mail.
-
-**Pick where they go.** Any web server that serves static files over HTTPS, with a certificate
-browsers trust, and without a sign-in in front of them. It has to be reachable from wherever Outlook
-is used: Outlook on the web and the new Outlook load the files on the user's own device, so a
-server only reachable inside the network means signatures only inside the network (or on VPN).
-
-| Where | How the files get there | Address |
-|---|---|---|
-| **Cloudflare Pages** (free, no credit card) | dash.cloudflare.com → *Workers & Pages → Create → Pages → Upload assets*: drag in the folder's content, *Deploy*. Updates: *Create new deployment*. | `https://<project>.pages.dev/`, own domain under *Custom domains* |
-| **Your website's web host** (Apache, most providers) | A subdomain with HTTPS; upload by FTP/SFTP, `.htaccess` included. | e.g. `https://osign.contoso.com/` |
-| **Azure Storage, static website** (simplest in Azure; costs cents) | Storage account → *Data management → Static website → Enabled*. Upload the folder's content into the `$web` container (Azure Storage Explorer, or the portal's *Upload* with the `assets` folder kept). | `https://<account>.z<n>.web.core.windows.net/` (or your own domain via Azure Front Door) |
-| **Azure Static Web Apps** (Free plan) | Create one with deployment source *Other*. Upload with `npx @azure/static-web-apps-cli deploy <folder> --deployment-token <token> --env production`. | `https://<name>.azurestaticapps.net/`, own domain possible |
-| **Your own web server** (IIS, nginx, Apache, a container) | Copy the folder into a site or virtual directory with HTTPS. | e.g. `https://osign.contoso.com/` or `https://intranet.contoso.com/osign/` |
-
-**Make the files.** Start the editor (step 4.1–4.2), then **Settings → Outlook add-in**:
-
-- *Address of the add-in*: where the files will be served, e.g. `https://osign.contoso.com/`
-- *Write the files to*: a folder of its own on this PC, e.g. `C:\OSign-addin`
-- *Client ID* (and *Tenant ID*, if the app is for your organization only): from step 2
-- *SharePoint site* and *Folder*: leave `root` and `OSign` for the home site's OSign folder
-
-- *Web server*: the kind of host. Its caching file comes along with the files: `_headers`
-  (Cloudflare Pages), `staticwebapp.config.json` (Azure), `web.config` (IIS) or `.htaccess` (Apache).
-  It makes Outlook check for a newer version before using its copy, so updates arrive within
-  minutes. For another server, have it send `Cache-Control: no-cache`.
-
-Click **Create the add-in files**, then copy the folder's content to the web server. The setup
-assistant's last step, **Check the address**, then confirms that the files there are the ones made
-here.
-
-The files only have to be made again for a new NOBS OSign version or when these settings change, never
-for a new signature. After a new version, upload the new `manifest.xml` in the admin center too
-(step 5).
-
-## 4. The editor
-
-1. Download `NOBS-OSign-vX.Y.Z.zip` from the releases once and unpack it, e.g. to `C:\Tools\OSign`. It
-   holds the editor and the add-in's files (`addin\`). From a clone of the repository, run
-   `npm ci` and `npm run build` first, so the add-in's files are there.
-2. Run:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\OSign.ps1          # from the release
-   powershell -ExecutionPolicy Bypass -File .\editor\OSign.ps1   # from the repository
-   ```
-   It opens in an Edge or Chrome app window, in German or English as Windows is set (change it
-   under Settings → Language). Closing that window stops it.
-3. **Settings**: *Publish to* = the synced OSign folder from step 1. *Photos for the preview*: leave
-   it empty to use `OSign\photos`, or point it at the network share the photos are on now.
-4. **Signatures**: import the existing ones with **⤓** next to *Signatures*. Pick the folder, or the
-   `.htm` files together with their images. CI-Sign templates (UTF-16, `images\…`) and classic
-   Outlook ones (`%APPDATA%\Microsoft\Signatures`) work. Under *Who gets it*, enter the AD groups.
-5. **Fields and where their values come from** (*Add-in → Where the users' values come from*):
-   - **Entra ID**: each field by its Graph source. Fields without one (`description`, `homePhone`,
-     `info`) stay empty, unless Entra Connect syncs them as directory extensions.
-   - **Entra ID and Active Directory** (recommended without those extensions): fields with a Graph
-     source from Entra ID, the others from AD.
-   - **Active Directory**: every field from AD.
-
-   With AD, the users' values go to `OSign\users\`: one file per person (`<mail>.json`) with
-   their fields and groups. The add-in reads only its own user's file. Groups then come from AD
-   too, so `GroupMember.Read.All` is not needed.
-
-   **Check before you publish:** open **Users**, click **Read from AD**. You see every user with
-   the values that would go out, new and changed ones marked (with the old value), and who would
-   be removed. Nothing is written yet. **Publish** then writes exactly what you read there, once;
-   without a read, or after the fields or groups changed, the users stay as they are.
-6. **Publish**. The dialog lists what would go wrong first. OneDrive uploads the folder; new
-   messages use it a minute or two later.
-
-On a PC in the domain, the preview can show any user's real values and groups from Active Directory:
-pick *User from Active Directory…* and enter a user name or address.
-
-Several admins can use the editor, each on their own PC with the folder synced. **Load published**
-takes the current state from the folder before you start.
-
-### Keeping the AD values current
-
-Only needed with *Entra ID and Active Directory* or *Active Directory*, and only if AD changes
-(a new phone number) should reach the signatures without anyone publishing. The scheduled export
-writes **without being checked** - leave it out if every change is to be looked at first under
-**Users**. On a PC in the domain where the OSign folder is synced, Task Scheduler → **Create Task**:
-
-- **General:** as the user whose OneDrive syncs the folder; *Run only when user is logged on*
-  (OneDrive uploads only while that user is signed in).
-- **Triggers:** daily, e.g. 12:00, or at log on.
-- **Actions:** program `powershell.exe`, arguments
-  `-NoProfile -ExecutionPolicy Bypass -File "C:\Tools\OSign\OSign.ps1" -ExportUsers`
-
-It reads the settings and the published `signatures.json`, writes only the users whose values
-changed, removes the files of users who are gone, and exits (code 0 when it worked).
-
-## 5. Deploy the add-in
-
-1. Microsoft 365 admin center → **Settings → Integrated apps → Upload custom apps**.
-2. App type *Office Add-in*, link to the manifest: `https://<address of the add-in>/manifest.xml`
-   (step 3)
-3. Assign it to everyone, or to a group to start with.
-
-It can take a few hours to reach every Outlook. To try it yourself first, sideload it: in Outlook on
-the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**.
-
-## 6. What users see
-
-- A new message, reply or forward gets its signature by itself, images included.
-- **NOBS OSign → Signatures** in the message toolbar opens the pane: insert another signature, or choose
-  the one for new mail and for replies (if allowed under *Add-in*).
-
-## The editor on a server (Docker)
-
-Instead of `OSign.ps1` on a PC, the editor can run as a container (`server/`, Docker Compose), on
-the same server as NOBS Inventory and behind its shared proxy. Admins sign in there with their
-Windows account (members of an AD group); the server writes into SharePoint itself, through
-Microsoft Graph, reads AD with a service account, and uploads the add-in's files to Cloudflare
-Pages. Nothing on the server is reachable from the internet.
+The editor runs as a container (Docker Compose), on the same server as NOBS Inventory and behind
+its shared proxy. Admins sign in there with their Windows account (members of an AD group); the
+server writes into SharePoint itself through Microsoft Graph, reads AD with a service account, and
+uploads the add-in's files to Cloudflare Pages.
 
 **Install** (on the server, with NOBS Inventory and its proxy running):
 
@@ -203,141 +27,267 @@ tar -xzf nobs-osign-server-X.Y.Z.tar.gz --strip-components=1
 sudo OSIGN_HOST=osign.example.ch ./deploy-nobs-osign.sh
 ```
 
-`deploy-nobs-osign.sh` creates `.env` and `secrets/` (the password of the local account `admin`, shown
-once), starts the release image `ghcr.io/monsama/nobs-osign:X.Y.Z`, adds `nobs-osign.caddy` to the shared
+`deploy-nobs-osign.sh` creates `.env` and `secrets/` (the password of the local account `admin`,
+shown once, and the key for the passwords set in the editor, `secrets/app_key`), starts the release
+image (by its digest, exactly the image that was scanned), adds `nobs-osign.caddy` to the shared
 proxy's sites (with its default certificate; your own with NOBS Inventory's
-`scripts/install-cert.sh nobs-osign <bundle.pem>`), and a daily backup at 03:25. Then sign in as
-`admin` and set the connections in **Settings → Server connections** (Active Directory, the service
-account, Microsoft Graph, Cloudflare Pages, as below); they take effect when saved, without a
-restart. The setup assistant does the rest.
-
-The connections can also go in `.env` and `secrets/` (the variables below, then `sudo
-./deploy-nobs-osign.sh` again): what is saved in Settings wins, and a field left empty there takes the
-value from `.env`. Only the local account `admin` may see or change them: whoever sets the domain
-controller's address gets the passwords people sign in with. The passwords and the token set there
-are kept encrypted in the data volume, with the key in `secrets/app_key` (made by the deploy script;
-the backup holds both), and are never shown again. The service account's password in
-`secrets/ldap_service_password` only goes to the domain controller `.env` names (`OSIGN_LDAP_URL`);
-another one set in Settings needs it entered there. A domain controller set in Settings has to use
-an LDAP port (389, 636, 3268, 3269; others with `OSIGN_LDAP_PORTS` in `.env`).
+`scripts/install-cert.sh nobs-osign <bundle.pem>`), and a daily backup at 03:25. Then open
+`https://osign.example.ch` and sign in as `admin`.
 
 | Task | Command |
 |---|---|
 | Update to the latest release | `sudo ./scripts/update.sh` (backs up first; switches back if the new one is not healthy) |
-| Update to a release | `sudo ./scripts/update.sh 0.5.0` |
-| Back up | `sudo ./scripts/backup.sh` → `backup/nobs-osign-<time>.tar.gz` (the draft, settings and secrets; with `BACKUP_PASSPHRASE_FILE` in `.env` encrypted) |
+| Update to a release | `sudo ./scripts/update.sh 0.7.2` |
+| Back up | `sudo ./scripts/backup.sh` → `backup/nobs-osign-<time>.tar.gz` (the draft, its history, the settings and secrets; with `BACKUP_PASSPHRASE_FILE` in `.env` encrypted) |
 | Restore | `sudo ./scripts/restore.sh backup/<file>` (`RESTORE_SECRETS=yes` restores `.env` and the secrets too) |
 | Logs | `docker logs -f nobs-osign` |
 
-**The add-in's files on Cloudflare Pages.** In Cloudflare: **My Profile → API Tokens → Create
-Token**, with the permission *Account → Cloudflare Pages → Edit* for your account. Put it, the
-account ID (on the account's overview page) and a project name in Settings → Server connections (or
-`secrets/cf_api_token`, `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT` in `.env`); the project is made on
-the first upload. The
-setup assistant's step *Create the add-in files* then uploads them; *Download as ZIP* is there for
-an upload by hand.
+**Updates are checked.** `update.sh` checks the download's checksum, and, where the GitHub CLI is
+installed and signed in (`gh auth login`), the build attestation of the server's files and of the
+image: that both were built by this repository's release workflow. Without `gh` it says it checked
+only the checksum; `OSIGN_REQUIRE_ATTESTATION=1` in `.env` makes that stop the update instead.
 
-**The setup script does all of Entra ID.** In the setup assistant's step *Register the app in
-Entra ID*, **Download the setup script**, and run it on a Windows PC
-(`powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"`). Signed in once in the
-browser as a SharePoint or Global administrator (through *Microsoft Graph Command Line Tools*,
-Microsoft's own app for Graph scripts), it makes the add-in's app registration *NOBS OSign* and the
-server's *NOBS OSign server* as described here, with admin consent and a client secret, gives the
-server's write access to the one site, and sends the IDs and the secret straight to the server
-(with a one-time code, valid for an hour; no session, no copying). Then it takes back the consent
-it was given for this, and deletes itself. Apps that are there by name are used again, so it can
-run again (a new secret each time). By hand, as follows:
+**Backups hold the secrets.** The backup contains `secrets/` (with `app_key`) and the data volume
+(with the passwords set in the editor, sealed with that key): set `BACKUP_PASSPHRASE_FILE` in `.env`
+so backups are encrypted, and keep them as private as the server.
 
-**Its own app registration**, not the add-in's: the add-in reads with each user's sign-in, the
-server writes with its own.
+## 2. The server's connections
 
-1. <https://entra.microsoft.com> → **App registrations** → **New registration**: name *NOBS OSign
-   server*, *Accounts in this organizational directory only*, no redirect URI.
-2. **Certificates & secrets** → **New client secret**. Note when it expires (at most 24 months):
-   after that, publishing says the server *could not sign in* until a new secret is in place.
-3. **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
-   → **Sites.Selected** → **Grant admin consent**. This alone reaches no site yet.
+**Settings → Server connections** (also the setup assistant's first step), for the local account
+`admin` only: whoever sets the domain controller's address gets the passwords people sign in with.
+Each tab has **Save and test the connection**.
+
+- **Sign-in:** the domain controller (`ldaps://dc01.example.ch`; `ldap://` only with StartTLS), the
+  user name format (`{login}@example.ch`), where the users are, the sign-in group (a DN, nested
+  groups count), and the CA certificate of the domain controller when it comes from your own CA.
+- **Service account:** a read-only AD account for the preview, the group list and the users'
+  values, its password, where users and groups are read, and the time of the daily export.
+- **SharePoint:** set by the setup script (step 4); by hand: the tenant ID, the server's client ID
+  and secret, and when the secret runs out (the editor warns 30 days before).
+- **Cloudflare Pages:** in Cloudflare, **My Profile → API Tokens → Create Token** with *Account →
+  Cloudflare Pages → Edit* for your account; the account ID (on the account's overview page) and a
+  project name. The project is made on the first upload.
+
+What is saved there wins over `.env`; a field left empty takes the value from `.env` (the variables
+at the end of this page, the secrets as files in `secrets/`). The passwords and the token set there
+are kept encrypted in the data volume and never shown again. The service account's password in
+`secrets/ldap_service_password` only goes to the domain controller `.env` names (`OSIGN_LDAP_URL`).
+A domain controller set in the editor has to use an LDAP port (389, 636, 3268, 3269; others with
+`OSIGN_LDAP_PORTS` in `.env`).
+
+## 3. The OSign folder in SharePoint
+
+The signatures, their images, the photos and (with values from AD) the users' values live in a
+folder **`OSign`** in a SharePoint site. The server writes into it, the add-in reads it with each
+user's own sign-in.
+
+1. **Make it:** in a site's document library (*Documents*), a folder **OSign**, with a folder
+   **photos** in it. A site of its own is fine (e.g. a communication site `/sites/osign`, kept out
+   of search and navigation); the server is given write access to that one site only.
+2. **Who may read it:** everyone who sends mail with a signature. Share the folder with *Everyone
+   except external users*, **Can view**, as direct access (a sharing link is not enough: the add-in
+   reads the files, it never opens a link).
+3. **Photos:** one per person in `OSign/photos`, named by the username (`<sAMAccountName>.jpg`).
+   Templates that show `photos/@@sAMAccountName.jpg` embed each sender's own photo; who has none
+   gets the signature without one.
+4. **Tell the setup assistant where it is** (step *Where the signatures are kept*): open the folder
+   in SharePoint in the browser and paste the address from the address bar. A sharing link works
+   too once Microsoft 365 is set up (the server asks Graph where it leads); otherwise the assistant
+   opens it for you to copy the address from there. **Test** checks the folder again.
+
+**For testing, your own OneDrive works too:** paste the OneDrive folder's address
+(`https://<tenant>-my.sharepoint.com/personal/<you>/…`). Nobody else can read it, so only you get
+signatures. For the rollout, move to a site everyone can read.
+
+## 4. Microsoft 365: the setup script
+
+Two app registrations are needed: **NOBS OSign** for the add-in (it reads with each user's sign-in)
+and **NOBS OSign server** for the server (it writes into the one site with its own).
+
+**The setup script does both.** In the setup assistant's step *Register the app in Entra ID*,
+**Download the setup script**, and run it on a Windows PC:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"
+```
+
+Signed in once in the browser as a SharePoint or Global administrator (through *Microsoft Graph
+Command Line Tools*, Microsoft's own app for Graph scripts; leave *Consent on behalf of your
+organization* unticked), it:
+
+- makes *NOBS OSign*: single-page application, redirect URI `brk-multihub://<host of the add-in>`,
+  delegated `User.Read`, `Sites.Read.All` (and `GroupMember.Read.All` where groups come from Entra
+  ID), with admin consent;
+- makes *NOBS OSign server*: application permission `Sites.Selected` with admin consent (and, when
+  ticked, `User.Read.All` and `GroupMember.Read.All` for the preview of a real person from Entra
+  ID), and a client secret;
+- gives *NOBS OSign server* write access to the site of the folder (step 3), and no other;
+- sends the IDs, the secret and when it runs out straight to the server (with a one-time code,
+  valid for an hour): nothing to copy. The assistant goes on by itself;
+- takes back the consent it was given for this, for your account, and deletes itself.
+
+It can run again: it uses the apps of its earlier run (as the server knows them, and owned by you)
+and makes a new secret each time. Apps somebody else registered under these names are never used.
+
+### By hand
+
+**The add-in's app** (*NOBS OSign*):
+
+1. <https://entra.microsoft.com> → **App registrations → New registration**: name *NOBS OSign*,
+   *Accounts in this organizational directory only*.
+2. **Authentication → Add a platform → Single-page application**, redirect URI
+   `brk-multihub://<host of the add-in>` (e.g. `brk-multihub://company-osign.pages.dev`).
+3. **API permissions** → *Microsoft Graph → Delegated*: `User.Read`, `Sites.Read.All`, and
+   `GroupMember.Read.All` only if signatures go to groups and the values come from Entra ID (with
+   values from AD the groups come from AD too). Then **Grant admin consent**.
+4. Copy the **Application (client) ID** and the **Directory (tenant) ID** into the assistant.
+
+**The server's app** (*NOBS OSign server*):
+
+1. **New registration**: name *NOBS OSign server*, no redirect URI.
+2. **Certificates & secrets → New client secret**. Note when it expires (at most 24 months), and
+   enter that date in Server connections → SharePoint: the editor warns 30 days before.
+3. **API permissions → Microsoft Graph → Application permissions → Sites.Selected → Grant admin
+   consent**. This alone reaches no site yet.
 4. **Give it the one site** (once, as a SharePoint or Global administrator). The setup assistant
    shows both requests with the right values. In Graph Explorer (<https://aka.ms/ge>), signed in:
-   - `GET https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/IT:?$select=id`
+   - `GET https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/osign:?$select=id`
      (for the home site: `…/sites/root?$select=id`), and copy the `id`;
    - `POST https://graph.microsoft.com/v1.0/sites/<id>/permissions` with
      `{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<client ID of NOBS OSign server>","displayName":"NOBS OSign server"}}]}`.
      Graph Explorer asks for consent to *Sites.FullControl.All* for this.
 
-   Or let the setup assistant make both requests: it signs you in with Microsoft in a pop-up
-   (authorization code with PKCE) and calls Graph from your browser; the server never gets your
-   sign-in. For that, once, a third, small app registration *NOBS OSign setup*: platform
-   **Single-page application** with the redirect URI the assistant shows
-   (`https://<editor>/ui/signin.html`), the **delegated** permission `Sites.FullControl.All`, no
-   client secret. `Sites.FullControl.All` is a strong right (Microsoft asks for it to grant a
-   site, in Graph Explorer and PnP too); keep it as narrow as this:
-   - **Only for you:** no admin consent for it in Entra, and *Consent on behalf of your
-     organization* left unticked when you sign in: the consent holds for your account only.
-   - **Only you may sign in:** Enterprise applications → *NOBS OSign setup* → Properties →
-     *Assignment required?* = Yes, and only yourself under Users and groups.
-   - **Off afterwards:** once the site is granted, *Enabled for users to sign-in?* = No, or delete
-     the app. The right then exists only for the minute it is needed.
+   Or let the setup assistant make both requests with **Sign in with Microsoft and grant**. That
+   needs a third, small app registration *NOBS OSign setup*: platform **Single-page application**
+   with the redirect URI the assistant shows (`https://<editor>/ui/signin.html`), the delegated
+   permission `Sites.FullControl.All`, no client secret. Keep it narrow: no admin consent (the
+   consent holds for your account only), *Assignment required?* = Yes with only you assigned, and
+   *Enabled for users to sign-in?* = No (or delete it) once the site is granted.
+5. Enter the tenant ID, the client ID, the secret and its end date in Server connections →
+   SharePoint, and **Save and test the connection**.
 
-   `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every
-   site of the tenant.
+`Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every site
+of the tenant.
 
-**Settings of the server** (in Settings → Server connections, or as environment variables with the
-secrets as files):
+## 5. The add-in's files
+
+The add-in is a few static files (HTML, JavaScript, icons, `manifest.xml`): only code, no data.
+Outlook loads them over HTTPS, from every device where someone writes mail, so they have to be
+reachable from wherever Outlook is used, with a certificate browsers trust and no sign-in in front.
+
+**With Cloudflare Pages** (free, no credit card; set up in step 2), the address is
+`https://<project>.pages.dev/` (the assistant fills it in). In the step *Create the add-in files*,
+**Create** and **Upload to Cloudflare Pages**. Your own domain later: Cloudflare → *Workers & Pages
+→ the project → Custom domains*; then enter the new address, create and upload the files again, and
+upload the new `manifest.xml` in the admin center.
+
+**Another web server:** enter its address, **Create**, then **Download as ZIP** and put its content
+there. *Web server* in Settings chooses the caching file that goes with the files: `_headers`
+(Cloudflare Pages), `staticwebapp.config.json` (Azure), `web.config` (IIS) or `.htaccess` (Apache).
+It makes Outlook check for a newer version before using its copy, so updates arrive within minutes.
+For another server, have it send `Cache-Control: no-cache`.
+
+| Where | How the files get there | Address |
+|---|---|---|
+| **Your website's web host** (Apache, most providers) | A subdomain with HTTPS; upload by FTP/SFTP, `.htaccess` included. | e.g. `https://osign.contoso.com/` |
+| **Azure Storage, static website** | Storage account → *Data management → Static website → Enabled*; upload into `$web`. | `https://<account>.z<n>.web.core.windows.net/` |
+| **Azure Static Web Apps** (Free plan) | `npx @azure/static-web-apps-cli deploy <folder> --deployment-token <token> --env production` | `https://<name>.azurestaticapps.net/` |
+| **Your own web server** (IIS, nginx, a container) | Copy the files into a site or virtual directory with HTTPS. | e.g. `https://intranet.contoso.com/osign/` |
+
+The files only have to be made again for a new NOBS OSign version or when these settings change,
+never for a new signature. After a new version, upload the new `manifest.xml` in the admin center
+too (step 7).
+
+## 6. Signatures and fields
+
+1. **Signatures**: import the existing ones with **⤓** next to *Signatures* (the `.htm` files
+   together with their images; CI-Sign templates in UTF-16 with `images\…` and classic Outlook ones
+   work), or make new ones. Under *Who gets it*, enter the groups.
+2. **Fields and where their values come from** (*Add-in → Where the users' values come from*):
+   - **Entra ID**: each field by its Graph source. Fields without one (`description`, `homePhone`,
+     `info`) stay empty, unless Entra Connect syncs them as directory extensions.
+   - **Entra ID and Active Directory** (recommended without those extensions): fields with a Graph
+     source from Entra ID, the others from AD.
+   - **Active Directory**: every field from AD.
+
+   With AD, the users' values go to `OSign/users/`: one file per person (`<mail>.json`) with their
+   fields and groups. The add-in reads only its own user's file.
+
+   **Check before you publish:** open **Users**, click **Read from AD**. You see every user with
+   the values that would go out, new and changed ones marked, and who would be removed. Nothing is
+   written yet. **Publish** then writes exactly what you read there, once. With an export time set
+   (Server connections → Service account), the server also exports by itself every day; the
+   Add-in view shows how its last run went.
+3. **Preview**: sample values, all fields empty, or a real person: *User from Active Directory…*
+   (with the service account), or *Person from Entra ID…* (when the setup script gave the server
+   `User.Read.All`).
+4. **Publish** (Ctrl+Enter). The dialog lists what would go wrong first. New messages use it a
+   minute or two later. Every publish is kept under **History**, with its images, the last 50:
+   *Load into the draft* brings an earlier version back.
+
+## 7. Deploy the add-in
+
+1. Microsoft 365 admin center → **Settings → Integrated apps → Upload custom apps**.
+2. App type *Office Add-in*, link to the manifest: `https://<address of the add-in>/manifest.xml`.
+3. Assign it to everyone, or to a group to start with.
+
+It can take a few hours to reach every Outlook. To try it yourself first, sideload it: in Outlook on
+the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**.
+
+## 8. What users see
+
+- A new message, reply or forward gets its signature by itself, images included.
+- **NOBS OSign → Signatures** in the message toolbar opens the pane: insert another signature, or
+  choose the one for new mail and for replies (if allowed under *Add-in*).
+
+## Settings of the server
+
+In Settings → Server connections, or as environment variables in `.env` with the secrets as files:
 
 | Variable | |
 |---|---|
+| `OSIGN_HOST` | the name people type (`osign.example.ch`); only in `.env` |
 | `OSIGN_GRAPH_TENANT_ID`, `OSIGN_GRAPH_CLIENT_ID` | the tenant, and the client ID of *NOBS OSign server* |
 | `OSIGN_GRAPH_CLIENT_SECRET_FILE` | a file holding its client secret |
+| `OSIGN_GRAPH_CLIENT_SECRET_EXPIRES` | when that secret runs out (`YYYY-MM-DD`) |
 | `OSIGN_ADMIN_PASSWORD_FILE` | a file holding the password of the local account `admin` (only here) |
 | `OSIGN_APP_KEY_FILE` | a file holding the key the passwords set in Settings are kept with (only here) |
 | `OSIGN_LDAP_URL` | `ldaps://dc01.example.ch` (or `ldap://…` with `OSIGN_LDAP_STARTTLS=1`) |
 | `OSIGN_LDAP_BIND`, `OSIGN_LDAP_BASE` | `{login}@example.ch`, `OU=Users,DC=example,DC=ch` |
-| `OSIGN_LDAP_GROUP` | who may sign in: `CN=OSign-Admins,OU=Groups,DC=example,DC=ch` (as a DN, nested groups count) |
+| `OSIGN_LDAP_GROUP` | who may sign in: `CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch` (as a DN, nested groups count) |
 | `OSIGN_LDAP_CA` | the CA certificate the domain controller's certificate comes from, if it is not a public one |
-| `OSIGN_LDAP_SERVICE_DN` | a read-only account for the preview, the group list and the users' values: `CN=svc-osign,OU=Service,DC=example,DC=ch` |
+| `OSIGN_LDAP_SERVICE_DN` | a read-only account for the preview, the group list and the users' values |
 | `OSIGN_LDAP_SERVICE_PASSWORD_FILE` | a file holding its password |
 | `OSIGN_LDAP_DIRECTORY_BASE` | where users and groups are searched; empty: the whole domain of `OSIGN_LDAP_BASE` |
-| `OSIGN_AD_EXPORT_AT` | `06:00`: the users' values are exported every day at that time (`TZ`), as `-ExportUsers` does from the Task Scheduler |
-| `OSIGN_DATA` | the draft, its images and the settings (`/data`) |
+| `OSIGN_AD_EXPORT_AT` | `06:00`: the users' values are exported every day at that time (`TZ`) |
+| `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT`, `OSIGN_CF_API_TOKEN_FILE` | Cloudflare Pages |
+| `OSIGN_REQUIRE_ATTESTATION` | `1`: an update whose attestation cannot be checked stops |
+| `OSIGN_DATA` | the draft, its images, its history and the settings (`/data`) |
 
-With values from AD, the server reads them with the service account and writes `users/<mail>.json`
-into the same SharePoint folder: on **Publish**, exactly what was read and checked under **Users**,
-and every day at `OSIGN_AD_EXPORT_AT` by itself (Add-in → *Where the users' values come from*
-shows how its last run went). A read that finds nobody writes nothing.
-
-Where it publishes is the SharePoint site and folder of the add-in (Settings → *SharePoint site*,
-*Folder in its library*), so the editor writes exactly where Outlook reads. The folder and its
-`assets` are made on the first publish; `photos` and `users` are left alone. Without
-`OSIGN_GRAPH_*` the server publishes into a folder of its own (`OSIGN_PUBLISH_DIR`), for testing.
+Without Microsoft Graph set up the server publishes into a folder of its own (`/data/publish`),
+for testing only: Outlook reads from SharePoint.
 
 ## When something is off
 
 | What | Why, and what to do |
 |---|---|
-| No signature at all | A notice above the message ("OSign inserted no signature; see Signatures.") gives the reason in short. Open the pane: it says what failed. Usually: no admin consent yet, the OSign folder not readable for that user, the redirect URI missing in the app registration, or no client ID when the add-in's files were made. |
-| "No signatures are published yet" | `OSign\signatures.json` is not in SharePoint: publish, and check that OneDrive has synced it. |
-| Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign\users\` (no mail address in AD, or not exported yet). |
-| No photo | No `OSign\photos\<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
+| No signature at all | A notice above the message ("NOBS OSign inserted no signature; see Signatures.") gives the reason in short. Open the pane: it says what failed. Usually: no admin consent yet, the OSign folder not readable for that user, the redirect URI missing in the app registration, or no client ID when the add-in's files were made. |
+| "No signatures are published yet" | `OSign/signatures.json` is not in SharePoint: publish (Settings shows where publishing goes). |
+| Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign/users/` (no mail address in AD, or not exported yet). |
+| No photo | No `OSign/photos/<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
-| The editor shows plain text, no layout | Its server had stopped right after the page: an NOBS OSign window of an earlier start was still open, and the browser opened the new one in it. Fixed in 0.4.3; with an older version, close every NOBS OSign window (and a leftover Edge in Task Manager), then start NOBS OSign again. |
+| Publishing says the server could not sign in | The client secret ran out (the status bar says so 30 days before): run the setup script again. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |
 
 ## Security software (EDR / XDR)
 
-NOBS OSign is a plain PowerShell script; it starts no other PowerShell, and runs no encoded or downloaded
-code. What it does that security software looks at:
+The setup script is a plain PowerShell script made for one setup; it starts no other PowerShell
+and runs no encoded or downloaded code. What it does that security software looks at:
 
-- It listens on `127.0.0.1` (ports 17690–17697) for its own window; nothing from the network can
-  reach it, and every request needs a random token.
-- It opens Edge or Chrome as an app window, with a browser profile of its own in `%APPDATA%\OSign`
-  (and turns translation off in that profile).
-- With values from AD it reads users and groups from Active Directory (LDAP), as Users and Publish
-  ask for.
-- It reads OneDrive's list of synced libraries (`HKCU\Software\SyncEngines\Providers\OneDrive`) to
-  show where a folder is in SharePoint.
+- It listens on `127.0.0.1` / `::1`, on a free port, for Microsoft's sign-in to come back (at most
+  5 minutes, 16 KB per request).
+- It opens the browser for that sign-in, and calls Microsoft Graph and the NOBS OSign server.
+- It deletes itself when it is done.
 
-If it is blocked, look at the alert's rule and the process it names. The clean way to allow it is
-to sign `OSign.ps1` with the company's code-signing certificate and allow that signer (or the
-file's hash) in the security software, rather than excluding a folder.
-
+If it is blocked, look at the alert's rule. Running it from a folder the security software trusts,
+or allowing it once by its hash, is cleaner than excluding a folder for good.

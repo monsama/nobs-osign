@@ -115,4 +115,25 @@ async function ldapLogin(c, login, password) {
   } finally { close(client); }
 }
 
-module.exports = { ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf, connect, close, bind, search, chain };
+// Whether the domain controller answers, with TLS as set ("Test" in Server connections); and,
+// with an account to look with, whether the sign-in group is there.
+async function testSignIn(c, lookWith) {
+  const problem = ldapProblem(c); if (problem) throw new Error(problem);
+  if (!c.url) throw new Error('Signing in with Active Directory is not set up.');
+  const client = await connect(c);
+  try {
+    if (!lookWith) return { reached: true };
+    await bind(client, lookWith.dn, lookWith.password);
+    if (!isDn(c.group)) return { reached: true };
+    const found = await new Promise((resolve, reject) => client.search(c.group, { scope: 'base', filter: '(objectClass=*)', attributes: ['cn'] }, (err, res) => {
+      if (err) return reject(err);
+      let n = 0;
+      res.on('searchEntry', () => { n++; });
+      res.on('error', (e) => (e instanceof ldap.NoSuchObjectError ? resolve(0) : reject(e)));
+      res.on('end', () => resolve(n));
+    }));
+    return { reached: true, group: found > 0 };
+  } finally { close(client); }
+}
+
+module.exports = { testSignIn, ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf, connect, close, bind, search, chain };

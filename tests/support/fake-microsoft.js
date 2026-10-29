@@ -16,7 +16,7 @@ function fakeMicrosoft() {
     apps: [], sps: [{ id: 'sp-graph', appId: GRAPH_APP }, { id: 'sp-cli', appId: CLI }], grants: [], roleAssignments: [], sitePerms: [], passwords: [], codes: new Map(), log: []
   };
   const graphSp = {
-    id: 'sp-graph', appRoles: [{ id: 'role-sites-selected', value: 'Sites.Selected' }, { id: 'role-other', value: 'Sites.Read.All' }],
+    id: 'sp-graph', appRoles: [{ id: 'role-sites-selected', value: 'Sites.Selected' }, { id: 'role-other', value: 'Sites.Read.All' }, { id: 'role-users', value: 'User.Read.All' }, { id: 'role-groups', value: 'GroupMember.Read.All' }],
     oauth2PermissionScopes: ['User.Read', 'Sites.Read.All', 'GroupMember.Read.All', 'Mail.Read'].map((v) => ({ id: 'scope-' + v, value: v }))
   };
   // The consent the sign-in gives, as Entra keeps it: for this account, with what it was asked for.

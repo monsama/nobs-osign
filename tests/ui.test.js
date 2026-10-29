@@ -1,63 +1,62 @@
-// node --test tests/ui.test.js   (needs pwsh and Playwright's Chromium)
+// node --test tests/ui.test.js   (needs Playwright's Chromium)
 //
-// The editor in a real browser against the real backend: make a signature, give it an image and
-// a field, see the preview, and publish it to a folder.
+// The editor in a real browser against the real server (server/app.js, in this process): make a
+// signature, give it an image and a field, see the preview, publish it to the server's folder,
+// read users from a stand-in AD, and go through the setup assistant.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
+const http = require('node:http');
 const path = require('node:path');
-const { spawn, execFileSync } = require('node:child_process');
+const { createApp } = require('../server/app');
+const { fakeAd } = require('./support/fake-ad');
 
 let chromium = null;
 try { ({ chromium } = require('playwright')); } catch (e) { /* skipped below */ }
-// OSIGN_TEST_SHELL=powershell runs it under Windows PowerShell 5.1 instead of PowerShell 7.
-const PS = process.env.OSIGN_TEST_SHELL || 'pwsh';
-let pwshOk = true;
-try { execFileSync(PS, ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }); } catch (e) { pwshOk = false; }
-const skip = (!pwshOk && PS + ' is not installed') || (!chromium && 'playwright is not installed');
+const skip = !chromium && 'playwright is not installed';
 
-const PORT = 17782;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
-let proc, url, browser, page, folder, dataDir, adJson, syncJson, oneDrive;
+const BASE = 'DC=example,DC=ch';
+const SERVICE = { dn: 'CN=svc-osign,OU=Service,DC=example,DC=ch', pw: 'svc-pw' };
+let srv, ad, base, url, cookie, browser, context, page, folder, dataDir;
 const errors = [], notFound = [];
+
+// A browser context signed in as the local account admin.
+async function signedIn(opts) {
+  const ctx = await browser.newContext(Object.assign({ viewport: { width: 1400, height: 900 } }, opts || {}));
+  await ctx.addCookies([{ name: 'osign_session', value: cookie, url: base }]);
+  return ctx;
+}
 
 test.before(async () => {
   if (skip) return;
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-'));
-  adJson = path.join(dataDir, 'ad.json');
-  fs.writeFileSync(adJson, JSON.stringify([
-    { mail: 'anna@example.com', attrs: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: [] },
-    { mail: 'beat@example.com', attrs: { description: '', homePhone: '+41 41 000 00 02', info: '' }, groups: [] }
-  ]));
   folder = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-pub-'));
-  // OneDrive's notes: the publish folder is synced from a team site's library.
-  syncJson = path.join(dataDir, 'sync.json');
-  oneDrive = path.join(dataDir, 'OneDrive - Contoso');
-  fs.mkdirSync(path.join(oneDrive, 'OSign', 'photos'), { recursive: true });
-  fs.mkdirSync(path.join(oneDrive, 'IT - General', 'OSign'), { recursive: true });
-  // As OneDrive notes them: the OneDrive twice, and a shortcut in it to a site's library.
-  fs.writeFileSync(syncJson, JSON.stringify([
-    { MountPoint: folder, UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/General/OSign/' },
-    { MountPoint: oneDrive, UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' },
-    { MountPoint: oneDrive, UrlNamespace: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/' },
-    { MountPoint: path.join(oneDrive, 'IT - General'), UrlNamespace: 'https://contoso.sharepoint.com/sites/IT/Shared Documents/' }
-  ]));
-  // Publishing goes to a folder: set before the start, as an admin would in Settings.
-  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ folder, photosFolder: '', setupDone: '1' }));
+  ad = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [] }, people: {
+    anna: { pw: 'anna-pw', name: 'Anna Muster', mail: 'anna@example.com', attrs: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01', info: '' }, groups: ['NOBS-OSign-Admins'] },
+    beat: { pw: 'beat-pw', name: 'Beat Beispiel', mail: 'beat@example.com', attrs: { description: '', homePhone: '+41 41 000 00 02', info: '' }, groups: [] }
+  } });
+  const ldapUrl = await ad.listen();
+  // Set up already (the assistant's own test starts it again), publishing into the server's folder.
+  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ setupDone: '1' }));
   // A photo for the sample user (mustera), as an admin would have copied it there.
   fs.mkdirSync(path.join(folder, 'photos'));
   fs.writeFileSync(path.join(folder, 'photos', 'mustera.jpg'), PNG);
-  proc = spawn(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, '..', 'editor', 'OSign.ps1'), '-NoBrowser', '-Port', String(PORT)], {
-    env: Object.assign({}, process.env, { OSIGN_DATA: dataDir, GITHUB_TOKEN: '', OSIGN_TEST_AD_JSON: adJson, OSIGN_TEST_SYNC_JSON: syncJson })
-  });
-  url = await new Promise((resolve, reject) => {
-    let out = '';
-    const t = setTimeout(() => reject(new Error('OSign did not start: ' + out)), 30000);
-    proc.stdout.on('data', (d) => { out += d; const m = /(http:\/\/127\.0\.0\.1:\d+\/#t=[0-9a-f]{64})/.exec(out); if (m) { clearTimeout(t); resolve(m[1]); } });
-  });
-  browser = await chromium.launch(fs.existsSync('/opt/pw-browsers/chromium') ? {} : {});
-  page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  const env = {
+    OSIGN_DATA: dataDir, OSIGN_PUBLISH_DIR: folder, OSIGN_ADMIN_PASSWORD: 'admin-pw', OSIGN_SECURE_COOKIE: '0', OSIGN_APP_KEY: 'a-key-for-the-ui-test',
+    OSIGN_LDAP_URL: ldapUrl, OSIGN_LDAP_ALLOW_PLAIN: '1', OSIGN_LDAP_BIND: 'cn={login}@example.ch,' + BASE, OSIGN_LDAP_BASE: 'OU=Users,' + BASE,
+    OSIGN_LDAP_GROUP: 'CN=NOBS-OSign-Admins,OU=Groups,' + BASE, OSIGN_LDAP_SERVICE_DN: SERVICE.dn, OSIGN_LDAP_SERVICE_PASSWORD: SERVICE.pw
+  };
+  srv = http.createServer(createApp({ env, log: { info() {}, warn() {}, error() {} } }));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  base = 'http://127.0.0.1:' + srv.address().port;
+  url = base + '/';
+  const r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'admin-pw' }) });
+  cookie = /osign_session=([^;]+)/.exec(r.headers.get('set-cookie'))[1];
+  browser = await chromium.launch();
+  context = await signedIn();
+  page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   page.on('response', (r) => { if (r.status() >= 400) notFound.push(new URL(r.url()).pathname); });
@@ -66,9 +65,9 @@ test.before(async () => {
 test.after(async () => {
   if (skip) return;
   if (browser) await browser.close();
-  try { await fetch(url.replace(/\/#t=.*/, '/api/quit'), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + url.split('#t=')[1] }, body: '{}' }); } catch (e) { /* gone */ }
-  setTimeout(() => { try { proc.kill(); } catch (e) { /* gone */ } }, 1500).unref();
+  srv.close(); ad.close();
 });
+const api = (p, body) => fetch(base + '/api/' + p, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'osign_session=' + cookie }, body: JSON.stringify(body || {}) }).then((r) => r.json());
 
 const preview = () => page.frameLocator('#preview').locator('body');
 // Each test leaves the next one where it starts: in the signature, design tab.
@@ -195,7 +194,8 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
 });
 
 test('German: in a German browser the editor speaks German, and offers no translation', { skip }, async () => {
-  const de = await browser.newPage({ locale: 'de-DE', viewport: { width: 1400, height: 900 } });
+  const deCtx = await signedIn({ locale: 'de-DE' });
+  const de = await deCtx.newPage();
   const errs = [];
   de.on('pageerror', (e) => errs.push(e.message));
   await de.goto(url);
@@ -219,7 +219,7 @@ test('German: in a German browser the editor speaks German, and offers no transl
   assert.equal(await de.getAttribute('html', 'lang'), 'en');
   await de.evaluate(() => localStorage.removeItem('osign.lang'));
   assert.deepEqual(errs, []);
-  await de.close();
+  await deCtx.close();
 });
 
 test('users from AD: read, look, and publish exactly that', { skip }, async () => {
@@ -252,81 +252,59 @@ test('users from AD: read, look, and publish exactly that', { skip }, async () =
   assert.deepEqual(errors, []);
 });
 
-test('setup assistant: opens by itself until OSign is set up, and walks through every step', { skip }, async () => {
-  const api = (p, body) => fetch(url.replace(/\/#t=.*/, '/api/' + p), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + url.split('#t=')[1] }, body: JSON.stringify(body || {}) }).then((r) => r.json());
+test('setup assistant: opens by itself until NOBS OSign is set up, and walks through every step', { skip }, async () => {
   // Each step saves on Next: wait for where it leads, or for what it says.
   const next = async (title) => { await page.click('#wizNext'); await page.waitForFunction((x) => document.querySelector('#wizTitle').textContent === x, title); };
   const nextFails = async (rx) => { await page.click('#wizNext'); await page.waitForFunction((x) => new RegExp(x).test(document.querySelector('#wizErr').textContent), rx.source); };
-  // Not set up (no app registration yet), never finished: it opens; Later closes it.
+  // Never finished: it opens by itself; Later closes it.
   await api('settings/save', { settings: { setupDone: '', clientId: '' } });
-  // The same address with only a #: reload, so the page really starts again.
   await page.goto(url); await page.reload();
   await page.waitForSelector('#dlgWizard[open]');
   assert.equal(await page.textContent('#wizTitle'), 'Welcome to NOBS OSign');
   await page.click('#wizLater');
   assert.equal(await page.isVisible('#dlgWizard'), false);
 
-  // From Settings, step by step; each step keeps what it asks for.
+  // From the top bar, step by step; each step keeps what it asks for.
   await page.click('#btnWizard');
+  await next("The server's connections");
+  // AD is set up here; SharePoint is the setup script's, a few steps on.
+  await page.waitForFunction(() => /SharePoint .* set up by the setup script/.test(document.querySelector('#wizConnList').textContent));
+  assert.match(await page.textContent('#wizConnList'), /signing in with Windows accounts – ready/);
   await next('Where the signatures are kept');
-  // The folder set already: taken as a folder on this PC, with where it is in SharePoint found out
-  // from OneDrive's notes and said in plain words.
-  assert.equal(await page.isChecked('input[name=wlib][value=own]'), true);
-  assert.equal(await page.inputValue('#wizFolder'), folder);
-  await page.waitForFunction(() => /In SharePoint/.test(document.querySelector('#wizWhereFound').textContent));
-  assert.equal(await page.textContent('#wizWhereFound'), '✓ In SharePoint: IT › Documents › General › OSign');
-  assert.equal(await page.inputValue('#wizSpSite'), 'contoso.sharepoint.com:/sites/IT:');
-  assert.equal(await page.inputValue('#wizSpFolder'), 'General/OSign');
-  // A folder OneDrive does not sync, and one in a shortcut: it says so, and points to the link.
-  const own = async (p) => {
-    await page.fill('#wizFolder', p); await page.dispatchEvent('#wizFolder', 'change');
-    await page.waitForFunction(() => /SharePoint link/.test(document.querySelector('#wizWhereFound').textContent));
-    return page.textContent('#wizWhereFound');
-  };
-  assert.match(await own(path.join(path.parse(os.tmpdir()).root, 'elsewhere', 'OSign')), /does not sync it/);
-  assert.match(await own(path.join(oneDrive, 'IT - General', 'OSign')), /shortcut/);
-  await nextFails(/cannot tell where this folder is/);
-
-  // The SharePoint link: OSign finds the synced folder on this PC for it.
-  await page.check('input[name=wlib][value=link]');
-  assert.equal(await page.isVisible('#wizFolder'), false);
+  // Nothing given yet (only the saved default): the address is asked for.
+  await nextFails(/Paste the address of the folder in SharePoint/);
   const link = async (address, rx) => {
     await page.fill('#wizLink', address); await page.dispatchEvent('#wizLink', 'change');
     await page.waitForFunction((x) => new RegExp(x).test(document.querySelector('#wizLinkNote').textContent), rx.source);
-    return [await page.inputValue('#wizSpSite'), await page.inputValue('#wizSpFolder'), await page.inputValue('#wizFolder')];
+    return [await page.inputValue('#wizSpSite'), await page.inputValue('#wizSpFolder')];
   };
-  assert.deepEqual(await link('https://contoso-my.sharepoint.com/:f:/g/personal/anna_contoso_com/IgDpY5m2CxbbRYgU2eNTaxZP?e=GOPGuO', /does not say which folder/), ['', '', '']);
-  assert.deepEqual(await link('https://example.com/x', /not an address in SharePoint/), ['', '', '']);
-  // A folder of a library synced to this PC, but not there (yet).
-  assert.deepEqual(await link('https://contoso.sharepoint.com/sites/IT/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FIT%2FShared%20Documents%2FGeneral%2FArchiv&viewid=1', /not on this PC yet/), ['contoso.sharepoint.com:/sites/IT:', 'General/Archiv', '']);
-  await nextFails(/not on this PC yet/);
-  assert.deepEqual(await link('https://contoso.sharepoint.com/:f:/r/sites/IT/Shared%20Documents/General/OSign?csf=1', /On this PC/), ['contoso.sharepoint.com:/sites/IT:', 'General/OSign', folder]);
-  // The OneDrive's folder, by its address from the browser.
-  assert.deepEqual(await link('https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fanna_contoso_com%2FDocuments%2FOSign', /On this PC/), ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign', path.join(oneDrive, 'OSign')]);
+  // A sharing link: without Graph the server cannot open it; the note says what to do.
+  await link('https://contoso-my.sharepoint.com/:f:/g/personal/anna_contoso_com/IgDpY5m2CxbbRYgU2eNTaxZP?e=GOPGuO', /Open the link/);
+  assert.equal(await page.getAttribute('#wizLinkNote a', 'href'), 'https://contoso-my.sharepoint.com/:f:/g/personal/anna_contoso_com/IgDpY5m2CxbbRYgU2eNTaxZP?e=GOPGuO');
+  assert.deepEqual(await link('https://example.com/x', /not an address in SharePoint/), ['', '']);
+  // The OneDrive's folder, by its address from the browser: noted, checked once Microsoft 365 is set up.
+  assert.deepEqual(await link('https://contoso-my.sharepoint.com/personal/anna_contoso_com/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fanna_contoso_com%2FDocuments%2FOSign', /Noted/), ['contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign']);
   assert.match(await page.textContent('#wizPerm'), /Only you/);
   await next("Where the users' values come from");
-  assert.equal((await api('settings/get')).settings.folder, path.join(oneDrive, 'OSign'));
+  assert.equal((await api('settings/get')).settings.spSite, 'contoso-my.sharepoint.com:/personal/anna_contoso_com:');
   await page.check('input[name=wvsrc][value=graph]');
   await next('Where the add-in is served');
   await page.check('input[name=whost][value=cloudflare]');
   await nextFails(/Enter the address/);
   await page.fill('#wizUrl', 'https://osign.example.com');
   await next('Register the app in Entra ID');
+  // The setup script, for the local account admin; and the way by hand.
+  assert.equal(await page.isVisible('#wizScriptGet'), true);
   assert.equal(await page.textContent('#wizRedirect'), 'brk-multihub://osign.example.com');
   assert.equal(await page.textContent('#wizPerms'), 'User.Read, Sites.Read.All, GroupMember.Read.All');
   await page.fill('#wizClientId', 'nope');
   await nextFails(/GUID/);
   await page.fill('#wizClientId', '11111111-2222-3333-4444-555555555555');
-  await next("Create the add-in files");
+  await next('Create the add-in files');
   await nextFails(/Create the add-in files first/);
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-addin-'));
-  await page.fill('#wizAddinFolder', out);
   await page.click('#wizMake');
-  await page.waitForSelector('#wizUpload:not([hidden])');
-  assert.equal(await page.isVisible('#wizUpload [data-host=cloudflare]'), true);
-  assert.equal(await page.isVisible('#wizUpload [data-host=azure]'), false);
-  assert.ok(fs.existsSync(path.join(out, '_headers')));
-  assert.match(fs.readFileSync(path.join(out, 'manifest.xml'), 'utf8'), /https:\/\/osign\.example\.com\/taskpane\.html/);
+  await page.waitForFunction(() => /files \(version/.test(document.querySelector('#wizMakeOk').textContent));
+  assert.equal(await page.isVisible('#wizServerFiles'), true);
   await next("Into everyone's Outlook");
   assert.equal(await page.textContent('#wizManifest'), 'https://osign.example.com/manifest.xml');
   await next('Ready');
@@ -335,17 +313,21 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   await page.waitForSelector('#dlgWizard', { state: 'hidden' });
   const s = (await api('settings/get')).settings;
   assert.deepEqual([s.setupDone, s.addinHost, s.addinUrl, s.clientId, s.spSite, s.spFolder], ['1', 'cloudflare', 'https://osign.example.com', '11111111-2222-3333-4444-555555555555', 'contoso-my.sharepoint.com:/personal/anna_contoso_com:', 'OSign']);
-  assert.match(fs.readFileSync(path.join(out, 'launchevent.js'), 'utf8'), /site:"contoso-my\.sharepoint\.com:\/personal\/anna_contoso_com:"/);
+  // The add-in's files, as downloaded: made for that site.
+  const zip = await fetch(base + '/addin.zip', { headers: { Cookie: 'osign_session=' + cookie } });
+  assert.equal(zip.status, 200);
   // Finished: it does not open by itself any more.
   await page.reload();
   await page.waitForSelector('html[data-ready]');
   assert.equal(await page.isVisible('#dlgWizard'), false);
+  // Back to the folder the other tests publish to.
+  await api('settings/save', { settings: { spSite: 'root', spFolder: 'OSign' } });
   assert.deepEqual(errors, []);
 });
 
 test('help: a ? opens a short explanation, above dialogs too, and closes again', { skip }, async () => {
   await page.goto(url); await page.reload();
-  // Loaded from the server, not only the page: a slow server (Windows, PowerShell 7) answers later.
+  // Loaded from the server, not only the page.
   await page.waitForSelector('html[data-ready]');
   await page.click('a[data-view=fields]');
   await page.click('button.help[data-help=hGraph]');

@@ -49,6 +49,8 @@ const FIELDS = {
   adExportAt: { env: 'OSIGN_AD_EXPORT_AT', check: (v) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(v) ? '' : 'The daily export is a time of day, like 06:00.') },
   graphTenantId: { env: 'OSIGN_GRAPH_TENANT_ID', check: (v) => (GUID.test(v) ? '' : 'The tenant ID is the Directory (tenant) ID, a GUID.') },
   graphClientId: { env: 'OSIGN_GRAPH_CLIENT_ID', check: (v) => (GUID.test(v) ? '' : "The client ID is the server's app registration's Application (client) ID, a GUID.") },
+  // When the server's client secret runs out (Entra says so when it is made): warned of in time.
+  graphSecretExpires: { env: 'OSIGN_GRAPH_CLIENT_SECRET_EXPIRES', check: (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(Date.parse(v)) ? '' : 'The date the client secret runs out is a date, like 2027-10-31.') },
   cfAccountId: { env: 'OSIGN_CF_ACCOUNT_ID', check: (v) => (/^[0-9a-f]{32}$/i.test(v) ? '' : "The Cloudflare account ID is 32 letters and digits, on the account's overview page.") },
   cfProject: { env: 'OSIGN_CF_PROJECT', check: (v) => (/^[a-z0-9][a-z0-9-]{0,57}$/.test(v) ? '' : 'The Pages project is a name of lower-case letters, digits and -.') }
 };

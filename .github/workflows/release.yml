@@ -1,8 +1,7 @@
 # Makes a release:
-#  - NOBS-OSign-vX.Y.Z.zip: the editor for Windows (OSign.ps1, its UI, the shared engine) and the add-in's
-#    files with blanks for a company's settings, which the editor fills in (Settings → Outlook add-in)
-#  - nobs-osign-server-X.Y.Z.tar.gz: what an install of the server needs (Compose, deploy and update scripts)
-#  - the Docker image ghcr.io/monsama/nobs-osign:X.Y.Z, scanned before it is pushed
+#  - the Docker image ghcr.io/monsama/nobs-osign:X.Y.Z, scanned before it is pushed, and attested
+#  - nobs-osign-server-X.Y.Z.tar.gz: what an install of the server needs (Compose, deploy and update scripts),
+#    with IMAGE: the image by its digest, so an install runs exactly the image that was scanned; attested too
 #
 # Runs on a version tag such as v0.5.0 (scripts/release.sh pushes one), or by hand (Actions →
 # release → Run workflow) on main, which tags the version in package.json first. Tests must pass
@@ -38,7 +37,7 @@ jobs:
       # A dropped connection to the npm registry (ECONNRESET) is tried once more before the job fails.
       - run: npm ci || (sleep 15 && npm ci)
       - run: npx playwright install --with-deps chromium
-      # pwsh comes with the runner, so the editor's tests run too.
+      # pwsh comes with the runner, so the setup script's test runs too.
       - run: npm test
 
   publish:
@@ -48,7 +47,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-      # A signed statement of where the zip was built (GitHub artifact attestation, Sigstore).
+      # Signed statements of where the image and the server's files were built (GitHub artifact attestation, Sigstore).
       id-token: write
       attestations: write
     steps:
@@ -58,7 +57,6 @@ jobs:
         run: |
           v="$(node -p 'require("./package.json").version')"
           echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Not a version: $v"; exit 1; }
-          grep -q "AppVersion = '$v'" editor/OSign.ps1 || { echo "editor/OSign.ps1 is not version $v: node scripts/bump-version.mjs $v"; exit 1; }
           grep -q "ghcr.io/monsama/nobs-osign:$v}" docker-compose.yml || { echo "docker-compose.yml is not version $v: node scripts/bump-version.mjs $v"; exit 1; }
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             [ "${GITHUB_REF_NAME#v}" = "$v" ] || { echo "Tag $GITHUB_REF_NAME does not match package.json $v"; exit 1; }
@@ -78,31 +76,6 @@ jobs:
         run: |
           npm ci || (sleep 15 && npm ci)
           node addin/build.mjs
-      - name: Package
-        run: |
-          TAG="v${{ steps.v.outputs.version }}"
-          mkdir -p out/OSign/shared
-          cp editor/OSign.ps1 out/OSign/
-          cp -r editor/ui out/OSign/ui
-          cp shared/signature-core.js out/OSign/shared/
-          cp -r dist/template out/OSign/addin
-          cp LICENSE out/OSign/
-          (cd out && zip -r "NOBS-OSign-$TAG.zip" OSign)
-          # The server: only what an install needs; the code is in the image.
-          V="${{ steps.v.outputs.version }}"
-          git archive --format=tar.gz --prefix="nobs-osign-server-$V/" -o "out/nobs-osign-server-$V.tar.gz" HEAD \
-            deploy-nobs-osign.sh docker-compose.yml .env.example certificates/README.md \
-            scripts/osign-lib.sh scripts/update.sh scripts/backup.sh scripts/restore.sh README.md LICENSE
-          (cd out && sha256sum "nobs-osign-server-$V.tar.gz" > "nobs-osign-server-$V.tar.gz.sha256")
-          (cd out && sha256sum "NOBS-OSign-$TAG.zip" "nobs-osign-server-$V.tar.gz" > SHA256SUMS.txt)
-      # Signs that this zip was built here, from this commit, by this workflow: `gh attestation verify <zip>
-      # --repo <owner>/osign` checks it. A plan that has no attestations for this repository does not stop the release.
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-        continue-on-error: true
-        with:
-          subject-path: |
-            out/NOBS-OSign-v${{ steps.v.outputs.version }}.zip
-            out/nobs-osign-server-${{ steps.v.outputs.version }}.tar.gz
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -125,7 +98,35 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
       - name: Push the scanned image
-        run: docker push "ghcr.io/monsama/nobs-osign:${{ steps.v.outputs.version }}"
+        id: push
+        run: |
+          docker push "ghcr.io/monsama/nobs-osign:${{ steps.v.outputs.version }}"
+          d="$(docker inspect --format '{{index .RepoDigests 0}}' "ghcr.io/monsama/nobs-osign:${{ steps.v.outputs.version }}")"
+          echo "digest=${d#*@}" >> "$GITHUB_OUTPUT"
+      # The server's files, with the image by its digest: an install pulls exactly the image just scanned.
+      - name: Package the server's files
+        run: |
+          V="${{ steps.v.outputs.version }}"
+          mkdir -p out
+          echo "ghcr.io/monsama/nobs-osign:$V@${{ steps.push.outputs.digest }}" > out/IMAGE
+          git archive --format=tar.gz --prefix="nobs-osign-server-$V/" --add-file=out/IMAGE -o "out/nobs-osign-server-$V.tar.gz" HEAD \
+            deploy-nobs-osign.sh docker-compose.yml .env.example certificates/README.md \
+            scripts/osign-lib.sh scripts/update.sh scripts/backup.sh scripts/restore.sh README.md LICENSE
+          (cd out && sha256sum "nobs-osign-server-$V.tar.gz" > "nobs-osign-server-$V.tar.gz.sha256")
+          (cd out && sha256sum "nobs-osign-server-$V.tar.gz" > SHA256SUMS.txt)
+      # Signs that the image and the server's files were built here, from this commit, by this workflow:
+      # scripts/update.sh checks it with `gh attestation verify` where gh is there. A plan without attestations
+      # for this repository does not stop the release.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        continue-on-error: true
+        with:
+          subject-path: out/nobs-osign-server-${{ steps.v.outputs.version }}.tar.gz
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        continue-on-error: true
+        with:
+          subject-name: ghcr.io/monsama/nobs-osign
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
       - name: Tag the version
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -136,7 +137,6 @@ jobs:
           tag_name: v${{ steps.v.outputs.version }}
           name: NOBS OSign v${{ steps.v.outputs.version }}
           files: |
-            out/NOBS-OSign-v${{ steps.v.outputs.version }}.zip
             out/nobs-osign-server-${{ steps.v.outputs.version }}.tar.gz
             out/nobs-osign-server-${{ steps.v.outputs.version }}.tar.gz.sha256
             out/SHA256SUMS.txt

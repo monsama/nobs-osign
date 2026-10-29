@@ -169,6 +169,22 @@
       ul.append(el('li', null, a));
     });
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
+    renderStatusBar();
+  }
+  // The status bar: how many signatures, where publishing goes, which version runs where.
+  function renderStatusBar() {
+    const n = S.config.signatures.length;
+    $('stSigs').textContent = n === 1 ? t('1 signature') : t('{0} signatures', n);
+    const f = (S.info && S.info.features) || {};
+    $('stTarget').textContent = !S.settings ? '' : onServer()
+      ? (f.publishTarget === 'sharepoint' ? t('Publishes to {0}', S.settings.folder) : t('Publishes into the server\'s own folder (not SharePoint)'))
+      : S.settings.folder ? t('Publishes to {0}', S.settings.folder) : t('No folder to publish to yet');
+    $('verFoot').textContent = S.info ? 'NOBS OSign ' + S.info.version + ' · ' + (onServer() ? t('Server') : t('Windows')) : '';
+    // The server's client secret, in time: from 30 days before it runs out.
+    const left = f.secretDaysLeft;
+    $('stSecret').hidden = !(typeof left === 'number' && left <= 30);
+    $('stSecret').textContent = typeof left !== 'number' ? '' : left < 0 ? t('The client secret ran out on {0}: publishing fails. Run the setup script again.', day(f.secretExpires))
+      : t('The client secret runs out on {0} (in {1} days): run the setup script again.', day(f.secretExpires), left);
   }
 
   function show(view) {
@@ -228,7 +244,7 @@
   // ---------------------------------------------------------------------------------------------
   const design = $('design');
   let ddoc = null, designReady = null;
-  const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;min-height:380px;outline:none;word-wrap:break-word}' +
+  const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;outline:none;word-wrap:break-word}' +
     'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
     'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}' +
     // A field, shown by its name in a plain token; in the signature it is the placeholder @@key.
@@ -240,6 +256,7 @@
     designReady = new Promise((resolve) => {
       design.addEventListener('load', () => {
         ddoc = design.contentDocument;
+        ddoc.addEventListener('keydown', (e) => onKeys(e));
         ddoc.body.contentEditable = 'true';
         try { ddoc.execCommand('styleWithCSS', false, true); ddoc.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { }
         ddoc.addEventListener('input', onDesignInput);
@@ -527,7 +544,7 @@
     if (mode === 'html') { $('source').value = s ? s.html : ''; }
     else { flushSource(); loadDesign(s ? s.html : ''); }
     S.mode = mode;
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
+    document.querySelectorAll('.tab[data-mode]').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
     design.hidden = mode !== 'design';
     $('source').hidden = mode !== 'html';
     document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
@@ -551,7 +568,7 @@
 
   function previewValues() {
     const src = $('pvSource').value, v = {};
-    S.config.fields.forEach((f) => { v[f.key] = src === 'sample' ? (f.sample || '') : src === 'ad' && S.adValues ? (S.adValues[f.key] || '') : ''; });
+    S.config.fields.forEach((f) => { v[f.key] = src === 'sample' ? (f.sample || '') : (src === 'ad' || src === 'entra') && S.adValues && S.adFrom === src ? (S.adValues[f.key] || '') : ''; });
     return v;
   }
 
@@ -571,7 +588,7 @@
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
       ? t('No Graph source, so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))
       : t('No source (neither Graph nor AD attribute), so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))));
-    if ($('pvSource').value === 'ad' && S.adName) {
+    if (($('pvSource').value === 'ad' || $('pvSource').value === 'entra') && S.adName && S.adFrom === $('pvSource').value) {
       // What this user would get, as the add-in decides it (the From address being their own).
       const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
       const nm = (x) => (x ? x.name : t('none'));
@@ -584,17 +601,24 @@
   }
 
   $('pvSource').addEventListener('change', () => {
+    const entra = $('pvSource').value === 'entra';
     const ad = $('pvSource').value === 'ad';
-    $('pvAd').hidden = !ad;
+    $('pvAd').hidden = !ad && !entra;
+    if (entra && !S.adValues) $('pvUser').focus();
     if (ad && !(S.info && S.info.features && S.info.features.adLookup)) toast(onServer() ? t('Active Directory is not set up on the server: {0}', t(S.info.features.adProblem)) : t('Active Directory is not reachable from here: this needs Windows on a machine in the domain.'), true);
     if (ad && !S.adValues) $('pvUser').focus();
     renderPreview();
   });
   $('pvText').addEventListener('change', renderPreview);
+  // A real person's values and groups: from AD (the service account) or from Entra ID (the
+  // server's app), whichever the preview is set to.
   async function adLookup() {
+    const from = $('pvSource').value === 'entra' ? 'entra' : 'ad';
     try {
-      const r = await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
-      S.adValues = r.values; S.adName = r.displayName; S.adGroups = r.groups || []; renderPreview();
+      const r = from === 'entra'
+        ? await api('entra/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, graph: f.graph })) })
+        : await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
+      S.adValues = r.values; S.adName = r.displayName; S.adGroups = r.groups || []; S.adFrom = from; renderPreview();
     } catch (e) { toast(t(e.message), true); }
   }
   $('pvLookup').addEventListener('click', adLookup);
@@ -642,7 +666,7 @@
     S.config.signatures = S.config.signatures.filter((x) => x !== s);
     changed(); openSig(S.config.signatures[0] ? S.config.signatures[0].id : null);
   });
-  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setMode(t.dataset.mode)));
+  document.querySelectorAll('.tab[data-mode]').forEach((t) => t.addEventListener('click', () => setMode(t.dataset.mode)));
   ['imgW', 'imgAlt', 'imgHref'].forEach((id) => $(id).addEventListener('change', applyImg));
   $('imgDone').addEventListener('click', () => { applyImg(); hideImgBar(); });
 
@@ -818,7 +842,6 @@
     $('installLink').hidden = !base; $('installNone').hidden = !!base;
     const mode = core.valueSource(S.config);
     document.querySelectorAll('input[name=vsrc]').forEach((r) => { r.checked = r.value === mode; });
-    $('vsrcNote').hidden = mode === 'graph' || onServer();
     // The server version: it exports the users itself, every day at the time set on it.
     const sn = $('vsrcServerNote');
     sn.hidden = mode === 'graph' || !onServer();
@@ -844,7 +867,7 @@
   Object.entries(OPTS).forEach(([id, k]) => $(id).addEventListener('change', () => { S.config.options[k] = $(id).checked; changed({ list: false }); }));
   $('lnkSetup').addEventListener('click', (e) => { e.preventDefault(); $('dlgHelp').showModal(); });
 
-  document.querySelectorAll('.nav-list a').forEach((a) => a.addEventListener('click', (e) => {
+  document.querySelectorAll('.nav-list a[data-view]').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault();
     // Not loaded yet (a slow server): nothing to show.
     if (!S.config) return;
@@ -969,6 +992,7 @@
       if ($('setLang').value !== I18N.lang) { await saving; I18N.setLang($('setLang').value); return; }
       S.settings = r.settings; lastSettings = r;
       $('dlgSettings').close();
+      renderStatusBar();
       if (onServer()) toast(r.folderError ? t('SharePoint cannot be reached: {0}', t(r.folderError)) : t('Settings saved.'), !!r.folderError);
       else toast(r.folderFound || !r.settings.folder ? t('Settings saved.') : t('Saved, but the folder is not there on this PC.'), !r.folderFound && !!r.settings.folder);
       schedulePreview();
@@ -992,10 +1016,10 @@
   // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
   // saved wins over .env, an empty field takes .env's value (its placeholder). Secrets are only
   // ever sent, never shown: the server says where each comes from.
-  const CONN_FIELDS = ['ldapUrl', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
+  const CONN_FIELDS = ['ldapUrl', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'graphSecretExpires', 'cfAccountId', 'cfProject'];
   const CONN_SECRETS = ['ldapServicePassword', 'graphClientSecret', 'cfApiToken'];
   let connDrop = {}, connCa;
-  const day = (iso) => (iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '');
+  function day(iso) { return iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : ''; }
   function renderConnections(r) {
     $('connKey').hidden = r.keyOk;
     for (const k of CONN_FIELDS) {
@@ -1017,17 +1041,28 @@
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
     $('connCaFile').value = '';
-    const line = (id, problem, okText) => { $(id).textContent = problem ? t(problem) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
+    // In this dialog, "(Settings → Server connections)" would point to itself.
+    const here = (p) => String(p).replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')');
+    const line = (id, problem, okText) => { $(id).textContent = problem ? t(here(problem)) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
     line('connSignIn', r.problems.signIn, 'Ready: members of the sign-in group can sign in.');
     line('connDirectory', r.problems.directory, 'Ready: the editor reads the users\' values from AD.');
     line('connGraph', r.problems.graph, 'Ready: publishing goes into SharePoint.');
     line('connPages', r.problems.pages, 'Ready: the add-in\'s files can be uploaded from here.');
+    // Each tab's dot: ready, or something to set.
+    document.querySelectorAll('#dlgConn [data-cdot]').forEach((d) => { d.className = 'dot ' + (r.problems[d.dataset.cdot] ? 'warn' : 'good'); });
     connDrop = {}; connCa = undefined; connCaReading = null;
     $('connErr').textContent = '';
   }
+  // Server connections in tabs: one part at a time.
+  function connTestsClear() { document.querySelectorAll('#dlgConn [data-ctestout]').forEach((o) => { o.textContent = ''; o.className = 'where'; }); }
+  function connTab(name) {
+    document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => { b.classList.toggle('active', b.dataset.ctab === name); b.setAttribute('aria-selected', b.dataset.ctab === name); });
+    document.querySelectorAll('#dlgConn [data-cpane]').forEach((p) => { p.hidden = p.dataset.cpane !== name; });
+  }
+  document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
   $('setConn').addEventListener('click', async () => {
     $('setErr').textContent = '';
-    try { renderConnections(await api('connections/get')); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('signin'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
   });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
@@ -1042,26 +1077,41 @@
     if (!f) return;
     connCaReading = new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
   });
-  $('connSave').addEventListener('click', async (e) => {
-    e.preventDefault();
+  // Saves what the dialog holds; the dialog stays open (Test) or closes (Save).
+  async function connSaveNow() {
     const values = {}, secrets = {};
     for (const k of CONN_FIELDS) values[k] = $('cn_' + k).value;
     for (const k of CONN_SECRETS) { if ($('cs_' + k).value) secrets[k] = $('cs_' + k).value; else if (connDrop[k]) secrets[k] = null; }
     const body = { values, secrets };
-    try {
-      // A CA file chosen just now may still be being read.
-      if (connCaReading) { connCa = await connCaReading; connCaReading = null; }
-      if (connCa !== undefined) body.ca = connCa;
-      const r = await api('connections/save', body);
-      // What the server can do now (publishing, AD, the upload) follows from what was saved.
-      const [info, st] = await Promise.all([api('info'), api('settings/get')]);
-      S.info = info; S.settings = st.settings; lastSettings = st;
-      wizConn = r; wizConnRender();
-      if ($('dlgSettings').open) renderSettingsNotes(st);
-      $('dlgConn').close();
-      toast(t('Server connections saved.'));
-    } catch (err) { $('connErr').textContent = t(err.message); }
+    // A CA file chosen just now may still be being read.
+    if (connCaReading) { connCa = await connCaReading; connCaReading = null; }
+    if (connCa !== undefined) body.ca = connCa;
+    const r = await api('connections/save', body);
+    // What the server can do now (publishing, AD, the upload) follows from what was saved.
+    const [info, st] = await Promise.all([api('info'), api('settings/get')]);
+    S.info = info; S.settings = st.settings; lastSettings = st;
+    wizConn = r; wizConnRender();
+    renderStatusBar();
+    if ($('dlgSettings').open) renderSettingsNotes(st);
+    return r;
+  }
+  $('connSave').addEventListener('click', async (e) => {
+    e.preventDefault();
+    $('connErr').textContent = '';
+    try { await connSaveNow(); $('dlgConn').close(); toast(t('Server connections saved.')); }
+    catch (err) { $('connErr').textContent = t(err.message); }
   });
+  // Test: saved first, so what is tested is what the dialog shows; the answer next to the button.
+  document.querySelectorAll('#dlgConn [data-ctest]').forEach((b) => b.addEventListener('click', async () => {
+    const out = document.querySelector('#dlgConn [data-ctestout="' + b.dataset.ctest + '"]');
+    out.className = 'where'; out.textContent = t('Testing…'); b.disabled = true; $('connErr').textContent = '';
+    try {
+      renderConnections(await connSaveNow());
+      const r = await api('connections/test', { what: b.dataset.ctest });
+      out.className = 'where good'; out.textContent = '✓ ' + t(r.message);
+    } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); }
+    finally { b.disabled = false; }
+  }));
 
   // The server version: the files made go to Cloudflare Pages from the server.
   async function pagesUpload(out, btn) {
@@ -1528,7 +1578,7 @@
   }
   $('wizConnOpen').addEventListener('click', async () => {
     $('wizErr').textContent = '';
-    try { renderConnections(await api('connections/get')); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('signin'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
   });
   // The setup script (server/setup.js): made for the folder and the add-in's address as saved,
   // downloaded, run on a Windows PC; its result comes back to the server, and here by asking.
@@ -1560,7 +1610,7 @@
     const out = $('wizScriptNote');
     out.className = 'where'; $('wizErr').textContent = '';
     try {
-      const r = await api('setup/start', { origin: location.origin, groups: radio('wvsrc') === 'graph' });
+      const r = await api('setup/start', { origin: location.origin, groups: radio('wvsrc') === 'graph', users: $('wizScriptUsers').checked });
       const a = el('a', { href: '/setup/nobs-osign-setup.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-setup.ps1' });
       document.body.append(a); a.click(); a.remove();
       out.textContent = t('Downloaded. Run it now: this page goes on by itself when it is done (the script is valid until {0}).', new Date(r.until).toLocaleTimeString());
@@ -1713,6 +1763,17 @@
     return out;
   }
 
+  // Keyboard shortcuts, in the page and in the design view (its own document).
+  function onKeys(e) {
+    const mod = e.ctrlKey || e.metaKey;
+    const inDialog = document.querySelector('dialog[open]');
+    if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); toast(t('Draft saved.')); return; }
+    if (mod && e.key === 'Enter' && !inDialog) { e.preventDefault(); $('btnPublish').click(); return; }
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable) || (e.target && e.target.ownerDocument === ddoc);
+    if (e.key === '?' && !mod && !typing && !inDialog) { e.preventDefault(); $('dlgKeys').showModal(); }
+  }
+  document.addEventListener('keydown', onKeys);
+  $('keysBtn').addEventListener('click', () => $('dlgKeys').showModal());
   $('btnPublish').addEventListener('click', async () => {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
@@ -1753,6 +1814,28 @@
     finally { $('pubGo').disabled = false; }
   });
 
+  // History: the versions published, and one of them back into the draft.
+  async function renderHistory() {
+    $('historyErr').textContent = '';
+    const tb = $('historyRows'); tb.replaceChildren(el('tr', null, el('td', { colspan: 5 }, t('Loading…'))));
+    let r;
+    try { r = await api('history/list'); } catch (err) { tb.replaceChildren(); $('historyErr').textContent = t(err.message); return; }
+    if (!r.versions.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted' }, t('Nothing published yet.')))); return; }
+    tb.replaceChildren(...r.versions.map((v, i) => el('tr', null,
+      el('td', null, new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB'), i === 0 ? el('span', { class: 'badge on', style: 'margin-left:6px' }, t('current')) : null),
+      el('td', null, v.by), el('td', null, v.message || '–'), el('td', null, String(v.signatures)),
+      el('td', null, el('button', { type: 'button', class: 'small', onclick: () => historyRestore(v) }, t('Load into the draft'))))));
+  }
+  async function historyRestore(v) {
+    if (!confirm(t('Replace the draft and its images with the version of {0}? What is not published is lost.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')))) return;
+    try {
+      await api('history/restore', { id: v.id });
+      applyDraft(await api('draft/get'));
+      $('dlgHistory').close();
+      toast(t('Loaded the version of {0} into the draft. Publish it to send it out.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')));
+    } catch (err) { $('historyErr').textContent = t(err.message); }
+  }
+  $('navHistory').addEventListener('click', (e) => { e.preventDefault(); $('dlgHistory').showModal(); renderHistory(); });
   $('btnLoad').addEventListener('click', async () => {
     if (S.dirty && !confirm(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'))) return;
     try { applyDraft(await api('load-published')); toast(t('Loaded the published signatures.')); }
@@ -1810,6 +1893,7 @@
       loadSnapshot();
       document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
       if (onServer()) serverTexts();
+      document.querySelector('#pvSource option[value=entra]').hidden = !(onServer() && info.features.publishTarget === 'sharepoint');
       if (info.features.signOut) {
         const out = $('btnLogout');
         out.hidden = false;

@@ -2,9 +2,9 @@
 
 Central email signatures for **classic and new Outlook**, managed in one place.
 
-- **The editor** (`editor/OSign.ps1`): a single PowerShell script, no installation needed. It
-  starts a small web server on 127.0.0.1 and opens a web interface (German or English) where you design the signatures, set who gets which
-  one, and publish them.
+- **The editor** (`server/`, `editor/ui/`): a web application in a Docker container on the company's
+  own server, behind its proxy. Admins sign in with their Windows account (an AD group) and design the
+  signatures in German or English, set who gets which one, and publish them into SharePoint.
 - **The Outlook add-in** (`addin/`): it inserts the right signature by itself in every new message,
   reply and forward, and switches signatures when the From address changes. Its pane lets users pick
   another signature or choose their own defaults. It fills the placeholders (`@@givenName`,
@@ -13,20 +13,21 @@ Central email signatures for **classic and new Outlook**, managed in one place.
 ![The editor](docs/editor.png)
 
 **It runs without GitHub.** GitHub only holds the source code and the releases. The add-in's
-files are made by the editor and served from a web server of the company's own choosing (its own
-web server, Azure Static Web Apps, an Azure storage account…). The signatures, images and photos
-stay in the company's own Microsoft 365: in a folder `OSign` in the SharePoint home site. The
-add-in reads that folder with each user's own sign-in, and embeds the images in the mail.
+files are made by the editor and served from a web server of the company's own choosing (Cloudflare
+Pages, uploaded from the editor, or any HTTPS web server). The signatures, images and photos stay
+in the company's own Microsoft 365: in a folder `OSign` in a SharePoint site. The add-in reads that
+folder with each user's own sign-in, and embeds the images in the mail. Nothing on the server is
+reachable from the internet.
 
 ```
- OSign.ps1 (editor, admin PC)        Company SharePoint (home site)       Outlook (every user)
+ NOBS OSign (editor, Docker)         Company SharePoint (one site)        Outlook (every user)
  ┌──────────────────────────┐ write  ┌───────────────────────────┐ Graph  ┌───────────────────────────┐
- │ web UI on 127.0.0.1      │ ─────> │ OSign\signatures.json     │ ─────> │ NOBS OSign add-in         │
- │ publishes into the       │ (One-  │ OSign\assets\*.png        │ user's │  new mail / reply → sign  │
- │ synced OSign folder      │ Drive) │ OSign\photos\<user>.jpg   │ sign-in│  details, groups ← Graph  │
+ │ web UI, AD sign-in       │ ─────> │ OSign/signatures.json     │ ─────> │ NOBS OSign add-in         │
+ │ publishes through Graph  │ (Sites │ OSign/assets/*.png        │ user's │  new mail / reply → sign  │
+ │ (Sites.Selected)         │ .Sel.) │ OSign/photos/<user>.jpg   │ sign-in│  details, groups ← Graph  │
  └──────────────────────────┘        └───────────────────────────┘        │  images embedded (cid:)   │
-                                                                          └───────────────────────────┘
- The company's HTTPS web server: the add-in's code (no data), made by the editor ──────┘
+              │ uploads the add-in's code (no data)                         └───────────────────────────┘
+              └────────────> Cloudflare Pages (or any HTTPS web server) ──────────────┘
 ```
 
 ## Where it works
@@ -59,7 +60,7 @@ These are the placeholders the signatures used before, mapped to where the add-i
 
 **Where the values come from** is a choice in the editor (*Add-in*): **Entra ID** (Microsoft Graph,
 each field by its Graph source), **Active Directory** (the editor exports each user's fields into
-`OSign\users\<mail>.json`; `OSign.ps1 -ExportUsers` keeps them current from the Task Scheduler), or
+`OSign/users/<mail>.json` on Publish and every day by itself), or
 **both**: Graph where a field has a Graph source, AD for the rest.
 
 Graph has no `description`, `homePhone` or `info`. To use them, sync them with Entra Connect,
@@ -70,30 +71,26 @@ reads them from AD.
 
 `@@sAMAccountName` (Benutzername, Graph `onPremisesSamAccountName`) is there as well. It also names
 each person's photo: a template image `photos/@@sAMAccountName.jpg` becomes
-`OSign\photos\<username>.jpg`, embedded in the mail; whoever has none gets the signature without.
+`OSign/photos/<username>.jpg`, embedded in the mail; whoever has none gets the signature without.
 
 A line whose fields all come out empty is left out, so nobody's signature shows "Mobile:" with no
 number. This works for paragraphs, lines split by line breaks, and table rows.
 
 ## Getting started
 
-On the first start, the editor's **setup assistant** walks through all of it.
-[docs/SETUP.md](docs/SETUP.md) has every step. In short:
+Install the server ([docs/SETUP.md](docs/SETUP.md), "The editor on a server"), sign in as `admin`,
+and the **setup assistant** walks through the rest:
 
-1. **SharePoint:** in the home site's document library, make a folder `OSign` (readable for all
-   employees). Sync it to the admin PC (*Sync* or *Add shortcut to My files*). Copy the photos into
-   `OSign\photos` (`<username>.jpg`).
-2. **Entra ID:** register an app (single-page application, redirect URI
-   `brk-multihub://<host of the add-in>`) with Graph `User.Read`, `Sites.Read.All` and, for groups,
-   `GroupMember.Read.All`, delegated, with admin consent.
-3. **Editor:** unpack the release zip on Windows and run
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\OSign.ps1
-   ```
-   In Settings, pick the synced `OSign` folder. Import or make the signatures and click **Publish**.
-4. **The add-in's files:** in Settings → *Outlook add-in*, enter the address they will be served
-   from and the app's client ID, click **Create the add-in files**, and copy that folder to the web
-   server.
+1. **The server's connections:** Active Directory for the sign-in and the users' values, Cloudflare
+   Pages for the add-in's files (Settings → Server connections, each with *Save and test*).
+2. **SharePoint:** a folder `OSign` in a site everyone can read; paste its address (or a sharing
+   link). Photos go into `OSign/photos` (`<username>.jpg`).
+3. **Microsoft 365:** download the **setup script** and run it once on a Windows PC as SharePoint
+   or Global administrator. It makes both app registrations (the add-in's and the server's), gives
+   the server write access to that one site, sends the result to the server, and takes back the
+   rights it used.
+4. **The add-in's files:** made and uploaded to Cloudflare Pages from the assistant (or downloaded
+   as a ZIP for another web server).
 5. **Microsoft 365 admin center:** Settings → Integrated apps → Upload custom apps, with
    `https://<host of the add-in>/manifest.xml`, and assign it to the users.
 
@@ -114,14 +111,16 @@ a mail never gets two.
 
 **⤓** next to *Signatures* imports `.htm` templates with their images: from CI-Sign (it keeps them
 next to `CI-Sign.exe`, as UTF-16, with images in `images\`) or from classic Outlook. Pick the
-folder, or the template files and images together. A per-person image (`images/@@sAMAccountName.jpg`)
-becomes the photo from `OSign\photos`. Not imported (yet): CI-Sign's text blocks
+template files and images together. A per-person image (`images/@@sAMAccountName.jpg`) becomes the
+photo from `OSign/photos`. Not imported (yet): CI-Sign's text blocks
 (`{##Name}…{end ##Name}` in `__intern.htm`).
 
 ## Privacy
 
 - GitHub holds only code; nothing at run time comes from it. The add-in's files on the company's
   web server are only code too, with the app registration ID filled in (it is not a secret).
+- The server writes into one SharePoint site only (`Sites.Selected`); its passwords and tokens are
+  kept encrypted in its data volume.
 - The signatures, images and photos are in the company's SharePoint, readable for its employees.
   The add-in reads them, and each user's details and groups, with that user's own sign-in
   (delegated permissions): it can never read more than the user can.
@@ -144,9 +143,8 @@ BASE_URL=https://intranet.example.com/osign/ OSIGN_CLIENT_ID=<app id> node addin
 and serve `dist/site/`. `OSIGN_SP_SITE` and `OSIGN_SP_FOLDER` choose another SharePoint site or
 folder for the signatures.
 
-The editor is meant to move into a container later. The web UI talks to its backend only through
-the HTTP API in [docs/API.md](docs/API.md), so a second backend can replace `OSign.ps1` without the
-UI changing. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes the parts.
+The web UI talks to its backend only through the HTTP API in [docs/API.md](docs/API.md).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes the parts.
 
 ## Development
 
@@ -156,37 +154,31 @@ npx playwright install chromium   # once, for the browser tests
 npm test                          # builds dist/template, then runs every test
 ```
 
-The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows PowerShell 5.1.
+The setup script's test needs `pwsh` (PowerShell 7) and is skipped without it; CI also runs it under
+Windows PowerShell 5.1.
 
 | Path | What |
 |---|---|
 | `shared/signature-core.js` | Placeholders, empty lines, who gets which signature. The editor's preview and the add-in both run this one file. |
-| `editor/OSign.ps1` | The editor's backend: local web server, draft, folder publishing, AD lookup, the add-in's files |
 | `editor/ui/` | The editor's web UI |
-| `server/` | The editor's backend for the container: the same API, with a sign-in (Docker: `Dockerfile`, `docker-compose.yml`, `deploy-nobs-osign.sh`) |
+| `server/` | The editor's backend: sign-in, draft, publishing through Graph, AD, the add-in's files, the setup script (Docker: `Dockerfile`, `docker-compose.yml`, `deploy-nobs-osign.sh`) |
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
-| `tests/` | Engine, add-in runtime (with a stand-in Graph and SharePoint), backend API, editor and pane in a browser |
-
-## On a server
-
-The editor also runs as a container, with Docker Compose, behind the shared proxy of NOBS
-Inventory: admins sign in with their Windows account, the server writes into SharePoint through
-Microsoft Graph and uploads the add-in's files to Cloudflare Pages. Nothing on it is reachable from
-the internet. [docs/SETUP.md](docs/SETUP.md) ("The editor on a server") has the install.
+| `tests/` | Engine, add-in runtime, server API (with stand-ins for AD, SharePoint, Microsoft and Cloudflare), the setup script, editor and pane in a browser |
 
 ## Releases
 
-Each version is a tag (`v0.5.0`) with the zip `NOBS-OSign-v0.5.0.zip` (the editor for Windows), the
-server's install files `nobs-osign-server-0.5.0.tar.gz`, their checksums on the GitHub releases page,
-and the Docker image `ghcr.io/monsama/nobs-osign:0.5.0`, scanned before it is pushed. The version is
-kept in `package.json`, `package-lock.json`, `editor/OSign.ps1` and `docker-compose.yml`; the
-add-in's manifest takes it from `package.json`.
+Each version is a tag (`v0.7.2`) with the server's install files `nobs-osign-server-0.7.2.tar.gz`
+and their checksums on the GitHub releases page, and the Docker image
+`ghcr.io/monsama/nobs-osign:0.7.2`, scanned before it is pushed. The install files name the image
+by its digest, so an install runs exactly the image that was scanned; both carry a build
+attestation, which `scripts/update.sh` checks where the GitHub CLI is there (`gh attestation verify
+<file> --repo monsama/nobs-osign`). The version is kept in `package.json`, `package-lock.json` and
+`docker-compose.yml`; the add-in's manifest takes it from `package.json`.
 
-To release, raise the version on main (`node scripts/bump-version.mjs 0.5.0`), then either push
-the tag with `scripts/release.sh 0.5.0`, or run the **release** workflow by hand on main (Actions →
+To release, raise the version on main (`node scripts/bump-version.mjs 0.7.2`), then either push
+the tag with `scripts/release.sh 0.7.2`, or run the **release** workflow by hand on main (Actions →
 release → Run workflow): it tags the version in `package.json` and publishes it. The tests have to
-pass first, and a version that is already tagged is refused. `gh attestation verify <zip> --repo
-monsama/nobs-osign` checks that a zip was built by that workflow.
+pass first, and a version that is already tagged is refused.
 
 ## License
 

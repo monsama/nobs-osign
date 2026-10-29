@@ -27,6 +27,8 @@ $Token = __OSIGN_TOKEN__
 $Site = __OSIGN_SITE__
 $AddinHost = __OSIGN_ADDIN_HOST__
 $WantGroups = __OSIGN_GROUPS__
+# The server may read users and their groups from Entra ID too (the preview of a real person).
+$WantUsers = __OSIGN_USERS__
 # The apps of an earlier run (client IDs the server has): used again if you own them. Any other
 # app is never used, whatever its name: anyone may register an app called "NOBS OSign server".
 $KnownAddin = __OSIGN_KNOWN_ADDIN__
@@ -222,9 +224,14 @@ try {
         Step "App registration ""$ServerName"" made" "App-Registrierung ""$ServerName"" angelegt"
     }
     $srvSp = Service-Principal $srv.appId
-    $assigned = @((Graph GET "/servicePrincipals/$($srvSp.id)/appRoleAssignments").value) | Where-Object { $_.appRoleId -eq $roleId -and $_.resourceId -eq $graphSp.id }
-    if (-not $assigned) { Graph POST "/servicePrincipals/$($srvSp.id)/appRoleAssignments" @{ principalId = $srvSp.id; resourceId = $graphSp.id; appRoleId = $roleId } -Retries 6 | Out-Null }
-    Step 'Admin consent for Sites.Selected (application)' 'Administratorzustimmung für Sites.Selected (Anwendung)'
+    $roles = @('Sites.Selected'); if ($WantUsers) { $roles += 'User.Read.All', 'GroupMember.Read.All' }
+    if ($WantUsers) { Graph PATCH "/applications/$($srv.id)" @{ requiredResourceAccess = @(With-Graph-Access $srv @($roles | ForEach-Object { $n = $_; @{ id = ($graphSp.appRoles | Where-Object { $_.value -eq $n } | Select-Object -First 1).id; type = 'Role' } })) } | Out-Null }
+    $have = @((Graph GET "/servicePrincipals/$($srvSp.id)/appRoleAssignments").value)
+    foreach ($n in $roles) {
+        $rid = ($graphSp.appRoles | Where-Object { $_.value -eq $n } | Select-Object -First 1).id
+        if (-not ($have | Where-Object { $_.appRoleId -eq $rid -and $_.resourceId -eq $graphSp.id })) { Graph POST "/servicePrincipals/$($srvSp.id)/appRoleAssignments" @{ principalId = $srvSp.id; resourceId = $graphSp.id; appRoleId = $rid } -Retries 6 | Out-Null }
+    }
+    Step ("Admin consent for " + ($roles -join ', ') + " (application)") ("Administratorzustimmung für " + ($roles -join ', ') + " (Anwendung)")
     $secret = $null
     foreach ($months in 24, 12, 6) {
         try { $secret = Graph POST "/applications/$($srv.id)/addPassword" @{ passwordCredential = @{ displayName = 'NOBS OSign server ' + (Get-Date -Format 'yyyy-MM-dd'); endDateTime = (Get-Date).ToUniversalTime().AddMonths($months).ToString('yyyy-MM-ddTHH:mm:ssZ') } }; break }
@@ -245,7 +252,7 @@ try {
     if (-not $has) { Graph POST "/sites/$($s.id)/permissions" @{ roles = @('write'); grantedToIdentities = @(@{ application = @{ id = $srv.appId; displayName = $ServerName } }) } -Retries 6 | Out-Null }
     Step "Write access for ""$ServerName"" on $($s.webUrl)" "Schreibzugriff für ""$ServerName"" auf $($s.webUrl)"
 
-    $result = @{ token = $Token; tenantId = $tenant; siteUrl = $s.webUrl; addin = @{ clientId = $app.appId }; server = @{ clientId = $srv.appId; secret = $secret.secretText; secretExpires = [string]$secret.endDateTime } }
+    $result = @{ token = $Token; tenantId = $tenant; siteUrl = $s.webUrl; addin = @{ clientId = $app.appId }; server = @{ clientId = $srv.appId; secret = $secret.secretText; secretExpires = $(if ($secret.endDateTime -is [datetime]) { $secret.endDateTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } else { [string]$secret.endDateTime }) } }
 } catch {
     $failure = $_.Exception.Message
     Say '' ''

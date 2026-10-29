@@ -20,10 +20,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # pwsh comes with the runner.
+      # pwsh comes with the runner: the setup script's test runs too.
       - run: npm test
 
-  # The editor as most will run it: Windows PowerShell 5.1, and PowerShell 7.
+  # The setup script for Microsoft 365 as admins will run it: Windows PowerShell 5.1, and PowerShell 7.
   windows:
     runs-on: windows-latest
     strategy:
@@ -37,12 +37,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install chromium
       - run: node addin/build.mjs
-      - run: node --test tests/editor.test.js tests/ui.test.js
-        env:
-          OSIGN_TEST_SHELL: ${{ matrix.shell }}
-      # The setup script for Microsoft 365, in this shell: a step of its own, not next to the UI test.
       - run: node --test tests/server-setup.test.js
         env:
           OSIGN_TEST_SHELL: ${{ matrix.shell }}

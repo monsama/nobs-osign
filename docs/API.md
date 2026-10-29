@@ -1,6 +1,8 @@
 # Editor API
 
-The contract between `editor/ui` and any backend (`editor/OSign.ps1` today).
+The contract between `editor/ui` and its backend, `server/` (the sections below the server's own are
+the routes it shares with the editor; `pick-folder`, `sp/resolve`, `sp/local` and `quit` were the
+Windows editor's and answer `ok: false`).
 
 - Every call is `POST /api/<name>` with `Content-Type: application/json` and
   `Authorization: Bearer <token>`. The body is a JSON object, `{}` when there is nothing to send.
@@ -60,6 +62,14 @@ asked.
   /setup/nobs-osign-setup.ps1?id=<id>` downloads it. **setup/status** → `{ state: none | waiting |
   failed | done, problem, result }` (never the secret). **setup/finish** is the script's: without a
   session, with its one-time code; its result goes into the settings and the server connections.
+- **entra/lookup** `{ query, fields: [{ key, graph }] }` → `{ ok, values, displayName, groups }`: a real
+  person from Entra ID for the preview, by UPN or mail, through the server's app (it needs
+  User.Read.All and GroupMember.Read.All, which the setup script gives when asked to).
+- **history/list** → `{ ok, versions: [{ id, at, by, message, signatures, images }] }`: what was
+  published, newest first (each publish that changed something, with its images; the last 50).
+  **history/restore** `{ id }` puts that version and exactly its images into the draft.
+- **connections/test** `{ what: signIn | directory | graph | pages }` → `{ ok, message }`: that part
+  of the server's connections tried for real, with what is saved (for the local account `admin`).
 - **sp/share** `{ url }` → `{ ok, webUrl, name }`: where a sharing link of SharePoint or OneDrive
   (`https://…/:f:/…`) leads, through Graph (`/shares`), as the folder's own address; a link to a
   file, one that is gone, or one the app may not open answers `ok: false` with why.

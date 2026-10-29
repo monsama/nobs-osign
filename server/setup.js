@@ -47,7 +47,7 @@ function createSetup({ now = Date.now } = {}) {
     const s = pending.spec;
     const values = {
       __OSIGN_SERVER__: psq(s.origin), __OSIGN_TOKEN__: psq(pending.token), __OSIGN_SITE__: psq(s.site),
-      __OSIGN_ADDIN_HOST__: psq(new URL(s.addinUrl).host), __OSIGN_GROUPS__: s.groups ? '$true' : '$false',
+      __OSIGN_ADDIN_HOST__: psq(new URL(s.addinUrl).host), __OSIGN_GROUPS__: s.groups ? '$true' : '$false', __OSIGN_USERS__: s.users ? '$true' : '$false',
       __OSIGN_KNOWN_ADDIN__: psq(s.knownAddin || ''), __OSIGN_KNOWN_SERVER__: psq(s.knownServer || '')
     };
     let text = fs.readFileSync(TEMPLATE, 'utf8');

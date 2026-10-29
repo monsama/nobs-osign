@@ -12,11 +12,13 @@ const { createStore, ASSET_TYPES } = require('./store');
 const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
-const { ldapConfig, ldapProblem } = require('./ldap');
-const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith } = require('./directory');
+const { ldapConfig, ldapProblem, testSignIn } = require('./ldap');
+const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, testService } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
+const { createHistory } = require('./history');
+const core = require('../shared/signature-core.js');
 const addin = require('./addin');
 
 const VERSION = require('../package.json').version;
@@ -97,6 +99,8 @@ function createApp(opts) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(publishDir, { recursive: true });
   const store = createStore(dataDir);
+  // What was published, to bring back (server/history.js).
+  const history = createHistory({ dataDir, assetDir: store.assetDir });
   // The connections (AD, Graph, Cloudflare): .env, with what the admin saved in the editor on top.
   // Each is read anew when that changes (configure, below), so no restart is needed.
   const connections = createConnections({ dataDir, env });
@@ -106,6 +110,9 @@ function createApp(opts) {
   // Where publishing goes: SharePoint through Graph when the server's app registration is set
   // up, its own folder otherwise (development, tests).
   let graph = null;
+  // When the client secret runs out, and how many days are left (null: not known).
+  let secretExpires = '';
+  const secretDaysLeft = () => (secretExpires && !isNaN(Date.parse(secretExpires)) ? Math.floor((Date.parse(secretExpires) - Date.now()) / 86400000) : null);
   const spFolder = (s) => String(s.spFolder || 'OSign').replace(/^\/+|\/+$/g, '');
   const local = folderTarget(publishDir);
   const targetFor = (s) => (graph ? graph.target(s.spSite || 'root', spFolder(s)) : local);
@@ -157,6 +164,9 @@ function createApp(opts) {
   function configure() {
     const e = connections.effectiveEnv();
     refill(graphCfg, graphConfig(e));
+    secretExpires = String(e.OSIGN_GRAPH_CLIENT_SECRET_EXPIRES || '').trim();
+    const left = secretDaysLeft();
+    if (left !== null && left <= 30) log.warn(left < 0 ? 'The server\'s client secret ran out on ' + secretExpires + ': publishing to SharePoint fails until a new one is set.' : 'The server\'s client secret runs out on ' + secretExpires + ' (in ' + left + ' days).');
     graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch }) : null;
     if (graphProblem(graphCfg)) log.warn('Publishing to SharePoint is not set up right: ' + graphProblem(graphCfg));
     refill(ldapCfg, Object.assign(ldapConfig(e), (opts && opts.ldap) || {}));
@@ -177,7 +187,9 @@ function createApp(opts) {
   const setup = createSetup();
   // Its result goes where the admin would type it, and takes effect at once.
   async function setupApply(r) {
-    const c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId }, secrets: { graphClientSecret: r.secret } });
+    const when = Date.parse(r.secretExpires);
+    const expires = isNaN(when) ? '' : new Date(when).toISOString().slice(0, 10);
+    const c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId, graphSecretExpires: expires }, secrets: { graphClientSecret: r.secret } });
     if (c.error) return c;
     const s = await settings.save({ clientId: r.addinClientId, tenantId: r.tenantId });
     if (s.error) return s;
@@ -213,6 +225,8 @@ function createApp(opts) {
         // 'sharepoint': publishing goes through Graph; 'folder': into the server's folder.
         publishTarget: graph ? 'sharepoint' : 'folder',
         graphClientId: graph ? graphCfg.clientId : '',
+        // The client secret: until when, and the days left (warned of from 30 on).
+        secretExpires: graph ? secretExpires : '', secretDaysLeft: graph ? secretDaysLeft() : null,
         graphTenantId: graph ? graphCfg.tenantId : '',
         graphProblem: graphProblem(graphCfg),
         // AD with the server's service account; the scheduled export, and how its last run went.
@@ -241,11 +255,43 @@ function createApp(opts) {
       if (adminOnly(s)) return { error: adminOnly(s) };
       if (!connections.answer().keyOk) return { error: 'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
       const st = settings.get();
-      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups,
+      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups, users: !!d.users,
         // The apps of an earlier run, the only ones the script may use again.
         knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
     },
     'setup/status': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : setup.status()),
+    // "Test" in Server connections: each part, with what is saved, for real. → { message } or { error }.
+    'connections/test': async (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
+      try {
+        if (d.what === 'signIn') {
+          const look = dir.serviceDn && dir.servicePassword ? { dn: dir.serviceDn, password: dir.servicePassword } : null;
+          const r = await testSignIn(ldapCfg, look);
+          if (r.group === false) return { error: 'The domain controller answers, but there is no sign-in group by that name: check the group\'s DN.' };
+          return { message: r.group ? 'The domain controller answers, and the sign-in group is there.' : 'The domain controller answers (TLS as set). With the service account set, the group is checked too.' };
+        }
+        if (d.what === 'directory') {
+          const r = await testService(dir);
+          return r.users ? { message: 'The service account signs in and reads users.' } : { error: 'The service account signs in, but sees no users with a mail address there: check where users and groups are read.' };
+        }
+        if (d.what === 'graph') {
+          if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
+          await graph.token();
+          const st = settings.get();
+          if (!st.spFolder) return { message: 'The server signs in to Microsoft 365. Choose the SharePoint folder in the setup assistant to check the site too.' };
+          try { await settings.target().exists(''); } catch (e) {
+            if (e.status === 401 || e.status === 403) return { error: 'The server signs in to Microsoft 365, but may not reach the site yet (Sites.Selected): run the setup script, or grant it as the setup assistant shows.' };
+            throw e;
+          }
+          return { message: 'The server signs in to Microsoft 365 and reaches the site of the signatures.' };
+        }
+        if (d.what === 'pages') {
+          const r = await addin.pagesTest(pages, fetchFn);
+          return { message: r.project ? 'The token works; the Pages project is there: ' + r.url : 'The token works; the Pages project is made on the first upload.' };
+        }
+        return { error: 'unknown' };
+      } catch (e) { return { error: e.message }; }
+    },
     // The server's connections (Settings → Server connections), for the local account admin.
     'connections/get': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : connectionsAnswer()),
     'connections/save': (d, s) => {
@@ -256,13 +302,24 @@ function createApp(opts) {
       log.info('connections: changed by ' + s.user.login);
       return connectionsAnswer();
     },
-    publish: async (d) => {
+    publish: async (d, s) => {
       const t = settings.target();
       let r;
       try { r = await store.publish(t, typeof d.configJson === 'string' ? d.configJson : ''); }
       catch (e) { return { error: e.message }; }
       settings.forget(); photos.clear();
+      // A version that differs from what was there: kept, with who and the note.
+      if (!r.error && r.changed) history.add({ by: s.user.name || s.user.login, message: d.message, configJson: d.configJson });
       return r.error ? r : { changed: r.changed, folder: t.describe() };
+    },
+    // The versions published, and one of them back into the draft (with its images).
+    'history/list': () => ({ versions: history.list() }),
+    'history/restore': (d) => {
+      const r = history.restore(String(d.id || ''));
+      if (r.error) return r;
+      const saved = store.saveDraft(r.configJson);
+      if (saved && saved.error) return saved;
+      return { at: r.at };
     },
     'load-published': async () => {
       try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }
@@ -288,6 +345,15 @@ function createApp(opts) {
       // Nothing typed: the one signed in, as OSign.ps1 takes the Windows user.
       const q = String(d.query || '').trim() || (s.user.local ? '' : s.user.login);
       try { return await lookup(dir, q, Array.isArray(d.fields) ? d.fields : []); } catch (e) { return { error: e.message }; }
+    },
+    // A person from Entra ID, for the preview: the fields with a Graph source, and the groups.
+    'entra/lookup': async (d) => {
+      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
+      const fields = (Array.isArray(d.fields) ? d.fields : []).filter((f) => f && f.key && f.graph).map((f) => ({ key: String(f.key), graph: String(f.graph) }));
+      try {
+        const r = await graph.user(d.query, core.graphSelect(fields));
+        return { values: core.valuesFromGraph(fields, r.user), displayName: r.user.displayName || d.query, groups: r.groups };
+      } catch (e) { return { error: e.message }; }
     },
     'ad/groups': async (d) => {
       if (!adOn) return { error: directoryProblem(dir) };

@@ -41,6 +41,7 @@
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
+      <li><a href="#" id="navHistory" class="nav">History <small>published versions</small></a></li>
     </ul>
   </nav>
 
@@ -93,6 +94,7 @@
               <option value="sample">Sample values</option>
               <option value="empty">All fields empty</option>
               <option value="ad">User from Active Directory…</option>
+              <option value="entra" hidden>Person from Entra ID…</option>
             </select>
             <button type="button" class="help" data-help="hPreview" aria-label="Help">?</button>
             <span id="pvAd" class="pv-ad" hidden>
@@ -148,10 +150,6 @@
         <label class="check block"><input type="radio" name="vsrc" value="mixed"> <span data-th="vsrcMixed"><b>Entra ID and Active Directory</b>: fields with a Graph source from Entra ID, the others (e.g. description, homePhone, info) from AD. Groups from AD.</span></label>
         <label class="check block"><input type="radio" name="vsrc" value="ad"> <span data-th="vsrcAd"><b>Active Directory</b>: every field by its AD attribute. Groups from AD.</span></label>
       </fieldset>
-      <p class="lead" id="vsrcNote" data-th="vsrcNote">With AD, the editor exports every active user with a mail address on Publish, into <code>users\</code> in the OSign
-        folder: one small file per person with their fields and groups. The add-in reads only the file of whoever writes. To keep
-        the values current without publishing, let Windows run the export, e.g. nightly, on a PC in the domain:
-        <code>powershell -ExecutionPolicy Bypass -File OSign.ps1 -ExportUsers</code></p>
       <p class="lead" id="vsrcServerNote" hidden></p>
       <h2>Sign-in and permissions</h2>
       <p class="lead" data-th="signinLead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
@@ -187,6 +185,43 @@
     </section>
   </main>
 </div>
+
+<!-- The status bar, as in NOBS Inventory: what there is, where it is published to, the version. -->
+<footer class="statusbar">
+  <span id="stSigs"></span>
+  <span id="stTarget"></span>
+  <span id="stSecret" class="sb-warn" hidden></span>
+  <span id="verFoot" class="sb-right"></span>
+  <button type="button" id="keysBtn" class="sb-keys" title="Keyboard shortcuts">? Shortcuts</button>
+</footer>
+
+<dialog id="dlgHistory">
+  <form method="dialog" class="dlg wide">
+    <h2>Published versions</h2>
+    <p class="lead">Each publish is kept, with its images: the last 50. Loading one replaces the draft and its images; it goes out
+      when you publish it.</p>
+    <div class="table-wrap"><table class="fields history"><thead><tr><th>Published</th><th>By</th><th>What changed</th><th>Signatures</th><th></th></tr></thead>
+      <tbody id="historyRows"></tbody></table></div>
+    <p id="historyErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgKeys">
+  <form method="dialog" class="dlg">
+    <h2>Keyboard shortcuts</h2>
+    <table class="keys">
+      <tr><td><kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save the draft now</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Publish…</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd></td><td>Bold, italic, underline (in the design view)</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd> / <kbd>Y</kbd></td><td>Undo, redo</td></tr>
+      <tr><td><kbd>?</kbd></td><td>This list (outside a field)</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close a dialog</td></tr>
+    </table>
+    <p class="lead">On a Mac, use the Command key (⌘) instead of Ctrl.</p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
 
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg wide">
@@ -244,7 +279,7 @@
   </form>
 </dialog>
 
-<dialog id="dlgConn">
+<dialog id="dlgConn" class="conn">
   <form method="dialog" class="dlg wide">
     <h2>Server connections</h2>
     <p class="lead">What is set here wins over .env; an empty field takes the value .env gives (shown in grey).
@@ -252,48 +287,85 @@
     <p id="connKey" class="err" hidden>The server has no key to keep passwords with (secrets/app_key): run sudo ./deploy-nobs-osign.sh
       again. Until then, passwords and the token go in ./secrets.</p>
 
-    <h3>Sign-in with Active Directory</h3>
-    <p id="connSignIn" class="lead"></p>
-    <div class="grid2">
-      <label>Domain controller <small>(ldaps://, port 636)</small><input id="cn_ldapUrl" data-ph="ldaps://dc01.example.ch" autocomplete="off"></label>
-      <label>StartTLS <small>(only for an ldap:// address)</small><select id="cn_ldapStartTls"><option value="">As in .env</option><option value="on">On</option><option value="off">Off</option></select></label>
-      <label>User name format <small>({login} is what people type)</small><input id="cn_ldapBind" data-ph="{login}@example.ch" autocomplete="off"></label>
-      <label>Where the users are<input id="cn_ldapBase" data-ph="OU=Users,DC=example,DC=ch" autocomplete="off"></label>
-      <label>Sign-in group <small>(its members may use the editor; nested groups count)</small><input id="cn_ldapGroup" data-ph="CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch" autocomplete="off"></label>
-      <label>Login attribute<input id="cn_ldapLoginAttr" data-ph="sAMAccountName" autocomplete="off"></label>
-    </div>
-    <label>CA certificate of the domain controller <small>(when it comes from your own CA: .cer, .crt or .pem)</small>
-      <span class="pick"><input id="connCaFile" type="file" accept=".cer,.crt,.pem"><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
-      <small id="connCa"></small>
-    </label>
+    <nav class="dtabs" role="tablist">
+      <button type="button" class="tab active" data-ctab="signin"><span class="dot" data-cdot="signIn"></span>Sign-in</button>
+      <button type="button" class="tab" data-ctab="service"><span class="dot" data-cdot="directory"></span>Service account</button>
+      <button type="button" class="tab" data-ctab="graph"><span class="dot" data-cdot="graph"></span>SharePoint</button>
+      <button type="button" class="tab" data-ctab="pages"><span class="dot" data-cdot="pages"></span>Cloudflare Pages</button>
+    </nav>
 
-    <h3>Values from AD: the service account</h3>
-    <p id="connDirectory" class="lead"></p>
-    <div class="grid2">
-      <label>Service account <small>(read-only)</small><input id="cn_ldapServiceDn" data-ph="CN=svc-osign,OU=Service,DC=example,DC=ch" autocomplete="off"></label>
-      <label>Its password<span class="pick"><input id="cs_ldapServicePassword" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="ldapServicePassword" hidden>Remove</button></span>
-        <small id="cx_ldapServicePassword"></small></label>
-      <label>Where users and groups are read <small>(empty: the whole domain)</small><input id="cn_ldapDirectoryBase" data-ph="DC=example,DC=ch" autocomplete="off"></label>
-      <label>Export the users' values every day at<input id="cn_adExportAt" data-ph="06:00" autocomplete="off"></label>
-    </div>
+    <section class="dpane" data-cpane="signin">
+      <p id="connSignIn" class="lead"></p>
+      <div class="form">
+        <label for="cn_ldapUrl">Domain controller</label>
+        <div><input id="cn_ldapUrl" data-ph="ldaps://dc01.example.ch" autocomplete="off">
+          <small>(ldaps://, port 636)</small></div>
+        <label for="cn_ldapStartTls">StartTLS</label>
+        <div><select id="cn_ldapStartTls"><option value="">As in .env</option><option value="on">On</option><option value="off">Off</option></select>
+          <small>(only for an ldap:// address)</small></div>
+        <label for="cn_ldapBind">User name format</label>
+        <div><input id="cn_ldapBind" data-ph="{login}@example.ch" autocomplete="off">
+          <small>({login} is what people type)</small></div>
+        <label for="cn_ldapBase">Where the users are</label>
+        <div><input id="cn_ldapBase" data-ph="OU=Users,DC=example,DC=ch" autocomplete="off"></div>
+        <label for="cn_ldapGroup">Sign-in group</label>
+        <div><input id="cn_ldapGroup" data-ph="CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch" autocomplete="off">
+          <small>(its members may use the editor; nested groups count)</small></div>
+        <label for="cn_ldapLoginAttr">Login attribute</label>
+        <div><input id="cn_ldapLoginAttr" data-ph="sAMAccountName" autocomplete="off"></div>
+        <label for="connCaFile">CA certificate of the domain controller</label>
+        <div><span class="pick"><input id="connCaFile" type="file" accept=".cer,.crt,.pem"><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
+          <small>(when it comes from your own CA: .cer, .crt or .pem)</small> <small id="connCa"></small></div>
+      </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="signIn">Save and test the connection</button> <span class="where" data-ctestout="signIn"></span></p>
+    </section>
 
-    <h3>Publishing into SharePoint (Microsoft Graph)</h3>
-    <p id="connGraph" class="lead"></p>
-    <div class="grid2">
-      <label>Directory (tenant) ID<input id="cn_graphTenantId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
-      <label>Application (client) ID <small>(the server's app registration, not the add-in's)</small><input id="cn_graphClientId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
-      <label>Client secret<span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span>
-        <small id="cx_graphClientSecret"></small></label>
-    </div>
+    <section class="dpane" data-cpane="service" hidden>
+      <p id="connDirectory" class="lead"></p>
+      <div class="form">
+        <label for="cn_ldapServiceDn">Service account</label>
+        <div><input id="cn_ldapServiceDn" data-ph="CN=svc-osign,OU=Service,DC=example,DC=ch" autocomplete="off">
+          <small>(read-only)</small></div>
+        <label for="cs_ldapServicePassword">Its password</label>
+        <div><span class="pick"><input id="cs_ldapServicePassword" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="ldapServicePassword" hidden>Remove</button></span><small id="cx_ldapServicePassword"></small></div>
+        <label for="cn_ldapDirectoryBase">Where users and groups are read</label>
+        <div><input id="cn_ldapDirectoryBase" data-ph="DC=example,DC=ch" autocomplete="off">
+          <small>(empty: the whole domain)</small></div>
+        <label for="cn_adExportAt">Export the users' values every day at</label>
+        <div><input id="cn_adExportAt" data-ph="06:00" autocomplete="off"></div>
+      </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="directory">Save and test the connection</button> <span class="where" data-ctestout="directory"></span></p>
+    </section>
 
-    <h3>The add-in's files to Cloudflare Pages</h3>
-    <p id="connPages" class="lead"></p>
-    <div class="grid2">
-      <label>Account ID<input id="cn_cfAccountId" data-ph="0123456789abcdef0123456789abcdef" autocomplete="off"></label>
-      <label>Pages project<input id="cn_cfProject" data-ph="company-osign" autocomplete="off"></label>
-      <label>API token <small>(Cloudflare Pages: Edit)</small><span class="pick"><input id="cs_cfApiToken" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="cfApiToken" hidden>Remove</button></span>
-        <small id="cx_cfApiToken"></small></label>
-    </div>
+    <section class="dpane" data-cpane="graph" hidden>
+      <p id="connGraph" class="lead"></p>
+      <div class="form">
+        <label for="cn_graphTenantId">Directory (tenant) ID</label>
+        <div><input id="cn_graphTenantId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
+        <label for="cn_graphClientId">Application (client) ID</label>
+        <div><input id="cn_graphClientId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off">
+          <small>(the server's app registration, not the add-in's)</small></div>
+        <label for="cs_graphClientSecret">Client secret</label>
+        <div><span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span><small id="cx_graphClientSecret"></small></div>
+        <label for="cn_graphSecretExpires">Client secret valid until</label>
+        <div><input id="cn_graphSecretExpires" type="date" data-ph="">
+          <small>(as Entra shows it; set by the setup script by itself. The editor warns 30 days before)</small></div>
+      </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="graph">Save and test the connection</button> <span class="where" data-ctestout="graph"></span></p>
+    </section>
+
+    <section class="dpane" data-cpane="pages" hidden>
+      <p id="connPages" class="lead"></p>
+      <div class="form">
+        <label for="cn_cfAccountId">Account ID</label>
+        <div><input id="cn_cfAccountId" data-ph="0123456789abcdef0123456789abcdef" autocomplete="off"></div>
+        <label for="cn_cfProject">Pages project</label>
+        <div><input id="cn_cfProject" data-ph="company-osign" autocomplete="off"></div>
+        <label for="cs_cfApiToken">API token</label>
+        <div><span class="pick"><input id="cs_cfApiToken" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="cfApiToken" hidden>Remove</button></span><small id="cx_cfApiToken"></small><small>(Cloudflare Pages: Edit)</small></div>
+      </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="pages">Save and test the connection</button> <span class="where" data-ctestout="pages"></span></p>
+    </section>
 
     <p id="connErr" class="err"></p>
     <div class="dlg-foot">
@@ -467,6 +539,8 @@
           <li>it sends the IDs and the secret straight to this server: nothing to copy;</li>
           <li>then it takes back the rights it used for this, and deletes itself.</li>
         </ul>
+        <label class="check block"><input type="checkbox" id="wizScriptUsers"> Let the server also read users and their groups from Entra ID,
+          for the preview of a real person (User.Read.All and GroupMember.Read.All, read-only)</label>
         <p><button type="button" id="wizScriptGet" class="primary">Download the setup script</button></p>
         <p data-th="wizScriptRun">Run it on a Windows PC, in PowerShell:</p>
         <span class="copyline"><code id="wizScriptCmd">powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"</code><button type="button" class="copy" data-copy="wizScriptCmd">Copy</button></span>

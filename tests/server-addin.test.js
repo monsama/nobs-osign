@@ -153,3 +153,11 @@ test('a wrong token is said as that, with the permission it needs', async () => 
   await assert.rejects(pagesDeploy(cfg, path.join(dataDir, 'addin'), fetch), /refused the API token.*Cloudflare Pages: Edit/);
   assert.match(require('../server/addin').pagesProblem(pagesConfig({ OSIGN_CF_ACCOUNT_ID: 'x', OSIGN_CF_PROJECT: 'p' })), /account ID/);
 });
+
+test('Test in Server connections: the token works, and whether the project is there', async () => {
+  const { pagesTest, pagesConfig } = require('../server/addin');
+  const cfUrl = 'http://127.0.0.1:' + new URL(cf.url).port;
+  const cfg = (project, token) => pagesConfig({ OSIGN_CF_ACCOUNT_ID: ACCOUNT, OSIGN_CF_PROJECT: project, OSIGN_CF_API_TOKEN: token, OSIGN_CF_API_URL: cfUrl });
+  assert.deepEqual(await pagesTest(cfg('not-there-yet', 'cf-token'), fetch), { project: false });
+  await assert.rejects(pagesTest(cfg('company-osign', 'wrong'), fetch), /refused the API token/);
+});

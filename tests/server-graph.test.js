@@ -177,3 +177,20 @@ test('sp/share: a sharing link becomes the folder\'s own address; what it cannot
   sp.shares.denied = true;
   try { assert.match((await api('sp/share', { url: folderLink })).error, /may not open sharing links/); } finally { delete sp.shares.denied; }
 });
+
+test('entra/lookup: a real person for the preview, values from Graph and the groups; refused said as that', async () => {
+  const anna = { id: 'u-1', userPrincipalName: 'anna@contoso.com', mail: 'Anna.Muster@contoso.com', displayName: 'Anna Muster', jobTitle: 'Projektleiterin', groups: ['SG-Signatur-Verkauf'] };
+  sp.users['anna@contoso.com'] = anna; sp.users['u-1'] = anna;
+  const fields = [{ key: 'title', graph: 'jobTitle' }, { key: 'description', graph: '' }];
+  let r = await api('entra/lookup', { query: 'anna@contoso.com', fields });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(r.values, { title: 'Projektleiterin' });
+  assert.equal(r.displayName, 'Anna Muster');
+  assert.deepEqual(r.groups, ['SG-Signatur-Verkauf']);
+  // By mail too.
+  r = await api('entra/lookup', { query: 'anna.muster@contoso.com', fields });
+  assert.equal(r.ok, true, r.error);
+  assert.match((await api('entra/lookup', { query: 'nobody@contoso.com', fields })).error, /No user nobody@contoso.com/);
+  sp.users.denied = true;
+  try { assert.match((await api('entra/lookup', { query: 'anna@contoso.com', fields })).error, /may not read users from Entra ID/); } finally { delete sp.users.denied; }
+});
