@@ -18,7 +18,7 @@ const { connect, close, bind, search, escapeFilter, chain, ldapProblem } = requi
 
 // An attribute a field may name. The LAPS password and the BitLocker recovery data never: the
 // values go into the preview and, exported, into SharePoint for every employee to read.
-const SECRET_ATTR = /ms-?mcs-?admpwd|mslaps-|msfve-|unicodepwd|userpassword|supplementalcredentials/i;
+const SECRET_ATTR = /ms-?mcs-?admpwd|mslaps-|msfve-|unicodepwd|userpassword|supplementalcredentials|password|pwd|msds-managed|mstpm-|mspki|dpapi|credential|secret|bitlocker|recovery/i;
 const attrOk = (a) => /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(a) && !SECRET_ATTR.test(a);
 // Users with a mail address whose account is not disabled (userAccountControl flag 2).
 const ACTIVE_USERS = '(&(objectCategory=person)(objectClass=user)(mail=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))';

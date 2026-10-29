@@ -18,9 +18,11 @@ const path = require('node:path');
 const TEMPLATE = path.join(__dirname, 'setup-template.ps1');
 const VALID_MS = 60 * 60 * 1000;
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SITE = /^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/(sites|teams|personal)\/[^:/"'\\\s]+:$/;
-// A PowerShell string in single quotes: nothing in it is run.
-const psq = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+// A site's name: the letters a SharePoint address has, nothing else (it goes into a script).
+const SITE = /^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/(sites|teams|personal)\/[A-Za-z0-9._-]+:$/;
+// A PowerShell string in single quotes: nothing in it is run. PowerShell ends such a string at
+// the typographic single quotes too (‘ ’ ‚ ‛), so each of them is doubled as well.
+const psq = (s) => "'" + String(s).replace(/['\u2018\u2019\u201A\u201B]/g, '$&$&') + "'";
 const same = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
 const line = (v, max) => typeof v === 'string' && v.trim() && v.length <= max && !/[\u0000-\u001f]/.test(v.trim());
 
@@ -28,8 +30,10 @@ function createSetup({ now = Date.now } = {}) {
   // One setup at a time: the last one made.
   let pending = null, last = null;
 
-  // spec: { origin, site, addinUrl, groups } → { id } or { error }
+  // spec: { origin, site, addinUrl, groups, knownAddin, knownServer } → { id } or { error }. The
+  // known apps (client IDs from an earlier run) are the only ones the script uses again.
   function start(spec) {
+    for (const k of ['knownAddin', 'knownServer']) if (spec[k] && !GUID.test(spec[k])) spec[k] = '';
     if (!/^https:\/\/[A-Za-z0-9.-]+(:\d+)?$|^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(String(spec.origin || ''))) return { error: 'The editor\'s address is not one the script can send to (https://…).' };
     if (!SITE.test(String(spec.site || ''))) return { error: 'Choose the SharePoint folder first (the step "Where the signatures are kept").' };
     if (!/^https:\/\/[^\s"<>'&]+$/.test(String(spec.addinUrl || ''))) return { error: 'Enter the add-in\'s address first (the step "Where the add-in is served").' };
@@ -43,7 +47,8 @@ function createSetup({ now = Date.now } = {}) {
     const s = pending.spec;
     const values = {
       __OSIGN_SERVER__: psq(s.origin), __OSIGN_TOKEN__: psq(pending.token), __OSIGN_SITE__: psq(s.site),
-      __OSIGN_ADDIN_HOST__: psq(new URL(s.addinUrl).host), __OSIGN_GROUPS__: s.groups ? '$true' : '$false'
+      __OSIGN_ADDIN_HOST__: psq(new URL(s.addinUrl).host), __OSIGN_GROUPS__: s.groups ? '$true' : '$false',
+      __OSIGN_KNOWN_ADDIN__: psq(s.knownAddin || ''), __OSIGN_KNOWN_SERVER__: psq(s.knownServer || '')
     };
     let text = fs.readFileSync(TEMPLATE, 'utf8');
     for (const [k, v] of Object.entries(values)) text = text.split(k).join(v);

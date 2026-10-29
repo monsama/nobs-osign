@@ -56,6 +56,9 @@ function run(file) {
 
 test('the setup script: both apps, the site, the result to the server, the rights taken back, and gone', { skip }, async () => {
   assert.equal((await api('setup/status')).state, 'none');
+  // Someone else registered apps with these names first: they are never used.
+  ms.state.apps.push({ id: 'obj-planted', appId: '99999999-9999-9999-9999-999999999999', displayName: 'NOBS OSign server', owners: ['someone-else'], requiredResourceAccess: [] });
+  ms.state.apps.push({ id: 'obj-planted2', appId: '88888888-8888-8888-8888-888888888888', displayName: 'NOBS OSign', owners: ['someone-else'], requiredResourceAccess: [] });
   const file = await makeScript(true);
   const text = fs.readFileSync(file, 'utf8');
   assert.ok(text.startsWith('﻿'), 'with a BOM for Windows PowerShell');
@@ -68,8 +71,10 @@ test('the setup script: both apps, the site, the result to the server, the right
   assert.equal(fs.existsSync(file), false, 'it deleted itself');
 
   const st = ms.state;
-  const addin = st.apps.find((a) => a.displayName === 'NOBS OSign');
-  const server = st.apps.find((a) => a.displayName === 'NOBS OSign server');
+  const addin = st.apps.find((a) => a.displayName === 'NOBS OSign' && a.id !== 'obj-planted2');
+  const server = st.apps.find((a) => a.displayName === 'NOBS OSign server' && a.id !== 'obj-planted');
+  assert.deepEqual(st.apps.filter((a) => a.id.startsWith('obj-planted')).map((a) => a.requiredResourceAccess.length), [0, 0], 'the planted apps got nothing');
+  assert.ok(!st.sitePerms.some((x) => x.grantedToIdentitiesV2[0].application.id.startsWith('9999')), 'the planted app has no site access');
   assert.deepEqual(addin.spa.redirectUris, ['brk-multihub://osign.contoso.com']);
   assert.deepEqual(addin.requiredResourceAccess[0].resourceAccess.map((x) => x.id).sort(), ['scope-GroupMember.Read.All', 'scope-Sites.Read.All', 'scope-User.Read']);
   const addinSp = st.sps.find((s) => s.appId === addin.appId);
@@ -98,10 +103,11 @@ test('the setup script: both apps, the site, the result to the server, the right
   assert.equal(conn.secrets.graphClientSecret.readable, true);
   assert.ok(!fs.readFileSync(path.join(dataDir, 'connections.json'), 'utf8').includes(st.passwords[0].secretText), 'kept sealed');
 
-  // Again (another site, say): the apps are used again, nothing twice.
+  // Again (another site, say): the apps of the first run are used again (the server knows them,
+  // and they are yours), nothing twice.
   const again = await run(await makeScript(false));
   assert.equal(again.code, 0, again.out);
-  assert.equal(st.apps.length, 2);
+  assert.equal(st.apps.length, 4);
   assert.equal(st.roleAssignments.length, 1);
   assert.equal(st.sitePerms.length, 1);
   assert.equal(st.passwords.length, 2, 'a new secret each time');
@@ -112,6 +118,8 @@ test('the one-time code: only with it, only once, and the script only for the ad
   await api('settings/save', { settings: { spSite: SITE, spFolder: 'OSign', addinUrl: 'https://osign.contoso.com/' } });
   const s = await api('setup/start', { origin: base });
   assert.equal(s.ok, true, s.error);
+  // A member of the sign-in group cannot change where the server publishes (it goes into the script).
+  // (No AD here: the rule is checked in server-ad.test.js.)
   // Without a session: not the script.
   assert.equal((await fetch(base + '/setup/nobs-osign-setup.ps1?id=' + s.id)).status, 401);
   assert.equal((await fetch(base + '/setup/nobs-osign-setup.ps1?id=nope', { headers: { Cookie: admin } })).status, 404);
@@ -148,5 +156,9 @@ test('the setup script needs the folder and the add-in\'s address first', async 
   await call('settings/save', { settings: { spSite: SITE, spFolder: 'OSign' } });
   assert.match((await call('setup/start', { origin: at })).error, /add-in's address first/);
   assert.match((await call('setup/start', { origin: 'javascript:alert(1)' })).error, /editor's address/);
+  // Nothing that could end a string in PowerShell gets into the settings or a script.
+  for (const site of ["contoso.sharepoint.com:/sites/IT\u2019;New-Item(\u2019x\u2019);\u2019:", "contoso.sharepoint.com:/sites/IT';x;':"]) {
+    assert.match((await call('settings/save', { settings: { spSite: site } })).error, /SharePoint site/);
+  }
   other.close();
 });

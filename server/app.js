@@ -82,6 +82,13 @@ function sameSite(req) {
   try { return new URL(origin).host === String(req.headers.host || ''); } catch (e) { return false; }
 }
 
+// Who is asking: the shared proxy (Caddy) puts the client's address in X-Forwarded-For, replacing
+// what the client sent; without a proxy, the connection's own.
+function clientAddress(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return fwd.length ? fwd[fwd.length - 1] : String(req.socket.remoteAddress || '');
+}
+
 function createApp(opts) {
   const env = (opts && opts.env) || process.env;
   const log = (opts && opts.log) || console;
@@ -181,6 +188,7 @@ function createApp(opts) {
   // The connections are the local account admin's alone: whoever sets the directory's address
   // gets the passwords people sign in with.
   const adminOnly = (s) => (s.user.local ? '' : 'Only the local account admin can change the server\'s connections.');
+  const ADMIN_SETTINGS = ['addinUrl', 'clientId', 'tenantId', 'spSite', 'spFolder', 'addinHost'];
   function connectionsAnswer() {
     return Object.assign(connections.answer(), {
       problems: {
@@ -218,14 +226,24 @@ function createApp(opts) {
     'assets/upload': (d) => store.uploadAsset(d.name, d.data),
     'assets/delete': (d) => store.deleteAsset(d.name),
     'settings/get': () => settings.answer(),
-    'settings/save': (d) => settings.save(d.settings || {}),
+    // Where the server publishes and what the add-in is made with: the local account admin's, like
+    // the connections (the site goes into the setup script, the add-in's address is fetched).
+    'settings/save': (d, s) => {
+      const sent = d.settings || {}, now = settings.get();
+      if (!s.user.local && ADMIN_SETTINGS.some((k) => sent[k] !== undefined && sent[k] !== null && String(sent[k]).trim().replace(/[\\/]+$/, '') !== now[k])) {
+        return { error: 'Only the local account admin can change these settings.' };
+      }
+      return settings.save(sent);
+    },
     // The setup script: made for this setup (the site and the add-in's address as saved), and
     // whether it has sent its result yet.
     'setup/start': (d, s) => {
       if (adminOnly(s)) return { error: adminOnly(s) };
       if (!connections.answer().keyOk) return { error: 'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
       const st = settings.get();
-      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups });
+      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups,
+        // The apps of an earlier run, the only ones the script may use again.
+        knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
     },
     'setup/status': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : setup.status()),
     // The server's connections (Settings → Server connections), for the local account admin.
@@ -332,7 +350,7 @@ function createApp(opts) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
 
     if (name === 'login') {
-      const r = await auth.login(data.login, data.password);
+      const r = await auth.login(data.login, data.password, clientAddress(req));
       if (r.error) return fail(res, r.error, r.status);
       return ok(res, { user: { login: r.user.login, name: r.user.name } }, { 'Set-Cookie': r.cookie });
     }

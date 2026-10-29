@@ -15,7 +15,8 @@
 
   Run it on a Windows PC as the SharePoint or Global administrator:
     powershell -ExecutionPolicy Bypass -File .\nobs-osign-setup.ps1
-  Apps that are there already (by name) are used again, so it can run again.
+  It can run again: the apps it made before (as the server knows them, and owned by you) are used
+  again; otherwise new ones are made.
 #>
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -26,6 +27,10 @@ $Token = __OSIGN_TOKEN__
 $Site = __OSIGN_SITE__
 $AddinHost = __OSIGN_ADDIN_HOST__
 $WantGroups = __OSIGN_GROUPS__
+# The apps of an earlier run (client IDs the server has): used again if you own them. Any other
+# app is never used, whatever its name: anyone may register an app called "NOBS OSign server".
+$KnownAddin = __OSIGN_KNOWN_ADDIN__
+$KnownServer = __OSIGN_KNOWN_SERVER__
 
 # Microsoft's endpoints; only the tests point them elsewhere.
 $LoginUrl = if ($env:OSIGN_SETUP_LOGIN_URL) { $env:OSIGN_SETUP_LOGIN_URL } else { 'https://login.microsoftonline.com' }
@@ -89,9 +94,14 @@ function Sign-In {
             if (-not $l) { Start-Sleep -Milliseconds 200; continue }
             $c = $l.AcceptTcpClient()
             try {
-                $s = $c.GetStream(); $s.ReadTimeout = 5000
-                $buf = New-Object byte[] 16384; $text = ''
-                while ($text -notmatch "`r`n`r`n") { $n = $s.Read($buf, 0, $buf.Length); if ($n -le 0) { break }; $text += [Text.Encoding]::ASCII.GetString($buf, 0, $n) }
+                $s = $c.GetStream(); $s.ReadTimeout = 2000
+                $buf = New-Object byte[] 16384; $text = ''; $read = [Diagnostics.Stopwatch]::StartNew()
+                # At most 16 KB and 5 seconds per request: nothing on this PC can hold it open.
+                while ($text -notmatch "`r`n`r`n" -and $text.Length -lt 16384 -and $read.ElapsedMilliseconds -lt 5000) {
+                    $n = 0; try { $n = $s.Read($buf, 0, $buf.Length) } catch { break }
+                    if ($n -le 0) { break }
+                    $text += [Text.Encoding]::ASCII.GetString($buf, 0, $n)
+                }
                 $first = ($text -split "`r`n")[0]
                 $p = @{}
                 if ($first -match '^GET /\?([^ ]*) HTTP') {
@@ -136,7 +146,16 @@ function Graph([string]$Method, [string]$Path, $Body = $null, [int]$Retries = 0)
 function Graph-OrNull([string]$Path) { try { Graph GET $Path } catch { if ($_.Exception.Data['status'] -eq 404) { return $null }; throw } }
 function Filter([string]$F) { '?$filter=' + [Uri]::EscapeDataString($F) }
 
-function App-Named([string]$Name) { @((Graph GET ('/applications' + (Filter "displayName eq '$($Name.Replace("'", "''"))'") + '&$select=id,appId,displayName,spa,requiredResourceAccess')).value) | Select-Object -First 1 }
+# An app of an earlier run, by its client ID: only if you are one of its owners.
+function Known-App([string]$AppId, [string]$Name) {
+    if (-not $AppId) { return $null }
+    $a = Graph-OrNull "/applications(appId='$AppId')?`$select=id,appId,displayName,spa,requiredResourceAccess"
+    if (-not $a) { return $null }
+    $owners = @((Graph GET "/applications/$($a.id)/owners?`$select=id").value)
+    if ($owners | Where-Object { $_.id -eq $script:MyId }) { return $a }
+    Say "The app ""$($a.displayName)"" ($AppId) is not yours: a new ""$Name"" is made." "Die App ""$($a.displayName)"" ($AppId) gehört nicht Ihnen: eine neue ""$Name"" wird angelegt." 'Yellow'
+    return $null
+}
 function Service-Principal([string]$AppId) {
     $sp = Graph-OrNull "/servicePrincipals(appId='$AppId')?`$select=id,appId"
     if (-not $sp) { $sp = Graph POST '/servicePrincipals' @{ appId = $AppId } -Retries 6 }
@@ -160,7 +179,9 @@ try {
     Say '' ''
     $script:AccessToken = Sign-In
     $tenant = (Claims $script:AccessToken).tid
+    $script:MyId = (Claims $script:AccessToken).oid
     $me = Graph GET '/me?$select=id,userPrincipalName'
+    if ($me.id) { $script:MyId = $me.id }
     Step "Signed in as $($me.userPrincipalName) (tenant $tenant)" "Angemeldet als $($me.userPrincipalName) (Mandant $tenant)"
 
     $graphSp = Graph GET "/servicePrincipals(appId='$GraphApp')?`$select=id,appRoles,oauth2PermissionScopes"
@@ -170,7 +191,7 @@ try {
     # 1. The add-in's app.
     $want = @('User.Read', 'Sites.Read.All'); if ($WantGroups) { $want += 'GroupMember.Read.All' }
     $redirect = "brk-multihub://$AddinHost"
-    $app = App-Named $AddinName
+    $app = Known-App $KnownAddin $AddinName
     $access = @($want | ForEach-Object { @{ id = $scopeId[$_]; type = 'Scope' } })
     if ($app) {
         $uris = @($app.spa.redirectUris) + $redirect | Where-Object { $_ } | Select-Object -Unique
@@ -191,7 +212,7 @@ try {
     Step ("Admin consent for " + ($want -join ', ')) ("Administratorzustimmung für " + ($want -join ', '))
 
     # 2. The server's app.
-    $srv = App-Named $ServerName
+    $srv = Known-App $KnownServer $ServerName
     $role = @{ id = $roleId; type = 'Role' }
     if ($srv) {
         Graph PATCH "/applications/$($srv.id)" @{ requiredResourceAccess = @(With-Graph-Access $srv @($role)) } | Out-Null
@@ -248,14 +269,15 @@ if ($result) {
 }
 
 # 5. The rights used for this go again: the consent given at the sign-in, for your account.
-if ($script:AccessToken -and $me) {
+if ($script:AccessToken -and $script:MyId) {
     try {
         $cli = Graph-OrNull "/servicePrincipals(appId='$CliApp')?`$select=id"
         if ($cli) {
-            foreach ($g in @((Graph GET ('/oauth2PermissionGrants' + (Filter "clientId eq '$($cli.id)'"))).value)) {
+            $graphSpId = (Graph GET "/servicePrincipals(appId='$GraphApp')?`$select=id").id
+            foreach ($g in @((Graph GET ('/oauth2PermissionGrants' + (Filter "clientId eq '$($cli.id)' and resourceId eq '$graphSpId'"))).value)) {
                 $left = @($g.scope -split ' ' | Where-Object { $_ -and $Scopes -notcontains $_ })
                 if ($left.Count -eq @($g.scope -split ' ' | Where-Object { $_ }).Count) { continue }
-                if ($g.consentType -ne 'Principal' -or $g.principalId -ne $me.id) {
+                if ($g.consentType -ne 'Principal' -or $g.principalId -ne $script:MyId) {
                     Say 'Note: these rights were given to "Microsoft Graph Command Line Tools" for the whole organization; they stay (take them back in Entra → Enterprise applications if they are not needed).' `
                         'Hinweis: diese Rechte wurden "Microsoft Graph Command Line Tools" für die ganze Organisation erteilt; sie bleiben (in Entra → Unternehmensanwendungen entfernen, wenn sie nicht gebraucht werden).' 'Yellow'
                     continue

@@ -73,14 +73,16 @@ function createAuth({ env, ldap, now = Date.now, log = console }) {
   }
 
   // { cookie, user } when signed in; { status, error } when not.
-  async function login(name, password) {
+  // Wrong passwords count per name and address: someone elsewhere cannot lock out a name (admin,
+  // above all, the way in when AD is down) by typing wrong passwords for it.
+  async function login(name, password, from) {
     sweep();
     const loginName = String(name || '').trim().slice(0, 256);
-    const key = loginName.toLowerCase();
+    const key = loginName.toLowerCase() + '|' + String(from || '');
     if (!loginName || !password) return { status: 400, error: 'Enter your sign-in name and password.' };
     if (throttled(key)) return { status: 429, error: 'Too many wrong passwords for this name. Wait a quarter of an hour, then try again.' };
     let user = null;
-    if (key === LOCAL_LOGIN) {
+    if (loginName.toLowerCase() === LOCAL_LOGIN) {
       const pw = adminPassword();
       if (pw && same(pw, String(password))) user = { login: LOCAL_LOGIN, name: 'admin', local: true };
     } else if (ldap.url) {

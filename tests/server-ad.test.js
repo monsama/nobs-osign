@@ -42,7 +42,7 @@ test.before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ad-'));
   fs.writeFileSync(path.join(dataDir, 'svc'), SERVICE.pw + '\n');
   handle = createApp({ log, env: {
-    OSIGN_DATA: dataDir, OSIGN_SECURE_COOKIE: '0',
+    OSIGN_DATA: dataDir, OSIGN_SECURE_COOKIE: '0', OSIGN_ADMIN_PASSWORD: 'admin-pw',
     OSIGN_LDAP_URL: ldapUrl, OSIGN_LDAP_ALLOW_PLAIN: '1', OSIGN_LDAP_BIND: 'cn={login}@example.ch,' + BASE, OSIGN_LDAP_BASE: 'OU=Users,' + BASE,
     OSIGN_LDAP_GROUP: 'CN=OSign-Admins,OU=Groups,' + BASE, OSIGN_LDAP_SERVICE_DN: SERVICE.dn, OSIGN_LDAP_SERVICE_PASSWORD_FILE: path.join(dataDir, 'svc'),
     OSIGN_GRAPH_TENANT_ID: TENANT, OSIGN_GRAPH_CLIENT_ID: CLIENT, OSIGN_GRAPH_CLIENT_SECRET: 's', OSIGN_GRAPH_URL: spUrl + '/v1.0', OSIGN_LOGIN_URL: spUrl
@@ -53,7 +53,14 @@ test.before(async () => {
   const r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'anna', password: 'anna-pw' }) });
   assert.equal(r.status, 200);
   cookie = r.headers.get('set-cookie').split(';')[0];
-  await api('settings/save', { settings: { spSite: SITE, spFolder: 'OSign' } });
+  // Where publishing goes is the local admin's to set; a member of the sign-in group may not.
+  const denied = await api('settings/save', { settings: { spSite: SITE, spFolder: 'OSign' } });
+  assert.match(denied.error, /Only the local account admin/);
+  const admin = (await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'admin-pw' }) })).headers.get('set-cookie').split(';')[0];
+  const saved = await fetch(base + '/api/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin }, body: JSON.stringify({ settings: { spSite: SITE, spFolder: 'OSign' } }) }).then((r) => r.json());
+  assert.equal(saved.ok, true, saved.error);
+  // What is set already may be sent again unchanged (the Settings dialog sends everything).
+  assert.equal((await api('settings/save', { settings: { spSite: SITE, spFolder: 'OSign', setupDone: '1' } })).ok, true);
 });
 test.after(() => { srv.close(); ad.close(); sp.close(); });
 
