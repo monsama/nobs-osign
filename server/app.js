@@ -258,6 +258,21 @@ function createApp(opts) {
     'ad/export': async (d) => {
       try { return await users.apiExport(settings.target(), d); } catch (e) { return { error: 'Writing the users: ' + e.message }; }
     },
+    // A sharing link: the folder it leads to (its own address), for the setup assistant.
+    'sp/share': async (d) => {
+      const link = String(d.url || '').trim();
+      if (!/^https:\/\/[a-z0-9-]+(-my)?\.sharepoint\.com\/:[a-z]:\//i.test(link)) return { error: 'That is not a sharing link of SharePoint or OneDrive.' };
+      if (!graph) return { error: 'The server cannot open sharing links before publishing to SharePoint is set up.' };
+      let r;
+      try { r = await graph.share(link); }
+      catch (e) {
+        if (e.status === 401 || e.status === 403) return { error: 'The server may not open sharing links (its app registration may only reach the sites granted to it).' };
+        if (e.status === 404) return { error: 'This sharing link leads nowhere: it was removed or has expired.' };
+        return { error: e.message };
+      }
+      if (!r.folder) return { error: 'This link leads to a file (' + r.name + '), not to a folder.' };
+      return { webUrl: r.webUrl, name: r.name };
+    },
     // Whether the server reaches a SharePoint folder, before it is saved (the setup assistant).
     'sp/check': async (d) => {
       const s = Object.assign(settings.get(), { spSite: String(d.spSite || 'root').trim(), spFolder: String(d.spFolder || '').trim() });

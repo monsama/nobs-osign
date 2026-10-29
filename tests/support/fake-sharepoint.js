@@ -13,6 +13,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
   const sites = {};
   for (const s of granted) sites[s] = { files: new Map(), folders: new Set() };
   const requests = [];
+  const shares = {};
   let busy = 0, tokens = 0;
 
   const server = http.createServer(async (req, res) => {
@@ -30,6 +31,15 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
     if (!/^Bearer tok-\d+$/.test(String(req.headers.authorization || ''))) return json(401, { error: { code: 'InvalidAuthenticationToken', message: 'Access token is empty.' } });
     if (busy > 0) { busy--; return json(429, { error: { code: 'TooManyRequests', message: 'slow down' } }, { 'Retry-After': '0' }); }
 
+    // A sharing link, as the tests set it up (shares: link → { webUrl, name, folder }).
+    const sh = /^\/v1\.0\/shares\/u!([A-Za-z0-9_-]+)\/driveItem$/.exec(u.pathname);
+    if (sh && req.method === 'GET') {
+      const link = Buffer.from(sh[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+      const item = shares[link];
+      if (shares.denied) return json(403, { error: { code: 'accessDenied', message: 'Access denied' } });
+      if (!item) return json(404, { error: { code: 'itemNotFound', message: 'The sharing link no longer exists.' } });
+      return json(200, Object.assign({ name: item.name, webUrl: item.webUrl }, item.folder ? { folder: { childCount: 0 } } : { file: {} }));
+    }
     const m = SITE_RE.exec(decodeURIComponent(u.pathname));
     if (!m) return json(400, { error: { code: 'BadRequest', message: 'not understood: ' + u.pathname } });
     const site = sites[m[1]];
@@ -77,7 +87,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
     return json(405, { error: { code: 'notAllowed', message: req.method + ' ' + suffix } });
   });
   return {
-    sites, requests,
+    sites, requests, shares,
     busyOnce: () => { busy = 1; },
     listen: () => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve('http://127.0.0.1:' + server.address().port))),
     close: () => server.close()

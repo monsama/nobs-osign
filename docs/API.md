@@ -55,6 +55,9 @@ asked.
 - **connections/save** `{ values: { <name>: text }, secrets: { <name>: text | null }, ca: base64 | null }`
   → like `connections/get`. A value `''` goes back to `.env`; a secret `null` is removed, one not
   sent stays; `ca` is a CA certificate file (.cer or PEM). Takes effect at once.
+- **sp/share** `{ url }` → `{ ok, webUrl, name }`: where a sharing link of SharePoint or OneDrive
+  (`https://…/:f:/…`) leads, through Graph (`/shares`), as the folder's own address; a link to a
+  file, one that is gone, or one the app may not open answers `ok: false` with why.
 - **sp/check** `{ spSite, spFolder }` → `{ ok, found, photos, where }`: whether the server reaches
   that folder, before it is saved (the setup assistant). `found: false` means the site is reached
   and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,

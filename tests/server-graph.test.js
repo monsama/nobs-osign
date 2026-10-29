@@ -162,3 +162,18 @@ test('Graph set up only half: said in info, and publishing stays in the server\'
   assert.match((await call(at, c, 'sp/check', { spSite: SITE, spFolder: 'OSign' })).error, /OSIGN_GRAPH_CLIENT_ID/);
   other.close();
 });
+
+test('sp/share: a sharing link becomes the folder\'s own address; what it cannot open, it says', async () => {
+  const folderLink = 'https://contoso-my.sharepoint.com/:f:/g/personal/anna_contoso_com/IgDpY5m2CxbbRYgU2eNTaxZP?e=GOPGuO';
+  const fileLink = 'https://contoso.sharepoint.com/:w:/s/IT/EaBcDeF?e=x';
+  sp.shares[folderLink] = { name: 'OSign', webUrl: 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/OSign', folder: true };
+  sp.shares[fileLink] = { name: 'Notes.docx', webUrl: 'https://contoso.sharepoint.com/sites/IT/Shared%20Documents/Notes.docx' };
+  const r = await api('sp/share', { url: folderLink });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.webUrl, 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/OSign');
+  assert.match((await api('sp/share', { url: fileLink })).error, /a file \(Notes\.docx\), not to a folder/);
+  assert.match((await api('sp/share', { url: 'https://contoso.sharepoint.com/:f:/s/IT/Gone' })).error, /removed or has expired/);
+  assert.match((await api('sp/share', { url: 'https://example.com/:f:/g/x' })).error, /not a sharing link/);
+  sp.shares.denied = true;
+  try { assert.match((await api('sp/share', { url: folderLink })).error, /may not open sharing links/); } finally { delete sp.shares.denied; }
+});

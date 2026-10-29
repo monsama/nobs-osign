@@ -1095,9 +1095,16 @@
       rest = parts.slice(2);
     }
     // The folder: from ?id= (the server-relative path), else from the path itself.
-    const sitePath = site === 'root' ? [] : parts.slice(0, 2).map((x) => x.toLowerCase());
     const id = u.searchParams.get('id') || u.searchParams.get('RootFolder');
-    let path = id ? id.split('/').filter(Boolean) : (shared ? [] : rest);
+    // OneDrive's own pages (…-my.sharepoint.com/my?id=/personal/<name>/Documents/…) name the site
+    // only in ?id=.
+    const idParts = id ? id.split('/').filter(Boolean) : [];
+    if (site === 'root' && idParts.length >= 2 && /^(sites|teams|personal)$/i.test(idParts[0])) {
+      parts = idParts.slice(0, 2);
+      site = host + ':/' + parts[0].toLowerCase() + '/' + parts[1] + ':';
+    }
+    const sitePath = site === 'root' ? [] : parts.slice(0, 2).map((x) => x.toLowerCase());
+    let path = id ? idParts : (shared ? [] : rest);
     if (id && sitePath.length && path.slice(0, 2).map((x) => x.toLowerCase()).join('/') === sitePath.join('/')) path = path.slice(2);
     let folder = null, url = null;
     const lib = path.findIndex((x) => LIBRARIES.includes(x.toLowerCase()));
@@ -1235,8 +1242,12 @@
     $('wizNext').textContent = name === 'welcome' ? t('Start') : name === 'done' ? t('Finish') : t('Next');
     $('wizLater').hidden = name === 'done';
     $('wizErr').textContent = '';
-    const host = radio('whost'), base = addinBase();
-    $('wizUrlHint').textContent = t(URL_HINTS[host] || URL_HINTS.other);
+    const host = radio('whost');
+    // The server uploads to its own Pages project: its address is known before the first upload.
+    const project = onServer() && host === 'cloudflare' && S.info.features && S.info.features.pagesProject;
+    if (project && !$('wizUrl').value.trim()) $('wizUrl').value = 'https://' + project + '.pages.dev/';
+    const base = addinBase();
+    $('wizUrlHint').textContent = project ? t('(the server\'s Pages project {0}, made on the first upload; or your own domain set up on it)', project) : t(URL_HINTS[host] || URL_HINTS.other);
     $('wizRedirect').textContent = base ? 'brk-multihub://' + new URL(base).host : t('(enter the address in the step before)');
     $('wizManifest').textContent = base ? base + 'manifest.xml' : '';
     const perms = ['User.Read', 'Sites.Read.All'];
@@ -1275,10 +1286,22 @@
     out.textContent = ''; out.className = 'where';
     $('wizSpSite').value = ''; $('wizSpFolder').value = ''; $('wizFolder').value = '';
     if (!v) { wizPermNote(); return; }
-    const p = parseSpAddress(v);
+    let p = parseSpAddress(v);
     const warn = (msg) => { out.textContent = msg; out.classList.add('warn'); wizPermNote(); };
     if (!/^https:\/\/[^/]+\.sharepoint\.com/i.test(v)) return warn(t('That is not an address in SharePoint (https://….sharepoint.com/…).'));
-    if (!p.folder) return warn(t('This link does not say which folder it is (sharing links usually do not). Open the folder in the browser and copy the address from the address bar.'));
+    // A sharing link names no folder: the server asks Graph where it leads. Elsewhere, or when it
+    // may not, the link is opened here, to copy the address from there.
+    const sharing = /^https:\/\/[^/]+\/:[a-z]:\//i.test(v);
+    if (!p.folder && sharing && onServer()) {
+      out.textContent = t('Opening the sharing link…');
+      try {
+        const r = await api('sp/share', { url: v });
+        p = parseSpAddress(r.webUrl);
+        if (p.folder) $('wizLink').value = r.webUrl;
+      } catch (e) { return shareHelp(out, v, t(e.message)); }
+    }
+    if (!p.folder && sharing) return shareHelp(out, v, t('A sharing link does not say which folder it is.'));
+    if (!p.folder) return warn(t('This address does not say which folder it is. Open the folder in the browser and copy the address from the address bar.'));
     $('wizSpSite').value = p.site; $('wizSpFolder').value = p.folder;
     if (onServer()) { await wizServerCheck(p.site, p.folder); return; }
     let r = { found: false };
@@ -1291,8 +1314,21 @@
     }
     wizPermNote();
   }
+  // What to do with a sharing link that cannot be read here: open it, and copy the address the
+  // browser shows then.
+  function shareHelp(out, link, why) {
+    out.replaceChildren(document.createTextNode(why + ' '));
+    const a = document.createElement('a');
+    a.href = link; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.textContent = t('Open the link');
+    out.append(a, document.createTextNode(', ' + t('then copy the address from the address bar and paste it here.')));
+    out.className = 'where warn';
+    wizPermNote();
+  }
   // Next may come right after the change (a click on it ends the field): it waits for the check.
   $('wizLink').addEventListener('change', () => { wiz.checking = wizLinkCheck(); });
+  // Test: the same check again, e.g. once the server was given access to the site.
+  $('wizLinkTest').addEventListener('click', () => { wiz.checking = wizLinkCheck(); });
 
   // The server version writes there itself: whether it reaches the site and folder, said under the
   // link, with how to give it access when it does not.
