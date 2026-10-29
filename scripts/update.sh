@@ -34,6 +34,8 @@ name="nobs-osign-server-$want.tar.gz"
 curl -fsSL -o "$work/$name" "https://github.com/$REPO/releases/download/v$want/$name" || fail "The release $want has no $name."
 curl -fsSL -o "$work/$name.sha256" "https://github.com/$REPO/releases/download/v$want/$name.sha256" || fail "The release $want has no checksum."
 ( cd "$work" && sha256sum -c --quiet "$name.sha256" ) || fail "The checksum does not match: the download is damaged."
+# And that it was built by this repository's release workflow, not only that it arrived whole.
+attest_verify "$work/$name" "$REPO"
 
 ./scripts/backup.sh
 # The files before the update, to switch back to.
@@ -45,7 +47,10 @@ src="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'nobs-osign-server-*' 
 cp -a "$src"/. "$BASE_DIR"/
 # A release from before 0.6.0 had no key for the passwords set in the editor.
 app_key_ensure
-env_set OSIGN_IMAGE "ghcr.io/monsama/nobs-osign:$want"
+# Exactly the image the release names (by its digest), or, for an older release, its version.
+new_image="$(release_image)"
+case "$new_image" in *"@sha256:"*) attest_verify "oci://${new_image%%:*}@${new_image#*@}" "$REPO" ;; esac
+env_set OSIGN_IMAGE "$new_image"
 docker pull "$(env_get OSIGN_IMAGE)" >/dev/null || fail "The image of $want could not be pulled."
 compose up -d --no-build >/dev/null
 if wait_healthy; then

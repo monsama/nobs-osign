@@ -24,8 +24,26 @@ app_key_ensure() {
     info "secrets/app_key generated"
 }
 
-# The image of the release in this folder: the version in docker-compose.yml.
-release_image() { grep -oE 'ghcr\.io/monsama/nobs-osign:[0-9]+\.[0-9]+\.[0-9]+' docker-compose.yml | head -1; }
+# The image of the release in this folder: by its digest as the release names it (IMAGE, since
+# 0.7.2: exactly the image that was scanned), else the version in docker-compose.yml.
+release_image() {
+    if [ -s IMAGE ] && grep -qE '^ghcr\.io/monsama/nobs-osign:[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}$' IMAGE; then head -1 IMAGE; return; fi
+    grep -oE 'ghcr\.io/monsama/nobs-osign:[0-9]+\.[0-9]+\.[0-9]+' docker-compose.yml | head -1
+}
+
+# Whether a release's file (or image, oci://…) was built by this repository's release workflow:
+# `gh attestation verify`, where the GitHub CLI is there and signed in. Without it only the
+# checksum is checked, unless OSIGN_REQUIRE_ATTESTATION=1 in .env, which then stops the update.
+attest_verify() {
+    local what="$1" repo="$2" must; must="$(env_get OSIGN_REQUIRE_ATTESTATION)"
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+        gh attestation verify "$what" --repo "$repo" >/dev/null 2>&1 || fail "The attestation of $what does not verify: it was not built by $repo's release workflow. Not installed."
+        info "Attestation verified: $(basename "$what") was built by $repo's release workflow"
+        return 0
+    fi
+    [ "$must" = 1 ] && fail "OSIGN_REQUIRE_ATTESTATION=1, but the GitHub CLI (gh) is not there or not signed in (gh auth login): the release cannot be checked."
+    warn "The release's attestation is not checked (no signed-in GitHub CLI, gh): only its checksum. See docs/SETUP.md, Updates."
+}
 
 # The network the shared proxy reaches the app on (made by NOBS Inventory; made here if it is not there yet).
 proxy_network() { docker network inspect "$PROXY_NET" >/dev/null 2>&1 || docker network create "$PROXY_NET" >/dev/null; }

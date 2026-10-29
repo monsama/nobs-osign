@@ -20,7 +20,7 @@ test('every setting Compose hands over is read by the server', () => {
 });
 
 test('every setting in .env.example reaches the container (or is the install\'s own)', () => {
-  const own = ['OSIGN_HOST', 'OSIGN_IMAGE', 'TZ', 'BACKUP_PASSPHRASE_FILE'];
+  const own = ['OSIGN_HOST', 'OSIGN_IMAGE', 'TZ', 'BACKUP_PASSPHRASE_FILE', 'OSIGN_REQUIRE_ATTESTATION'];
   const listed = [...read('.env.example').matchAll(/^#?\s*([A-Z_]+)=/gm)].map((m) => m[1]);
   for (const v of listed) assert.ok(own.includes(v) || compose.includes('${' + v + ':-'), v + ' is not handed to the container');
 });
