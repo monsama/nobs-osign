@@ -81,6 +81,11 @@ What changes, and what doesn't:
 | Draft | `%APPDATA%\OSign` | a volume (`OSIGN_DATA`), shared by everyone |
 | AD lookup | ADSI on a domain PC | LDAP to a DC, or Graph (`User.Read.All`) |
 
+`server/` is that new backend, in Node, under way: the API, the sign-in (Active Directory group
+or the local account `admin`) and the draft in `OSIGN_DATA` are there. Publishing still goes into a
+folder (`OSIGN_PUBLISH_DIR`) until it writes through Microsoft Graph; AD lookup and export, the
+add-in's files (uploaded to Cloudflare Pages) and the Docker setup follow.
+
 `OSign.ps1` already reads `OSIGN_DATA`. So it also runs as it is
 in a `mcr.microsoft.com/powershell` container, as a stopgap, publishing into a mounted folder. It
 would need a port mapping and a proxy in front: it only listens on 127.0.0.1 and has no sign-in of

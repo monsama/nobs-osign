@@ -163,6 +163,7 @@ The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows Powe
 | `shared/signature-core.js` | Placeholders, empty lines, who gets which signature. The editor's preview and the add-in both run this one file. |
 | `editor/OSign.ps1` | The editor's backend: local web server, draft, folder publishing, AD lookup, the add-in's files |
 | `editor/ui/` | The editor's web UI |
+| `server/` | The editor's backend for the container (under way): the same API, with a sign-in |
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
 | `tests/` | Engine, add-in runtime (with a stand-in Graph and SharePoint), backend API, editor and pane in a browser |
 

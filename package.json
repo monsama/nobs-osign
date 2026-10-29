@@ -6,10 +6,12 @@
   "scripts": {
     "build": "node addin/build.mjs",
     "test": "node addin/build.mjs && node --test \"tests/*.test.js\"",
-    "editor": "pwsh -NoProfile -File editor/OSign.ps1"
+    "editor": "pwsh -NoProfile -File editor/OSign.ps1",
+    "server": "node server/index.js"
   },
   "dependencies": {
-    "@azure/msal-browser": "4.26.1"
+    "@azure/msal-browser": "4.26.1",
+    "ldapjs": "3.0.7"
   },
   "devDependencies": {
     "esbuild": "0.25.11",

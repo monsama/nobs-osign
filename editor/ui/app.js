@@ -32,10 +32,13 @@
         keepalive: !!(opts && opts.keepalive)
       });
     } catch (e) {
-      if (!serverDown) { serverDown = true; toast(t('The OSign server is not running. Start OSign.ps1 again.'), true); }
-      throw new Error(t('The OSign server is not running.'));
+      // Without a start token this is the server version: it is not started by hand.
+      if (!serverDown) { serverDown = true; toast(TOKEN ? t('The OSign server is not running. Start OSign.ps1 again.') : t('The OSign server cannot be reached.'), true); }
+      throw new Error(TOKEN ? t('The OSign server is not running.') : t('The OSign server cannot be reached.'));
     }
     serverDown = false;
+    // The server version signs in with a page of its own: a session that ended goes back there.
+    if (r.status === 401 && !TOKEN) { location.replace('/login'); throw new Error(t('Not signed in.')); }
     let j;
     try { j = await r.json(); } catch (e) { throw new Error(t('The server answered {0}.', r.status)); }
     if (r.status === 401) throw new Error(t('This window is not signed in to the server: open the address OSign printed.'));
@@ -1381,6 +1384,16 @@
       applyDraft(draft);
       loadSnapshot();
       document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
+      if (info.features.signOut) {
+        const out = $('btnLogout');
+        out.hidden = false;
+        if (info.user) out.title = t('Signed in as {0}', info.user.name || info.user.login);
+        out.addEventListener('click', async () => {
+          if (saveTimer) await save();
+          try { await api('logout'); } catch (e) { /* signed out either way */ }
+          location.replace('/login');
+        });
+      }
       const wl = $('wizLang');
       Object.entries(I18N.langs).forEach(([k, v]) => wl.append(el('option', { value: k }, v)));
       wl.value = I18N.lang;

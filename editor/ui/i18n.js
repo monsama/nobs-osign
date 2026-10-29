@@ -366,7 +366,31 @@
     'Looking up groups needs Windows on a machine in the domain.': 'Gruppen suchen geht nur unter Windows auf einem PC in der Domäne.',
     'More than one user matches that.': 'Mehr als ein Benutzer passt dazu.',
     'The request is not valid JSON.': 'Die Anfrage ist kein gültiges JSON.',
-    'The configuration is not valid JSON.': 'Die Konfiguration ist kein gültiges JSON.'
+    'The configuration is not valid JSON.': 'Die Konfiguration ist kein gültiges JSON.',
+    // the server version: sign-in, and what it cannot do (yet)
+    'Sign in': 'Anmelden',
+    'Sign-in name': 'Anmeldename',
+    'Password': 'Passwort',
+    'Sign out': 'Abmelden',
+    'Signed in as {0}': 'Angemeldet als {0}',
+    'Your Windows sign-in name and password. Only members of the OSign group may sign in.': 'Ihr Windows-Anmeldename und Passwort. Anmelden können nur Mitglieder der OSign-Gruppe.',
+    'Active Directory is not set up on the server yet: sign in as admin.': 'Active Directory ist auf dem Server noch nicht eingerichtet: als admin anmelden.',
+    'The OSign server cannot be reached.': 'Der OSign-Server ist nicht erreichbar.',
+    'Enter your sign-in name and password.': 'Anmeldename und Passwort eingeben.',
+    'Too many wrong passwords for this name. Wait a quarter of an hour, then try again.': 'Zu viele falsche Passwörter für diesen Namen. In einer Viertelstunde nochmals versuchen.',
+    'Active Directory cannot be reached. The local account admin still works.': 'Active Directory ist nicht erreichbar. Das lokale Konto admin geht weiterhin.',
+    'You are not in the group that may use OSign. Ask IT to add you.': 'Sie sind nicht in der Gruppe, die OSign verwenden darf. Die Informatik kann Sie aufnehmen.',
+    'The sign-in name or the password is wrong.': 'Anmeldename oder Passwort ist falsch.',
+    'Not signed in.': 'Nicht angemeldet.',
+    'The request is too large.': 'Die Anfrage ist zu gross.',
+    'The server does not use a synced folder.': 'Der Server verwendet keinen synchronisierten Ordner.',
+    'Looking up users in Active Directory is not in the server version yet.': 'Benutzer in Active Directory suchen gibt es in der Server-Version noch nicht.',
+    'Looking up groups in Active Directory is not in the server version yet.': 'Gruppen in Active Directory suchen gibt es in der Server-Version noch nicht.',
+    'Reading users from Active Directory is not in the server version yet.': 'Benutzer aus Active Directory lesen gibt es in der Server-Version noch nicht.',
+    'Writing users from Active Directory is not in the server version yet.': 'Benutzer aus Active Directory schreiben gibt es in der Server-Version noch nicht.',
+    "Making the add-in's files is not in the server version yet.": 'Die Add-in-Dateien erstellen gibt es in der Server-Version noch nicht.',
+    "Checking the add-in's files is not in the server version yet.": 'Die Add-in-Dateien prüfen gibt es in der Server-Version noch nicht.',
+    'The server keeps running; sign out instead.': 'Der Server läuft weiter; stattdessen abmelden.'
   };
 
   DE.html = {
