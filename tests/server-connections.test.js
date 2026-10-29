@@ -86,6 +86,19 @@ test('set in the editor: AD sign-in and the service account work at once, withou
   assert.equal(info.user.local, false);
   const who = await api(anna.cookie, 'ad/lookup', { query: 'anna' });
   assert.equal(who.ok, true, who.error);
+  // Test, per part: for real, with what is saved.
+  let tst = await api(admin, 'connections/test', { what: 'signIn' });
+  assert.equal(tst.ok, true, tst.error);
+  assert.match(tst.message, /sign-in group is there/);
+  tst = await api(admin, 'connections/test', { what: 'directory' });
+  assert.equal(tst.ok, true, tst.error);
+  assert.match(tst.message, /reads users/);
+  assert.match((await api(admin, 'connections/test', { what: 'graph' })).error, /not set up/);
+  assert.match((await api(anna.cookie, 'connections/test', { what: 'signIn' })).error, /Only the local account admin/);
+  // A group that is not there is said as that.
+  await api(admin, 'connections/save', { values: { ldapGroup: 'CN=Nobody,OU=Groups,' + BASE } });
+  assert.match((await api(admin, 'connections/test', { what: 'signIn' })).error, /no sign-in group by that name/);
+  await api(admin, 'connections/save', { values: { ldapGroup: LDAP_VALUES().ldapGroup } });
 });
 
 test('only the local account admin may see or change the connections', async () => {
@@ -108,6 +121,12 @@ test('Graph set in the editor: publishing goes into SharePoint at once', async (
   assert.equal((await api(admin, 'info')).features.publishTarget, 'sharepoint');
   const found = await api(admin, 'sp/check', { spSite: SITE, spFolder: 'OSign' });
   assert.equal(found.ok, true, found.error);
+  // The site not saved yet: the test says the server may not reach it.
+  assert.match((await api(admin, 'connections/test', { what: 'graph' })).error, /may not reach the site yet/);
+  await api(admin, 'settings/save', { settings: { spSite: SITE, spFolder: 'OSign' } });
+  let tg = await api(admin, 'connections/test', { what: 'graph' });
+  assert.equal(tg.ok, true, tg.error);
+  assert.match(tg.message, /reaches the site of the signatures/);
   // When the secret runs out: said from 30 days before (the setup script sets the date itself).
   const soon = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
   assert.equal((await api(admin, 'connections/save', { values: { graphSecretExpires: soon } })).ok, true);

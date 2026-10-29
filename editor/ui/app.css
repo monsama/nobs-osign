@@ -380,3 +380,5 @@ th button.help { text-transform: none; }
 .form > div > small { display: block; margin-top: 3px; font-size: 11.5px; }
 .form > div > .pick { display: flex; gap: 6px; }
 @media (max-width: 640px) { .form { grid-template-columns: 1fr; } }
+.ctest { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--line-2); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ctest .where { font-size: 12px; }

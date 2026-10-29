@@ -307,6 +307,7 @@
         <div><span class="pick"><input id="connCaFile" type="file" accept=".cer,.crt,.pem"><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
           <small>(when it comes from your own CA: .cer, .crt or .pem)</small> <small id="connCa"></small></div>
       </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="signIn">Save and test the connection</button> <span class="where" data-ctestout="signIn"></span></p>
     </section>
 
     <section class="dpane" data-cpane="service" hidden>
@@ -323,6 +324,7 @@
         <label for="cn_adExportAt">Export the users' values every day at</label>
         <div><input id="cn_adExportAt" data-ph="06:00" autocomplete="off"></div>
       </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="directory">Save and test the connection</button> <span class="where" data-ctestout="directory"></span></p>
     </section>
 
     <section class="dpane" data-cpane="graph" hidden>
@@ -339,6 +341,7 @@
         <div><input id="cn_graphSecretExpires" type="date" data-ph="">
           <small>(as Entra shows it; set by the setup script by itself. The editor warns 30 days before)</small></div>
       </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="graph">Save and test the connection</button> <span class="where" data-ctestout="graph"></span></p>
     </section>
 
     <section class="dpane" data-cpane="pages" hidden>
@@ -351,6 +354,7 @@
         <label for="cs_cfApiToken">API token</label>
         <div><span class="pick"><input id="cs_cfApiToken" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="cfApiToken" hidden>Remove</button></span><small id="cx_cfApiToken"></small><small>(Cloudflare Pages: Edit)</small></div>
       </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="pages">Save and test the connection</button> <span class="where" data-ctestout="pages"></span></p>
     </section>
 
     <p id="connErr" class="err"></p>

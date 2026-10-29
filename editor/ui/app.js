@@ -1048,6 +1048,7 @@
     $('connErr').textContent = '';
   }
   // Server connections in tabs: one part at a time.
+  function connTestsClear() { document.querySelectorAll('#dlgConn [data-ctestout]').forEach((o) => { o.textContent = ''; o.className = 'where'; }); }
   function connTab(name) {
     document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => { b.classList.toggle('active', b.dataset.ctab === name); b.setAttribute('aria-selected', b.dataset.ctab === name); });
     document.querySelectorAll('#dlgConn [data-cpane]').forEach((p) => { p.hidden = p.dataset.cpane !== name; });
@@ -1055,7 +1056,7 @@
   document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
   $('setConn').addEventListener('click', async () => {
     $('setErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab('signin'); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('signin'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
   });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
@@ -1070,27 +1071,41 @@
     if (!f) return;
     connCaReading = new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
   });
-  $('connSave').addEventListener('click', async (e) => {
-    e.preventDefault();
+  // Saves what the dialog holds; the dialog stays open (Test) or closes (Save).
+  async function connSaveNow() {
     const values = {}, secrets = {};
     for (const k of CONN_FIELDS) values[k] = $('cn_' + k).value;
     for (const k of CONN_SECRETS) { if ($('cs_' + k).value) secrets[k] = $('cs_' + k).value; else if (connDrop[k]) secrets[k] = null; }
     const body = { values, secrets };
-    try {
-      // A CA file chosen just now may still be being read.
-      if (connCaReading) { connCa = await connCaReading; connCaReading = null; }
-      if (connCa !== undefined) body.ca = connCa;
-      const r = await api('connections/save', body);
-      // What the server can do now (publishing, AD, the upload) follows from what was saved.
-      const [info, st] = await Promise.all([api('info'), api('settings/get')]);
-      S.info = info; S.settings = st.settings; lastSettings = st;
-      wizConn = r; wizConnRender();
-      renderStatusBar();
-      if ($('dlgSettings').open) renderSettingsNotes(st);
-      $('dlgConn').close();
-      toast(t('Server connections saved.'));
-    } catch (err) { $('connErr').textContent = t(err.message); }
+    // A CA file chosen just now may still be being read.
+    if (connCaReading) { connCa = await connCaReading; connCaReading = null; }
+    if (connCa !== undefined) body.ca = connCa;
+    const r = await api('connections/save', body);
+    // What the server can do now (publishing, AD, the upload) follows from what was saved.
+    const [info, st] = await Promise.all([api('info'), api('settings/get')]);
+    S.info = info; S.settings = st.settings; lastSettings = st;
+    wizConn = r; wizConnRender();
+    renderStatusBar();
+    if ($('dlgSettings').open) renderSettingsNotes(st);
+    return r;
+  }
+  $('connSave').addEventListener('click', async (e) => {
+    e.preventDefault();
+    $('connErr').textContent = '';
+    try { await connSaveNow(); $('dlgConn').close(); toast(t('Server connections saved.')); }
+    catch (err) { $('connErr').textContent = t(err.message); }
   });
+  // Test: saved first, so what is tested is what the dialog shows; the answer next to the button.
+  document.querySelectorAll('#dlgConn [data-ctest]').forEach((b) => b.addEventListener('click', async () => {
+    const out = document.querySelector('#dlgConn [data-ctestout="' + b.dataset.ctest + '"]');
+    out.className = 'where'; out.textContent = t('Testing…'); b.disabled = true; $('connErr').textContent = '';
+    try {
+      renderConnections(await connSaveNow());
+      const r = await api('connections/test', { what: b.dataset.ctest });
+      out.className = 'where good'; out.textContent = '✓ ' + t(r.message);
+    } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); }
+    finally { b.disabled = false; }
+  }));
 
   // The server version: the files made go to Cloudflare Pages from the server.
   async function pagesUpload(out, btn) {
@@ -1557,7 +1572,7 @@
   }
   $('wizConnOpen').addEventListener('click', async () => {
     $('wizErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab('signin'); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('signin'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
   });
   // The setup script (server/setup.js): made for the folder and the add-in's address as saved,
   // downloaded, run on a Windows PC; its result comes back to the server, and here by asking.

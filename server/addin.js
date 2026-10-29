@@ -173,4 +173,18 @@ async function pagesDeploy(c, dir, fetchFn) {
   return { id: d.id, url: d.url, uploaded: todo.length, files: files.length };
 }
 
-module.exports = { templateDir, build, zip, check, pagesConfig, pagesEnabled, pagesProblem, pagesDeploy, pagesHash, walk };
+// Whether the token may work with this account's Pages ("Test" in Server connections), and whether
+// the project is there yet (it is made on the first upload).
+async function pagesTest(c, fetchFn) {
+  const problem = pagesProblem(c); if (problem) throw new Error(problem);
+  let r;
+  try { r = await fetchFn(c.api + '/accounts/' + c.account + '/pages/projects/' + c.project, { headers: { Authorization: 'Bearer ' + c.token }, signal: AbortSignal.timeout(20000) }); }
+  catch (e) { throw new Error('Cloudflare cannot be reached from the server: ' + e.message); }
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401 || r.status === 403) throw new Error('Cloudflare refused the API token (' + (((j.errors || [])[0] || {}).message || r.status) + '). It needs the permission Cloudflare Pages: Edit for this account.');
+  if (r.status === 404) return { project: false };
+  if (!r.ok) throw new Error('Cloudflare: ' + (((j.errors || [])[0] || {}).message || r.status));
+  return { project: true, url: 'https://' + ((j.result && j.result.subdomain) || c.project + '.pages.dev') };
+}
+
+module.exports = { pagesTest, templateDir, build, zip, check, pagesConfig, pagesEnabled, pagesProblem, pagesDeploy, pagesHash, walk };

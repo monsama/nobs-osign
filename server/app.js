@@ -12,8 +12,8 @@ const { createStore, ASSET_TYPES } = require('./store');
 const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
-const { ldapConfig, ldapProblem } = require('./ldap');
-const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith } = require('./directory');
+const { ldapConfig, ldapProblem, testSignIn } = require('./ldap');
+const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, testService } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
@@ -256,6 +256,38 @@ function createApp(opts) {
         knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
     },
     'setup/status': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : setup.status()),
+    // "Test" in Server connections: each part, with what is saved, for real. → { message } or { error }.
+    'connections/test': async (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
+      try {
+        if (d.what === 'signIn') {
+          const look = dir.serviceDn && dir.servicePassword ? { dn: dir.serviceDn, password: dir.servicePassword } : null;
+          const r = await testSignIn(ldapCfg, look);
+          if (r.group === false) return { error: 'The domain controller answers, but there is no sign-in group by that name: check the group\'s DN.' };
+          return { message: r.group ? 'The domain controller answers, and the sign-in group is there.' : 'The domain controller answers (TLS as set). With the service account set, the group is checked too.' };
+        }
+        if (d.what === 'directory') {
+          const r = await testService(dir);
+          return r.users ? { message: 'The service account signs in and reads users.' } : { error: 'The service account signs in, but sees no users with a mail address there: check where users and groups are read.' };
+        }
+        if (d.what === 'graph') {
+          if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
+          await graph.token();
+          const st = settings.get();
+          if (!st.spFolder) return { message: 'The server signs in to Microsoft 365. Choose the SharePoint folder in the setup assistant to check the site too.' };
+          try { await settings.target().exists(''); } catch (e) {
+            if (e.status === 401 || e.status === 403) return { error: 'The server signs in to Microsoft 365, but may not reach the site yet (Sites.Selected): run the setup script, or grant it as the setup assistant shows.' };
+            throw e;
+          }
+          return { message: 'The server signs in to Microsoft 365 and reaches the site of the signatures.' };
+        }
+        if (d.what === 'pages') {
+          const r = await addin.pagesTest(pages, fetchFn);
+          return { message: r.project ? 'The token works; the Pages project is there: ' + r.url : 'The token works; the Pages project is made on the first upload.' };
+        }
+        return { error: 'unknown' };
+      } catch (e) { return { error: e.message }; }
+    },
     // The server's connections (Settings → Server connections), for the local account admin.
     'connections/get': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : connectionsAnswer()),
     'connections/save': (d, s) => {
