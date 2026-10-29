@@ -25,9 +25,20 @@ session redirects to `/login`; `GET /health` answers `ok` to anyone, for health 
 - **login-methods** → `{ ok, local: bool, ad: bool }`: what the sign-in page offers.
 - **logout** → `{ ok }`, and the cookie removed.
 
-`info` answers `backend: "node"`, `user: { login, name }` and `features.signOut: true`. `folder` and
-`photosFolder` in the settings are the server's (`OSIGN_PUBLISH_DIR` and its `photos/`): sent
-values are ignored. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,
+`info` answers `backend: "node"`, `user: { login, name }`, `features.signOut: true`, and where
+publishing goes: `features.publishTarget` is `"sharepoint"` (through Microsoft Graph, with the
+server's own app registration `features.graphClientId`) or `"folder"` (the server's own folder,
+when Graph is not set up; `features.graphProblem` says what is missing).
+
+Publishing goes to the SharePoint site and folder of the add-in (`spSite`, `spFolder`): `publish`,
+`load-published` and `GET /photos/<name>` use it. `folder` in the settings answers where that is,
+in words (`SharePoint contoso.sharepoint.com/sites/IT › OSign`); `folder`, `photosFolder` and
+`addinFolder` sent are ignored. `settings/get` also answers `folderError` when SharePoint cannot be
+asked.
+
+- **sp/check** `{ spSite, spFolder }` → `{ ok, found, photos, where }`: whether the server reaches
+  that folder, before it is saved (the setup assistant). `found: false` means the site is reached
+  and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,
 `sp/*`, `ad/*`, `addin/*`, `quit`) answers `ok: false` with a sentence saying so.
 
 ## ping

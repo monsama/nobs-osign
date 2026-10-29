@@ -1,12 +1,13 @@
 /*
  * The settings the editor keeps, the same keys as editor/OSign.ps1 (see docs/API.md, settings/get).
  *
- * In the container two of them are the server's, not the editor's: folder (where Publish writes,
- * OSIGN_PUBLISH_DIR) and photosFolder (its photos/). They are answered, never saved, so nobody
- * signed in to the editor can point the server at another place on its disk.
+ * In the container the publish target is not a setting of its own: it is the SharePoint site and
+ * folder the add-in reads (spSite, spFolder), written through Microsoft Graph (server/graph.js),
+ * or the server's folder when Graph is not set up. folder, photosFolder and addinFolder are
+ * answered (where publishing goes, as words), never saved, so nobody signed in to the editor can
+ * point the server at another place on its disk.
  */
 'use strict';
-const fs = require('node:fs');
 const path = require('node:path');
 const { writeAtomic, readText } = require('./store');
 
@@ -14,6 +15,8 @@ const KEYS = ['folder', 'photosFolder', 'addinUrl', 'clientId', 'tenantId', 'spS
 const SERVER_KEYS = ['folder', 'photosFolder', 'addinFolder'];
 const DEFAULTS = { folder: '', photosFolder: '', addinUrl: '', clientId: '', tenantId: '', spSite: 'root', spFolder: 'OSign', addinFolder: '', addinHost: '', setupDone: '' };
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// How long what was found in SharePoint (is the folder there?) is believed.
+const FOUND_MS = 60 * 1000;
 
 // The same rules as Test-AddinSettings in OSign.ps1 and checkSetup in addin/fill.mjs. Empty values pass.
 function check(s) {
@@ -27,24 +30,36 @@ function check(s) {
   return null;
 }
 
-function createSettings(dataDir, publishDir) {
+// targetFor(settings) → where publishing goes for these settings (server/graph.js).
+function createSettings(dataDir, targetFor) {
   const file = path.join(dataDir, 'settings.json');
+  let found = null;
   function get() {
     const s = Object.assign({}, DEFAULTS);
     try {
       const saved = JSON.parse(readText(file) || '{}');
       for (const k of KEYS) if (saved[k] !== undefined && saved[k] !== null) s[k] = String(saved[k]);
     } catch (e) { /* defaults */ }
-    s.folder = publishDir; s.photosFolder = ''; s.addinFolder = '';
+    s.folder = targetFor(s).describe(); s.photosFolder = ''; s.addinFolder = '';
     return s;
   }
-  const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } };
-  function answer() {
+  const target = () => targetFor(get());
+  // Whether the folder and its photos/ are there; a target that cannot be asked says why.
+  async function where(t) {
+    const key = t.describe();
+    if (found && found.key === key && Date.now() - found.at < FOUND_MS) return found.value;
+    let value;
+    try { value = { folderFound: await t.exists(''), photosFound: await t.exists('photos'), folderError: '' }; }
+    catch (e) { value = { folderFound: false, photosFound: false, folderError: e.message }; }
+    found = { key, at: Date.now(), value };
+    return value;
+  }
+  async function answer() {
     const s = get();
-    return { settings: s, folderFound: isDir(publishDir), photosFound: isDir(path.join(publishDir, 'photos')) };
+    return Object.assign({ settings: s }, await where(targetFor(s)));
   }
   // Only what is sent changes; the rest stays as it was.
-  function save(sent) {
+  async function save(sent) {
     const s = get();
     for (const k of KEYS) {
       if (SERVER_KEYS.includes(k) || !sent || sent[k] === undefined || sent[k] === null) continue;
@@ -54,9 +69,10 @@ function createSettings(dataDir, publishDir) {
     const keep = {};
     for (const k of KEYS) if (!SERVER_KEYS.includes(k)) keep[k] = s[k];
     writeAtomic(file, JSON.stringify(keep));
+    found = null;
     return answer();
   }
-  return { get, answer, save, photosDir: () => path.join(publishDir, 'photos') };
+  return { get, answer, save, target, forget: () => { found = null; } };
 }
 
 module.exports = { createSettings, check };

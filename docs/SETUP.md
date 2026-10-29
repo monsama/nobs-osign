@@ -186,6 +186,52 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 - **OSign → Signatures** in the message toolbar opens the pane: insert another signature, or choose
   the one for new mail and for replies (if allowed under *Add-in*).
 
+## The editor on a server (under way)
+
+The editor is moving into a container (`server/`, Docker Compose like nobs-inventory). Admins
+sign in there with their Windows account (members of an AD group) instead of starting
+`OSign.ps1`, and the server writes into SharePoint itself, through Microsoft Graph: no synced
+folder, no PC. The Docker setup itself comes with a later version; these are the parts that are
+there already.
+
+**Its own app registration**, not the add-in's: the add-in reads with each user's sign-in, the
+server writes with its own.
+
+1. <https://entra.microsoft.com> → **App registrations** → **New registration**: name *OSign
+   server*, *Accounts in this organizational directory only*, no redirect URI.
+2. **Certificates & secrets** → **New client secret**. Note when it expires (at most 24 months):
+   after that, publishing says the server *could not sign in* until a new secret is in place.
+3. **API permissions** → **Add a permission** → **Microsoft Graph** → **Application permissions**
+   → **Sites.Selected** → **Grant admin consent**. This alone reaches no site yet.
+4. **Give it the one site** (once, as a SharePoint or Global administrator). The setup assistant
+   shows both requests with the right values. In Graph Explorer (<https://aka.ms/ge>), signed in:
+   - `GET https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/IT:?$select=id`
+     (for the home site: `…/sites/root?$select=id`), and copy the `id`;
+   - `POST https://graph.microsoft.com/v1.0/sites/<id>/permissions` with
+     `{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<client ID of OSign server>","displayName":"OSign server"}}]}`.
+     Graph Explorer asks for consent to *Sites.FullControl.All* for this.
+
+   `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every
+   site of the tenant.
+
+**Settings of the server** (environment variables; the secrets as files):
+
+| Variable | |
+|---|---|
+| `OSIGN_GRAPH_TENANT_ID`, `OSIGN_GRAPH_CLIENT_ID` | the tenant, and the client ID of *OSign server* |
+| `OSIGN_GRAPH_CLIENT_SECRET_FILE` | a file holding its client secret |
+| `OSIGN_ADMIN_PASSWORD_FILE` | a file holding the password of the local account `admin` |
+| `OSIGN_LDAP_URL` | `ldaps://dc01.example.ch` (or `ldap://…` with `OSIGN_LDAP_STARTTLS=1`) |
+| `OSIGN_LDAP_BIND`, `OSIGN_LDAP_BASE` | `{login}@example.ch`, `OU=Users,DC=example,DC=ch` |
+| `OSIGN_LDAP_GROUP` | who may sign in: `CN=OSign-Admins,OU=Groups,DC=example,DC=ch` (as a DN, nested groups count) |
+| `OSIGN_LDAP_CA` | the CA certificate the domain controller's certificate comes from, if it is not a public one |
+| `OSIGN_DATA` | the draft, its images and the settings (`/data`) |
+
+Where it publishes is the SharePoint site and folder of the add-in (Settings → *SharePoint site*,
+*Folder in its library*), so the editor writes exactly where Outlook reads. The folder and its
+`assets` are made on the first publish; `photos` and `users` are left alone. Without
+`OSIGN_GRAPH_*` the server publishes into a folder of its own (`OSIGN_PUBLISH_DIR`), for testing.
+
 ## When something is off
 
 | What | Why, and what to do |

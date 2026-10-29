@@ -390,10 +390,28 @@
     'Writing users from Active Directory is not in the server version yet.': 'Benutzer aus Active Directory schreiben gibt es in der Server-Version noch nicht.',
     "Making the add-in's files is not in the server version yet.": 'Die Add-in-Dateien erstellen gibt es in der Server-Version noch nicht.',
     "Checking the add-in's files is not in the server version yet.": 'Die Add-in-Dateien prüfen gibt es in der Server-Version noch nicht.',
-    'The server keeps running; sign out instead.': 'Der Server läuft weiter; stattdessen abmelden.'
+    'The server keeps running; sign out instead.': 'Der Server läuft weiter; stattdessen abmelden.',
+    // the server version: publishing through Microsoft Graph
+    'To {0}. New messages use it a minute or two later.': 'Nach {0}. Neue Mails verwenden es ein bis zwei Minuten später.',
+    'Publishing goes to {0}: the SharePoint site and folder of the add-in below, through Microsoft Graph.': 'Veröffentlicht wird nach {0}: Site und Ordner des Add-ins unten, über Microsoft Graph.',
+    "Publishing goes into the server's own folder ({0}), not to SharePoint: Microsoft Graph is not set up on the server.": 'Veröffentlicht wird in den eigenen Ordner des Servers ({0}), nicht nach SharePoint: Microsoft Graph ist auf dem Server nicht eingerichtet.',
+    'The folder is not there yet: it is made on the first publish.': 'Den Ordner gibt es noch nicht: Er wird beim ersten Veröffentlichen angelegt.',
+    'SharePoint cannot be reached: {0}': 'SharePoint ist nicht erreichbar: {0}',
+    "Publishing goes into the server's own folder, not to SharePoint: Microsoft Graph is not set up on the server.": 'Veröffentlicht wird in den eigenen Ordner des Servers, nicht nach SharePoint: Microsoft Graph ist auf dem Server nicht eingerichtet.',
+    '✓ Found in SharePoint: {0}': '✓ In SharePoint gefunden: {0}',
+    'The server reaches the site; the folder is not there yet and is made on the first publish: {0}': 'Der Server erreicht die Site; den Ordner gibt es noch nicht, er wird beim ersten Veröffentlichen angelegt: {0}',
+    'The server cannot reach this folder yet. Give it access as described below, then paste the link again. Next again to go on anyway.': 'Der Server erreicht diesen Ordner noch nicht. Zugriff wie unten beschrieben geben, dann den Link nochmals einfügen. Nochmals Weiter, um trotzdem fortzufahren.',
+    'The server may not reach this site yet: its app registration needs write access to it (Sites.Selected).': 'Der Server darf diese Site noch nicht erreichen: Seine App-Registrierung braucht Schreibzugriff darauf (Sites.Selected).',
+    'There is no such SharePoint site. Check the address.': 'Diese SharePoint-Site gibt es nicht. Die Adresse prüfen.',
+    'Name the folder in the site, like OSign.': 'Den Ordner in der Site angeben, z. B. OSign.',
+    'Publishing to SharePoint is not set up on the server (OSIGN_GRAPH_* in .env).': 'Veröffentlichen nach SharePoint ist auf dem Server nicht eingerichtet (OSIGN_GRAPH_* in .env).'
   };
 
   DE.html = {
+    wizGrantLead: '<b>Dem Server Schreibzugriff auf diese Site geben</b>, einmalig, als SharePoint- oder globaler Administrator. Seine App-Registrierung braucht die Anwendungsberechtigung <b>Sites.Selected</b> (mit Administratorzustimmung); damit erhält sie genau diese eine Site und keine andere:',
+    wizGrant1: '<code>https://aka.ms/ge</code> (Graph Explorer) öffnen, anmelden und diese Abfrage ausführen. Die <b>id</b> aus der Antwort kopieren:',
+    wizGrant2: '<b>POST</b> auf <code>https://graph.microsoft.com/v1.0/sites/&lt;id&gt;/permissions</code> mit diesem Inhalt ausführen (Graph Explorer fragt nach der Zustimmung für <i>Sites.FullControl.All</i>):',
+    wizGrant3: 'Danach den Link hier nochmals einfügen: OSign prüft den Zugriff.',
     fieldsLead: 'Ein Feld ist ein Platzhalter in einer Signatur, <code>@@givenName</code>, den das Add-in beim Einfügen mit dem Wert der Person füllt. Das Add-in liest die Werte aus Microsoft Graph, dem eigenen Profil der Person in Entra ID. <b>AD-Attribut</b> dient der Vorschau hier und wird aus dem Active Directory gelesen.',
     fieldsCallout: '<b>Ohne Graph-Quelle</b> bleibt ein Feld in Outlook leer. Graph kennt kein <code>description</code>, <code>homePhone</code> oder <code>info</code>. Um sie zu nutzen, sie mit Entra Connect aus dem AD synchronisieren, entweder nach <code>onPremisesExtensionAttributes.extensionAttribute1</code>…<code>15</code> (Exchange-Attribute) oder als Verzeichniserweiterungen (<code>extension_&lt;appId&gt;_description</code>), und diesen Pfad hier eintragen.',
     signinLead: 'Das Add-in meldet sich über Outlook an (ohne Passwortabfrage) und liest mit den Rechten der jeweiligen Person deren Angaben und Gruppen aus Entra ID und die Signaturen aus dem OSign-Ordner in SharePoint. Es verwendet eine App-Registrierung, die unter Einstellungen → Outlook-Add-in festgelegt wird, wenn die Dateien des Add-ins erstellt werden – nicht in den Signaturen. <a href="#" id="lnkSetup">So wird sie registriert</a>',

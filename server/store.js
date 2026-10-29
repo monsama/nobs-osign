@@ -2,8 +2,8 @@
  * The draft, its images, the settings and what was last published: the same files and rules as
  * editor/OSign.ps1 keeps in %APPDATA%\OSign, here in the data volume (OSIGN_DATA, /data).
  *
- * Publishing goes into a folder (OSIGN_PUBLISH_DIR) for now, laid out as the add-in reads it in
- * SharePoint: signatures.json, assets/<image>, photos/<user>.jpg, users/<mail>.json.
+ * Publishing goes into a target (server/graph.js), laid out as the add-in reads it in SharePoint:
+ * signatures.json, assets/<image>, photos/<user>.jpg, users/<mail>.json.
  */
 'use strict';
 const fs = require('node:fs');
@@ -112,37 +112,41 @@ function createStore(dataDir) {
     return {};
   }
 
-  // Publishing: images first, the configuration last (the add-in never reads one that points at
-  // images not there yet), and only what differs. photos/ and users/ are not touched.
-  function publish(root, text) {
+  // Publishing into a target (server/graph.js: SharePoint, or a folder on the disk): the images
+  // first, then the configuration (the add-in never reads one that points at images not there
+  // yet), then the images it no longer uses go. Only what differs is written. photos/ and users/
+  // are not touched.
+  async function publish(target, text) {
     const err = checkConfigJson(text); if (err) return { error: err };
     writeAtomic(draftFile, text);
-    const dst = path.join(root, 'assets');
-    fs.mkdirSync(dst, { recursive: true });
     let changed = false;
     const keep = new Set();
     for (const a of assets()) {
       keep.add(a.name);
-      const src = fs.readFileSync(path.join(assetDir, a.name)), to = path.join(dst, a.name);
-      if (!fs.existsSync(to) || sha256(fs.readFileSync(to)) !== sha256(src)) { writeAtomic(to, src); changed = true; }
+      const src = fs.readFileSync(path.join(assetDir, a.name));
+      const there = await target.read('assets/' + a.name);
+      if (!there || sha256(there) !== sha256(src)) { await target.write('assets/' + a.name, src, ASSET_TYPES[path.extname(a.name)]); changed = true; }
     }
-    for (const n of fs.readdirSync(dst)) {
-      if (!keep.has(n) && safeAssetName(n) === n) { fs.rmSync(path.join(dst, n), { force: true }); changed = true; }
+    const old = await target.read('signatures.json');
+    if (!old || old.toString('utf8') !== text) { await target.write('signatures.json', Buffer.from(text, 'utf8'), 'application/json'); changed = true; }
+    for (const n of await target.list('assets')) {
+      if (!keep.has(n) && safeAssetName(n) === n) { await target.remove('assets/' + n); changed = true; }
     }
-    const cfgFile = path.join(root, 'signatures.json');
-    if (readText(cfgFile) !== text) { writeAtomic(cfgFile, text); changed = true; }
     saveState(draftHash());
     return { changed };
   }
 
-  function loadPublished(root) {
-    const text = readText(path.join(root, 'signatures.json'));
-    if (!text) return { error: 'Nothing has been published there yet.' };
+  async function loadPublished(target) {
+    const buf = await target.read('signatures.json');
+    if (!buf) return { error: 'Nothing has been published there yet.' };
+    const text = buf.toString('utf8');
     const err = checkConfigJson(text); if (err) return { error: 'The published configuration: ' + err };
     const published = new Map();
-    let names = [];
-    try { names = fs.readdirSync(path.join(root, 'assets')); } catch (e) { /* none */ }
-    for (const n of names) if (safeAssetName(n) === n) published.set(n, fs.readFileSync(path.join(root, 'assets', n)));
+    for (const n of await target.list('assets')) {
+      if (safeAssetName(n) !== n) continue;
+      const bytes = await target.read('assets/' + n);
+      if (bytes) published.set(n, bytes);
+    }
     // The draft being replaced is kept, once, in case it held work that was never published.
     if (fs.existsSync(draftFile)) fs.copyFileSync(draftFile, draftFile + '.bak');
     writeAtomic(draftFile, text);
