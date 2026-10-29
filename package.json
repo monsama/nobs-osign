@@ -1,6 +1,6 @@
 {
   "name": "nobs-osign",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "Central email signatures for classic and new Outlook: an Outlook add-in, and the editor that publishes the signatures it reads.",
   "scripts": {

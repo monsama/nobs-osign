@@ -31,12 +31,14 @@ const PHOTO_CACHE_MS = 5 * 60 * 1000;
 const MAX_BODY = 4 * 1024 * 1024;
 
 // Never inside another site's frame, never read as another type; the page loads nothing but its
-// own files, plus images from https (an image a signature links to, shown in the preview).
+// own files, plus images from https (an image a signature links to, shown in the preview). It
+// talks to its server only, and to Microsoft's sign-in and Graph for the one step the admin does
+// with their own account (giving the server access to the site, in the setup assistant).
 const SECURITY = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
 };
 
 function send(res, status, type, body, extra) {
@@ -190,6 +192,7 @@ function createApp(opts) {
         // 'sharepoint': publishing goes through Graph; 'folder': into the server's folder.
         publishTarget: graph ? 'sharepoint' : 'folder',
         graphClientId: graph ? graphCfg.clientId : '',
+        graphTenantId: graph ? graphCfg.tenantId : '',
         graphProblem: graphProblem(graphCfg),
         // AD with the server's service account; the scheduled export, and how its last run went.
         adProblem: adOn ? '' : directoryProblem(dir),
@@ -338,6 +341,9 @@ function createApp(opts) {
       if (pathname === '/health') return send(res, 200, 'text/plain; charset=utf-8', 'ok');
       if (pathname === '/login') return sendFile(res, UI_DIR, 'login.html', STATIC_TYPES);
       if (pathname === '/ui/login.js' || pathname === '/ui/app.css' || pathname === '/ui/icon.svg' || pathname === '/ui/i18n.js') return sendFile(res, UI_DIR, pathname.slice(4), STATIC_TYPES);
+      // Where Microsoft's sign-in comes back to: a cross-site navigation, so without the session
+      // cookie (SameSite=Strict). It holds nothing; it hands the answer to the editor that opened it.
+      if (pathname === '/ui/signin.html' || pathname === '/ui/signin.js') return sendFile(res, UI_DIR, pathname.slice(4), STATIC_TYPES);
       const s = auth.session(req);
       if (pathname === '/' || pathname === '/index.html') {
         if (!s) { res.writeHead(302, Object.assign({ Location: '/login', 'Cache-Control': 'no-store' }, SECURITY)); return res.end(); }

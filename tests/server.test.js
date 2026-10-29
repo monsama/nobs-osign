@@ -110,6 +110,13 @@ test('without a sign-in: the sign-in page and the health check, nothing else', a
   assert.match(page.headers['content-security-policy'], /script-src 'self'/);
   assert.match(page.body.toString(), /loginForm/);
   for (const p of ['/ui/app.js', '/shared/signature-core.js', '/assets/x.png', '/photos/x.jpg']) assert.equal((await request(p)).status, 401, p);
+  // Where Microsoft's sign-in comes back to (a cross-site navigation, so no session cookie): it holds nothing.
+  const back = await request('/ui/signin.html');
+  assert.equal(back.status, 200);
+  assert.match(back.body.toString(), /signin\.js/);
+  assert.equal((await request('/ui/signin.js')).status, 200);
+  // The page may talk to Microsoft's sign-in and Graph, and nothing else besides its server.
+  assert.match(page.headers['content-security-policy'], /connect-src 'self' https:\/\/login\.microsoftonline\.com https:\/\/graph\.microsoft\.com;/);
   const info = await post('info', {});
   assert.equal(info.status, 401);
   assert.equal(info.json.ok, false);

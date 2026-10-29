@@ -342,6 +342,18 @@
       <div class="wiz-fields"><label>Language<select id="wizLang"></select></label></div>
     </section>
 
+    <!-- The server version, for the local account admin: what the server reaches by itself. -->
+    <section class="wiz-step" data-step="connect" data-title="The server's connections">
+      <p class="wiz-intro" data-th="wizConnLead">The server signs in people with Active Directory, writes the signatures into SharePoint
+        and uploads the add-in's files itself. Set up what you use: only <b>SharePoint</b> is needed to publish. All of it can be
+        changed later under <b>Settings → Server connections</b>.</p>
+      <ul id="wizConnList" class="checks"></ul>
+      <p><button type="button" id="wizConnOpen" class="primary">Set up the connections…</button></p>
+      <p class="wiz-note" data-th="wizConnApp">For SharePoint the server needs <b>an app registration of its own</b> in Entra ID (not the
+        add-in's): <b>Application permissions</b> → <b>Sites.Selected</b> with admin consent, and a client secret. The next step
+        shows how to give it the one site.</p>
+    </section>
+
     <section class="wiz-step" data-step="folder" data-title="Where the signatures are kept">
       <p class="wiz-intro" data-th="wizFolderLead">NOBS OSign keeps the signatures, their images and the photos in a folder in your company's SharePoint,
         where Outlook reads them with each user's own sign-in. Make a folder <b>OSign</b> there (with a folder <b>photos</b> in it), and tell
@@ -365,6 +377,25 @@
       <div id="wizGrant" class="wiz-note" hidden>
         <p data-th="wizGrantLead"><b>Give the server write access to this site</b>, once, as a SharePoint or Global administrator. Its app
           registration needs the application permission <b>Sites.Selected</b> (with admin consent); this grants it this one site and no other:</p>
+        <div class="wiz-ms">
+          <p data-th="wizGrantMsLead"><b>The quick way:</b> sign in here with your administrator account, and NOBS OSign makes the two
+            requests below for you. Your sign-in stays in this browser; the server never sees it. It needs a small app registration
+            of its own, once (not the server's, and not the add-in's): <b>NOBS OSign setup</b>, platform <b>Single-page
+            application</b> with this redirect URI, the delegated permission <b>Sites.FullControl.All</b>, and no client secret.
+            You can delete it once the site is granted.</p>
+          <span class="copyline"><code id="wizGrantRedirect"></code><button type="button" class="copy" data-copy="wizGrantRedirect">Copy</button></span>
+          <ul class="wiz-list" data-th="wizGrantMsSafe">
+            <li><b>Only for you:</b> grant no admin consent for it in Entra, and when you sign in, leave <i>Consent on behalf of
+              your organization</i> unticked. The consent then holds for your account only.</li>
+            <li><b>Only you may sign in:</b> Entra → Enterprise applications → NOBS OSign setup → Properties → <i>Assignment
+              required?</i> = Yes, and under Users and groups add only yourself.</li>
+            <li><b>Off afterwards:</b> once the site is granted, set <i>Enabled for users to sign-in?</i> = No, or delete the app.
+              Then the right exists only for the minute you need it.</li>
+          </ul>
+          <div class="wiz-fields"><label>Client ID of NOBS OSign setup<span class="pick"><input id="wizSetupClient" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"><button type="button" id="wizGrantGo">Sign in with Microsoft and grant</button></span></label></div>
+          <p id="wizGrantMsNote" class="where"></p>
+          <p data-th="wizGrantOr">Or by hand, in Graph Explorer:</p>
+        </div>
         <ol class="wiz-list">
           <li><span data-th="wizGrant1">Open <code>https://aka.ms/ge</code> (Graph Explorer), sign in, and run this request. Copy the <b>id</b> from
             the answer:</span> <span class="copyline"><code id="wizGrantGet"></code><button type="button" class="copy" data-copy="wizGrantGet">Copy</button></span></li>
