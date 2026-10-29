@@ -7,7 +7,7 @@ services:
   app:
     container_name: osign
     # Pinned release image (set OSIGN_IMAGE in .env). Built locally only if the pull is not possible.
-    image: ${OSIGN_IMAGE:-ghcr.io/monsama/osign:0.4.7}
+    image: ${OSIGN_IMAGE:-ghcr.io/monsama/osign:0.5.0}
     build: .
     restart: unless-stopped
     # No extra rights, and no writing outside its data: it needs neither.
