@@ -17,6 +17,7 @@ const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStart
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
+const { createHistory } = require('./history');
 const addin = require('./addin');
 
 const VERSION = require('../package.json').version;
@@ -97,6 +98,8 @@ function createApp(opts) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(publishDir, { recursive: true });
   const store = createStore(dataDir);
+  // What was published, to bring back (server/history.js).
+  const history = createHistory({ dataDir, assetDir: store.assetDir });
   // The connections (AD, Graph, Cloudflare): .env, with what the admin saved in the editor on top.
   // Each is read anew when that changes (configure, below), so no restart is needed.
   const connections = createConnections({ dataDir, env });
@@ -298,13 +301,24 @@ function createApp(opts) {
       log.info('connections: changed by ' + s.user.login);
       return connectionsAnswer();
     },
-    publish: async (d) => {
+    publish: async (d, s) => {
       const t = settings.target();
       let r;
       try { r = await store.publish(t, typeof d.configJson === 'string' ? d.configJson : ''); }
       catch (e) { return { error: e.message }; }
       settings.forget(); photos.clear();
+      // A version that differs from what was there: kept, with who and the note.
+      if (!r.error && r.changed) history.add({ by: s.user.name || s.user.login, message: d.message, configJson: d.configJson });
       return r.error ? r : { changed: r.changed, folder: t.describe() };
+    },
+    // The versions published, and one of them back into the draft (with its images).
+    'history/list': () => ({ versions: history.list() }),
+    'history/restore': (d) => {
+      const r = history.restore(String(d.id || ''));
+      if (r.error) return r;
+      const saved = store.saveDraft(r.configJson);
+      if (saved && saved.error) return saved;
+      return { at: r.at };
     },
     'load-published': async () => {
       try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }

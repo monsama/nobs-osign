@@ -291,3 +291,28 @@ test('what the server version cannot do is said plainly', async () => {
   assert.deepEqual(await api('ad/snapshot'), { ok: true, snapshot: null, matches: false });
   assert.equal((await post('nope', {}, admin)).status, 404);
 });
+
+test('history: each publish that changed something is kept with its images, and comes back into the draft', async () => {
+  const first = cfg([{ id: 'a', name: 'First version', html: '<p><img src="assets/hist-logo.png"></p>' }]);
+  assert.equal((await api('assets/upload', { name: 'hist-logo.png', data: PNG.toString('base64') })).ok, true);
+  assert.equal((await api('publish', { configJson: first, message: 'The first one' })).ok, true);
+  const before = (await api('history/list')).versions.length;
+  // The same again changes nothing, and is not kept twice.
+  await api('publish', { configJson: first, message: 'again' });
+  assert.equal((await api('history/list')).versions.length, before);
+  // Another version, without the logo.
+  await api('assets/delete', { name: 'hist-logo.png' });
+  const second = cfg([{ id: 'b', name: 'Second version', html: '<p>no logo</p>' }]);
+  await api('publish', { configJson: second, message: 'The second one' });
+  const { versions } = await api('history/list');
+  assert.equal(versions[0].message, 'The second one');
+  assert.equal(versions[1].message, 'The first one');
+  assert.equal(versions[0].by, 'admin');
+  // The first back into the draft: its configuration and its logo.
+  const r = await api('history/restore', { id: versions[1].id });
+  assert.equal(r.ok, true, r.error);
+  const d = await api('draft/get');
+  assert.equal(d.configJson, first);
+  assert.ok(d.assets.some((a) => a.name === 'hist-logo.png'), 'its image is back');
+  assert.match((await api('history/restore', { id: '../../etc' })).error, /no such version/);
+});

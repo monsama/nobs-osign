@@ -41,6 +41,7 @@
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
+      <li><a href="#" id="navHistory" class="nav">History <small>published versions</small></a></li>
     </ul>
   </nav>
 
@@ -196,6 +197,18 @@
   <span id="verFoot" class="sb-right"></span>
   <button type="button" id="keysBtn" class="sb-keys" title="Keyboard shortcuts">? Shortcuts</button>
 </footer>
+
+<dialog id="dlgHistory">
+  <form method="dialog" class="dlg wide">
+    <h2>Published versions</h2>
+    <p class="lead">Each publish is kept, with its images: the last 50. Loading one replaces the draft and its images; it goes out
+      when you publish it.</p>
+    <div class="table-wrap"><table class="fields history"><thead><tr><th>Published</th><th>By</th><th>What changed</th><th>Signatures</th><th></th></tr></thead>
+      <tbody id="historyRows"></tbody></table></div>
+    <p id="historyErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
 
 <dialog id="dlgKeys">
   <form method="dialog" class="dlg">

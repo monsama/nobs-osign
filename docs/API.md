@@ -60,6 +60,11 @@ asked.
   /setup/nobs-osign-setup.ps1?id=<id>` downloads it. **setup/status** → `{ state: none | waiting |
   failed | done, problem, result }` (never the secret). **setup/finish** is the script's: without a
   session, with its one-time code; its result goes into the settings and the server connections.
+- **history/list** → `{ ok, versions: [{ id, at, by, message, signatures, images }] }`: what was
+  published, newest first (each publish that changed something, with its images; the last 50).
+  **history/restore** `{ id }` puts that version and exactly its images into the draft.
+- **connections/test** `{ what: signIn | directory | graph | pages }` → `{ ok, message }`: that part
+  of the server's connections tried for real, with what is saved (for the local account `admin`).
 - **sp/share** `{ url }` → `{ ok, webUrl, name }`: where a sharing link of SharePoint or OneDrive
   (`https://…/:f:/…`) leads, through Graph (`/shares`), as the folder's own address; a link to a
   file, one that is gone, or one the app may not open answers `ok: false` with why.

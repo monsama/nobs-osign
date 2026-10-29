@@ -861,7 +861,7 @@
   Object.entries(OPTS).forEach(([id, k]) => $(id).addEventListener('change', () => { S.config.options[k] = $(id).checked; changed({ list: false }); }));
   $('lnkSetup').addEventListener('click', (e) => { e.preventDefault(); $('dlgHelp').showModal(); });
 
-  document.querySelectorAll('.nav-list a').forEach((a) => a.addEventListener('click', (e) => {
+  document.querySelectorAll('.nav-list a[data-view]').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault();
     // Not loaded yet (a slow server): nothing to show.
     if (!S.config) return;
@@ -1808,6 +1808,28 @@
     finally { $('pubGo').disabled = false; }
   });
 
+  // History: the versions published, and one of them back into the draft.
+  async function renderHistory() {
+    $('historyErr').textContent = '';
+    const tb = $('historyRows'); tb.replaceChildren(el('tr', null, el('td', { colspan: 5 }, t('Loading…'))));
+    let r;
+    try { r = await api('history/list'); } catch (err) { tb.replaceChildren(); $('historyErr').textContent = t(err.message); return; }
+    if (!r.versions.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted' }, t('Nothing published yet.')))); return; }
+    tb.replaceChildren(...r.versions.map((v, i) => el('tr', null,
+      el('td', null, new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB'), i === 0 ? el('span', { class: 'badge on', style: 'margin-left:6px' }, t('current')) : null),
+      el('td', null, v.by), el('td', null, v.message || '–'), el('td', null, String(v.signatures)),
+      el('td', null, el('button', { type: 'button', class: 'small', onclick: () => historyRestore(v) }, t('Load into the draft'))))));
+  }
+  async function historyRestore(v) {
+    if (!confirm(t('Replace the draft and its images with the version of {0}? What is not published is lost.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')))) return;
+    try {
+      await api('history/restore', { id: v.id });
+      applyDraft(await api('draft/get'));
+      $('dlgHistory').close();
+      toast(t('Loaded the version of {0} into the draft. Publish it to send it out.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')));
+    } catch (err) { $('historyErr').textContent = t(err.message); }
+  }
+  $('navHistory').addEventListener('click', (e) => { e.preventDefault(); $('dlgHistory').showModal(); renderHistory(); });
   $('btnLoad').addEventListener('click', async () => {
     if (S.dirty && !confirm(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'))) return;
     try { applyDraft(await api('load-published')); toast(t('Loaded the published signatures.')); }
