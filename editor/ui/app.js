@@ -828,7 +828,10 @@
   $('lnkSetup').addEventListener('click', (e) => { e.preventDefault(); $('dlgHelp').showModal(); });
 
   document.querySelectorAll('.nav-list a').forEach((a) => a.addEventListener('click', (e) => {
-    e.preventDefault(); flushSource();
+    e.preventDefault();
+    // Not loaded yet (a slow server): nothing to show.
+    if (!S.config) return;
+    flushSource();
     show(a.dataset.view);
     if (a.dataset.view === 'fields') renderFields(); else if (a.dataset.view === 'users') renderUsers(); else renderOptions();
   }));
@@ -1477,6 +1480,8 @@
       // The server version always has a target: the assistant opens until it was finished once.
       if (resume !== null || (S.settings.setupDone !== '1' && (onServer() || !S.settings.folder || !S.settings.clientId))) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
+      // Loaded: what waits for the editor (the tests) can go on.
+      document.documentElement.dataset.ready = '1';
     } catch (e) {
       document.body.classList.add('failed');
       $('main').replaceChildren(el('section', { class: 'view empty' }, el('h1', null, t('Not connected')), el('p', null, t(e.message))));
