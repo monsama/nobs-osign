@@ -10,6 +10,26 @@ The contract between `editor/ui` and any backend (`editor/OSign.ps1` today).
 - `GET /assets/<name>` serves a draft image, `GET /photos/<name>` a photo from the photos folder
   (no token: an `<img>` cannot send one).
 
+## The server version (`server/`)
+
+The container's backend answers the same API, behind a sign-in instead of a start token. It ignores
+the `Authorization` header; a session cookie (`osign_session`, HttpOnly, SameSite=Strict) counts
+instead. Every call except the three below needs one and gets HTTP 401 without it. A request whose
+`Origin` is not this site, or whose `Sec-Fetch-Site` says another site, gets 403. `GET /` without a
+session redirects to `/login`; `GET /health` answers `ok` to anyone, for health checks.
+
+- **login** `{ login, password }` → `{ ok, user: { login, name } }` and the cookie. `admin` is the
+  local account (its password from `OSIGN_ADMIN_PASSWORD_FILE`); any other name is checked against
+  Active Directory, and only members of `OSIGN_LDAP_GROUP` get in (403 otherwise). A wrong password
+  gets 401; five for one name within 15 minutes, 429; a directory that does not answer, 503.
+- **login-methods** → `{ ok, local: bool, ad: bool }`: what the sign-in page offers.
+- **logout** → `{ ok }`, and the cookie removed.
+
+`info` answers `backend: "node"`, `user: { login, name }` and `features.signOut: true`. `folder` and
+`photosFolder` in the settings are the server's (`OSIGN_PUBLISH_DIR` and its `photos/`): sent
+values are ignored. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,
+`sp/*`, `ad/*`, `addin/*`, `quit`) answers `ok: false` with a sentence saying so.
+
 ## ping
 
 Keeps the server from stopping when idle. → `{ ok }`

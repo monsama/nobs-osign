@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" translate="no" class="notranslate">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google" content="notranslate">
+<title>OSign</title>
+<link rel="icon" href="/ui/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/ui/app.css">
+<script src="/ui/i18n.js"></script>
+<script src="/ui/login.js" defer></script>
+</head>
+<body class="login-page">
+<main class="login-box">
+  <div class="brand"><img src="/ui/icon.svg" alt=""><span>OSign</span></div>
+  <h1>Sign in</h1>
+  <form id="loginForm" novalidate>
+    <label>Sign-in name <input id="loginName" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+    <label>Password <input id="loginPassword" type="password" autocomplete="current-password" required></label>
+    <p id="loginError" class="login-error" role="alert" hidden></p>
+    <button id="loginGo" class="primary" type="submit">Sign in</button>
+  </form>
+  <p id="loginHint" class="hint"></p>
+</main>
+</body>
+</html>
