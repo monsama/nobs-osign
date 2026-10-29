@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.7.0'
+$script:AppVersion = '0.7.1'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
