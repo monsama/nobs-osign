@@ -14,6 +14,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
   for (const s of granted) sites[s] = { files: new Map(), folders: new Set() };
   const requests = [];
   const shares = {};
+  const users = {};
   let busy = 0, tokens = 0;
 
   const server = http.createServer(async (req, res) => {
@@ -31,6 +32,21 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
     if (!/^Bearer tok-\d+$/.test(String(req.headers.authorization || ''))) return json(401, { error: { code: 'InvalidAuthenticationToken', message: 'Access token is empty.' } });
     if (busy > 0) { busy--; return json(429, { error: { code: 'TooManyRequests', message: 'slow down' } }, { 'Retry-After': '0' }); }
 
+    // Users and their groups (the preview of a real person from Entra ID), as the tests set them up.
+    let um;
+    if (req.method === 'GET' && (um = /^\/v1\.0\/users\/([^/]+)$/.exec(u.pathname))) {
+      if (users.denied) return json(403, { error: { code: 'Authorization_RequestDenied', message: 'Insufficient privileges' } });
+      const x = users[decodeURIComponent(um[1]).toLowerCase()];
+      return x ? json(200, x) : json(404, { error: { code: 'Request_ResourceNotFound', message: 'not found' } });
+    }
+    if (req.method === 'GET' && u.pathname === '/v1.0/users') {
+      const mail = (/mail eq '([^']*)'/.exec(u.searchParams.get('$filter') || '') || [])[1] || '';
+      return json(200, { value: Object.values(users).filter((x, i, all) => x.mail && x.mail.toLowerCase() === mail.toLowerCase() && all.indexOf(x) === i) });
+    }
+    if (req.method === 'GET' && (um = /^\/v1\.0\/users\/([^/]+)\/transitiveMemberOf\/microsoft\.graph\.group$/.exec(u.pathname))) {
+      const x = Object.values(users).find((y) => y.id === decodeURIComponent(um[1]));
+      return json(200, { value: (x && x.groups || []).map((g) => ({ displayName: g })) });
+    }
     // A sharing link, as the tests set it up (shares: link → { webUrl, name, folder }).
     const sh = /^\/v1\.0\/shares\/u!([A-Za-z0-9_-]+)\/driveItem$/.exec(u.pathname);
     if (sh && req.method === 'GET') {
@@ -87,7 +103,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
     return json(405, { error: { code: 'notAllowed', message: req.method + ' ' + suffix } });
   });
   return {
-    sites, requests, shares,
+    sites, requests, shares, users,
     busyOnce: () => { busy = 1; },
     listen: () => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve('http://127.0.0.1:' + server.address().port))),
     close: () => server.close()

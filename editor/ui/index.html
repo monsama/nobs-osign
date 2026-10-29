@@ -94,6 +94,7 @@
               <option value="sample">Sample values</option>
               <option value="empty">All fields empty</option>
               <option value="ad">User from Active Directory…</option>
+              <option value="entra" hidden>Person from Entra ID…</option>
             </select>
             <button type="button" class="help" data-help="hPreview" aria-label="Help">?</button>
             <span id="pvAd" class="pv-ad" hidden>
@@ -542,6 +543,8 @@
           <li>it sends the IDs and the secret straight to this server: nothing to copy;</li>
           <li>then it takes back the rights it used for this, and deletes itself.</li>
         </ul>
+        <label class="check block"><input type="checkbox" id="wizScriptUsers"> Let the server also read users and their groups from Entra ID,
+          for the preview of a real person (User.Read.All and GroupMember.Read.All, read-only)</label>
         <p><button type="button" id="wizScriptGet" class="primary">Download the setup script</button></p>
         <p data-th="wizScriptRun">Run it on a Windows PC, in PowerShell:</p>
         <span class="copyline"><code id="wizScriptCmd">powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"</code><button type="button" class="copy" data-copy="wizScriptCmd">Copy</button></span>

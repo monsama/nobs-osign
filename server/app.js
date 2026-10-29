@@ -18,6 +18,7 @@ const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
 const { createHistory } = require('./history');
+const core = require('../shared/signature-core.js');
 const addin = require('./addin');
 
 const VERSION = require('../package.json').version;
@@ -254,7 +255,7 @@ function createApp(opts) {
       if (adminOnly(s)) return { error: adminOnly(s) };
       if (!connections.answer().keyOk) return { error: 'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
       const st = settings.get();
-      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups,
+      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups, users: !!d.users,
         // The apps of an earlier run, the only ones the script may use again.
         knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
     },
@@ -344,6 +345,15 @@ function createApp(opts) {
       // Nothing typed: the one signed in, as OSign.ps1 takes the Windows user.
       const q = String(d.query || '').trim() || (s.user.local ? '' : s.user.login);
       try { return await lookup(dir, q, Array.isArray(d.fields) ? d.fields : []); } catch (e) { return { error: e.message }; }
+    },
+    // A person from Entra ID, for the preview: the fields with a Graph source, and the groups.
+    'entra/lookup': async (d) => {
+      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
+      const fields = (Array.isArray(d.fields) ? d.fields : []).filter((f) => f && f.key && f.graph).map((f) => ({ key: String(f.key), graph: String(f.graph) }));
+      try {
+        const r = await graph.user(d.query, core.graphSelect(fields));
+        return { values: core.valuesFromGraph(fields, r.user), displayName: r.user.displayName || d.query, groups: r.groups };
+      } catch (e) { return { error: e.message }; }
     },
     'ad/groups': async (d) => {
       if (!adOn) return { error: directoryProblem(dir) };

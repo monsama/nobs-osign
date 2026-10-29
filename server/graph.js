@@ -169,7 +169,38 @@ function createGraph(c, opts) {
     const j = await r.json();
     return { name: String(j.name || ''), webUrl: String(j.webUrl || ''), folder: !!j.folder };
   }
-  return { target, token, share };
+  // A user from Entra ID, for the preview ("Person from Entra ID"): by UPN or mail, the properties
+  // asked for, and the groups (nested ones too). Needs User.Read.All and GroupMember.Read.All
+  // (application), which the setup script gives the server's app when asked to.
+  async function user(query, select) {
+    const q = String(query || '').trim();
+    if (!q) throw new Error('Enter a user name or mail address.');
+    const sel = '$select=' + encodeURIComponent(['id', 'displayName'].concat(select || []).join(','));
+    let u = null;
+    try {
+      const r = await call('GET', c.graphUrl + '/users/' + encodeURIComponent(q) + '?' + sel, { what: 'Reading the user', okStatus: [404] });
+      if (r.status !== 404) u = await r.json();
+      if (!u) {
+        const f = await call('GET', c.graphUrl + '/users?$filter=' + encodeURIComponent("mail eq '" + q.replace(/'/g, "''") + "'") + '&' + sel, { what: 'Reading the user' });
+        const list = (await f.json()).value || [];
+        if (list.length > 1) throw new Error('More than one user has the mail address ' + q + '.');
+        u = list[0] || null;
+      }
+      if (!u) throw new Error('No user ' + q + ' in Entra ID.');
+      const groups = new Set();
+      let next = c.graphUrl + '/users/' + encodeURIComponent(u.id) + '/transitiveMemberOf/microsoft.graph.group?$select=displayName,onPremisesSamAccountName&$top=999';
+      while (next) {
+        const g = await (await call('GET', next, { what: 'Reading the user\'s groups' })).json();
+        for (const x of g.value || []) for (const n of [x.onPremisesSamAccountName, x.displayName]) if (n) groups.add(n);
+        next = g['@odata.nextLink'] || null;
+      }
+      return { user: u, groups: [...groups].sort((a, b) => a.localeCompare(b)) };
+    } catch (e) {
+      if (e.status === 403 || e.status === 401) throw new Error("The server's app may not read users from Entra ID (User.Read.All, GroupMember.Read.All): run the setup script again with that box ticked.");
+      throw e;
+    }
+  }
+  return { target, token, share, user };
 }
 
 // The same, in a folder on the disk: for a server without Graph (development, tests).

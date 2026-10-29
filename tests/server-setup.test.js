@@ -37,9 +37,9 @@ test.before(async () => {
 test.after(() => { srv.close(); ms.close(); });
 const api = (name, data, cookie) => fetch(base + '/api/' + name, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, cookie === null ? {} : { Cookie: cookie || admin }), body: JSON.stringify(data || {}) }).then((r) => r.json());
 
-async function makeScript(groups) {
+async function makeScript(groups, users) {
   await api('settings/save', { settings: { spSite: SITE, spFolder: 'OSign', addinUrl: 'https://osign.contoso.com/' } });
-  const s = await api('setup/start', { origin: base, groups });
+  const s = await api('setup/start', { origin: base, groups, users });
   assert.equal(s.ok, true, s.error);
   const r = await fetch(base + '/setup/nobs-osign-setup.ps1?id=' + s.id, { headers: { Cookie: admin } });
   assert.equal(r.status, 200);
@@ -59,7 +59,7 @@ test('the setup script: both apps, the site, the result to the server, the right
   // Someone else registered apps with these names first: they are never used.
   ms.state.apps.push({ id: 'obj-planted', appId: '99999999-9999-9999-9999-999999999999', displayName: 'NOBS OSign server', owners: ['someone-else'], requiredResourceAccess: [] });
   ms.state.apps.push({ id: 'obj-planted2', appId: '88888888-8888-8888-8888-888888888888', displayName: 'NOBS OSign', owners: ['someone-else'], requiredResourceAccess: [] });
-  const file = await makeScript(true);
+  const file = await makeScript(true, true);
   const text = fs.readFileSync(file, 'utf8');
   assert.ok(text.startsWith('﻿'), 'with a BOM for Windows PowerShell');
   assert.match(text, /\$Site = 'contoso\.sharepoint\.com:\/sites\/osign:'/);
@@ -80,9 +80,9 @@ test('the setup script: both apps, the site, the result to the server, the right
   const addinSp = st.sps.find((s) => s.appId === addin.appId);
   assert.equal(st.grants.find((g) => g.clientId === addinSp.id).scope, 'User.Read Sites.Read.All GroupMember.Read.All');
   assert.equal(st.grants.find((g) => g.clientId === addinSp.id).consentType, 'AllPrincipals');
-  assert.deepEqual(server.requiredResourceAccess[0].resourceAccess, [{ id: 'role-sites-selected', type: 'Role' }]);
-  assert.equal(st.roleAssignments.length, 1);
-  assert.equal(st.roleAssignments[0].appRoleId, 'role-sites-selected');
+  assert.deepEqual(server.requiredResourceAccess[0].resourceAccess.map((x) => x.id), ['role-sites-selected', 'role-users', 'role-groups']);
+  // Sites.Selected, and (asked for) reading users and groups for the preview.
+  assert.deepEqual(st.roleAssignments.map((r) => r.appRoleId).sort(), ['role-groups', 'role-sites-selected', 'role-users']);
   assert.deepEqual(st.sitePerms.map((x) => [x.roles, x.grantedToIdentitiesV2[0].application.id]), [[['write'], server.appId]]);
   // The sign-in's consent is gone again.
   assert.equal(st.grants.find((g) => g.id === 'grant-cli-me'), undefined);
@@ -110,7 +110,7 @@ test('the setup script: both apps, the site, the result to the server, the right
   const again = await run(await makeScript(false));
   assert.equal(again.code, 0, again.out);
   assert.equal(st.apps.length, 4);
-  assert.equal(st.roleAssignments.length, 1);
+  assert.equal(st.roleAssignments.length, 3);
   assert.equal(st.sitePerms.length, 1);
   assert.equal(st.passwords.length, 2, 'a new secret each time');
   assert.equal(addin.requiredResourceAccess[0].resourceAccess.length, 3, 'what it asked for stays');

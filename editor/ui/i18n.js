@@ -401,6 +401,11 @@
     'Name the folder in the site, like OSign.': 'Den Ordner in der Site angeben, z. B. OSign.',
     'Publishing to SharePoint is not set up on the server (Settings → Server connections).': 'Veröffentlichen nach SharePoint ist auf dem Server nicht eingerichtet (Einstellungen → Server-Verbindungen).',
     // server connections
+    'Person from Entra ID…': 'Person aus Entra ID…',
+    'Let the server also read users and their groups from Entra ID, for the preview of a real person (User.Read.All and GroupMember.Read.All, read-only)': 'Den Server auch Benutzer und ihre Gruppen aus Entra ID lesen lassen, für die Vorschau einer echten Person (User.Read.All und GroupMember.Read.All, nur lesend)',
+    "The server's app may not read users from Entra ID (User.Read.All, GroupMember.Read.All): run the setup script again with that box ticked.": 'Die App des Servers darf keine Benutzer aus Entra ID lesen (User.Read.All, GroupMember.Read.All): Führen Sie das Setup-Skript mit diesem Häkchen erneut aus.',
+    'Reading the user': 'Benutzer lesen',
+    "Reading the user's groups": 'Gruppen des Benutzers lesen',
     'History': 'Verlauf',
     'published versions': 'veröffentlichte Versionen',
     'Published versions': 'Veröffentlichte Versionen',

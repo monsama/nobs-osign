@@ -568,7 +568,7 @@
 
   function previewValues() {
     const src = $('pvSource').value, v = {};
-    S.config.fields.forEach((f) => { v[f.key] = src === 'sample' ? (f.sample || '') : src === 'ad' && S.adValues ? (S.adValues[f.key] || '') : ''; });
+    S.config.fields.forEach((f) => { v[f.key] = src === 'sample' ? (f.sample || '') : (src === 'ad' || src === 'entra') && S.adValues && S.adFrom === src ? (S.adValues[f.key] || '') : ''; });
     return v;
   }
 
@@ -588,7 +588,7 @@
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
       ? t('No Graph source, so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))
       : t('No source (neither Graph nor AD attribute), so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))));
-    if ($('pvSource').value === 'ad' && S.adName) {
+    if (($('pvSource').value === 'ad' || $('pvSource').value === 'entra') && S.adName && S.adFrom === $('pvSource').value) {
       // What this user would get, as the add-in decides it (the From address being their own).
       const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
       const nm = (x) => (x ? x.name : t('none'));
@@ -601,17 +601,24 @@
   }
 
   $('pvSource').addEventListener('change', () => {
+    const entra = $('pvSource').value === 'entra';
     const ad = $('pvSource').value === 'ad';
-    $('pvAd').hidden = !ad;
+    $('pvAd').hidden = !ad && !entra;
+    if (entra && !S.adValues) $('pvUser').focus();
     if (ad && !(S.info && S.info.features && S.info.features.adLookup)) toast(onServer() ? t('Active Directory is not set up on the server: {0}', t(S.info.features.adProblem)) : t('Active Directory is not reachable from here: this needs Windows on a machine in the domain.'), true);
     if (ad && !S.adValues) $('pvUser').focus();
     renderPreview();
   });
   $('pvText').addEventListener('change', renderPreview);
+  // A real person's values and groups: from AD (the service account) or from Entra ID (the
+  // server's app), whichever the preview is set to.
   async function adLookup() {
+    const from = $('pvSource').value === 'entra' ? 'entra' : 'ad';
     try {
-      const r = await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
-      S.adValues = r.values; S.adName = r.displayName; S.adGroups = r.groups || []; renderPreview();
+      const r = from === 'entra'
+        ? await api('entra/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, graph: f.graph })) })
+        : await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
+      S.adValues = r.values; S.adName = r.displayName; S.adGroups = r.groups || []; S.adFrom = from; renderPreview();
     } catch (e) { toast(t(e.message), true); }
   }
   $('pvLookup').addEventListener('click', adLookup);
@@ -1604,7 +1611,7 @@
     const out = $('wizScriptNote');
     out.className = 'where'; $('wizErr').textContent = '';
     try {
-      const r = await api('setup/start', { origin: location.origin, groups: radio('wvsrc') === 'graph' });
+      const r = await api('setup/start', { origin: location.origin, groups: radio('wvsrc') === 'graph', users: $('wizScriptUsers').checked });
       const a = el('a', { href: '/setup/nobs-osign-setup.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-setup.ps1' });
       document.body.append(a); a.click(); a.remove();
       out.textContent = t('Downloaded. Run it now: this page goes on by itself when it is done (the script is valid until {0}).', new Date(r.until).toLocaleTimeString());
@@ -1887,6 +1894,7 @@
       loadSnapshot();
       document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
       if (onServer()) serverTexts();
+      document.querySelector('#pvSource option[value=entra]').hidden = !(onServer() && info.features.publishTarget === 'sharepoint');
       if (info.features.signOut) {
         const out = $('btnLogout');
         out.hidden = false;

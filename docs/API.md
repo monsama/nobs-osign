@@ -60,6 +60,9 @@ asked.
   /setup/nobs-osign-setup.ps1?id=<id>` downloads it. **setup/status** → `{ state: none | waiting |
   failed | done, problem, result }` (never the secret). **setup/finish** is the script's: without a
   session, with its one-time code; its result goes into the settings and the server connections.
+- **entra/lookup** `{ query, fields: [{ key, graph }] }` → `{ ok, values, displayName, groups }`: a real
+  person from Entra ID for the preview, by UPN or mail, through the server's app (it needs
+  User.Read.All and GroupMember.Read.All, which the setup script gives when asked to).
 - **history/list** → `{ ok, versions: [{ id, at, by, message, signatures, images }] }`: what was
   published, newest first (each publish that changed something, with its images; the last 50).
   **history/restore** `{ id }` puts that version and exactly its images into the draft.
