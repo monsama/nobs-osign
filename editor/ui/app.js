@@ -829,7 +829,9 @@
       else if (!x) text += ' ' + t('The server does not export them by itself (no daily time in Settings → Server connections): the values change only when you publish.');
       else {
         text += ' ' + t('The server exports them every day at {0}.', x.at);
-        if (x.last) text += ' ' + (x.last.ok ? t('Last run {0}: fine.', new Date(x.last.at).toLocaleString(I18N.lang)) : t('Last run {0} failed: {1}', new Date(x.last.at).toLocaleString(I18N.lang), x.last.error));
+        const when = x.last && new Date(x.last.at).toLocaleString(I18N.lang);
+        // Skipped (nothing published that takes values from AD, or AD answered nobody): said as that.
+        if (x.last) text += ' ' + (!x.last.ok ? t('Last run {0} failed: {1}', when, t(x.last.error)) : x.last.result && x.last.result.skipped ? t('Last run {0}: skipped, {1}', when, t(x.last.result.skipped)) : t('Last run {0}: fine.', when));
       }
       sn.textContent = text;
       sn.className = 'lead' + (!f.adLookup || (x && x.last && !x.last.ok) ? ' warn' : '');
@@ -947,10 +949,13 @@
     document.querySelector('#dlgSettings [data-th=addinLead]').hidden = onServer();
     document.querySelector('#dlgSettings [data-th=addinLeadServer]').hidden = !onServer();
     $('setAddinBuild').closest('p').hidden = onServer() && $('setAddinBuild').disabled;
-    // The server's connections: the local account admin's alone (server/connections.js).
+    // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = !(onServer() && S.info.user && S.info.user.local);
+    const locked = onServer() && !(S.info.user && S.info.user.local);
+    $('setLocked').hidden = !locked;
+    for (const [id] of ADDIN_FIELDS) $(id).disabled = locked;
     $('setAddinUpload').hidden = true; $('setAddinZip').hidden = true;
-    $('setAddinOk').textContent = $('setAddinBuild').disabled ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
+    $('setAddinOk').textContent = $('setAddinBuild').disabled && !onServer() ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
     $('setWhere').textContent = '';
@@ -1017,7 +1022,7 @@
     line('connDirectory', r.problems.directory, 'Ready: the editor reads the users\' values from AD.');
     line('connGraph', r.problems.graph, 'Ready: publishing goes into SharePoint.');
     line('connPages', r.problems.pages, 'Ready: the add-in\'s files can be uploaded from here.');
-    connDrop = {}; connCa = undefined;
+    connDrop = {}; connCa = undefined; connCaReading = null;
     $('connErr').textContent = '';
   }
   $('setConn').addEventListener('click', async () => {
@@ -1030,11 +1035,12 @@
     connDrop[b.dataset.drop] = true; b.hidden = true;
     $('cx_' + b.dataset.drop).textContent = t('Removed when you save.');
   });
-  $('connCaRemove').addEventListener('click', () => { connCa = null; $('connCaRemove').hidden = true; $('connCa').textContent = t('Removed when you save.'); });
+  $('connCaRemove').addEventListener('click', () => { connCa = null; connCaReading = null; $('connCaRemove').hidden = true; $('connCa').textContent = t('Removed when you save.'); });
+  let connCaReading = null;
   $('connCaFile').addEventListener('change', async () => {
     const f = $('connCaFile').files[0];
     if (!f) return;
-    connCa = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+    connCaReading = new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
   });
   $('connSave').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -1042,13 +1048,17 @@
     for (const k of CONN_FIELDS) values[k] = $('cn_' + k).value;
     for (const k of CONN_SECRETS) { if ($('cs_' + k).value) secrets[k] = $('cs_' + k).value; else if (connDrop[k]) secrets[k] = null; }
     const body = { values, secrets };
-    if (connCa !== undefined) body.ca = connCa;
     try {
+      // A CA file chosen just now may still be being read.
+      if (connCaReading) { connCa = await connCaReading; connCaReading = null; }
+      if (connCa !== undefined) body.ca = connCa;
       const r = await api('connections/save', body);
       // What the server can do now (publishing, AD, the upload) follows from what was saved.
-      S.info = await api('info');
-      renderConnections(r);
+      const [info, st] = await Promise.all([api('info'), api('settings/get')]);
+      S.info = info; S.settings = st.settings; lastSettings = st;
       wizConn = r; wizConnRender();
+      if ($('dlgSettings').open) renderSettingsNotes(st);
+      $('dlgConn').close();
       toast(t('Server connections saved.'));
     } catch (err) { $('connErr').textContent = t(err.message); }
   });
@@ -1202,6 +1212,21 @@
     wiz.checking = detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null).then(wizPermNote);
   });
 
+  // The texts that speak of "this PC" (OSign.ps1 on Windows): on the server, what it does instead.
+  const SERVER_TEXTS = {
+    wizValuesNote: ['You can change this at any time under <b>Add-in</b>. The server reads Active Directory itself, with its service account (<b>Settings → Server connections</b>).',
+      'Sie können das jederzeit unter <b>Add-in</b> ändern. Active Directory liest der Server selbst, mit seinem Dienstkonto (<b>Einstellungen → Server-Verbindungen</b>).'],
+    wizFolderLead: ['NOBS OSign keeps the signatures, their images and the photos in a folder in your company\'s SharePoint, where Outlook reads them with each user\'s own sign-in. Make a folder <b>OSign</b> there (with a folder <b>photos</b> in it), and paste its address here: the server writes into it through Microsoft Graph.',
+      'NOBS OSign bewahrt die Signaturen, ihre Bilder und die Fotos in einem Ordner im SharePoint Ihrer Firma auf, wo Outlook sie mit der Anmeldung der jeweiligen Person liest. Legen Sie dort einen Ordner <b>OSign</b> an (mit einem Ordner <b>photos</b> darin) und fügen Sie seine Adresse hier ein: der Server schreibt über Microsoft Graph hinein.'],
+    hSpSite: ['Where the add-in finds the OSign folder in SharePoint, and where the server publishes. <code>root</code> is the home site (<code>https://&lt;tenant&gt;.sharepoint.com</code>). Paste the folder\'s address from the browser or a sharing link to it; NOBS OSign converts it, e.g. to <code>contoso.sharepoint.com:/sites/IT:</code>.',
+      'Wo das Add-in den OSign-Ordner in SharePoint findet und wohin der Server veröffentlicht. <code>root</code> ist die Startseite (<code>https://&lt;tenant&gt;.sharepoint.com</code>). Fügen Sie die Adresse des Ordners aus dem Browser oder einen Freigabelink ein; NOBS OSign wandelt sie um, z. B. in <code>contoso.sharepoint.com:/sites/IT:</code>.'],
+    hPreview: ['<b>Sample values</b>: each field\'s sample value (see <i>Fields</i>). <b>All fields empty</b>: shows which lines disappear. <b>User from Active Directory</b>: a real user\'s values and groups, read from AD by the server; shows which signature they would get.',
+      '<b>Beispielwerte</b>: der Beispielwert jedes Feldes (siehe <i>Felder</i>). <b>Alle Felder leer</b>: zeigt, welche Zeilen wegfallen. <b>Benutzer aus Active Directory</b>: die Werte und Gruppen einer echten Person, vom Server aus AD gelesen; zeigt, welche Signatur sie bekäme.']
+  };
+  function serverTexts() {
+    for (const [k, [en, de]] of Object.entries(SERVER_TEXTS)) document.querySelectorAll('[data-th="' + k + '"]').forEach((e) => { e.innerHTML = I18N.lang === 'de' ? de : en; });
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Setup assistant: opens by itself until it was finished once, while NOBS OSign is not set up
   // (no publish folder or no app registration). Each step saves what it asks for.
@@ -1213,7 +1238,7 @@
     // The server's connections: only on the server, and only for who may set them.
     && !(n === 'connect' && !(onServer() && S.info.user && S.info.user.local)));
   const WIZ_KEY = 'osign.wizStep';
-  const wiz = { step: 0, built: false, warned: '', checking: null, spOk: false };
+  const wiz = { step: 0, built: false, warned: '', checking: null, spOk: false, checkSeq: 0, scriptWaiting: false };
   const stored = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no storage */ } return null; };
   const radio = (name) => (document.querySelector('input[name=' + name + ']:checked') || {}).value || '';
   const setRadio = (name, v) => document.querySelectorAll('input[name=' + name + ']').forEach((r) => { r.checked = r.value === v; });
@@ -1233,7 +1258,7 @@
     setRadio('whost', st.addinHost || 'cloudflare');
     $('wizUrl').value = st.addinUrl || '';
     $('wizClientId').value = st.clientId || ''; $('wizTenantId').value = st.tenantId || '';
-    $('wizSpSite').value = st.spSite || 'root'; $('wizSpFolder').value = st.spFolder || 'OSign';
+    if (onServer()) { $('wizSpSite').value = st.spSite || 'root'; $('wizSpFolder').value = st.spFolder || 'OSign'; }
     $('wizAddinFolder').value = st.addinFolder || (S.info.backend === 'powershell' && navigator.platform.startsWith('Win') ? 'C:\\OSign-addin' : '');
   }
   function wizRender() {
@@ -1248,6 +1273,8 @@
     $('wizLater').hidden = name === 'done';
     $('wizErr').textContent = '';
     $('wizScript').hidden = !(name === 'app' && wizHasScript());
+    // Back on the step while the script is out: ask again (the answer may be there already).
+    if (name === 'app' && wiz.scriptWaiting && !wizScriptTimer) wizScriptPoll();
     const host = radio('whost');
     // The server uploads to its own Pages project: its address is known before the first upload.
     const project = onServer() && host === 'cloudflare' && S.info.features && S.info.features.pagesProject;
@@ -1309,7 +1336,7 @@
     if (!p.folder && sharing) return shareHelp(out, v, t('A sharing link does not say which folder it is.'));
     if (!p.folder) return warn(t('This address does not say which folder it is. Open the folder in the browser and copy the address from the address bar.'));
     $('wizSpSite').value = p.site; $('wizSpFolder').value = p.folder;
-    if (onServer()) { await wizServerCheck(p.site, p.folder); return; }
+    if (onServer()) { await wizServerCheck(p.site, p.folder, true); return; }
     let r = { found: false };
     try { r = await api('sp/local', { url: p.url }); } catch (e) { /* said below */ }
     if (r.found && r.exists) {
@@ -1338,22 +1365,26 @@
 
   // The server version writes there itself: whether it reaches the site and folder, said under the
   // link, with how to give it access when it does not.
-  async function wizServerCheck(site, folder) {
-    const out = $('wizLinkNote');
+  // given: the admin entered or tested this address (not only what is saved, checked on opening).
+  async function wizServerCheck(site, folder, given) {
+    const out = $('wizLinkNote'), my = ++wiz.checkSeq;
     out.textContent = ''; out.className = 'where';
     wiz.spOk = false;
     wizGrantFill(site);
     $('wizSpSite').value = site; $('wizSpFolder').value = folder;
     try {
       const c = await api('sp/check', { spSite: site, spFolder: folder });
+      // A newer check (another address, Test) came in meanwhile: that one says.
+      if (my !== wiz.checkSeq) return;
       wiz.spOk = true;
       $('wizGrant').hidden = true;
       out.textContent = c.found ? t('✓ Found in SharePoint: {0}', c.where) : t('The server reaches the site; the folder is not there yet and is made on the first publish: {0}', c.where);
       out.classList.add('good');
     } catch (e) {
+      if (my !== wiz.checkSeq) return;
       // Microsoft 365 not set up yet: the setup script does it (step "Register the app"), and the
       // folder is checked then.
-      if (!toSharePoint() && wizHasScript()) {
+      if (!toSharePoint() && wizHasScript() && given) {
         wiz.spOk = true;
         out.textContent = t('Noted. The server checks this folder once Microsoft 365 is set up, with the setup script a few steps on.');
       } else {
@@ -1460,6 +1491,8 @@
     wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
     $('wizWhereFound').textContent = ''; $('wizLinkNote').textContent = ''; $('wizGrantMsNote').textContent = '';
+    wiz.spOk = false; $('wizFolderNote').textContent = ''; $('wizCfOk').textContent = '';
+    if (!wiz.scriptWaiting) $('wizScriptNote').textContent = '';
     // A folder set already: that one, with where it is in SharePoint as set. The server version
     // has no folder on a PC: only the SharePoint link.
     setRadio('wlib', onServer() ? 'link' : S.settings.folder ? 'own' : '');
@@ -1504,12 +1537,14 @@
     clearTimeout(wizScriptTimer); wizScriptTimer = null;
     if (stop) return;
     wizScriptTimer = setTimeout(async () => {
-      if (!$('dlgWizard').open || WIZ[wiz.step] !== 'app') return wizScriptPoll(true);
       let r;
       try { r = await api('setup/status'); } catch (e) { return wizScriptPoll(); }
       const out = $('wizScriptNote');
+      if (r.state === 'none') { wiz.scriptWaiting = false; return wizScriptPoll(true); }
       if (r.state === 'done') {
-        const [info, st] = await Promise.all([api('info'), api('settings/get')]);
+        wiz.scriptWaiting = false;
+        let info, st;
+        try { [info, st] = await Promise.all([api('info'), api('settings/get')]); } catch (e) { wiz.scriptWaiting = true; return wizScriptPoll(); }
         S.info = info; S.settings = st.settings; lastSettings = st;
         $('wizClientId').value = S.settings.clientId || ''; $('wizTenantId').value = S.settings.tenantId || '';
         out.className = 'where good';
@@ -1529,6 +1564,7 @@
       const a = el('a', { href: '/setup/nobs-osign-setup.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-setup.ps1' });
       document.body.append(a); a.click(); a.remove();
       out.textContent = t('Downloaded. Run it now: this page goes on by itself when it is done (the script is valid until {0}).', new Date(r.until).toLocaleTimeString());
+      wiz.scriptWaiting = true;
       wizScriptPoll();
     } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); }
   });
@@ -1542,10 +1578,10 @@
     async folder() {
       await wiz.checking;
       if (onServer()) {
-        if (!$('wizSpFolder').value) throw new Error(t('Paste the address of the folder in SharePoint.'));
+        if (!$('wizSpFolder').value || (!wiz.spOk && !toSharePoint() && !$('wizLink').value.trim())) throw new Error(t('Paste the address of the folder in SharePoint.'));
         if (!wiz.spOk && wiz.warned !== 'folder') {
           wiz.warned = 'folder';
-          throw new Error(t('The server cannot reach this folder yet. Give it access as described below, then paste the link again. Next again to go on anyway.'));
+          throw new Error(t('The server cannot reach this folder yet. Give it access as described below, then paste the link again. Click Next again to continue anyway.'));
         }
         await wizSave({ spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value });
         schedulePreview();
@@ -1559,7 +1595,7 @@
       const r = await wizSave({ folder: $('wizFolder').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value });
       if (!r.folderFound && wiz.warned !== 'folder') {
         wiz.warned = 'folder';
-        $('wizFolderNote').textContent = t('Not found on this PC: is the library synced? Next again to go on anyway.');
+        $('wizFolderNote').textContent = t('Not found on this PC: is the library synced? Click Next again to continue anyway.');
         throw new Error('');
       }
       schedulePreview();
@@ -1577,7 +1613,7 @@
       await wizSave({ clientId: $('wizClientId').value, tenantId: $('wizTenantId').value });
     },
     async files() {
-      if (!wiz.built) throw new Error(t('Make the add-in files first.'));
+      if (!wiz.built) throw new Error(t('Create the add-in files first.'));
     },
     async done() {
       await wizSave({ setupDone: '1' });
@@ -1586,13 +1622,13 @@
   $('wizNext').addEventListener('click', async () => {
     $('wizErr').textContent = '';
     const name = WIZ[wiz.step];
-    $('wizNext').disabled = true;
+    $('wizNext').disabled = true; $('wizBack').disabled = true;
     try {
       if (wizLeave[name]) await wizLeave[name]();
       if (name === 'done') { $('dlgWizard').close(); toast(t('NOBS OSign is set up.')); return; }
       wiz.step++; wiz.warned = ''; wizRender();
     } catch (err) { $('wizErr').textContent = err.message ? t(err.message) : ''; }
-    finally { $('wizNext').disabled = false; }
+    finally { $('wizNext').disabled = false; $('wizBack').disabled = false; }
   });
   $('wizBack').addEventListener('click', () => { if (wiz.step) { wiz.step--; wizRender(); } });
   $('wizLater').addEventListener('click', () => $('dlgWizard').close());
@@ -1630,8 +1666,12 @@
   }));
   // Another language: the page starts again in it, and the assistant with it, on this step.
   $('wizLang').addEventListener('change', async () => { await saving; stored(WIZ_KEY, String(wiz.step)); I18N.setLang($('wizLang').value); });
-  $('wizImport').addEventListener('click', async () => { await wizLeave.done(); $('dlgWizard').close(); $('btnImportOpen').click(); });
-  $('wizNewSig').addEventListener('click', async () => { await wizLeave.done(); $('dlgWizard').close(); $('btnNew').click(); });
+  const wizFinishThen = (btn) => async () => {
+    try { await wizLeave.done(); } catch (err) { $('wizErr').textContent = t(err.message); return; }
+    $('dlgWizard').close(); $(btn).click();
+  };
+  $('wizImport').addEventListener('click', wizFinishThen('btnImportOpen'));
+  $('wizNewSig').addEventListener('click', wizFinishThen('btnNew'));
   $('btnWizard').addEventListener('click', () => wizOpen(0));
 
   // ---------------------------------------------------------------------------------------------
@@ -1652,13 +1692,13 @@
     } else if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
     if (core.groupsUsed(c).length && core.valueSource(c) === 'graph') out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.')]);
     const perPerson = c.signatures.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
-    if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; who has none gets the signature without.', perPerson.join(', '))]);
+    if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; users without a photo get the signature without one.', perPerson.join(', '))]);
     const lost = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/|photos\/|https:)[^"]*"/i.test(s.html || '')).map((s) => s.name);
-    if (lost.length) out.push(['warn', t('Images that are no file of the signatures are left out in: {0}.', lost.join(', '))]);
+    if (lost.length) out.push(['warn', t('Images not stored with the signatures are left out in: {0}.', lost.join(', '))]);
     const keys = fieldKeys();
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
-    if (unknown.length) out.push(['warn', t('Not fields, left as typed: {0}', unknown.map((k) => '@@' + k).join(', '))]);
+    if (unknown.length) out.push(['warn', t('Unknown placeholders, left as typed: {0}', unknown.map((k) => '@@' + k).join(', '))]);
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
     if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map(fieldName).join(', '))]);
     if (core.usesAdExport(c)) {
@@ -1769,6 +1809,7 @@
       applyDraft(draft);
       loadSnapshot();
       document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
+      if (onServer()) serverTexts();
       if (info.features.signOut) {
         const out = $('btnLogout');
         out.hidden = false;
@@ -1788,7 +1829,10 @@
       // A step stored: the assistant was open when the page started again (another language).
       const resume = stored(WIZ_KEY);
       // The server version always has a target: the assistant opens until it was finished once.
-      if (resume !== null || (S.settings.setupDone !== '1' && (onServer() || !S.settings.folder || !S.settings.clientId))) wizOpen(+resume || 0);
+      // On the server the setup is the local account admin's: the others neither get nor see it.
+      const mayWizard = !onServer() || !!(info.user && info.user.local);
+      $('btnWizard').hidden = !mayWizard;
+      if (mayWizard && (resume !== null || (S.settings.setupDone !== '1' && (onServer() || !S.settings.folder || !S.settings.clientId)))) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
       // Loaded: what waits for the editor (the tests) can go on.
       document.documentElement.dataset.ready = '1';

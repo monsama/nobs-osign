@@ -158,8 +158,8 @@ test('Graph set up only half: said in info, and publishing stays in the server\'
   const c = await signIn(at);
   const info = await call(at, c, 'info');
   assert.equal(info.features.publishTarget, 'folder');
-  assert.match(info.features.graphProblem, /OSIGN_GRAPH_CLIENT_ID/);
-  assert.match((await call(at, c, 'sp/check', { spSite: SITE, spFolder: 'OSign' })).error, /OSIGN_GRAPH_CLIENT_ID/);
+  assert.match(info.features.graphProblem, /client ID is the server's app registration/);
+  assert.match((await call(at, c, 'sp/check', { spSite: SITE, spFolder: 'OSign' })).error, /client ID is the server's app registration/);
   other.close();
 });
 

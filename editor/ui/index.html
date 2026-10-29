@@ -212,6 +212,8 @@
       its path goes in the first field. Publishing writes <code>signatures.json</code> and <code>assets\</code> there; the
       photos go in <code>photos\</code>, by hand.</p>
     <h3>Outlook add-in</h3>
+    <p id="setLocked" class="lead" hidden>Where the server publishes and what the add-in is made with can only be changed by the local
+      account admin.</p>
     <p class="lead" data-th="addinLead">The add-in's files go on an HTTPS web server of your own (your web server, Azure Static Web Apps, …):
       they are only code, the signatures stay in SharePoint. This makes them for your server; copy the folder there and upload
       its <code>manifest.xml</code> in the Microsoft 365 admin center.</p>
@@ -224,12 +226,12 @@
       <label>Web server <small>(its caching file goes with the files)</small><select id="setAddinHost">
         <option value="">Choose…</option><option value="cloudflare">Cloudflare Pages</option><option value="azure">Azure Static Web Apps</option>
         <option value="iis">IIS</option><option value="apache">Web host (Apache)</option><option value="other">Another web server</option></select></label>
-      <label>App registration: client ID<input id="setClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
-      <label>Tenant ID <small>(only for a single-organization app)</small><input id="setTenantId" placeholder="optional"></label>
+      <label>Application (client) ID<input id="setClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
+      <label>Directory (tenant) ID <small>(only for a single-organization app)</small><input id="setTenantId" placeholder="optional"></label>
       <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button> <small>(root: the home site; or paste the address of a site or OneDrive)</small><input id="setSpSite" placeholder="root"></label>
       <label>Folder in its library<input id="setSpFolder" placeholder="OSign"></label>
     </div>
-    <p><button id="setAddinBuild" type="button">Make the add-in files</button>
+    <p><button id="setAddinBuild" type="button">Create the add-in files</button>
       <button id="setAddinUpload" type="button" hidden>Upload to Cloudflare Pages</button>
       <a id="setAddinZip" href="/addin.zip" download hidden>Download as ZIP</a></p>
     <p id="setAddinOk" class="ok"></p>
@@ -255,7 +257,7 @@
     <div class="grid2">
       <label>Domain controller <small>(ldaps://, port 636)</small><input id="cn_ldapUrl" data-ph="ldaps://dc01.example.ch" autocomplete="off"></label>
       <label>StartTLS <small>(only for an ldap:// address)</small><select id="cn_ldapStartTls"><option value="">As in .env</option><option value="on">On</option><option value="off">Off</option></select></label>
-      <label>Sign-in name <small>({login} is what people type)</small><input id="cn_ldapBind" data-ph="{login}@example.ch" autocomplete="off"></label>
+      <label>User name format <small>({login} is what people type)</small><input id="cn_ldapBind" data-ph="{login}@example.ch" autocomplete="off"></label>
       <label>Where the users are<input id="cn_ldapBase" data-ph="OU=Users,DC=example,DC=ch" autocomplete="off"></label>
       <label>Sign-in group <small>(its members may use the editor; nested groups count)</small><input id="cn_ldapGroup" data-ph="CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch" autocomplete="off"></label>
       <label>Login attribute<input id="cn_ldapLoginAttr" data-ph="sAMAccountName" autocomplete="off"></label>
@@ -278,8 +280,8 @@
     <h3>Publishing into SharePoint (Microsoft Graph)</h3>
     <p id="connGraph" class="lead"></p>
     <div class="grid2">
-      <label>Tenant ID<input id="cn_graphTenantId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
-      <label>Client ID <small>(the server's app registration, not the add-in's)</small><input id="cn_graphClientId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
+      <label>Directory (tenant) ID<input id="cn_graphTenantId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
+      <label>Application (client) ID <small>(the server's app registration, not the add-in's)</small><input id="cn_graphClientId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
       <label>Client secret<span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span>
         <small id="cx_graphClientSecret"></small></label>
     </div>
@@ -336,7 +338,7 @@
     </div>
 
     <section class="wiz-step" data-step="welcome" data-title="Welcome to NOBS OSign">
-      <p class="wiz-intro" data-th="wizWelcome">NOBS OSign manages your organisation's email signatures centrally and adds them
+      <p class="wiz-intro" data-th="wizWelcome">NOBS OSign manages your organization's email signatures centrally and adds them
         automatically to every message in classic Outlook, new Outlook and Outlook on the web. This assistant guides you
         through the one-time setup. Each step explains what to do in Microsoft 365 and saves your entries right away, so
         you can pause at any time and continue later with <b>Setup assistant</b> at the top.</p>
@@ -493,14 +495,14 @@
         redirect URI as well.</p>
     </section>
 
-    <section class="wiz-step" data-step="files" data-title="Make the add-in's files">
+    <section class="wiz-step" data-step="files" data-title="Create the add-in files">
       <p class="wiz-intro" data-th="wizFilesLead">NOBS OSign now generates the add-in's files for your address, app registration and SharePoint folder,
         and saves them in a folder on this PC.</p>
       <p class="wiz-intro" id="wizFilesServer" data-th="wizFilesServer" hidden>NOBS OSign now generates the add-in's files for your address, app
         registration and SharePoint folder, on the server. It uploads them to Cloudflare Pages itself, or you download them as a ZIP.</p>
       <div class="wiz-fields">
         <label>Write the files to<span class="pick"><input id="wizAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="wizAddinFolder">Choose folder…</button></span></label>
-        <p class="wiz-actions"><button type="button" id="wizMake" class="primary">Make the add-in files</button></p>
+        <p class="wiz-actions"><button type="button" id="wizMake" class="primary">Create the add-in files</button></p>
         <p id="wizMakeOk" class="ok"></p>
         <p id="wizServerFiles" class="wiz-actions" hidden><button type="button" id="wizCfUpload" class="primary" hidden>Upload to Cloudflare Pages</button>
           <a id="wizZip" href="/addin.zip" download>Download as ZIP</a></p>
@@ -553,7 +555,7 @@
           apps</b>.</li>
         <li><span data-th="wizDeploy2">Choose <i>Office Add-in</i> and <b>Provide link to the manifest file</b>:</span>
           <span class="copyline"><code id="wizManifest"></code><button type="button" class="copy" data-copy="wizManifest">Copy</button></span></li>
-        <li data-th="wizDeploy3"><b>Assign users:</b> for testing <i>Just me</i> or a pilot group, later the entire organisation.</li>
+        <li data-th="wizDeploy3"><b>Assign users:</b> for testing <i>Just me</i> or a pilot group, later the entire organization.</li>
         <li data-th="wizDeploy4">Allow up to 24 hours for the deployment. To test right away, add it in Outlook on the web: <b>Get Add-ins</b> →
           <b>My add-ins</b> → <b>Add a custom add-in</b> → <b>Add from URL</b>, with the same link.</li>
       </ol>
@@ -587,7 +589,7 @@
       <li data-th="help3"><b>API permissions</b>, Microsoft Graph, delegated: <code>User.Read</code>, <code>Sites.Read.All</code> (the OSign
         folder) and, for signatures by AD group, <code>GroupMember.Read.All</code>. Then <b>Grant admin consent</b>, so no
         user is asked.</li>
-      <li data-th="help4">The <b>Application (client) ID</b> goes into Settings → Outlook add-in; then <i>Make the add-in files</i>
+      <li data-th="help4">The <b>Application (client) ID</b> goes into Settings → Outlook add-in; then <i>Create the add-in files</i>
         and copy them to the web server.</li>
       <li data-th="help5">The OSign folder has to be readable for everyone who signs: in SharePoint, share it (read) with all employees.</li>
     </ol>

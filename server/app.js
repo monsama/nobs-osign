@@ -275,11 +275,11 @@ function createApp(opts) {
     'addin/check': async () => {
       const s = settings.get();
       if (!s.addinUrl) return { error: 'Enter the address the add-in will be served from.' };
-      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Make the add-in files first.' };
+      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
       return addin.check(s.addinUrl, addinDir, fetchFn);
     },
     'addin/upload': async () => {
-      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Make the add-in files first.' };
+      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
       try { return await addin.pagesDeploy(pages, addinDir, fetchFn); } catch (e) { return { error: e.message }; }
     },
     // Active Directory, with the service account.
@@ -403,12 +403,12 @@ function createApp(opts) {
       // The setup script, for the local account admin (made by setup/start).
       if (pathname === '/setup/nobs-osign-setup.ps1') {
         const text = s.user.local ? setup.script(new URL(req.url, 'http://x').searchParams.get('id') || '') : null;
-        if (!text) return send(res, 404, 'text/plain; charset=utf-8', 'Make the setup script again in the setup assistant.');
+        if (!text) return send(res, 404, 'text/plain; charset=utf-8', 'Download the setup script again in the setup assistant.');
         return send(res, 200, 'text/plain; charset=utf-8', text, { 'Content-Disposition': 'attachment; filename="nobs-osign-setup.ps1"' });
       }
       // The add-in's files as last made, to upload by hand.
       if (pathname === '/addin.zip') {
-        if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return send(res, 404, 'text/plain; charset=utf-8', 'Make the add-in files first.');
+        if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return send(res, 404, 'text/plain; charset=utf-8', 'Create the add-in files first.');
         return send(res, 200, 'application/zip', addin.zip(addinDir), { 'Content-Disposition': 'attachment; filename="osign-addin.zip"' });
       }
       if (pathname.startsWith('/assets/')) return sendFile(res, store.assetDir, pathname.slice(8), ASSET_TYPES);

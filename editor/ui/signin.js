@@ -9,5 +9,8 @@
   var p = new URLSearchParams(location.hash.slice(1));
   var answer = { osignSignIn: true, code: p.get('code') || '', state: p.get('state') || '', error: p.get('error') || '', errorText: p.get('error_description') || '' };
   try { if (window.opener) window.opener.postMessage(answer, location.origin); } catch (e) { /* read from here instead */ }
-  document.getElementById('msg').textContent = 'You can close this window.';
+  // This page has no translations of its own: the language chosen in the editor, or the browser's.
+  var lang = ''; try { lang = localStorage.getItem('osign.lang') || ''; } catch (e) { /* none */ }
+  var de = (lang || navigator.language || '').toLowerCase().indexOf('de') === 0;
+  document.getElementById('msg').textContent = de ? 'Sie können dieses Fenster schliessen.' : 'You can close this window.';
 })();

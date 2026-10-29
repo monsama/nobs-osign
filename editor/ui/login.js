@@ -28,7 +28,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: $('loginName').value, password: $('loginPassword').value })
       });
-      const j = await r.json().catch(() => ({ ok: false, error: 'The server answered ' + r.status + '.' }));
+      const j = await r.json().catch(() => ({ ok: false, error: t('The server answered {0}.', r.status) }));
       if (!j.ok) { error(t(j.error || 'Failed.')); $('loginPassword').select(); return; }
       location.replace('/');
     } catch (err) {

@@ -550,7 +550,7 @@ function Test-AddinOnline([string]$Base, [string]$Dir) {
 function Api-AddinCheck {
     $s = Get-Settings
     if (-not $s.addinUrl) { return (Fail 'Enter the address the add-in will be served from.') }
-    if (-not $s.addinFolder -or -not (Test-Path -LiteralPath (Join-Path $s.addinFolder 'manifest.xml'))) { return (Fail 'Make the add-in files first.') }
+    if (-not $s.addinFolder -or -not (Test-Path -LiteralPath (Join-Path $s.addinFolder 'manifest.xml'))) { return (Fail 'Create the add-in files first.') }
     $checks = Test-AddinOnline $s.addinUrl $s.addinFolder
     return (Ok @{ checks = $checks; allOk = -not @($checks | Where-Object { -not $_.ok -and $_.what -ne 'Cache-Control' }).Count })
 }

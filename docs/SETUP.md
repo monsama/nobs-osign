@@ -105,7 +105,7 @@ server only reachable inside the network means signatures only inside the networ
   It makes Outlook check for a newer version before using its copy, so updates arrive within
   minutes. For another server, have it send `Cache-Control: no-cache`.
 
-Click **Make the add-in files**, then copy the folder's content to the web server. The setup
+Click **Create the add-in files**, then copy the folder's content to the web server. The setup
 assistant's last step, **Check the address**, then confirms that the files there are the ones made
 here.
 
@@ -234,7 +234,7 @@ Token**, with the permission *Account → Cloudflare Pages → Edit* for your ac
 account ID (on the account's overview page) and a project name in Settings → Server connections (or
 `secrets/cf_api_token`, `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT` in `.env`); the project is made on
 the first upload. The
-setup assistant's step *Make the add-in's files* then uploads them; *Download as ZIP* is there for
+setup assistant's step *Create the add-in files* then uploads them; *Download as ZIP* is there for
 an upload by hand.
 
 **The setup script does all of Entra ID.** In the setup assistant's step *Register the app in
