@@ -510,7 +510,8 @@
     'That is not a sharing link of SharePoint or OneDrive.': 'Das ist kein Freigabelink von SharePoint oder OneDrive.',
     'The server cannot open sharing links before publishing to SharePoint is set up.': 'Der Server kann Freigabelinks erst öffnen, wenn das Veröffentlichen nach SharePoint eingerichtet ist.',
     'The server may not open sharing links (its app registration may only reach the sites granted to it).': 'Der Server darf keine Freigabelinks öffnen (seine App-Registrierung erreicht nur die ihr freigegebenen Sites).',
-    'This sharing link leads nowhere: it was removed or has expired.': 'Dieser Freigabelink führt nirgends hin: er wurde entfernt oder ist abgelaufen.'
+    'This sharing link leads nowhere: it was removed or has expired.': 'Dieser Freigabelink führt nirgends hin: er wurde entfernt oder ist abgelaufen.',
+    "(the server's Pages project {0}, made on the first upload; or your own domain set up on it)": '(das Pages-Projekt {0} des Servers, angelegt beim ersten Hochladen; oder Ihre eigene Domain darauf)'
   };
 
   DE.html = {

@@ -1242,8 +1242,12 @@
     $('wizNext').textContent = name === 'welcome' ? t('Start') : name === 'done' ? t('Finish') : t('Next');
     $('wizLater').hidden = name === 'done';
     $('wizErr').textContent = '';
-    const host = radio('whost'), base = addinBase();
-    $('wizUrlHint').textContent = t(URL_HINTS[host] || URL_HINTS.other);
+    const host = radio('whost');
+    // The server uploads to its own Pages project: its address is known before the first upload.
+    const project = onServer() && host === 'cloudflare' && S.info.features && S.info.features.pagesProject;
+    if (project && !$('wizUrl').value.trim()) $('wizUrl').value = 'https://' + project + '.pages.dev/';
+    const base = addinBase();
+    $('wizUrlHint').textContent = project ? t('(the server\'s Pages project {0}, made on the first upload; or your own domain set up on it)', project) : t(URL_HINTS[host] || URL_HINTS.other);
     $('wizRedirect').textContent = base ? 'brk-multihub://' + new URL(base).host : t('(enter the address in the step before)');
     $('wizManifest').textContent = base ? base + 'manifest.xml' : '';
     const perms = ['User.Read', 'Sites.Read.All'];
