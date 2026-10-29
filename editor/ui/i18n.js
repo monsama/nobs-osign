@@ -533,10 +533,25 @@
     'Microsoft Graph answered {0}: {1}': 'Microsoft Graph hat mit {0} geantwortet: {1}',
     'Signing in with Microsoft…': 'Anmelden bei Microsoft…',
     '✓ The server had write access to {0} already.': '✓ Der Server hatte bereits Schreibzugriff auf {0}.',
-    '✓ The server may now write to {0}.': '✓ Der Server darf jetzt in {0} schreiben.'
+    '✓ The server may now write to {0}.': '✓ Der Server darf jetzt in {0} schreiben.',
+    'Download the setup script': 'Setup-Skript herunterladen',
+    'Noted. The server checks this folder once Microsoft 365 is set up, with the setup script a few steps on.': 'Vermerkt. Der Server prüft diesen Ordner, sobald Microsoft 365 eingerichtet ist – mit dem Setup-Skript ein paar Schritte weiter.',
+    'set up by the setup script in the step "Register the app in Entra ID"': 'richtet das Setup-Skript im Schritt «App in Entra ID registrieren» ein',
+    "✓ Microsoft 365 is set up: the add-in's app {0}, the server's app {1}, write access to {2}. The client secret is valid until {3}.": '✓ Microsoft 365 ist eingerichtet: die App des Add-ins {0}, die App des Servers {1}, Schreibzugriff auf {2}. Der geheime Clientschlüssel gilt bis {3}.',
+    'The setup script stopped: {0}': 'Das Setup-Skript hat abgebrochen: {0}',
+    'Fix it, then run the script again (it is valid until {0}).': 'Beheben und das Skript nochmals ausführen (es gilt bis {0}).',
+    'Downloaded. Run it now: this page goes on by itself when it is done (the script is valid until {0}).': 'Heruntergeladen. Jetzt ausführen: diese Seite geht von selbst weiter, wenn es fertig ist (das Skript gilt bis {0}).',
+    "The editor's address is not one the script can send to (https://…).": 'An die Adresse des Editors kann das Skript nicht senden (https://…).',
+    'Choose the SharePoint folder first (the step "Where the signatures are kept").': 'Zuerst den SharePoint-Ordner wählen (Schritt «Wo die Signaturen liegen»).',
+    'Enter the add-in\'s address first (the step "Where the add-in is served").': 'Zuerst die Adresse des Add-ins eintragen (Schritt «Wo das Add-in bereitgestellt wird»).',
+    'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.': 'Der Server hat keinen Schlüssel für den geheimen Clientschlüssel (secrets/app_key): sudo ./deploy-nobs-osign.sh nochmals ausführen.'
   };
 
   DE.html = {
+    wizScriptLead: '<b>Der einfache Weg: das Setup-Skript.</b> Es erledigt diesen ganzen Schritt für Sie, nach einer einzigen Anmeldung mit Ihrem Administratorkonto (SharePoint- oder globaler Administrator) im Browser:',
+    wizScriptWhat: '<li>die App-Registrierung des Add-ins <b>NOBS OSign</b>, mit Umleitungs-URI, Berechtigungen und Administratorzustimmung;</li><li>die App-Registrierung des Servers <b>NOBS OSign server</b> (Sites.Selected) mit geheimem Clientschlüssel, und Schreibzugriff auf die SharePoint-Site der Signaturen, und keine andere;</li><li>es schickt die IDs und den Schlüssel direkt an diesen Server: nichts zu kopieren;</li><li>danach entfernt es die Rechte, die es dafür gebraucht hat, und löscht sich selbst.</li>',
+    wizScriptRun: 'Auf einem Windows-PC in PowerShell ausführen:',
+    wizScriptManual: 'Oder von Hand, wie folgt:',
     wizGrantMsLead: '<b>Der schnelle Weg:</b> hier mit Ihrem Administratorkonto anmelden, und NOBS OSign macht die zwei Aufrufe unten für Sie. Ihre Anmeldung bleibt in diesem Browser; der Server sieht sie nie. Dafür braucht es einmal eine kleine eigene App-Registrierung (nicht die des Servers und nicht die des Add-ins): <b>NOBS OSign setup</b>, Plattform <b>Single-Page-Anwendung</b> mit dieser Umleitungs-URI, die delegierte Berechtigung <b>Sites.FullControl.All</b> und kein geheimer Clientschlüssel. Sie können sie löschen, sobald die Site freigegeben ist.',
     wizGrantOr: 'Oder von Hand, im Graph Explorer:',
     wizGrantMsSafe: '<li><b>Nur für Sie:</b> in Entra keine Administratorzustimmung dafür erteilen, und bei der Anmeldung <i>Im Namen Ihrer Organisation zustimmen</i> nicht anhaken. Die Zustimmung gilt dann nur für Ihr Konto.</li><li><b>Nur Sie dürfen sich anmelden:</b> Entra → Unternehmensanwendungen → NOBS OSign setup → Eigenschaften → <i>Zuweisung erforderlich?</i> = Ja, und unter Benutzer und Gruppen nur sich selbst hinzufügen.</li><li><b>Danach ausschalten:</b> sobald die Site freigegeben ist, <i>Aktiviert für die Benutzeranmeldung?</i> = Nein setzen oder die App löschen. Dann gibt es das Recht nur für die Minute, in der Sie es brauchen.</li>',

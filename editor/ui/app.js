@@ -1245,6 +1245,7 @@
     $('wizNext').textContent = name === 'welcome' ? t('Start') : name === 'done' ? t('Finish') : t('Next');
     $('wizLater').hidden = name === 'done';
     $('wizErr').textContent = '';
+    $('wizScript').hidden = !(name === 'app' && wizHasScript());
     const host = radio('whost');
     // The server uploads to its own Pages project: its address is known before the first upload.
     const project = onServer() && host === 'cloudflare' && S.info.features && S.info.features.pagesProject;
@@ -1348,11 +1349,19 @@
       out.textContent = c.found ? t('✓ Found in SharePoint: {0}', c.where) : t('The server reaches the site; the folder is not there yet and is made on the first publish: {0}', c.where);
       out.classList.add('good');
     } catch (e) {
-      $('wizGrant').hidden = !toSharePoint();
-      out.textContent = t(e.message); out.classList.add('warn');
+      // Microsoft 365 not set up yet: the setup script does it (step "Register the app"), and the
+      // folder is checked then.
+      if (!toSharePoint() && wizHasScript()) {
+        wiz.spOk = true;
+        out.textContent = t('Noted. The server checks this folder once Microsoft 365 is set up, with the setup script a few steps on.');
+      } else {
+        $('wizGrant').hidden = !toSharePoint();
+        out.textContent = t(e.message); out.classList.add('warn');
+      }
     }
     wizPermNote();
   }
+  const wizHasScript = () => onServer() && !!(S.info.user && S.info.user.local);
   // The server version: how to give its app registration write access to the site (Sites.Selected).
   function wizGrantFill(site) {
     const sitePath = !site || site === 'root' ? 'root' : site;
@@ -1474,8 +1483,9 @@
       ['directory', t('Active Directory: the users\' values, with the service account'), false],
       ['pages', t('Cloudflare Pages: uploading the add-in\'s files'), false]
     ];
-    $('wizConnList').replaceChildren(...rows.map(([k, what, needed]) => el('li', { class: p[k] ? (needed ? 'bad' : 'warn') : 'good' },
-      what + (p[k] ? ' – ' + t(p[k]) + (needed ? '' : ' ' + t('(optional)')) : ' – ' + t('ready')))));
+    // SharePoint is set up by the setup script, a few steps on: nothing to do here for it.
+    $('wizConnList').replaceChildren(...rows.map(([k, what, needed]) => el('li', { class: p[k] ? 'warn' : 'good' },
+      what + (!p[k] ? ' – ' + t('ready') : needed ? ' – ' + t('set up by the setup script in the step "Register the app in Entra ID"') : ' – ' + t(p[k]) + ' ' + t('(optional)')))));
   }
   async function wizConnLoad() {
     try { wizConn = await api('connections/get'); } catch (e) { wizConn = null; }
@@ -1485,6 +1495,41 @@
     $('wizErr').textContent = '';
     try { renderConnections(await api('connections/get')); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
   });
+  // The setup script (server/setup.js): made for the folder and the add-in's address as saved,
+  // downloaded, run on a Windows PC; its result comes back to the server, and here by asking.
+  let wizScriptTimer = null;
+  function wizScriptPoll(stop) {
+    clearTimeout(wizScriptTimer); wizScriptTimer = null;
+    if (stop) return;
+    wizScriptTimer = setTimeout(async () => {
+      if (!$('dlgWizard').open || WIZ[wiz.step] !== 'app') return wizScriptPoll(true);
+      let r;
+      try { r = await api('setup/status'); } catch (e) { return wizScriptPoll(); }
+      const out = $('wizScriptNote');
+      if (r.state === 'done') {
+        const [info, st] = await Promise.all([api('info'), api('settings/get')]);
+        S.info = info; S.settings = st.settings; lastSettings = st;
+        $('wizClientId').value = S.settings.clientId || ''; $('wizTenantId').value = S.settings.tenantId || '';
+        out.className = 'where good';
+        out.textContent = t('✓ Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1}, write access to {2}. The client secret is valid until {3}.',
+          r.result.addinClientId, r.result.serverClientId, r.result.siteUrl, r.result.secretExpires ? new Date(r.result.secretExpires).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '?');
+        return wizScriptPoll(true);
+      }
+      if (r.state === 'failed') { out.className = 'where warn'; out.textContent = t('The setup script stopped: {0}', r.problem) + ' ' + t('Fix it, then run the script again (it is valid until {0}).', new Date(r.until).toLocaleTimeString()); }
+      wizScriptPoll();
+    }, 3000);
+  }
+  $('wizScriptGet').addEventListener('click', async () => {
+    const out = $('wizScriptNote');
+    out.className = 'where'; $('wizErr').textContent = '';
+    try {
+      const r = await api('setup/start', { origin: location.origin, groups: radio('wvsrc') === 'graph' });
+      const a = el('a', { href: '/setup/nobs-osign-setup.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-setup.ps1' });
+      document.body.append(a); a.click(); a.remove();
+      out.textContent = t('Downloaded. Run it now: this page goes on by itself when it is done (the script is valid until {0}).', new Date(r.until).toLocaleTimeString());
+      wizScriptPoll();
+    } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); }
+  });
   async function wizSave(settings) {
     const r = await api('settings/save', { settings });
     S.settings = r.settings; lastSettings = r;
@@ -1492,12 +1537,6 @@
   }
   // What a step does on Next; throws to stay on it.
   const wizLeave = {
-    async connect() {
-      if (wizConn && wizConn.problems.graph && wiz.warned !== 'connect') {
-        wiz.warned = 'connect';
-        throw new Error(t('Publishing to SharePoint is not set up yet: the server cannot publish. Next again to go on anyway.'));
-      }
-    },
     async folder() {
       await wiz.checking;
       if (onServer()) {

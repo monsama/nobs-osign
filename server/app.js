@@ -16,6 +16,7 @@ const { ldapConfig, ldapProblem } = require('./ldap');
 const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
+const { createSetup } = require('./setup');
 const addin = require('./addin');
 
 const VERSION = require('../package.json').version;
@@ -165,6 +166,18 @@ function createApp(opts) {
     settings.forget(); photos.clear();
   }
   configure();
+  // The setup script for Microsoft 365 (server/setup.js): one at a time, for an hour.
+  const setup = createSetup();
+  // Its result goes where the admin would type it, and takes effect at once.
+  async function setupApply(r) {
+    const c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId }, secrets: { graphClientSecret: r.secret } });
+    if (c.error) return c;
+    const s = await settings.save({ clientId: r.addinClientId, tenantId: r.tenantId });
+    if (s.error) return s;
+    configure();
+    log.info('setup: the setup script set up Microsoft 365 (add-in ' + r.addinClientId + ', server ' + r.serverClientId + ')');
+    return {};
+  }
   // The connections are the local account admin's alone: whoever sets the directory's address
   // gets the passwords people sign in with.
   const adminOnly = (s) => (s.user.local ? '' : 'Only the local account admin can change the server\'s connections.');
@@ -206,6 +219,15 @@ function createApp(opts) {
     'assets/delete': (d) => store.deleteAsset(d.name),
     'settings/get': () => settings.answer(),
     'settings/save': (d) => settings.save(d.settings || {}),
+    // The setup script: made for this setup (the site and the add-in's address as saved), and
+    // whether it has sent its result yet.
+    'setup/start': (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
+      if (!connections.answer().keyOk) return { error: 'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
+      const st = settings.get();
+      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups });
+    },
+    'setup/status': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : setup.status()),
     // The server's connections (Settings → Server connections), for the local account admin.
     'connections/get': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : connectionsAnswer()),
     'connections/save': (d, s) => {
@@ -315,6 +337,13 @@ function createApp(opts) {
       return ok(res, { user: { login: r.user.login, name: r.user.name } }, { 'Set-Cookie': r.cookie });
     }
     if (name === 'login-methods') return ok(res, auth.methods());
+    // The setup script sends its result with its one-time code, not with a session.
+    if (name === 'setup/finish') {
+      const r = setup.finish(data);
+      if (r.error) return fail(res, r.error, r.status);
+      if (r.data) { const a = await setupApply(r.data); if (a.error) return fail(res, a.error); }
+      return ok(res, {});
+    }
     if (name === 'logout') return ok(res, {}, { 'Set-Cookie': auth.logout(req) });
 
     const s = auth.session(req);
@@ -353,6 +382,12 @@ function createApp(opts) {
       if (!s) return send(res, 401, 'text/plain; charset=utf-8', '401 Not signed in');
       if (pathname === '/shared/signature-core.js') return sendFile(res, path.dirname(CORE_FILE), path.basename(CORE_FILE), STATIC_TYPES);
       if (pathname.startsWith('/ui/')) return sendFile(res, UI_DIR, pathname.slice(4), STATIC_TYPES);
+      // The setup script, for the local account admin (made by setup/start).
+      if (pathname === '/setup/nobs-osign-setup.ps1') {
+        const text = s.user.local ? setup.script(new URL(req.url, 'http://x').searchParams.get('id') || '') : null;
+        if (!text) return send(res, 404, 'text/plain; charset=utf-8', 'Make the setup script again in the setup assistant.');
+        return send(res, 200, 'text/plain; charset=utf-8', text, { 'Content-Disposition': 'attachment; filename="nobs-osign-setup.ps1"' });
+      }
       // The add-in's files as last made, to upload by hand.
       if (pathname === '/addin.zip') {
         if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return send(res, 404, 'text/plain; charset=utf-8', 'Make the add-in files first.');

@@ -55,6 +55,11 @@ asked.
 - **connections/save** `{ values: { <name>: text }, secrets: { <name>: text | null }, ca: base64 | null }`
   → like `connections/get`. A value `''` goes back to `.env`; a secret `null` is removed, one not
   sent stays; `ca` is a CA certificate file (.cer or PEM). Takes effect at once.
+- **setup/start** `{ origin, groups }` → `{ ok, id, until }`, for the local account `admin`: a setup
+  script for the folder and the add-in's address as saved, valid for an hour; `GET
+  /setup/nobs-osign-setup.ps1?id=<id>` downloads it. **setup/status** → `{ state: none | waiting |
+  failed | done, problem, result }` (never the secret). **setup/finish** is the script's: without a
+  session, with its one-time code; its result goes into the settings and the server connections.
 - **sp/share** `{ url }` → `{ ok, webUrl, name }`: where a sharing link of SharePoint or OneDrive
   (`https://…/:f:/…`) leads, through Graph (`/shares`), as the folder's own address; a link to a
   file, one that is gone, or one the app may not open answers `ok: false` with why.

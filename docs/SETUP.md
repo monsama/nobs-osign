@@ -237,6 +237,17 @@ the first upload. The
 setup assistant's step *Make the add-in's files* then uploads them; *Download as ZIP* is there for
 an upload by hand.
 
+**The setup script does all of Entra ID.** In the setup assistant's step *Register the app in
+Entra ID*, **Download the setup script**, and run it on a Windows PC
+(`powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"`). Signed in once in the
+browser as a SharePoint or Global administrator (through *Microsoft Graph Command Line Tools*,
+Microsoft's own app for Graph scripts), it makes the add-in's app registration *NOBS OSign* and the
+server's *NOBS OSign server* as described here, with admin consent and a client secret, gives the
+server's write access to the one site, and sends the IDs and the secret straight to the server
+(with a one-time code, valid for an hour; no session, no copying). Then it takes back the consent
+it was given for this, and deletes itself. Apps that are there by name are used again, so it can
+run again (a new secret each time). By hand, as follows:
+
 **Its own app registration**, not the add-in's: the add-in reads with each user's sign-in, the
 server writes with its own.
 

@@ -39,7 +39,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install chromium
       - run: node addin/build.mjs
-      - run: node --test tests/editor.test.js tests/ui.test.js
+      - run: node --test tests/editor.test.js tests/ui.test.js tests/server-setup.test.js
         env:
           OSIGN_TEST_SHELL: ${{ matrix.shell }}
 
