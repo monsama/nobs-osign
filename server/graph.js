@@ -161,7 +161,15 @@ function createGraph(c, opts) {
       async remove(rel) { await call('DELETE', itemUrl(rel), { what: 'Removing ' + rel, okStatus: [404] }).then((x) => x.arrayBuffer().catch(() => {})); }
     };
   }
-  return { target, token };
+  // A sharing link (https://…/:f:/g/…): what it leads to, as Graph names it (/shares, with the
+  // link encoded as u!<base64url>). Its webUrl is the item's own address, the folder in it.
+  async function share(link) {
+    const id = 'u!' + Buffer.from(String(link), 'utf8').toString('base64').replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
+    const r = await call('GET', c.graphUrl + '/shares/' + id + '/driveItem?$select=name,webUrl,folder,file', { what: 'Opening the sharing link' });
+    const j = await r.json();
+    return { name: String(j.name || ''), webUrl: String(j.webUrl || ''), folder: !!j.folder };
+  }
+  return { target, token, share };
 }
 
 // The same, in a folder on the disk: for a server without Graph (development, tests).

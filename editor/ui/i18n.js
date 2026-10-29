@@ -183,10 +183,11 @@
     '<b>Everyone who gets a signature</b> needs read access to the folder OSign: in SharePoint, on the folder, <b>Share</b> → <i>Everyone except external users</i> → <b>Can view</b>. While testing, leave it to yourself.': '<b>Alle, die eine Signatur erhalten</b>, brauchen Lesezugriff auf den Ordner OSign: in SharePoint beim Ordner <b>Teilen</b> → <i>Jeder außer externen Benutzern</i> → <b>Kann anzeigen</b>. Während der Tests nur für Sie lassen.',
     'Setup assistant': 'Einrichtungsassistent',
     'Step by step through the SharePoint folder, the app registration and the add-in': 'Schritt für Schritt durch den SharePoint-Ordner, die App-Registrierung und das Add-in',
-    'Address of the folder in SharePoint': 'Adresse des Ordners in SharePoint',
+    'Address of the folder in SharePoint or OneDrive': 'Adresse des Ordners in SharePoint oder OneDrive',
+    '(from the address bar, or a sharing link)': '(aus der Adressleiste, oder ein Freigabelink)',
+    'Test': 'Testen',
     'On this PC: {0}': 'Auf diesem PC: {0}',
     'That is not an address in SharePoint (https://….sharepoint.com/…).': 'Das ist keine Adresse in SharePoint (https://….sharepoint.com/…).',
-    'This link does not say which folder it is (sharing links usually do not). Open the folder in the browser and copy the address from the address bar.': 'Dieser Link sagt nicht, welcher Ordner es ist (Freigabelinks meist nicht). Öffnen Sie den Ordner im Browser und kopieren Sie die Adresse aus der Adresszeile.',
     'This folder is not on this PC yet: NOBS OSign publishes through OneDrive. In SharePoint, open the library and choose Sync, wait until the folder is there, then paste the link again.': 'Dieser Ordner ist noch nicht auf diesem PC: NOBS OSign veröffentlicht über OneDrive. Öffnen Sie in SharePoint die Bibliothek und wählen Sie Synchronisieren, warten Sie, bis der Ordner da ist, und fügen Sie den Link dann nochmals ein.',
     'NOBS OSign cannot tell where this folder is in SharePoint: OneDrive does not sync it. Choose «SharePoint link» instead, or a folder OneDrive syncs.': 'NOBS OSign kann nicht erkennen, wo dieser Ordner in SharePoint liegt: OneDrive synchronisiert ihn nicht. Wählen Sie stattdessen «SharePoint-Link» oder einen Ordner, den OneDrive synchronisiert.',
     "This is a shortcut in your OneDrive («Add shortcut to My files»): NOBS OSign cannot tell which SharePoint folder it is. Choose «SharePoint link» and paste the folder's address.": 'Das ist eine Verknüpfung in Ihrem OneDrive («Verknüpfung zu „Meine Dateien“ hinzufügen»): NOBS OSign kann nicht erkennen, welcher SharePoint-Ordner es ist. Wählen Sie «SharePoint-Link» und fügen Sie die Adresse des Ordners ein.',
@@ -500,7 +501,16 @@
     'Where users and groups are read is not set (like DC=example,DC=ch).': 'Wo Benutzer und Gruppen gelesen werden, ist nicht gesetzt (z. B. DC=example,DC=ch).',
     'Where the users are is not set (like OU=Users,DC=example,DC=ch).': 'Wo die Benutzer sind, ist nicht gesetzt (z. B. OU=Users,DC=example,DC=ch).',
     'The sign-in group is not set: without it, every account in the directory could sign in.': 'Die Anmeldegruppe ist nicht gesetzt: ohne sie könnte sich jedes Konto im Verzeichnis anmelden.',
-    "The service account's password is missing (secrets/ldap_service_password, or Server connections).": 'Das Passwort des Dienstkontos fehlt (secrets/ldap_service_password oder Server-Verbindungen).'
+    "The service account's password is missing (secrets/ldap_service_password, or Server connections).": 'Das Passwort des Dienstkontos fehlt (secrets/ldap_service_password oder Server-Verbindungen).',
+    'Opening the sharing link…': 'Der Freigabelink wird geöffnet…',
+    'A sharing link does not say which folder it is.': 'Ein Freigabelink sagt nicht, welcher Ordner es ist.',
+    'This address does not say which folder it is. Open the folder in the browser and copy the address from the address bar.': 'Diese Adresse sagt nicht, welcher Ordner es ist. Öffnen Sie den Ordner im Browser und kopieren Sie die Adresse aus der Adressleiste.',
+    'Open the link': 'Link öffnen',
+    'then copy the address from the address bar and paste it here.': 'dann die Adresse aus der Adressleiste kopieren und hier einfügen.',
+    'That is not a sharing link of SharePoint or OneDrive.': 'Das ist kein Freigabelink von SharePoint oder OneDrive.',
+    'The server cannot open sharing links before publishing to SharePoint is set up.': 'Der Server kann Freigabelinks erst öffnen, wenn das Veröffentlichen nach SharePoint eingerichtet ist.',
+    'The server may not open sharing links (its app registration may only reach the sites granted to it).': 'Der Server darf keine Freigabelinks öffnen (seine App-Registrierung erreicht nur die ihr freigegebenen Sites).',
+    'This sharing link leads nowhere: it was removed or has expired.': 'Dieser Freigabelink führt nirgends hin: er wurde entfernt oder ist abgelaufen.'
   };
 
   DE.html = {
