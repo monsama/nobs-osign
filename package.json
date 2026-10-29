@@ -1,6 +1,6 @@
 {
   "name": "osign",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "description": "Central email signatures for classic and new Outlook: an Outlook add-in, and the editor that publishes the signatures it reads.",
   "scripts": {
