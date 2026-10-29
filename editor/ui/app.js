@@ -569,8 +569,8 @@
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && core.fieldSource(S.config, f) === 'none'; });
     if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', '))));
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
-      ? t('No Graph source, so empty in Outlook: {0}. See Fields.', noGraph.map(fieldName).join(', '))
-      : t('No source (neither Graph nor AD attribute), so empty in Outlook: {0}. See Fields.', noGraph.map(fieldName).join(', '))));
+      ? t('No Graph source, so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))
+      : t('No source (neither Graph nor AD attribute), so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))));
     if ($('pvSource').value === 'ad' && S.adName) {
       // What this user would get, as the add-in decides it (the From address being their own).
       const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
@@ -920,7 +920,7 @@
       const where = toSharePoint()
         ? t('Publishing goes to {0}: the SharePoint site and folder of the add-in below, through Microsoft Graph.', S.settings.folder)
         : t("Publishing goes into the server's own folder ({0}), not to SharePoint: Microsoft Graph is not set up on the server.", S.settings.folder);
-      const state = r.folderError ? t('SharePoint cannot be reached: {0}', t(r.folderError)) : r.folderFound ? t('Found.') : toSharePoint() ? t('The folder is not there yet: it is made on the first publish.') : '';
+      const state = !toSharePoint() ? '' : r.folderError ? t('SharePoint cannot be reached: {0}', t(r.folderError)) : r.folderFound ? t('Found.') : t('The folder is not there yet: it is made on the first publish.');
       w.textContent = where + (state ? ' ' + state : '');
       w.className = 'lead' + (r.folderError || !toSharePoint() ? ' warn' : '');
       return;
@@ -944,6 +944,8 @@
     $('setServerWhere').hidden = !onServer();
     for (const id of ['setFolder', 'setPhotos', 'setAddinFolder']) $(id).closest('label').hidden = onServer();
     document.querySelector('#dlgSettings [data-th=settingsLead]').hidden = onServer();
+    document.querySelector('#dlgSettings [data-th=addinLead]').hidden = onServer();
+    document.querySelector('#dlgSettings [data-th=addinLeadServer]').hidden = !onServer();
     $('setAddinBuild').closest('p').hidden = onServer() && $('setAddinBuild').disabled;
     // The server's connections: the local account admin's alone (server/connections.js).
     $('setConnRow').hidden = !(onServer() && S.info.user && S.info.user.local);
@@ -1770,7 +1772,10 @@
       if (info.features.signOut) {
         const out = $('btnLogout');
         out.hidden = false;
-        if (info.user) out.title = t('Signed in as {0}', info.user.name || info.user.login);
+        if (info.user) {
+          out.title = t('Signed in as {0}', info.user.name || info.user.login);
+          $('who').textContent = info.user.name || info.user.login; $('who').title = out.title; $('who').hidden = false;
+        }
         out.addEventListener('click', async () => {
           if (saveTimer) await save();
           try { await api('logout'); } catch (e) { /* signed out either way */ }

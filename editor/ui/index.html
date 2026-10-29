@@ -21,6 +21,7 @@
   <button id="btnWizard" class="ghost" title="Step by step through the SharePoint folder, the app registration and the add-in">Setup assistant</button>
   <button id="btnSettings" class="ghost">Settings</button>
   <button id="btnPublish" class="primary">Publish…</button>
+  <span id="who" class="who" hidden></span>
   <button id="btnLogout" class="ghost" hidden>Sign out</button>
   <a id="coffeeBtn" class="btnlike icon" href="https://buymeacoffee.com/monsama" target="_blank" rel="noopener noreferrer" title="Buy me a coffee: if NOBS OSign saves you some time" aria-label="Buy me a coffee"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/></svg></a>
 </header>
@@ -160,7 +161,7 @@
       <p class="lead" data-th="installLead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
         is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://osign.contoso.com/manifest.xml</code>. Settings → Outlook add-in makes the files.</p>
       <p id="installLink" class="copyline" hidden><span>Manifest:</span> <code id="installManifest"></code><button type="button" class="copy" data-copy="installManifest">Copy</button></p>
-      <p id="installNone" class="hint" hidden>No address for the add-in yet: set it in the setup assistant (step 3).</p>
+      <p id="installNone" class="hint" hidden>No address for the add-in yet: set it in the setup assistant (Where the add-in is served).</p>
     </section>
 
     <!-- users from AD -->
@@ -192,8 +193,12 @@
     <h2>Settings</h2>
     <label>Language<select id="setLang"></select></label>
     <p id="setServerWhere" class="lead" hidden></p>
-    <p id="setConnRow" hidden><button type="button" id="setConn">Server connections…</button>
-      <small>Active Directory, SharePoint and Cloudflare: the server's own settings, for the local account admin.</small></p>
+    <section id="setConnRow" hidden>
+      <h3>Server</h3>
+      <p class="lead">Active Directory, SharePoint and Cloudflare: the server's own connections. Only the local account admin can
+        change them.</p>
+      <p><button type="button" id="setConn">Server connections…</button></p>
+    </section>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
       <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
       <small id="setFolderNote"></small> <small id="setWhere" class="where"></small>
@@ -210,11 +215,14 @@
     <p class="lead" data-th="addinLead">The add-in's files go on an HTTPS web server of your own (your web server, Azure Static Web Apps, …):
       they are only code, the signatures stay in SharePoint. This makes them for your server; copy the folder there and upload
       its <code>manifest.xml</code> in the Microsoft 365 admin center.</p>
+    <p class="lead" data-th="addinLeadServer" hidden>The add-in's files are made here, from the settings below: uploaded to Cloudflare Pages
+      (Server connections), or downloaded as a ZIP for another HTTPS web server. They are only code; the signatures stay in
+      SharePoint. Then upload <code>manifest.xml</code> in the Microsoft 365 admin center.</p>
     <div class="grid2">
       <label>Address of the add-in <small>(where the files are served)</small><input id="setAddinUrl" placeholder="https://osign.contoso.com/"></label>
       <label>Write the files to<span class="pick"><input id="setAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="setAddinFolder">Choose folder…</button></span></label>
       <label>Web server <small>(its caching file goes with the files)</small><select id="setAddinHost">
-        <option value="">-</option><option value="cloudflare">Cloudflare Pages</option><option value="azure">Azure Static Web Apps</option>
+        <option value="">Choose…</option><option value="cloudflare">Cloudflare Pages</option><option value="azure">Azure Static Web Apps</option>
         <option value="iis">IIS</option><option value="apache">Web host (Apache)</option><option value="other">Another web server</option></select></label>
       <label>App registration: client ID<input id="setClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
       <label>Tenant ID <small>(only for a single-organization app)</small><input id="setTenantId" placeholder="optional"></label>
@@ -226,8 +234,8 @@
       <a id="setAddinZip" href="/addin.zip" download hidden>Download as ZIP</a></p>
     <p id="setAddinOk" class="ok"></p>
     <p id="setErr" class="err"></p>
-    <p><a class="btnlike" href="https://buymeacoffee.com/monsama" target="_blank" rel="noopener noreferrer" title="If NOBS OSign saves you some time"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/></svg>Buy me a coffee</a></p>
     <div class="dlg-foot">
+      <a class="btnlike foot-left" href="https://buymeacoffee.com/monsama" target="_blank" rel="noopener noreferrer" title="If NOBS OSign saves you some time"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/></svg>Buy me a coffee</a>
       <button value="cancel" class="ghost" formnovalidate>Cancel</button>
       <button id="setSave" value="default" class="primary">Save</button>
     </div>
@@ -331,11 +339,11 @@
       <p class="wiz-intro" data-th="wizWelcome">NOBS OSign manages your organisation's email signatures centrally and adds them
         automatically to every message in classic Outlook, new Outlook and Outlook on the web. This assistant guides you
         through the one-time setup. Each step explains what to do in Microsoft 365 and saves your entries right away, so
-        you can pause at any time and continue later under <b>Settings → Setup assistant</b>.</p>
+        you can pause at any time and continue later with <b>Setup assistant</b> at the top.</p>
       <h3 class="wiz-h">Before you start</h3>
       <ul class="wiz-list ticks">
         <li data-th="wizNeed1"><b>Microsoft 365 administrator rights</b> – for the app registration in Entra ID and for deploying the add-in.</li>
-        <li data-th="wizNeed2"><b>Access to SharePoint</b> – step 1 creates a folder for the signatures.</li>
+        <li data-th="wizNeed2"><b>Access to SharePoint</b> – for a folder that holds the signatures.</li>
         <li data-th="wizNeed3"><b>A web host for the add-in's files</b> – for example Cloudflare Pages: free of charge, no credit card required.</li>
         <li data-th="wizNeed4"><b>About one hour.</b> After deployment, Microsoft 365 can take up to 24 hours to make the add-in available in every mailbox.</li>
       </ul>

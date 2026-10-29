@@ -196,7 +196,7 @@
     "NOBS OSign cannot tell where this folder is in SharePoint. Choose «SharePoint link» and paste the folder's address.": 'NOBS OSign kann nicht erkennen, wo dieser Ordner in SharePoint liegt. Wählen Sie «SharePoint-Link» und fügen Sie die Adresse des Ordners ein.',
     '+ Insert field': '+ Feld einfügen',
     'not a field': 'kein Feld',
-    'No address for the add-in yet: set it in the setup assistant (step 3).': 'Noch keine Adresse für das Add-in: im Einrichtungsassistenten festlegen (Schritt 3).',
+    'No address for the add-in yet: set it in the setup assistant (Where the add-in is served).': 'Noch keine Adresse für das Add-in: im Einrichtungsassistenten festlegen (Wo das Add-in bereitgestellt wird).',
     'Help': 'Hilfe',
     'Before you start': 'Bevor Sie beginnen',
     'What to do': 'So gehen Sie vor',
@@ -261,7 +261,7 @@
     'Last published {0}': 'Zuletzt veröffentlicht {0}',
     // preview notes
     'Not a field: {0} - left as typed.': 'Kein Feld: {0} – bleibt wie geschrieben.',
-    'No Graph source, so empty in Outlook: {0}. See Fields.': 'Keine Graph-Quelle, darum in Outlook leer: {0}. Siehe Felder.',
+    'No Graph source, so empty in Outlook (see Fields): {0}': 'Keine Graph-Quelle, darum in Outlook leer (siehe Felder): {0}',
     'Values of {0} from Active Directory.': 'Werte von {0} aus dem Active Directory.',
     'This signature is open to them.': 'Diese Signatur steht ihnen zur Verfügung.',
     'This signature is NOT open to them.': 'Diese Signatur steht ihnen NICHT zur Verfügung.',
@@ -317,7 +317,7 @@
     'OK': 'OK',
     // value source
     "Where the users' values come from": 'Woher die Werte der Benutzer kommen',
-    'No source (neither Graph nor AD attribute), so empty in Outlook: {0}. See Fields.': 'Keine Quelle (weder Graph noch AD-Attribut), darum in Outlook leer: {0}. Siehe Felder.',
+    'No source (neither Graph nor AD attribute), so empty in Outlook (see Fields): {0}': 'Keine Quelle (weder Graph noch AD-Attribut), darum in Outlook leer (siehe Felder): {0}',
     'Empty in Outlook (no source): {0}': 'Leer in Outlook (keine Quelle): {0}',
     'Users are exported from Active Directory on publishing ({0} field(s){1}).': 'Die Benutzer werden beim Veröffentlichen aus dem Active Directory exportiert ({0} Feld(er){1}).',
     ', and the groups': ' und die Gruppen',
@@ -428,6 +428,9 @@
     'Name the folder in the site, like OSign.': 'Den Ordner in der Site angeben, z. B. OSign.',
     'Publishing to SharePoint is not set up on the server (Settings → Server connections).': 'Veröffentlichen nach SharePoint ist auf dem Server nicht eingerichtet (Einstellungen → Server-Verbindungen).',
     // server connections
+    'Choose…': 'Wählen…',
+    'Server': 'Server',
+    "Active Directory, SharePoint and Cloudflare: the server's own connections. Only the local account admin can change them.": 'Active Directory, SharePoint und Cloudflare: die Verbindungen des Servers selbst. Ändern kann sie nur das lokale Konto admin.',
     'Server connections…': 'Server-Verbindungen…',
     "Active Directory, SharePoint and Cloudflare: the server's own settings, for the local account admin.": 'Active Directory, SharePoint und Cloudflare: die Einstellungen des Servers selbst, für das lokale Konto admin.',
     'Server connections': 'Server-Verbindungen',
@@ -548,6 +551,7 @@
   };
 
   DE.html = {
+    addinLeadServer: 'Die Dateien des Add-ins werden hier aus den Einstellungen unten erstellt: zu Cloudflare Pages hochgeladen (Server-Verbindungen) oder als ZIP für einen anderen HTTPS-Webserver heruntergeladen. Sie sind nur Code; die Signaturen bleiben in SharePoint. Danach <code>manifest.xml</code> im Microsoft 365 Admin Center hochladen.',
     wizScriptLead: '<b>Der einfache Weg: das Setup-Skript.</b> Es erledigt diesen ganzen Schritt für Sie, nach einer einzigen Anmeldung mit Ihrem Administratorkonto (SharePoint- oder globaler Administrator) im Browser:',
     wizScriptWhat: '<li>die App-Registrierung des Add-ins <b>NOBS OSign</b>, mit Umleitungs-URI, Berechtigungen und Administratorzustimmung;</li><li>die App-Registrierung des Servers <b>NOBS OSign server</b> (Sites.Selected) mit geheimem Clientschlüssel, und Schreibzugriff auf die SharePoint-Site der Signaturen, und keine andere;</li><li>es schickt die IDs und den Schlüssel direkt an diesen Server: nichts zu kopieren;</li><li>danach entfernt es die Rechte, die es dafür gebraucht hat, und löscht sich selbst.</li>',
     wizScriptRun: 'Auf einem Windows-PC in PowerShell ausführen:',
@@ -588,9 +592,9 @@
     hSpSite: 'Wo das Add-in den OSign-Ordner in SharePoint findet. NOBS OSign füllt das selbst aus, anhand des Ordners, den Sie auf diesem PC wählen, sofern OneDrive ihn synchronisiert. <code>root</code> ist die Startseite (<code>https://&lt;tenant&gt;.sharepoint.com</code>). Von Hand: die Adresse des Ordners aus dem Browser oder einen Freigabelink darauf einfügen; NOBS OSign wandelt ihn um, z. B. in <code>contoso.sharepoint.com:/sites/IT:</code>.',
     wizLibOwn: '<b>Ein bestehender Ordner auf diesem PC</b><span class="sub">Der Ordner, wie OneDrive ihn im Explorer zeigt, mit SharePoint synchronisiert.</span>',
     wizLibLink: '<b>SharePoint-Link</b><span class="sub">Öffnen Sie den Ordner in SharePoint im Browser und kopieren Sie die Adresse aus der Adresszeile.</span>',
-    wizWelcome: 'NOBS OSign verwaltet die E-Mail-Signaturen Ihrer Organisation zentral und fügt sie automatisch in jede Nachricht ein – im klassischen und im neuen Outlook sowie in Outlook im Web. Dieser Assistent führt Sie durch die einmalige Einrichtung. Jeder Schritt erklärt, was in Microsoft 365 zu tun ist, und speichert Ihre Angaben sofort. Sie können jederzeit unterbrechen und später unter <b>Einstellungen → Einrichtungsassistent</b> fortfahren.',
+    wizWelcome: 'NOBS OSign verwaltet die E-Mail-Signaturen Ihrer Organisation zentral und fügt sie automatisch in jede Nachricht ein – im klassischen und im neuen Outlook sowie in Outlook im Web. Dieser Assistent führt Sie durch die einmalige Einrichtung. Jeder Schritt erklärt, was in Microsoft 365 zu tun ist, und speichert Ihre Angaben sofort. Sie können jederzeit unterbrechen und später mit <b>Einrichtungsassistent</b> oben fortfahren.',
     wizNeed1: '<b>Administratorrechte für Microsoft 365</b> – für die App-Registrierung in Entra ID und die Verteilung des Add-ins.',
-    wizNeed2: '<b>Zugriff auf SharePoint</b> – in Schritt 1 legen Sie einen Ordner für die Signaturen an.',
+    wizNeed2: '<b>Zugriff auf SharePoint</b> – für einen Ordner, der die Signaturen enthält.',
     wizNeed3: '<b>Einen Webhost für die Dateien des Add-ins</b> – zum Beispiel Cloudflare Pages: kostenlos, ohne Kreditkarte.',
     wizNeed4: '<b>Etwa eine Stunde.</b> Nach der Verteilung kann es bis zu 24 Stunden dauern, bis das Add-in in jedem Postfach verfügbar ist.',
     wizFolderLead: 'NOBS OSign legt die Signaturen, ihre Bilder und die Fotos in einem Ordner im SharePoint Ihrer Firma ab, wo Outlook sie mit der Anmeldung der jeweiligen Person liest. Legen Sie dort einen Ordner <b>OSign</b> an (darin einen Ordner <b>photos</b>) und sagen Sie NOBS OSign, welchen. Das ist nicht der Ordner, in den Sie das Programm NOBS OSign entpackt haben.',
