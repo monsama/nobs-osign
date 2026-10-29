@@ -163,15 +163,24 @@ The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows Powe
 | `shared/signature-core.js` | Placeholders, empty lines, who gets which signature. The editor's preview and the add-in both run this one file. |
 | `editor/OSign.ps1` | The editor's backend: local web server, draft, folder publishing, AD lookup, the add-in's files |
 | `editor/ui/` | The editor's web UI |
-| `server/` | The editor's backend for the container (under way): the same API, with a sign-in |
+| `server/` | The editor's backend for the container: the same API, with a sign-in (Docker: `Dockerfile`, `docker-compose.yml`, `deploy-osign.sh`) |
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
 | `tests/` | Engine, add-in runtime (with a stand-in Graph and SharePoint), backend API, editor and pane in a browser |
 
+## On a server
+
+The editor also runs as a container, with Docker Compose, behind the shared proxy of NOBS
+Inventory: admins sign in with their Windows account, the server writes into SharePoint through
+Microsoft Graph and uploads the add-in's files to Cloudflare Pages. Nothing on it is reachable from
+the internet. [docs/SETUP.md](docs/SETUP.md) ("The editor on a server") has the install.
+
 ## Releases
 
-Each version is a tag (`v0.5.0`) with the zip `OSign-v0.5.0.zip` and its checksum on the GitHub
-releases page. The version is kept in `package.json`, `package-lock.json` and `editor/OSign.ps1`;
-the add-in's manifest takes it from `package.json`.
+Each version is a tag (`v0.5.0`) with the zip `OSign-v0.5.0.zip` (the editor for Windows), the
+server's install files `osign-server-0.5.0.tar.gz`, their checksums on the GitHub releases page,
+and the Docker image `ghcr.io/monsama/osign:0.5.0`, scanned before it is pushed. The version is
+kept in `package.json`, `package-lock.json`, `editor/OSign.ps1` and `docker-compose.yml`; the
+add-in's manifest takes it from `package.json`.
 
 To release, raise the version on main (`node scripts/bump-version.mjs 0.5.0`), then either push
 the tag with `scripts/release.sh 0.5.0`, or run the **release** workflow by hand on main (Actions →

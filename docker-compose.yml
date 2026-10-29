@@ -1,0 +1,86 @@
+# OSign, the signature editor, as a server. Generated values live in ./secrets and .env (see deploy-osign.sh).
+# HTTPS comes from the shared proxy (nobs-proxy, as for NOBS Inventory): deploy-osign.sh puts osign.caddy in its sites.
+# Nothing here is reachable from the internet: the add-in's files go to Cloudflare Pages, uploaded from here.
+name: osign
+
+services:
+  app:
+    container_name: osign
+    # Pinned release image (set OSIGN_IMAGE in .env). Built locally only if the pull is not possible.
+    image: ${OSIGN_IMAGE:-ghcr.io/monsama/osign:0.4.7}
+    build: .
+    restart: unless-stopped
+    # No extra rights, and no writing outside its data: it needs neither.
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    expose:
+      - "8080"
+    environment:
+      # The time zone of the daily AD export (OSIGN_AD_EXPORT_AT).
+      TZ: ${TZ:-Europe/Zurich}
+      OSIGN_SECURE_COOKIE: ${OSIGN_SECURE_COOKIE:-1}
+      OSIGN_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      # Sign-in and AD (server/ldap.js, server/directory.js)
+      OSIGN_LDAP_URL: ${OSIGN_LDAP_URL:-}
+      OSIGN_LDAP_STARTTLS: ${OSIGN_LDAP_STARTTLS:-}
+      OSIGN_LDAP_BIND: ${OSIGN_LDAP_BIND:-}
+      OSIGN_LDAP_BASE: ${OSIGN_LDAP_BASE:-}
+      OSIGN_LDAP_GROUP: ${OSIGN_LDAP_GROUP:-}
+      OSIGN_LDAP_LOGIN_ATTR: ${OSIGN_LDAP_LOGIN_ATTR:-}
+      OSIGN_LDAP_CA: ${OSIGN_LDAP_CA:-}
+      OSIGN_LDAP_SERVICE_DN: ${OSIGN_LDAP_SERVICE_DN:-}
+      OSIGN_LDAP_SERVICE_PASSWORD_FILE: /run/secrets/ldap_service_password
+      OSIGN_LDAP_DIRECTORY_BASE: ${OSIGN_LDAP_DIRECTORY_BASE:-}
+      OSIGN_AD_EXPORT_AT: ${OSIGN_AD_EXPORT_AT:-}
+      # Publishing into SharePoint (server/graph.js)
+      OSIGN_GRAPH_TENANT_ID: ${OSIGN_GRAPH_TENANT_ID:-}
+      OSIGN_GRAPH_CLIENT_ID: ${OSIGN_GRAPH_CLIENT_ID:-}
+      OSIGN_GRAPH_CLIENT_SECRET_FILE: /run/secrets/graph_client_secret
+      # The add-in's files to Cloudflare Pages (server/addin.js)
+      OSIGN_CF_ACCOUNT_ID: ${OSIGN_CF_ACCOUNT_ID:-}
+      OSIGN_CF_PROJECT: ${OSIGN_CF_PROJECT:-}
+      OSIGN_CF_API_TOKEN_FILE: /run/secrets/cf_api_token
+    secrets:
+      - admin_password
+      - ldap_service_password
+      - graph_client_secret
+      - cf_api_token
+    volumes:
+      - osign-data:/data
+      # A CA certificate for the domain controller (OSIGN_LDAP_CA=/run/osign-certs/ldap-ca.pem).
+      - ./certificates:/run/osign-certs:ro
+    # The shared proxy reaches the app as osign:8080 on this network.
+    networks:
+      - default
+      - nobs-proxy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password
+  ldap_service_password:
+    file: ./secrets/ldap_service_password
+  graph_client_secret:
+    file: ./secrets/graph_client_secret
+  cf_api_token:
+    file: ./secrets/cf_api_token
+
+volumes:
+  osign-data:
+    name: osign-data
+
+networks:
+  nobs-proxy:
+    external: true

@@ -42,6 +42,11 @@ asked.
   SharePoint folder; the server keeps a copy of what it holds (`users-mirror.json`), so a read asks
   SharePoint only for the files that changed since. `features.adExport` is `{ at, last }` when the
   server exports by itself every day (`OSIGN_AD_EXPORT_AT`); `last` is `{ at, ok, result | error }`.
+- **addin/build** makes the add-in's files on the server (into the data volume, with
+  `addin/fill.mjs`); `folder` is empty. **addin/check** compares what the add-in's address serves with
+  them. **addin/upload** → `{ ok, id, url, uploaded, files }` uploads them to Cloudflare Pages
+  (Direct Upload; `features.pagesUpload`, `features.pagesProblem`). `GET /addin.zip` gives them as a
+  ZIP, to upload by hand.
 - **sp/check** `{ spSite, spFolder }` → `{ ok, found, photos, where }`: whether the server reaches
   that folder, before it is saved (the setup assistant). `found: false` means the site is reached
   and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,

@@ -54,7 +54,9 @@ function ldapProblem(c) {
 }
 
 async function connect(c) {
-  const ca = c.caFile ? [...tls.rootCertificates, fs.readFileSync(c.caFile, 'utf8')] : null;
+  // The CA named, on top of the public ones Node trusts; an empty file (no CA given) adds none.
+  const extra = c.caFile ? fs.readFileSync(c.caFile, 'utf8').trim() : '';
+  const ca = extra ? [...tls.rootCertificates, extra] : null;
   const opts = { url: c.url, timeout: 8000, connectTimeout: 8000 };
   const plain = /^ldap:\/\//i.test(c.url);
   if (!plain && ca) opts.tlsOptions = { ca };

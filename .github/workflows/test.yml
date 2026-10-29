@@ -42,3 +42,23 @@ jobs:
       - run: node --test tests/editor.test.js tests/ui.test.js
         env:
           OSIGN_TEST_SHELL: ${{ matrix.shell }}
+
+  # The server's image: it builds, starts, answers its health check and shows the sign-in page;
+  # and the scripts that install and update it pass shellcheck.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -x deploy-osign.sh scripts/osign-lib.sh scripts/update.sh scripts/backup.sh scripts/restore.sh scripts/release.sh
+      - run: docker build -t osign:ci .
+      - name: Start it and ask it
+        run: |
+          docker run -d --name osign --read-only --tmpfs /tmp --cap-drop ALL -e OSIGN_ADMIN_PASSWORD=ci -e OSIGN_SECURE_COOKIE=0 -p 127.0.0.1:8080:8080 osign:ci
+          for i in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' osign)" = healthy ] && break; sleep 2; done
+          docker inspect -f '{{.State.Health.Status}}' osign | grep -qx healthy || { docker logs osign; exit 1; }
+          curl -fsS http://127.0.0.1:8080/login | grep -q loginForm
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/api/info)" = 401
+          # The add-in's template is in the image: info says the files can be made.
+          c="$(curl -s -D - -o /dev/null -X POST -H 'Content-Type: application/json' -d '{"login":"admin","password":"ci"}' http://127.0.0.1:8080/api/login | grep -i '^set-cookie' | sed -E 's/^[^:]+: ([^;]+).*/\1/')"
+          curl -fsS -X POST -H 'Content-Type: application/json' -H "Cookie: $c" -d '{}' http://127.0.0.1:8080/api/info | grep -q '"addinFiles":true'
+          docker logs osign

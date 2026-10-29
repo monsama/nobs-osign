@@ -15,6 +15,7 @@ const { createAuth } = require('./auth');
 const { ldapConfig } = require('./ldap');
 const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith } = require('./directory');
 const { createUsers, nextAt } = require('./users');
+const addin = require('./addin');
 
 const VERSION = require('../package.json').version;
 const ROOT = path.resolve(__dirname, '..');
@@ -114,6 +115,10 @@ function createApp(opts) {
   const adOn = directoryEnabled(dir) && !directoryProblem(dir);
   if (directoryEnabled(dir) && directoryProblem(dir)) log.warn('Active Directory is not set up right: ' + directoryProblem(dir));
   const users = createUsers({ dataDir, directory: dir, log });
+  // The add-in's files, as last made; and where they go (Cloudflare Pages).
+  const addinDir = path.join(dataDir, 'addin');
+  const pages = addin.pagesConfig(env);
+  const fetchFn = (opts && opts.fetch) || fetch;
   // The scheduled export (OSIGN_AD_EXPORT_AT, hh:mm in TZ): every day, what the published
   // signatures ask for, so the values stay as current as AD without anyone publishing.
   const exportAt = String(env.OSIGN_AD_EXPORT_AT || '').trim();
@@ -148,7 +153,11 @@ function createApp(opts) {
       backend: 'node', version: VERSION, dataDir,
       // Not here yet: AD lookup and export (LDAP), and the add-in's files (Cloudflare Pages).
       features: {
-        adLookup: adOn, addinFiles: false, pickFolder: false, signOut: true,
+        adLookup: adOn, addinFiles: !!addin.templateDir(env), pickFolder: false, signOut: true,
+        // The add-in's files go to Cloudflare Pages from here, or by hand as a ZIP.
+        pagesUpload: !addin.pagesProblem(pages),
+        pagesProblem: addin.pagesProblem(pages),
+        pagesProject: pages.project,
         // 'sharepoint': publishing goes through Graph; 'folder': into the server's folder.
         publishTarget: graph ? 'sharepoint' : 'folder',
         graphClientId: graph ? graphCfg.clientId : '',
@@ -175,6 +184,21 @@ function createApp(opts) {
     },
     'load-published': async () => {
       try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }
+    },
+    // The add-in's files: made into the data volume, then uploaded or downloaded.
+    'addin/build': async () => {
+      const r = await addin.build(env, settings.get(), addinDir);
+      return r.error ? r : Object.assign({ folder: '' }, r);
+    },
+    'addin/check': async () => {
+      const s = settings.get();
+      if (!s.addinUrl) return { error: 'Enter the address the add-in will be served from.' };
+      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Make the add-in files first.' };
+      return addin.check(s.addinUrl, addinDir, fetchFn);
+    },
+    'addin/upload': async () => {
+      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Make the add-in files first.' };
+      try { return await addin.pagesDeploy(pages, addinDir, fetchFn); } catch (e) { return { error: e.message }; }
     },
     // Active Directory, with the service account.
     'ad/lookup': async (d, s) => {
@@ -216,8 +240,6 @@ function createApp(opts) {
     'pick-folder': 'Choosing a folder needs Windows.',
     'sp/resolve': 'The server does not use a synced folder.',
     'sp/local': 'The server does not use a synced folder.',
-    'addin/build': "Making the add-in's files is not in the server version yet.",
-    'addin/check': "Checking the add-in's files is not in the server version yet.",
     quit: 'The server keeps running; sign out instead.'
   };
 
@@ -271,6 +293,11 @@ function createApp(opts) {
       if (!s) return send(res, 401, 'text/plain; charset=utf-8', '401 Not signed in');
       if (pathname === '/shared/signature-core.js') return sendFile(res, path.dirname(CORE_FILE), path.basename(CORE_FILE), STATIC_TYPES);
       if (pathname.startsWith('/ui/')) return sendFile(res, UI_DIR, pathname.slice(4), STATIC_TYPES);
+      // The add-in's files as last made, to upload by hand.
+      if (pathname === '/addin.zip') {
+        if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return send(res, 404, 'text/plain; charset=utf-8', 'Make the add-in files first.');
+        return send(res, 200, 'application/zip', addin.zip(addinDir), { 'Content-Disposition': 'attachment; filename="osign-addin.zip"' });
+      }
       if (pathname.startsWith('/assets/')) return sendFile(res, store.assetDir, pathname.slice(8), ASSET_TYPES);
       if (pathname.startsWith('/photos/')) {
         const name = pathname.slice(8);

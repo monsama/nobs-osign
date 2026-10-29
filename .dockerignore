@@ -1,0 +1,10 @@
+node_modules
+dist
+tests
+docs
+.git
+.github
+.env
+secrets
+backup
+certificates
