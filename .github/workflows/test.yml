@@ -39,7 +39,11 @@ jobs:
       - run: npm ci
       - run: npx playwright install chromium
       - run: node addin/build.mjs
-      - run: node --test tests/editor.test.js tests/ui.test.js tests/server-setup.test.js
+      - run: node --test tests/editor.test.js tests/ui.test.js
+        env:
+          OSIGN_TEST_SHELL: ${{ matrix.shell }}
+      # The setup script for Microsoft 365, in this shell: a step of its own, not next to the UI test.
+      - run: node --test tests/server-setup.test.js
         env:
           OSIGN_TEST_SHELL: ${{ matrix.shell }}
 
