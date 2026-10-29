@@ -18,6 +18,12 @@ const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
 const { createHistory } = require('./history');
+const { createCerts } = require('./cert');
+const { createAudit } = require('./audit');
+const { exportBackup, openBackup, restoreFiles } = require('./backup');
+const { createUpdates } = require('./updates');
+const { diffConfigs } = require('./diff');
+const { writeAtomic, readText } = require('./store');
 const core = require('../shared/signature-core.js');
 const addin = require('./addin');
 
@@ -32,6 +38,8 @@ const PHOTO_CACHE_MS = 5 * 60 * 1000;
 // A request body larger than this is refused: a configuration is at most 1.5 MB, an image 1 MB
 // (as base64, 1.4 MB).
 const MAX_BODY = 4 * 1024 * 1024;
+// A backup brought back may be larger: the history with its images.
+const MAX_BACKUP_BODY = 96 * 1024 * 1024;
 
 // Never inside another site's frame, never read as another type; the page loads nothing but its
 // own files, plus images from https (an image a signature links to, shown in the preview). It
@@ -64,10 +72,10 @@ function sendFile(res, root, rel, types) {
   send(res, 200, type, fs.readFileSync(full));
 }
 
-function readBody(req) {
+function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     const parts = []; let size = 0;
-    req.on('data', (d) => { size += d.length; if (size > MAX_BODY) { reject(Object.assign(new Error('too large'), { status: 413 })); req.destroy(); } else parts.push(d); });
+    req.on('data', (d) => { size += d.length; if (size > max) { reject(Object.assign(new Error('too large'), { status: 413 })); req.destroy(); } else parts.push(d); });
     req.on('end', () => resolve(Buffer.concat(parts).toString('utf8')));
     req.on('error', reject);
   });
@@ -99,18 +107,22 @@ function createApp(opts) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(publishDir, { recursive: true });
   const store = createStore(dataDir);
+  // Who did what (server/audit.js); what each request adds to it is in AUDIT, below.
+  const audit = createAudit({ dataDir });
   // What was published, to bring back (server/history.js).
   const history = createHistory({ dataDir, assetDir: store.assetDir });
   // The connections (AD, Graph, Cloudflare): .env, with what the admin saved in the editor on top.
   // Each is read anew when that changes (configure, below), so no restart is needed.
   const connections = createConnections({ dataDir, env });
+  // The server's certificate for Microsoft Entra ID (server/cert.js), sealed like the passwords.
+  const certs = createCerts({ dataDir, seal: connections.seal, open: connections.open });
   // Filled in by configure(); the same objects throughout, so what holds them sees the change.
   const graphCfg = {}, ldapCfg = {}, dir = {}, pages = {};
   const refill = (obj, fresh) => { for (const k of Object.keys(obj)) delete obj[k]; Object.assign(obj, fresh); };
   // Where publishing goes: SharePoint through Graph when the server's app registration is set
   // up, its own folder otherwise (development, tests).
   let graph = null;
-  // When the client secret runs out, and how many days are left (null: not known).
+  // When the client secret (or the certificate) runs out, and how many days are left (null: not known).
   let secretExpires = '';
   const secretDaysLeft = () => (secretExpires && !isNaN(Date.parse(secretExpires)) ? Math.floor((Date.parse(secretExpires) - Date.now()) / 86400000) : null);
   const spFolder = (s) => String(s.spFolder || 'OSign').replace(/^\/+|\/+$/g, '');
@@ -163,10 +175,12 @@ function createApp(opts) {
   // Reads the connections (again): at the start, and when the admin saved them.
   function configure() {
     const e = connections.effectiveEnv();
-    refill(graphCfg, graphConfig(e));
-    secretExpires = String(e.OSIGN_GRAPH_CLIENT_SECRET_EXPIRES || '').trim();
+    const cert = certs.active();
+    refill(graphCfg, graphConfig(e, cert));
+    secretExpires = cert ? cert.expires.slice(0, 10) : String(e.OSIGN_GRAPH_CLIENT_SECRET_EXPIRES || '').trim();
     const left = secretDaysLeft();
-    if (left !== null && left <= 30) log.warn(left < 0 ? 'The server\'s client secret ran out on ' + secretExpires + ': publishing to SharePoint fails until a new one is set.' : 'The server\'s client secret runs out on ' + secretExpires + ' (in ' + left + ' days).');
+    const what = cert ? 'certificate' : 'client secret';
+    if (left !== null && left <= 30) log.warn(left < 0 ? 'The server\'s ' + what + ' ran out on ' + secretExpires + ': publishing to SharePoint fails until a new one is set (run the setup script again).' : 'The server\'s ' + what + ' runs out on ' + secretExpires + ' (in ' + left + ' days): run the setup script again.');
     graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch }) : null;
     if (graphProblem(graphCfg)) log.warn('Publishing to SharePoint is not set up right: ' + graphProblem(graphCfg));
     refill(ldapCfg, Object.assign(ldapConfig(e), (opts && opts.ldap) || {}));
@@ -187,22 +201,62 @@ function createApp(opts) {
   const setup = createSetup();
   // Its result goes where the admin would type it, and takes effect at once.
   async function setupApply(r) {
-    const when = Date.parse(r.secretExpires);
-    const expires = isNaN(when) ? '' : new Date(when).toISOString().slice(0, 10);
-    const c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId, graphSecretExpires: expires }, secrets: { graphClientSecret: r.secret } });
+    let c;
+    if (r.certThumbprint) {
+      // The certificate the script put on the app: the server signs in with it, no secret kept.
+      if (!certs.activate(r.certThumbprint)) return { error: 'The script put another certificate on the app than this setup made: download the setup script again.' };
+      c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId, graphSecretExpires: '' }, secrets: { graphClientSecret: null } });
+    } else {
+      const when = Date.parse(r.secretExpires);
+      const expires = isNaN(when) ? '' : new Date(when).toISOString().slice(0, 10);
+      certs.remove();
+      c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId, graphSecretExpires: expires }, secrets: { graphClientSecret: r.secret } });
+    }
     if (c.error) return c;
     const s = await settings.save({ clientId: r.addinClientId, tenantId: r.tenantId });
     if (s.error) return s;
     configure();
-    log.info('setup: the setup script set up Microsoft 365 (add-in ' + r.addinClientId + ', server ' + r.serverClientId + ')');
+    log.info('setup: the setup script set up Microsoft 365 (add-in ' + r.addinClientId + ', server ' + r.serverClientId + ', ' + (r.certThumbprint ? 'certificate ' + r.certThumbprint : 'client secret') + ')');
     return {};
   }
   // The connections are the local account admin's alone: whoever sets the directory's address
   // gets the passwords people sign in with.
   const adminOnly = (s) => (s.user.local ? '' : 'Only the local account admin can change the server\'s connections.');
-  const ADMIN_SETTINGS = ['addinUrl', 'clientId', 'tenantId', 'spSite', 'spFolder', 'addinHost'];
+  const ADMIN_SETTINGS = ['addinUrl', 'clientId', 'tenantId', 'spSite', 'spFolder', 'addinHost', 'requireApproval', 'addinMobile'];
+  // Whether a newer version is out (server/updates.js; OSIGN_UPDATE_CHECK=1).
+  const updates = createUpdates({ env, version: VERSION, fetchFn, log });
+
+  // Four eyes: with requireApproval on, publishing is asked for by one person and done by another.
+  // The request is for the draft as it was then (its hash over the configuration and the images):
+  // a change to the draft after that withdraws it.
+  const approvalFile = path.join(dataDir, 'approval.json');
+  const approval = () => { try { return JSON.parse(readText(approvalFile) || 'null'); } catch (e) { return null; } };
+  const needsApproval = () => settings.get().requireApproval === 'on';
+  function approvalAnswer(s) {
+    const a = approval();
+    if (!a) return { pending: null, required: needsApproval() };
+    const current = store.draftHash() === a.hash;
+    return {
+      required: needsApproval(),
+      pending: { by: a.by, at: a.at, message: a.message, current, mine: a.login === s.user.login, mayApprove: a.login !== s.user.login && current,
+        changes: diffConfigs(history.latest(), a.configJson) }
+    };
+  }
+  async function publishNow(configJson, by, message) {
+    const t = settings.target();
+    let r;
+    try { r = await store.publish(t, typeof configJson === 'string' ? configJson : ''); }
+    catch (e) { return { error: e.message }; }
+    settings.forget(); photos.clear();
+    // A version that differs from what was there: kept, with who and the note.
+    if (!r.error && r.changed) history.add({ by, message, configJson });
+    return r.error ? r : { changed: r.changed, folder: t.describe() };
+  }
   function connectionsAnswer() {
+    const cert = certs.active();
     return Object.assign(connections.answer(), {
+      // The certificate in use, if any: it wins over a client secret.
+      cert: cert ? { thumbprint: cert.thumbprint, expires: cert.expires } : null,
       problems: {
         signIn: ldapProblem(ldapCfg) || (ldapCfg.url ? '' : 'Signing in with Active Directory is not set up.'),
         directory: directoryProblem(dir), graph: graphProblem(graphCfg) || (graphEnabled(graphCfg) ? '' : 'Publishing to SharePoint is not set up.'),
@@ -227,11 +281,19 @@ function createApp(opts) {
         graphClientId: graph ? graphCfg.clientId : '',
         // The client secret: until when, and the days left (warned of from 30 on).
         secretExpires: graph ? secretExpires : '', secretDaysLeft: graph ? secretDaysLeft() : null,
+        // How the server signs in to Microsoft Entra ID: 'certificate' or 'secret'.
+        graphCredential: graph ? (graphCfg.cert ? 'certificate' : 'secret') : '',
         graphTenantId: graph ? graphCfg.tenantId : '',
         graphProblem: graphProblem(graphCfg),
         // AD with the server's service account; the scheduled export, and how its last run went.
         adProblem: adOn ? '' : directoryProblem(dir),
-        adExport: adOn && exportAt ? { at: exportAt, last: lastExport } : null
+        adExport: adOn && exportAt ? { at: exportAt, last: lastExport } : null,
+        // A newer release, when the server is allowed to look (OSIGN_UPDATE_CHECK).
+        update: updates.status(),
+        // Four eyes: publishing waits for a second person.
+        requireApproval: needsApproval(),
+        // Others than the local admin can sign in (Active Directory).
+        adSignIn: !!ldapCfg.url && !ldapProblem(ldapCfg)
       },
       user: { login: s.user.login, name: s.user.name, local: !!s.user.local }
     }),
@@ -255,7 +317,9 @@ function createApp(opts) {
       if (adminOnly(s)) return { error: adminOnly(s) };
       if (!connections.answer().keyOk) return { error: 'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
       const st = settings.get();
-      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups, users: !!d.users,
+      // A new certificate for this run: only its public half goes into the script.
+      const cert = certs.pending();
+      return setup.start({ cert: cert.certDer, certThumbprint: cert.thumbprint, origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups, users: !!d.users,
         // The apps of an earlier run, the only ones the script may use again.
         knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
     },
@@ -298,20 +362,63 @@ function createApp(opts) {
       if (adminOnly(s)) return { error: adminOnly(s) };
       const r = connections.save({ values: d.values, secrets: d.secrets && typeof d.secrets === 'object' ? d.secrets : {}, ca: d.ca });
       if (r.error) return r;
+      // Back to a client secret: the certificate goes (it stays on the app until removed there).
+      if (d.removeCert === true) certs.remove();
       configure();
       log.info('connections: changed by ' + s.user.login);
       return connectionsAnswer();
     },
     publish: async (d, s) => {
-      const t = settings.target();
-      let r;
-      try { r = await store.publish(t, typeof d.configJson === 'string' ? d.configJson : ''); }
-      catch (e) { return { error: e.message }; }
-      settings.forget(); photos.clear();
-      // A version that differs from what was there: kept, with who and the note.
-      if (!r.error && r.changed) history.add({ by: s.user.name || s.user.login, message: d.message, configJson: d.configJson });
-      return r.error ? r : { changed: r.changed, folder: t.describe() };
+      if (needsApproval()) return { error: 'Publishing needs a second person\'s approval here: ask for it (Publish… → Ask for approval).' };
+      return publishNow(d.configJson, s.user.name || s.user.login, d.message);
     },
+    // Four eyes (settings: requireApproval).
+    'approval/get': (d, s) => approvalAnswer(s),
+    'approval/request': (d, s) => {
+      if (!needsApproval()) return { error: 'Approval before publishing is not on.' };
+      const saved = store.saveDraft(typeof d.configJson === 'string' ? d.configJson : '');
+      if (saved.error) return saved;
+      writeAtomic(approvalFile, JSON.stringify({ by: s.user.name || s.user.login, login: s.user.login, at: Date.now(), message: String(d.message || '').slice(0, 200), configJson: d.configJson, hash: store.draftHash() }));
+      return approvalAnswer(s);
+    },
+    'approval/approve': async (d, s) => {
+      const a = approval();
+      if (!a) return { error: 'Nothing is waiting for approval.' };
+      if (a.login === s.user.login) return { error: 'Someone else has to approve what you asked for.' };
+      if (store.draftHash() !== a.hash) return { error: 'The draft changed after approval was asked for: it has to be asked for again.' };
+      const r = await publishNow(a.configJson, a.by + ' (' + (s.user.name || s.user.login) + ' approved)', a.message);
+      if (!r.error) fs.rmSync(approvalFile, { force: true });
+      return r;
+    },
+    'approval/cancel': () => { fs.rmSync(approvalFile, { force: true }); return {}; },
+    // What changed: a version against the one before it, or against the draft.
+    'history/diff': (d) => {
+      const v = history.get(String(d.id || ''));
+      if (!v) return { error: 'There is no such version.' };
+      const draft = store.getDraft().configJson || '';
+      return d.against === 'draft' ? { changes: diffConfigs(v.configJson, draft) } : { changes: diffConfigs(v.previous, v.configJson) };
+    },
+    // A backup of the data (server/backup.js), for the local account admin.
+    'backup/export': (d, s) => {
+      if (adminOnly(s)) return { error: 'Only the local account admin can make a backup.' };
+      return exportBackup({ dataDir, passphrase: d.passphrase, appKey: connections.rawKey(), version: VERSION });
+    },
+    'backup/restore': (d, s) => {
+      if (adminOnly(s)) return { error: 'Only the local account admin can bring back a backup.' };
+      const b = openBackup(d.data, d.passphrase);
+      if (b.error) return b;
+      const r = restoreFiles(dataDir, b.files);
+      if (r.error) return r;
+      fs.mkdirSync(store.assetDir, { recursive: true });
+      fs.mkdirSync(path.join(dataDir, 'history', 'assets'), { recursive: true });
+      // Sealed with the key of the server it came from: sealed again with this one's.
+      connections.reseal(b.appKey);
+      configure();
+      log.info('backup: brought back the backup of ' + b.at + ' (version ' + b.version + ', ' + r.files + ' files) by ' + s.user.login);
+      return { at: b.at, version: b.version, files: r.files };
+    },
+    // The audit log, for the local account admin.
+    'audit/list': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin can read the audit log.' } : { entries: audit.list({ limit: d.limit, what: String(d.what || ''), failed: !!d.failed }) }),
     // The versions published, and one of them back into the draft (with its images).
     'history/list': () => ({ versions: history.list() }),
     'history/restore': (d) => {
@@ -398,6 +505,23 @@ function createApp(opts) {
       }
     }
   };
+  // What goes into the audit log, by request: the words for it, from what was sent and answered.
+  const AUDIT = {
+    publish: (d, r) => (r.changed ? 'changed' : 'nothing changed') + (d.message ? ': ' + d.message : ''),
+    'history/restore': (d) => 'version of ' + new Date(Number(d.id) || 0).toISOString() + ' into the draft',
+    'connections/save': (d) => 'saved' + Object.keys(d.secrets || {}).map((k) => (d.secrets[k] === null ? ', ' + k + ' removed' : ', ' + k + ' set')).join('') + (d.removeCert ? ', certificate removed' : '') + (d.ca !== undefined ? ', CA certificate ' + (d.ca === null ? 'removed' : 'set') : ''),
+    'settings/save': (d) => Object.keys(d.settings || {}).join(', '),
+    'setup/start': () => 'setup script made',
+    'addin/build': () => 'add-in files made',
+    'addin/upload': (d, r) => 'uploaded to Cloudflare Pages' + (r.url ? ' ' + r.url : ''),
+    'ad/export': () => 'users exported',
+    'backup/export': () => 'backup downloaded',
+    'backup/restore': () => 'backup restored',
+    'approval/request': (d) => 'asked for approval' + (d.message ? ': ' + d.message : ''),
+    'approval/approve': () => 'approved and published',
+    'approval/cancel': () => 'request withdrawn'
+  };
+
   // What only Windows, OneDrive or (for now) the PowerShell editor can do: said plainly.
   const NOT_HERE = {
     'pick-folder': 'Choosing a folder needs Windows.',
@@ -409,14 +533,16 @@ function createApp(opts) {
   async function api(req, res, name) {
     if (req.method !== 'POST' || !/^application\/json\b/i.test(String(req.headers['content-type'] || '')) || !sameSite(req)) return send(res, 403, 'text/plain; charset=utf-8', '403 Forbidden');
     let data = {};
-    try { const body = await readBody(req); data = body ? JSON.parse(body) : {}; } catch (e) {
+    try { const body = await readBody(req, name === 'backup/restore' ? MAX_BACKUP_BODY : MAX_BODY); data = body ? JSON.parse(body) : {}; } catch (e) {
       if (e.status === 413) return fail(res, 'The request is too large.', 413);
       return fail(res, 'The request is not valid JSON.');
     }
     if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
 
+    const ip = clientAddress(req);
     if (name === 'login') {
-      const r = await auth.login(data.login, data.password, clientAddress(req));
+      const r = await auth.login(data.login, data.password, ip);
+      audit.add({ who: String(data.login || '').slice(0, 120), ip, what: 'signin', ok: !r.error, detail: r.error || '' });
       if (r.error) return fail(res, r.error, r.status);
       return ok(res, { user: { login: r.user.login, name: r.user.name } }, { 'Set-Cookie': r.cookie });
     }
@@ -424,11 +550,22 @@ function createApp(opts) {
     // The setup script sends its result with its one-time code, not with a session.
     if (name === 'setup/finish') {
       const r = setup.finish(data);
-      if (r.error) return fail(res, r.error, r.status);
-      if (r.data) { const a = await setupApply(r.data); if (a.error) return fail(res, a.error); }
+      const note = (ok, detail) => audit.add({ who: 'setup script', ip, what: 'setup/finish', ok, detail });
+      if (r.error) { note(false, r.error); return fail(res, r.error, r.status); }
+      if (r.failed) note(false, 'the script stopped: ' + String(data.error || ''));
+      if (r.data) {
+        const a = await setupApply(r.data);
+        if (a.error) { note(false, a.error); return fail(res, a.error); }
+        setup.done(r.data);
+        note(true, 'Microsoft 365 set up (server ' + r.data.serverClientId + ', ' + (r.data.certThumbprint ? 'certificate' : 'client secret') + ')');
+      }
       return ok(res, {});
     }
-    if (name === 'logout') return ok(res, {}, { 'Set-Cookie': auth.logout(req) });
+    if (name === 'logout') {
+      const was = auth.session(req);
+      if (was) audit.add({ who: was.user.login, ip, what: 'signout' });
+      return ok(res, {}, { 'Set-Cookie': auth.logout(req) });
+    }
 
     const s = auth.session(req);
     if (!s) return fail(res, 'Not signed in.', 401);
@@ -436,10 +573,13 @@ function createApp(opts) {
     const fn = Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
     if (!fn) return fail(res, 'unknown', 404);
     let r;
-    try { r = await fn(data, s); } catch (e) {
+    const logged = Object.prototype.hasOwnProperty.call(AUDIT, name);
+    try { r = await fn(data, s, ip); } catch (e) {
       log.error('api ' + name + ': ' + (e && e.stack || e));
+      if (logged) audit.add({ who: s.user.login, ip, what: name, ok: false, detail: String(e && e.message) });
       return fail(res, 'The server could not do that: ' + (e && e.message), 500);
     }
+    if (logged) audit.add({ who: s.user.login, ip, what: name, ok: !(r && r.error), detail: r && r.error ? r.error : AUDIT[name](data, r || {}) });
     if (r && r.error) return fail(res, r.error);
     return ok(res, r || {});
   }

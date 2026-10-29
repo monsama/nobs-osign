@@ -147,8 +147,8 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   const utf16 = (s) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, 'utf16le')]);
   const tpl = '<!DOCTYPE html><html><head><title></title></head><body><table><tbody><tr>' +
     '<td><img src="images/logo.png" width="90" /><br /><img src="images/@@sAMAccountName.jpg" width="100" /></td>' +
-    '<td><strong>@@givenName @@sn</strong><br />@@title<br />Mobile @@mobile</td></tr></tbody></table>@@info</body></html>';
-  const blocks = '<html><body>{##notice}{dats 01.01.2020}{date 31.01.2020}Closed in January{end ##notice}</body></html>';
+    '<td><strong>@@givenName @@sn</strong><br />@@title<br />Mobile @@mobile</td></tr></tbody></table>@@info{##notice}{##legal}</body></html>';
+  const blocks = '<html><body>{##notice}{dats 01.01.2020}{date 31.01.2020}<p>Closed in January</p>{end ##notice}{##legal}<p>Contoso AG</p>{end ##legal}</body></html>';
   await page.click('#btnImportOpen');
   await page.waitForSelector('#dlgImport[open]');
   await page.setInputFiles('#impFiles', [
@@ -161,9 +161,22 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   assert.deepEqual(items.map((i) => [i.name, i.on]), [['Vertrieb', true], ['textblocks', false]]);
   assert.match(items[0].meta, /photo per person images\/@@sAMAccountName\.jpg → photos\\@@sAMAccountName\.jpg/);
   assert.match(items[1].meta, /text blocks/);
+  assert.match(items[0].meta, /text blocks notice, legal \(with days: a campaign each\)/);
   await page.click('#impGo');
   await page.waitForSelector('#dlgImport:not([open])', { state: 'attached' });
   assert.equal(await page.inputValue('#sigName'), 'Vertrieb');
+  // The text block without days in the template; the one with days a campaign of its own.
+  let imported = '';
+  for (let i = 0; i < 50 && !/Vertrieb – notice/.test(imported); i++) { await new Promise((r) => setTimeout(r, 100)); imported = (await api('draft/get')).configJson || ''; }
+  const sigs = JSON.parse(imported).signatures;
+  const vt = sigs.find((x) => x.name === 'Vertrieb'), camp = sigs.find((x) => x.name === 'Vertrieb – notice');
+  assert.match(vt.html, /Contoso AG/);
+  assert.doesNotMatch(vt.html, /Closed in January|\{##/);
+  assert.match(camp.html, /Closed in January.*Contoso AG|Contoso AG.*Closed in January/s);
+  assert.deepEqual([camp.validFrom, camp.validUntil], ['2020-01-01', '2020-01-31']);
+  await page.click('#sigList a:has-text("Vertrieb – notice")');
+  await page.click('#btnDel');
+  await page.click('#sigList a:has-text("Vertrieb")');
 
   // The logo is now one of the signature's images; the photo comes from the photos folder.
   await page.click('.tab[data-mode=html]');
@@ -179,7 +192,7 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   await page.waitForFunction(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 5000 });
 
   // Who gets it: an AD group.
-  await page.click('.audience summary');
+  await page.click('.audience:not(.campaign) summary');
   await page.fill('#sigGroups', 'SG-Vertrieb, SG-Marketing');
   assert.equal(await page.textContent('#audienceSummary'), 'SG-Vertrieb, SG-Marketing');
   await page.click('#btnPublish');
@@ -388,3 +401,77 @@ test('fields: chips with their names in the design view, @@key in the signature'
   assert.deepEqual(errors, []);
 });
 
+
+test('campaigns, dark mode, comparing versions, the audit log, the backup and four eyes', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('#sigList a');
+  await page.click('#sigList a');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  // A campaign that is over: said in the list and under the preview.
+  await page.click('#sigCampaign summary');
+  await page.fill('#sigFrom', '2020-01-01');
+  await page.fill('#sigUntil', '2020-01-31');
+  await page.waitForFunction(() => /Campaign, not now/.test(document.querySelector('#sigList').textContent));
+  await page.waitForFunction(() => /A campaign, not running today/.test(document.querySelector('#pvNote').textContent));
+  assert.match(await page.textContent('#campaignSummary'), /2020/);
+  await page.fill('#sigFrom', ''); await page.fill('#sigUntil', '');
+  await page.waitForFunction(() => !/Campaign/.test(document.querySelector('#sigList').textContent));
+  // Dark mode in the preview.
+  await page.check('#pvDark');
+  await page.waitForFunction(() => /invert\(1\)/.test(document.querySelector('#preview').srcdoc));
+  await page.uncheck('#pvDark');
+
+  // A version against the one before it.
+  await page.click('#navHistory');
+  await page.waitForSelector('#historyRows button');
+  await page.click('#historyRows tr:first-child button:has-text("Compare")');
+  await page.waitForSelector('#dlgDiff[open] .change');
+  assert.match(await page.textContent('#diffChanges'), /Added|Changed/);
+  await page.check('#dlgDiff input[value=draft]');
+  await page.waitForSelector('#dlgDiff[open] .change, #dlgDiff[open] .muted');
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+
+  // The audit log and the backup, for the local admin.
+  await page.click('#btnSettings');
+  await page.click('#setAudit');
+  await page.waitForFunction(() => /signin/.test(document.querySelector('#auditRows').textContent));
+  await page.selectOption('#auditWhat', 'publish');
+  await page.waitForFunction(() => /First signatures/.test(document.querySelector('#auditRows').textContent));
+  await page.keyboard.press('Escape');
+  await page.click('#setBackup');
+  await page.fill('#bakPass', 'a long passphrase'); await page.fill('#bakPass2', 'a long passphrase');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bakExport')]);
+  assert.match(dl.suggestedFilename(), /^nobs-osign-backup-.*\.osignbak$/);
+  await page.keyboard.press('Escape');
+
+  // Four eyes: on, asked for here (admin), approved by Anna in her own browser.
+  await page.check('#setApproval');
+  await page.waitForFunction(() => /On: publishing now waits/.test(document.querySelector('#setApprovalNote').textContent));
+  await page.keyboard.press('Escape');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  assert.equal(await page.textContent('#pubGo'), 'Ask for approval');
+  await page.fill('#pubMsg', 'Please check');
+  await page.click('#pubGo');
+  await page.waitForFunction(() => /Asked for approval/.test(document.querySelector('#pubOk').textContent));
+  assert.equal(await page.isVisible('#pubApprove'), false, 'not by the one who asked');
+  await page.keyboard.press('Escape');
+  assert.match(await page.textContent('#stApproval'), /Waiting for approval/);
+
+  const r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'anna', password: 'anna-pw' }) });
+  const annaCtx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await annaCtx.addCookies([{ name: 'osign_session', value: /osign_session=([^;]+)/.exec(r.headers.get('set-cookie'))[1], url: base }]);
+  const anna = await annaCtx.newPage();
+  try {
+    await anna.goto(url);
+    await anna.waitForFunction(() => /asks for approval/.test(document.querySelector('#stApproval').textContent));
+    await anna.click('#stApproval');
+    await anna.waitForSelector('#dlgPublish[open] #pubApprove:not([hidden])');
+    assert.match(await anna.textContent('#pubApprovalWho'), /admin asks for approval.*Please check/);
+    await anna.click('#pubApprove');
+    await anna.waitForFunction(() => /Approved and published|Nothing had changed/.test(document.querySelector('#pubOk').textContent));
+  } finally { await annaCtx.close(); }
+  // And off again, for the tests after this one.
+  await api('settings/save', { settings: { requireApproval: '' } });
+  assert.deepEqual(errors, []);
+});

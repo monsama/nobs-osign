@@ -98,6 +98,17 @@ test('build: the same files addin/fill.mjs makes, for the saved settings', async
   const list = (d) => require('../server/addin').walk(d);
   assert.deepEqual(list(made), list(ref));
   for (const f of list(ref)) assert.ok(fs.readFileSync(path.join(made, f)).equals(fs.readFileSync(path.join(ref, f))), f);
+  // Outlook on iOS and Android only when asked for: then Mailbox 1.5 and the mobile launch event.
+  let xml = fs.readFileSync(path.join(made, 'manifest.xml'), 'utf8');
+  assert.match(xml, /DefaultMinVersion="1\.10"/);
+  assert.doesNotMatch(xml, /MobileFormFactor/);
+  assert.equal((await api('settings/save', { settings: { addinMobile: 'on' } })).ok, true);
+  assert.equal((await api('addin/build')).ok, true);
+  xml = fs.readFileSync(path.join(made, 'manifest.xml'), 'utf8');
+  assert.match(xml, /DefaultMinVersion="1\.5"/);
+  assert.match(xml, /<MobileFormFactor>[\s\S]*<LaunchEvent Type="OnNewMessageCompose" FunctionName="onNewMessageComposeHandler"\/>[\s\S]*<\/MobileFormFactor>/);
+  assert.equal((await api('settings/save', { settings: { addinMobile: '' } })).ok, true);
+  assert.equal((await api('addin/build')).ok, true);
   assert.ok(list(made).includes('_headers'));
   assert.equal(r.files, list(ref).length);
 });

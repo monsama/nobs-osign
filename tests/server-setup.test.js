@@ -8,6 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -87,33 +88,61 @@ test('the setup script: both apps, the site, the result to the server, the right
   // The sign-in's consent is gone again.
   assert.equal(st.grants.find((g) => g.id === 'grant-cli-me'), undefined);
 
+  // The server signs in with its own certificate: only its public half went to the app, and no
+  // secret was made.
+  assert.equal(server.keyCredentials.length, 1);
+  assert.equal(server.keyCredentials[0].type, 'AsymmetricX509Cert');
+  assert.equal(st.passwords.length, 0, 'no client secret');
+  const certFile = fs.readFileSync(path.join(dataDir, 'graph-cert.json'), 'utf8');
+  assert.ok(!certFile.includes('PRIVATE KEY'), 'the key is kept sealed');
+  assert.ok(!text.includes('PRIVATE KEY'), 'the key never goes into the script');
+  const cert = new crypto.X509Certificate(Buffer.from(server.keyCredentials[0].key, 'base64'));
+
   // The server has what it needs, and the assistant sees it.
   const s = await api('setup/status');
   assert.equal(s.state, 'done');
   assert.equal(s.result.addinClientId, addin.appId);
   assert.equal(s.result.serverClientId, server.appId);
-  assert.ok(!JSON.stringify(s).includes(st.passwords[0].secretText), 'the secret is never sent to the page');
-  const info = await api('info');
+  assert.equal(s.result.credential, 'certificate');
+  let info = await api('info');
   assert.equal(info.features.publishTarget, 'sharepoint');
   assert.equal(info.features.graphClientId, server.appId);
-  // The secret's end, from Entra, so the editor warns in time.
-  assert.equal(info.features.secretExpires, st.passwords[0].endDateTime.slice(0, 10));
+  assert.equal(info.features.graphCredential, 'certificate');
+  // The certificate's end, so the editor warns in time.
+  assert.equal(info.features.secretExpires, new Date(cert.validTo).toISOString().slice(0, 10));
   const settings = (await api('settings/get')).settings;
   assert.equal(settings.clientId, addin.appId);
   assert.equal(settings.tenantId, TENANT);
-  const conn = await api('connections/get');
-  assert.equal(conn.secrets.graphClientSecret.readable, true);
-  assert.ok(!fs.readFileSync(path.join(dataDir, 'connections.json'), 'utf8').includes(st.passwords[0].secretText), 'kept sealed');
+  let conn = await api('connections/get');
+  assert.equal(conn.cert.thumbprint, cert.fingerprint.replace(/:/g, ''));
 
-  // Again (another site, say): the apps of the first run are used again (the server knows them,
-  // and they are yours), nothing twice.
+  // Again (another site, say), where the tenant refuses certificates on apps: the apps of the first
+  // run are used again (the server knows them, and they are yours), nothing twice, and the server
+  // gets a client secret instead.
+  st.refuseCerts = true;
   const again = await run(await makeScript(false));
   assert.equal(again.code, 0, again.out);
   assert.equal(st.apps.length, 4);
   assert.equal(st.roleAssignments.length, 3);
   assert.equal(st.sitePerms.length, 1);
-  assert.equal(st.passwords.length, 2, 'a new secret each time');
+  assert.equal(st.passwords.length, 1, 'a secret instead');
   assert.equal(addin.requiredResourceAccess[0].resourceAccess.length, 3, 'what it asked for stays');
+  info = await api('info');
+  assert.equal(info.features.graphCredential, 'secret');
+  assert.equal(info.features.secretExpires, st.passwords[0].endDateTime.slice(0, 10));
+  assert.ok(!JSON.stringify(await api('setup/status')).includes(st.passwords[0].secretText), 'the secret is never sent to the page');
+  conn = await api('connections/get');
+  assert.equal(conn.secrets.graphClientSecret.readable, true);
+  assert.equal(conn.cert, null);
+  assert.ok(!fs.readFileSync(path.join(dataDir, 'connections.json'), 'utf8').includes(st.passwords[0].secretText), 'kept sealed');
+
+  // And with certificates allowed again: the certificate, and the old secret goes from the app.
+  st.refuseCerts = false;
+  const third = await run(await makeScript(false));
+  assert.equal(third.code, 0, third.out);
+  assert.equal((await api('info')).features.graphCredential, 'certificate');
+  assert.equal(st.passwords.filter((x) => !x.removed).length, 0, 'the old secret is removed');
+  assert.equal((await api('connections/get')).secrets.graphClientSecret.saved, '');
 });
 
 test('the one-time code: only with it, only once, and the script only for the admin', async () => {

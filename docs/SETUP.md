@@ -120,14 +120,19 @@ organization* unticked), it:
   ID), with admin consent;
 - makes *NOBS OSign server*: application permission `Sites.Selected` with admin consent (and, when
   ticked, `User.Read.All` and `GroupMember.Read.All` for the preview of a real person from Entra
-  ID), and a client secret;
+  ID), and the server's own **certificate**: the server makes the key itself and keeps it (sealed
+  in its data volume); the script only puts the public half on the app. No secret to copy or to
+  leak. Where the tenant refuses certificates on apps, it makes a client secret instead;
 - gives *NOBS OSign server* write access to the site of the folder (step 3), and no other;
-- sends the IDs, the secret and when it runs out straight to the server (with a one-time code,
-  valid for an hour): nothing to copy. The assistant goes on by itself;
+- sends the IDs (and, only without the certificate, the secret and when it runs out) straight to
+  the server (with a one-time code, valid for an hour): nothing to copy. The assistant goes on by
+  itself;
 - takes back the consent it was given for this, for your account, and deletes itself.
 
 It can run again: it uses the apps of its earlier run (as the server knows them, and owned by you)
-and makes a new secret each time. Apps somebody else registered under these names are never used.
+and puts a new certificate on the server's app each time (client secrets of earlier runs are
+removed then). The certificate holds for two years; the status bar warns 30 days before. Apps
+somebody else registered under these names are never used.
 
 ### By hand
 
@@ -223,7 +228,18 @@ too (step 7).
    `User.Read.All`).
 4. **Publish** (Ctrl+Enter). The dialog lists what would go wrong first. New messages use it a
    minute or two later. Every publish is kept under **History**, with its images, the last 50:
-   *Load into the draft* brings an earlier version back.
+   *Compare* shows what changed (the HTML line by line, who gets it, fields and options), against
+   the version before or the draft; *Load into the draft* brings an earlier version back.
+5. **Campaigns**: under *When*, a signature gets its first and last day (e.g. December, for the
+   holidays). On those days it is used instead of the usual default, for whoever it is open to;
+   before and after, the usual one again, by itself. CI-Sign's text blocks with days
+   (`{dats …}{date …}` in `__intern.htm`) become such campaigns when imported; text blocks
+   without days go straight into the template.
+6. **Four eyes** (Settings, the local `admin`): with *Publishing needs a second person's approval*
+   on, *Publish…* asks for approval. A second person signed in with AD sees what would change
+   and publishes it, or rejects it; a change to the draft after that withdraws the request.
+7. **Dark mode**: the preview's *Dark mode* shows roughly what recipients with Outlook's dark mode
+   see. Check that the logo still shows on a dark background.
 
 ## 7. Deploy the add-in
 
@@ -234,11 +250,29 @@ too (step 7).
 It can take a few hours to reach every Outlook. To try it yourself first, sideload it: in Outlook on
 the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**.
 
+**Outlook for iOS and Android** (preview): tick *Also in Outlook for iOS and Android* in the
+settings, make the add-in's files again and upload the new `manifest.xml`. Phones then put the
+signature in new messages, replies and forwards too (Outlook 4.2352 and later); there is no pane
+there, and no change with the From address. Try it on one phone first.
+
 ## 8. What users see
 
 - A new message, reply or forward gets its signature by itself, images included.
 - **NOBS OSign → Signatures** in the message toolbar opens the pane: insert another signature, or
   choose the one for new mail and for replies (if allowed under *Add-in*).
+
+## Running it
+
+- **Audit log** (Settings, the local `admin`): who signed in (and who failed), published, approved,
+  brought back a version, changed the connections or settings, ran the setup script or made a
+  backup, with the address it came from. Never a password or a signature's content.
+- **Backup** (Settings, the local `admin`): one file with the draft and its images, the settings,
+  the connections with their passwords, the certificate and the history, locked with a passphrase
+  of at least 12 characters. Keep it apart from the passphrase. *Bring it back* on this server or
+  a new one: the passwords are sealed again with that server's key.
+- **Updates**: the status bar says when a newer version is out (twice a day the server asks GitHub
+  for the latest release; `OSIGN_UPDATE_CHECK=0` in `.env` switches that off). Then
+  `sudo ./scripts/update.sh <version>`.
 
 ## Settings of the server
 
@@ -248,7 +282,7 @@ In Settings → Server connections, or as environment variables in `.env` with t
 |---|---|
 | `OSIGN_HOST` | the name people type (`osign.example.ch`); only in `.env` |
 | `OSIGN_GRAPH_TENANT_ID`, `OSIGN_GRAPH_CLIENT_ID` | the tenant, and the client ID of *NOBS OSign server* |
-| `OSIGN_GRAPH_CLIENT_SECRET_FILE` | a file holding its client secret |
+| `OSIGN_GRAPH_CLIENT_SECRET_FILE` | a file holding its client secret (only without the server's certificate) |
 | `OSIGN_GRAPH_CLIENT_SECRET_EXPIRES` | when that secret runs out (`YYYY-MM-DD`) |
 | `OSIGN_ADMIN_PASSWORD_FILE` | a file holding the password of the local account `admin` (only here) |
 | `OSIGN_APP_KEY_FILE` | a file holding the key the passwords set in Settings are kept with (only here) |
@@ -262,6 +296,7 @@ In Settings → Server connections, or as environment variables in `.env` with t
 | `OSIGN_AD_EXPORT_AT` | `06:00`: the users' values are exported every day at that time (`TZ`) |
 | `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT`, `OSIGN_CF_API_TOKEN_FILE` | Cloudflare Pages |
 | `OSIGN_REQUIRE_ATTESTATION` | `1`: an update whose attestation cannot be checked stops |
+| `OSIGN_UPDATE_CHECK` | `0`: the server does not ask GitHub whether a newer version is out (default `1`) |
 | `OSIGN_DATA` | the draft, its images, its history and the settings (`/data`) |
 
 Without Microsoft Graph set up the server publishes into a folder of its own (`/data/publish`),
@@ -276,7 +311,7 @@ for testing only: Outlook reads from SharePoint.
 | Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign/users/` (no mail address in AD, or not exported yet). |
 | No photo | No `OSign/photos/<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
-| Publishing says the server could not sign in | The client secret ran out (the status bar says so 30 days before): run the setup script again. |
+| Publishing says the server could not sign in | The certificate or client secret ran out (the status bar says so 30 days before), or the certificate was taken off the app in Entra: run the setup script again. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |
 
 ## Security software (EDR / XDR)

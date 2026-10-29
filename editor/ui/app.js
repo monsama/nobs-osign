@@ -156,16 +156,23 @@
     return parts.length ? parts.join(' · ') : t('everyone');
   }
 
+  // A campaign's days, as words; '' when it has none.
+  function campaignText(s) {
+    if (!core.isCampaign(s)) return '';
+    return s.validFrom && s.validUntil ? t('{0} to {1}', day(s.validFrom), day(s.validUntil)) : s.validFrom ? t('from {0}', day(s.validFrom)) : t('until {0}', day(s.validUntil));
+  }
+
   function renderList() {
     const ul = $('sigList'); ul.textContent = '';
     if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, t('None yet')));
     S.config.signatures.forEach((s) => {
-      const a = el('a', { href: '#', class: S.view === 'sig' && s.id === S.sigId ? 'active' : '', onclick: (e) => { e.preventDefault(); openSig(s.id); } },
+      const a = el('a', { href: '#', class: S.view === 'sig' && s.id === S.sigId ? 'active' : '', 'aria-current': S.view === 'sig' && s.id === S.sigId ? 'page' : null, onclick: (e) => { e.preventDefault(); openSig(s.id); } },
         s.name || t('(no name)'),
         el('div', { class: 'badges' },
           s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
           s.defaultReply ? el('span', { class: 'badge on' }, t('Reply')) : null,
-          audienceText(s) !== t('everyone') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null));
+          audienceText(s) !== t('everyone') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
+          core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' on' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
       ul.append(el('li', null, a));
     });
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
@@ -183,8 +190,17 @@
     // The server's client secret, in time: from 30 days before it runs out.
     const left = f.secretDaysLeft;
     $('stSecret').hidden = !(typeof left === 'number' && left <= 30);
-    $('stSecret').textContent = typeof left !== 'number' ? '' : left < 0 ? t('The client secret ran out on {0}: publishing fails. Run the setup script again.', day(f.secretExpires))
-      : t('The client secret runs out on {0} (in {1} days): run the setup script again.', day(f.secretExpires), left);
+    // A newer version, when the server may look; a publish waiting for approval.
+    const up = f.update;
+    $('stUpdate').hidden = !up;
+    if (up) { $('stUpdate').textContent = t('Version {0} is out', up.version); $('stUpdate').href = up.url || '#'; $('stUpdate').title = t('Update with sudo ./scripts/update.sh {0}', up.version); }
+    const ap = S.approval && S.approval.pending;
+    $('stApproval').hidden = !ap;
+    if (ap) $('stApproval').textContent = ap.mine ? t('Waiting for approval') : t('{0} asks for approval', ap.by);
+    const cert = f.graphCredential === 'certificate';
+    $('stSecret').textContent = typeof left !== 'number' ? '' : left < 0
+      ? t(cert ? 'The server\'s certificate ran out on {0}: publishing fails. Run the setup script again.' : 'The client secret ran out on {0}: publishing fails. Run the setup script again.', day(f.secretExpires))
+      : t(cert ? 'The server\'s certificate runs out on {0} (in {1} days): run the setup script again.' : 'The client secret runs out on {0} (in {1} days): run the setup script again.', day(f.secretExpires), left);
   }
 
   function show(view) {
@@ -211,6 +227,9 @@
     $('sigDeps').value = (s.audience.departments || []).join(', ');
     $('sigDoms').value = (s.audience.domains || []).join(', ');
     $('audienceSummary').textContent = audienceText(s);
+    $('sigFrom').value = s.validFrom || '';
+    $('sigUntil').value = s.validUntil || '';
+    $('campaignSummary').textContent = campaignText(s) || t('always');
     loadDesign(s.html);
     $('source').value = s.html;
     schedulePreview();
@@ -544,7 +563,7 @@
     if (mode === 'html') { $('source').value = s ? s.html : ''; }
     else { flushSource(); loadDesign(s ? s.html : ''); }
     S.mode = mode;
-    document.querySelectorAll('.tab[data-mode]').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
+    document.querySelectorAll('.tab[data-mode]').forEach((t) => { t.classList.toggle('active', t.dataset.mode === mode); t.setAttribute('aria-selected', t.dataset.mode === mode); });
     design.hidden = mode !== 'design';
     $('source').hidden = mode !== 'html';
     document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
@@ -578,13 +597,18 @@
     const asText = $('pvText').checked;
     const greet = asText ? '' : '<p>' + core.escapeHtml(t('Hello,')) + '</p><p>' + core.escapeHtml(t('this is how the signature looks under a message.')) + '</p><p>&nbsp;</p>';
     const body = asText ? '<pre style="font:11pt/1.4 Consolas,monospace;white-space:pre-wrap">' + core.escapeHtml(core.htmlToText(html)) + '</pre>' : greet + html;
-    $('preview').srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222}p{margin:0}table{border-collapse:collapse}</style></head><body>' + body + '</body></html>';
+    // Dark mode, roughly as Outlook shows it to recipients who use it: the colours turned around,
+    // the images as they are (a dark logo on a transparent background gets hard to see).
+    const dark = $('pvDark').checked ? 'html{background:#fff;filter:invert(1) hue-rotate(180deg)}img{filter:invert(1) hue-rotate(180deg)}' : '';
+    $('preview').srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222}p{margin:0}table{border-collapse:collapse}' + dark + '</style></head><body>' + body + '</body></html>';
 
     // What to know about this signature before it goes out.
     const notes = [], keys = fieldKeys(), used = core.placeholdersIn(s.html);
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && core.fieldSource(S.config, f) === 'none'; });
     if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', '))));
+    if ($('pvDark').checked && /<img\b/i.test(s.html || '')) notes.push(el('div', null, t('Dark mode, roughly: Outlook turns the colours itself. Check that the logo still shows on a dark background (a white edge or a light version helps).')));
+    if (core.isCampaign(s) && !core.inPeriod(s)) notes.push(el('div', { class: 'warn' }, t('A campaign, not running today ({0}): nobody gets it now.', campaignText(s))));
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
       ? t('No Graph source, so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))
       : t('No source (neither Graph nor AD attribute), so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))));
@@ -593,7 +617,7 @@
       const v = S.adValues || {}, from = v.mail || '', g = S.adGroups || [];
       const nm = (x) => (x ? x.name : t('none'));
       const open = core.isAvailable(s, v, from, g);
-      notes.push(el('div', { class: 'pv-groups' }, t('Values of {0} from Active Directory.', S.adName) + ' ' +
+      notes.push(el('div', { class: 'pv-groups' }, ($('pvSource').value === 'entra' ? t('Values of {0} from Entra ID.', S.adName) : t('Values of {0} from Active Directory.', S.adName)) + ' ' +
         (open ? t('This signature is open to them.') : t('This signature is NOT open to them.')) + ' ' +
         t('New mail: {0}, replies: {1}.', nm(core.pick(S.config, v, from, 'new', null, g)), nm(core.pick(S.config, v, from, 'reply', null, g)))));
     }
@@ -610,6 +634,7 @@
     renderPreview();
   });
   $('pvText').addEventListener('change', renderPreview);
+  $('pvDark').addEventListener('change', renderPreview);
   // A real person's values and groups: from AD (the service account) or from Entra ID (the
   // server's app), whichever the preview is set to.
   async function adLookup() {
@@ -639,6 +664,13 @@
   }
   $('sigNew').addEventListener('change', () => setDefault('defaultNew', $('sigNew').checked));
   $('sigReply').addEventListener('change', () => setDefault('defaultReply', $('sigReply').checked));
+  // A campaign: from / until.
+  ['sigFrom', 'sigUntil'].forEach((id) => $(id).addEventListener('change', () => {
+    const s = sig(); if (!s) return;
+    s.validFrom = $('sigFrom').value; s.validUntil = $('sigUntil').value;
+    $('campaignSummary').textContent = campaignText(s) || t('always');
+    changed({ list: true });
+  }));
   $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
   $('sigGroups').addEventListener('input', () => { const s = sig(); if (s) { s.audience.groups = splitList($('sigGroups').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
   // Group names from AD to pick from, for what is typed after the last comma.
@@ -674,15 +706,27 @@
   // Import: templates (.htm) with their images, from a folder or picked files. CI-Sign keeps them
   // as UTF-16 files that load "images/<name>"; classic Outlook as "<name>_files/<name>".
   // ---------------------------------------------------------------------------------------------
-  let impItems = [], impImages = new Map();
+  let impItems = [], impImages = new Map(), impBlocks = new Map();
   const IMG_EXT = /\.(png|jpe?g|gif)$/i;
+  // CI-Sign's text blocks: {##Name}…{end ##Name} in a file of their own (__intern.htm), each with
+  // the days it is shown ({dats 01.12.2026}{date 31.12.2026}), used in a template as {##Name}.
+  const BLOCK_DEF = /\{##([^}\s]+)\}([\s\S]*?)\{end ##\1\}/g;
+  const BLOCK_REF = /\{##([^}\s]+)\}/g;
+  const ciDay = (v) => { const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(String(v || '').trim()); return m ? m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2) : ''; };
+  function readBlocks(text) {
+    for (const m of text.matchAll(BLOCK_DEF)) {
+      let html = m[2], from = '', until = '';
+      html = html.replace(/\{dats\s+([^}]*)\}/i, (a, d) => { from = ciDay(d); return ''; }).replace(/\{date\s+([^}]*)\}/i, (a, d) => { until = ciDay(d); return ''; });
+      impBlocks.set(m[1].toLowerCase(), { name: m[1], html: html.trim(), from, until });
+    }
+  }
 
   function relativeSrcs(doc) {
     return [...doc.querySelectorAll('img[src]')].map((i) => i.getAttribute('src')).filter((src) => !/^(https?:|cid:|data:)/i.test(src));
   }
 
   async function readImportFiles(files) {
-    impItems = []; impImages = new Map();
+    impItems = []; impImages = new Map(); impBlocks = new Map();
     const list = [...files];
     list.filter((f) => IMG_EXT.test(f.name)).forEach((f) => { if (!impImages.has(f.name.toLowerCase())) impImages.set(f.name.toLowerCase(), f); });
     for (const f of list.filter((x) => /\.html?$/i.test(x.name))) {
@@ -693,13 +737,15 @@
       const body = d.body ? d.body.innerHTML : text;
       const name = f.name.replace(/\.html?$/i, '');
       const fields = core.placeholdersIn(body);
-      const blocks = /\{##[^}]+\}/.test(text);
+      const blocks = /\{end ##[^}]+\}/.test(text);
+      if (blocks) readBlocks(body);
+      const refs = blocks ? [] : [...new Set([...body.matchAll(BLOCK_REF)].map((m) => m[1]))];
       const srcs = relativeSrcs(d);
       const perPerson = srcs.filter((x) => x.indexOf('@@') >= 0);
       const imgs = srcs.filter((x) => x.indexOf('@@') < 0).map((x) => decodeURIComponent(x.split(/[\\/]/).pop()));
       const missing = imgs.filter((x) => !impImages.has(x.toLowerCase()));
       const looksLikeSig = fields.length > 0 && !blocks && !/\\(editor|ci-sign-update|AutoBackup-[^\\/]*|Templates)[\\/]/i.test(path.replace(/\//g, '\\'));
-      impItems.push({ file: f, path, name, body, fields, blocks, perPerson, imgs, missing, checked: looksLikeSig });
+      impItems.push({ file: f, path, name, body, fields, blocks, refs, perPerson, imgs, missing, checked: looksLikeSig });
     }
     impItems.sort((a, b) => (b.checked - a.checked) || a.name.localeCompare(b.name));
     // The same template twice (CI-Sign keeps a copy next to the program): the first one is ticked.
@@ -719,6 +765,12 @@
       meta.push(it.fields.length ? t('{0} fields', it.fields.length) : t('no fields'));
       meta.push(t(' · {0} image(s)', it.imgs.length));
       if (it.missing.length) meta.push(el('span', { class: 'warn' }, t(' · not picked: {0}', [...new Set(it.missing)].join(', '))));
+      if (it.refs.length) {
+        const known = it.refs.filter((r) => impBlocks.has(r.toLowerCase())), unknown = it.refs.filter((r) => !impBlocks.has(r.toLowerCase()));
+        const timed = known.filter((r) => { const b = impBlocks.get(r.toLowerCase()); return b.from || b.until; });
+        if (known.length) meta.push(t(' · text blocks {0}', known.join(', ')) + (timed.length ? t(' (with days: a campaign each)') : ''));
+        if (unknown.length) meta.push(el('span', { class: 'warn' }, t(' · text blocks not picked: {0} (pick the file with them, e.g. __intern.htm)', unknown.join(', '))));
+      }
       if (it.perPerson.length) meta.push(t(' · photo per person {0} → photos\\{1}', it.perPerson[0], it.perPerson[0].split(/[\\/]/).pop()));
       if (exists) meta.push(t(' · replaces the signature of the same name'));
       ul.append(el('li', { class: it.checked ? '' : 'skip' }, box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta))));
@@ -739,6 +791,7 @@
     $('impErr').textContent = ''; $('impGo').disabled = true;
     const uploaded = new Map(); // picked file name (lower case) -> asset name
     let first = null, count = 0;
+    const campaigns = [];
     try {
       for (const it of impItems.filter((x) => x.checked)) {
         const t = document.createElement('template');
@@ -753,9 +806,31 @@
           // Not picked: it points where the image will be once uploaded under that name.
           img.setAttribute('src', 'assets/' + (uploaded.get(key) || core.assetName(base)));
         }
-        let s = S.config.signatures.find((x) => x.name.toLowerCase() === it.name.toLowerCase());
-        if (!s) { s = core.newSignature(newId(it.name), it.name); S.config.signatures.push(s); }
-        s.html = t.innerHTML.trim();
+        // Text blocks: one without days goes in as it is; one with days becomes a campaign of its
+        // own (the template with that block, on those days), and the template itself goes without.
+        const html = t.innerHTML.trim();
+        const timed = [];
+        const plain = html.replace(BLOCK_REF, (all, name) => {
+          const b = impBlocks.get(name.toLowerCase());
+          if (!b) return all;
+          if (b.from || b.until) { timed.push(b); return ''; }
+          return sanitize(b.html);
+        });
+        const put = (name, body, from, until) => {
+          let s = S.config.signatures.find((x) => x.name.toLowerCase() === name.toLowerCase());
+          if (!s) { s = core.newSignature(newId(name), name); S.config.signatures.push(s); }
+          s.html = body; s.validFrom = from || ''; s.validUntil = until || '';
+          return s;
+        };
+        const s = put(it.name, plain);
+        for (const b of timed) {
+          const c = put(it.name + ' – ' + b.name, html.replace(BLOCK_REF, (all, name) => {
+            const x = impBlocks.get(name.toLowerCase());
+            return !x ? all : x === b || !(x.from || x.until) ? sanitize(x.html) : '';
+          }), b.from, b.until);
+          c.audience = JSON.parse(JSON.stringify(s.audience));
+          campaigns.push([c, s]);
+        }
         first = first || s; count++;
       }
       // With no default yet, the one called Standard (or the first) becomes it.
@@ -763,6 +838,8 @@
         const std = S.config.signatures.find((x) => /^standard$/i.test(x.name)) || first;
         std.defaultNew = true; std.defaultReply = true;
       }
+      // A campaign stands in for its template while it runs: the same defaults.
+      for (const [c, base] of campaigns) { c.defaultNew = !!base.defaultNew; c.defaultReply = !!base.defaultReply; }
       changed();
       $('dlgImport').close();
       if (first) openSig(first.id);
@@ -958,12 +1035,14 @@
   function settingsFromDialog() {
     const s = { folder: $('setFolder').value, photosFolder: $('setPhotos').value };
     for (const [id, k] of ADDIN_FIELDS) s[k] = $(id).value;
+    s.addinMobile = $('setAddinMobile').checked ? 'on' : '';
     return s;
   }
   $('btnSettings').addEventListener('click', () => {
     $('setFolder').value = S.settings.folder || '';
     $('setPhotos').value = S.settings.photosFolder || '';
     for (const [id, k] of ADDIN_FIELDS) $(id).value = S.settings[k] || '';
+    $('setAddinMobile').checked = S.settings.addinMobile === 'on';
     $('setAddinBuild').disabled = !(S.info.features && S.info.features.addinFiles);
     // The server version: where publishing goes is the site and folder below; no folders on a PC.
     $('setServerWhere').hidden = !onServer();
@@ -974,9 +1053,12 @@
     $('setAddinBuild').closest('p').hidden = onServer() && $('setAddinBuild').disabled;
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = !(onServer() && S.info.user && S.info.user.local);
+    $('setApproval').checked = S.settings.requireApproval === 'on';
+    $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
     for (const [id] of ADDIN_FIELDS) $(id).disabled = locked;
+    $('setAddinMobile').disabled = locked;
     $('setAddinUpload').hidden = true; $('setAddinZip').hidden = true;
     $('setAddinOk').textContent = $('setAddinBuild').disabled && !onServer() ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
@@ -1018,7 +1100,7 @@
   // ever sent, never shown: the server says where each comes from.
   const CONN_FIELDS = ['ldapUrl', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'graphSecretExpires', 'cfAccountId', 'cfProject'];
   const CONN_SECRETS = ['ldapServicePassword', 'graphClientSecret', 'cfApiToken'];
-  let connDrop = {}, connCa;
+  let connDrop = {}, connCa, connCertDrop = false;
   function day(iso) { return iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : ''; }
   function renderConnections(r) {
     $('connKey').hidden = r.keyOk;
@@ -1037,6 +1119,11 @@
         : x.file ? t('From {0}.', x.fileName) : t('Not set.');
       $('cx_' + k).className = x.saved && !x.readable ? 'err' : '';
     }
+    // The server's own certificate, when the setup script put it on the app: no secret then.
+    connCertDrop = false;
+    $('connCert').textContent = r.cert ? t('With the server\'s own certificate (thumbprint {0}, valid until {1}). Its key never leaves the server.', r.cert.thumbprint, day(r.cert.expires)) : t('With a client secret (the setup script puts a certificate on the app instead).');
+    $('connCertRemove').hidden = !r.cert;
+    document.querySelectorAll('#dlgConn [data-nocert]').forEach((x) => { x.hidden = !!r.cert; });
     $('connCaRemove').hidden = !r.ca.saved;
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
@@ -1070,6 +1157,11 @@
     connDrop[b.dataset.drop] = true; b.hidden = true;
     $('cx_' + b.dataset.drop).textContent = t('Removed when you save.');
   });
+  $('connCertRemove').addEventListener('click', () => {
+    connCertDrop = true; $('connCertRemove').hidden = true;
+    $('connCert').textContent = t('The certificate is no longer used when you save: enter the client secret.');
+    document.querySelectorAll('#dlgConn [data-nocert]').forEach((x) => { x.hidden = false; });
+  });
   $('connCaRemove').addEventListener('click', () => { connCa = null; connCaReading = null; $('connCaRemove').hidden = true; $('connCa').textContent = t('Removed when you save.'); });
   let connCaReading = null;
   $('connCaFile').addEventListener('change', async () => {
@@ -1083,6 +1175,7 @@
     for (const k of CONN_FIELDS) values[k] = $('cn_' + k).value;
     for (const k of CONN_SECRETS) { if ($('cs_' + k).value) secrets[k] = $('cs_' + k).value; else if (connDrop[k]) secrets[k] = null; }
     const body = { values, secrets };
+    if (connCertDrop) body.removeCert = true;
     // A CA file chosen just now may still be being read.
     if (connCaReading) { connCa = await connCaReading; connCaReading = null; }
     if (connCa !== undefined) body.ca = connCa;
@@ -1784,6 +1877,7 @@
     $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
     $('pubGo').disabled = checks.some((c) => c[0] === 'bad');
     $('pubErr').textContent = ''; $('pubOk').textContent = ''; $('pubMsg').value = '';
+    await loadApproval(); renderApproval();
     $('dlgPublish').showModal();
   });
   $('pubGo').addEventListener('click', async (e) => {
@@ -1805,6 +1899,13 @@
           S.snap.written = true;
         } catch (err) { exported = ' ' + t('The users could not be written: {0}', t(err.message)); }
       }
+      if (S.info.features.requireApproval) {
+        await api('approval/request', { configJson: JSON.stringify(c), message: $('pubMsg').value });
+        S.config.updated = c.updated;
+        await loadApproval(); renderApproval();
+        $('pubOk').textContent = t('Asked for approval: someone else who signs in to the editor can now publish it.') + exported;
+        return;
+      }
       const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
       S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
       // The server version: whether the folder is there now (it is made on the first publish).
@@ -1812,6 +1913,120 @@
       $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
     finally { $('pubGo').disabled = false; }
+  });
+
+  // Four eyes: turned on and off by the local account admin, at once.
+  $('setApproval').addEventListener('change', async () => {
+    const on = $('setApproval').checked;
+    $('setApprovalNote').textContent = '';
+    try {
+      const r = await api('settings/save', { settings: { requireApproval: on ? 'on' : '' } });
+      S.settings = r.settings; lastSettings = r;
+      S.info = await api('info');
+      $('setApprovalNote').textContent = on ? (ldapOn() ? t('On: publishing now waits for a second person.') : t('On, but nobody else can sign in yet (Active Directory): set up the sign-in first, or nothing can be published.')) : t('Off: whoever signs in publishes.');
+      renderStatusBar();
+    } catch (err) { $('setApproval').checked = !on; $('setApprovalNote').textContent = t(err.message); }
+  });
+  function ldapOn() { return !!(S.info && S.info.features && S.info.features.adSignIn); }
+
+  // What changed, as a list: signatures added, removed, renamed, their HTML line by line, who gets
+  // them, the fields and the options.
+  function renderChanges(box, changes) {
+    if (!changes.length) { box.replaceChildren(el('p', { class: 'muted' }, t('Nothing changed.'))); return; }
+    const KIND = { added: 'Added', removed: 'Removed', renamed: 'Renamed', html: 'Changed', rules: 'Who gets it, defaults or days', fields: 'Fields', options: 'Add-in options' };
+    box.replaceChildren(...changes.map((c) => el('div', { class: 'change ' + c.kind },
+      el('div', { class: 'change-head' }, el('span', { class: 'badge' + (c.kind === 'removed' ? ' danger' : c.kind === 'added' ? ' on' : '') }, t(KIND[c.kind] || c.kind)), ' ',
+        c.name ? el('b', null, c.name) : null, c.kind === 'renamed' ? ' ' + t('(was {0})', c.detail) : c.detail ? ' ' + c.detail : ''),
+      c.lines && c.lines.length ? el('pre', { class: 'diff' }, ...c.lines.map((l) => el('span', { class: l.op === '+' ? 'add' : 'del' }, l.op + ' ' + l.text + '\n'))) : null)));
+  }
+
+  // The audit log, for the local account admin.
+  async function renderAudit() {
+    $('auditErr').textContent = '';
+    const v = $('auditWhat').value;
+    const tb = $('auditRows'); tb.replaceChildren(el('tr', null, el('td', { colspan: 5 }, t('Loading…'))));
+    try {
+      const r = await api('audit/list', v === 'failed' ? { failed: true } : { what: v });
+      if (!r.entries.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted' }, t('Nothing yet.')))); return; }
+      tb.replaceChildren(...r.entries.map((e) => el('tr', { class: e.ok ? '' : 'refused' },
+        el('td', null, new Date(e.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')), el('td', null, e.who), el('td', null, e.ip),
+        el('td', null, e.ok ? e.what : el('span', { class: 'warn' }, e.what + ' · ' + t('refused'))), el('td', null, e.detail ? t(e.detail) : ''))));
+    } catch (err) { tb.replaceChildren(); $('auditErr').textContent = t(err.message); }
+  }
+  $('setAudit').addEventListener('click', () => { $('dlgAudit').showModal(); renderAudit(); });
+  $('auditWhat').addEventListener('change', renderAudit);
+
+  // A backup: downloaded locked with a passphrase, or brought back.
+  $('setBackup').addEventListener('click', () => {
+    for (const id of ['bakPass', 'bakPass2', 'bakRestorePass', 'bakFile']) $(id).value = '';
+    for (const id of ['bakErr', 'bakExportOk', 'bakRestoreOk']) $(id).textContent = '';
+    $('dlgBackup').showModal();
+  });
+  $('bakExport').addEventListener('click', async () => {
+    $('bakErr').textContent = ''; $('bakExportOk').textContent = '';
+    if ($('bakPass').value !== $('bakPass2').value) { $('bakErr').textContent = t('The two passphrases are not the same.'); return; }
+    $('bakExport').disabled = true; $('bakExportOk').textContent = t('Making the backup…');
+    try {
+      const r = await api('backup/export', { passphrase: $('bakPass').value });
+      const bytes = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0));
+      const a = el('a', { href: URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' })), download: r.name });
+      document.body.append(a); a.click(); a.remove();
+      $('bakExportOk').textContent = t('Downloaded: {0}. Keep the passphrase apart from it.', r.name);
+    } catch (err) { $('bakExportOk').textContent = ''; $('bakErr').textContent = t(err.message); }
+    finally { $('bakExport').disabled = false; }
+  });
+  $('bakRestore').addEventListener('click', async () => {
+    $('bakErr').textContent = ''; $('bakRestoreOk').textContent = '';
+    const f = $('bakFile').files[0];
+    if (!f) { $('bakErr').textContent = t('Choose the backup file.'); return; }
+    if (!confirm(t('Replace the draft, the settings, the connections and the history here with the backup\'s?'))) return;
+    $('bakRestore').disabled = true; $('bakRestoreOk').textContent = t('Bringing it back…');
+    try {
+      const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+      const r = await api('backup/restore', { data, passphrase: $('bakRestorePass').value });
+      const [info, st, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
+      S.info = info; S.settings = st.settings; lastSettings = st;
+      applyDraft(draft); renderStatusBar();
+      $('bakRestoreOk').textContent = t('Brought back: the backup of {0} (version {1}).', new Date(r.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB'), r.version);
+    } catch (err) { $('bakRestoreOk').textContent = ''; $('bakErr').textContent = t(err.message); }
+    finally { $('bakRestore').disabled = false; }
+  });
+
+  // Four eyes: what waits for approval, shown in Publish….
+  async function loadApproval() {
+    if (!(S.info && S.info.features && S.info.features.requireApproval)) { S.approval = null; renderStatusBar(); return null; }
+    try { S.approval = await api('approval/get'); } catch (e) { S.approval = null; }
+    renderStatusBar();
+    return S.approval;
+  }
+  function renderApproval() {
+    const need = !!(S.info && S.info.features && S.info.features.requireApproval);
+    const p = need && S.approval && S.approval.pending;
+    $('pubApproval').hidden = !p;
+    $('pubGo').textContent = need ? (p && p.mine ? t('Ask again') : t('Ask for approval')) : t('Publish');
+    if (!p) return;
+    const when = new Date(p.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB');
+    $('pubApprovalWho').textContent = (p.mine ? t('You asked for approval on {0}.', when) : t('{0} asks for approval since {1}.', p.by, when)) + (p.message ? ' «' + p.message + '»' : '') +
+      (p.current ? '' : ' ' + t('The draft changed since: it has to be asked for again.'));
+    $('pubApprovalWho').className = 'lead' + (p.current ? '' : ' warn');
+    renderChanges($('pubApprovalChanges'), p.changes);
+    $('pubApprove').hidden = !p.mayApprove;
+    $('pubWithdraw').textContent = p.mine ? t('Withdraw') : t('Reject');
+  }
+  $('stApproval').addEventListener('click', () => $('btnPublish').click());
+  $('pubApprove').addEventListener('click', async () => {
+    $('pubApprove').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
+    try {
+      const r = await api('approval/approve');
+      S.dirty = false; S.publishedAt = Date.now(); renderStatus();
+      $('pubOk').textContent = r.changed ? t('Approved and published to {0}.', r.folder) : t('Nothing had changed.');
+      await loadApproval(); renderApproval();
+    } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
+    finally { $('pubApprove').disabled = false; }
+  });
+  $('pubWithdraw').addEventListener('click', async () => {
+    try { await api('approval/cancel'); await loadApproval(); renderApproval(); $('pubOk').textContent = t('The request is withdrawn.'); }
+    catch (err) { $('pubErr').textContent = t(err.message); }
   });
 
   // History: the versions published, and one of them back into the draft.
@@ -1824,8 +2039,19 @@
     tb.replaceChildren(...r.versions.map((v, i) => el('tr', null,
       el('td', null, new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB'), i === 0 ? el('span', { class: 'badge on', style: 'margin-left:6px' }, t('current')) : null),
       el('td', null, v.by), el('td', null, v.message || '–'), el('td', null, String(v.signatures)),
-      el('td', null, el('button', { type: 'button', class: 'small', onclick: () => historyRestore(v) }, t('Load into the draft'))))));
+      el('td', { class: 'nowrap' }, el('button', { type: 'button', class: 'small', onclick: () => historyDiff(v) }, t('Compare')), ' ',
+        el('button', { type: 'button', class: 'small', onclick: () => historyRestore(v) }, t('Load into the draft'))))));
   }
+  let diffOf = null;
+  async function historyDiff(v) {
+    if (v) { diffOf = v; document.querySelector('#dlgDiff input[value=previous]').checked = true; $('dlgDiff').showModal(); }
+    const against = document.querySelector('#dlgDiff input[name=diffAgainst]:checked').value;
+    $('diffTitle').textContent = t('What changed: the version of {0}', new Date(diffOf.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB'));
+    $('diffErr').textContent = ''; $('diffChanges').replaceChildren(el('p', null, t('Loading…')));
+    try { renderChanges($('diffChanges'), (await api('history/diff', { id: diffOf.id, against })).changes); }
+    catch (err) { $('diffChanges').replaceChildren(); $('diffErr').textContent = t(err.message); }
+  }
+  document.querySelectorAll('#dlgDiff input[name=diffAgainst]').forEach((r) => r.addEventListener('change', () => historyDiff()));
   async function historyRestore(v) {
     if (!confirm(t('Replace the draft and its images with the version of {0}? What is not published is lost.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')))) return;
     try {
@@ -1878,8 +2104,29 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 6000 : 3000);
   }
 
+  // Accessibility: each dialog is named by its heading; tabs move with the arrow keys; the list
+  // says which signature is open.
+  function a11y() {
+    document.querySelectorAll('dialog').forEach((d, i) => {
+      const h = d.querySelector('h2');
+      if (!h) return;
+      if (!h.id) h.id = 'dlgTitle' + i;
+      d.setAttribute('aria-labelledby', h.id);
+    });
+    document.querySelectorAll('[role=tablist]').forEach((list) => list.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+      const tabs = [...list.querySelectorAll('[role=tab]')].filter((x) => !x.hidden);
+      const i = tabs.indexOf(document.activeElement);
+      if (i < 0) return;
+      e.preventDefault();
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      tabs[next].focus(); tabs[next].click();
+    }));
+  }
+
   async function start() {
     I18N.apply(document.body);
+    a11y();
     const langSel = $('setLang');
     Object.entries(I18N.langs).forEach(([k, v]) => langSel.append(el('option', { value: k }, v)));
     langSel.value = I18N.lang;
@@ -1891,6 +2138,7 @@
       buildToolbar();
       applyDraft(draft);
       loadSnapshot();
+      loadApproval();
       document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
       if (onServer()) serverTexts();
       document.querySelector('#pvSource option[value=entra]').hidden = !(onServer() && info.features.publishTarget === 'sharepoint');

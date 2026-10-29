@@ -68,6 +68,29 @@ asked.
 - **history/list** → `{ ok, versions: [{ id, at, by, message, signatures, images }] }`: what was
   published, newest first (each publish that changed something, with its images; the last 50).
   **history/restore** `{ id }` puts that version and exactly its images into the draft.
+  **history/diff** `{ id, against?: 'draft' }` → `{ ok, changes }`: what changed in that version
+  against the one before it (or the draft against it). Each change is `{ kind: added | removed |
+  renamed | html | rules | fields | options, name, detail?, lines? }`; `lines` are the HTML's lines
+  that differ, `{ op: '-' | '+', text }`.
+- **Four eyes** (setting `requireApproval: 'on'`, the local `admin`'s; `features.requireApproval`):
+  `publish` answers `ok: false`; **approval/request** `{ configJson, message }` saves the draft and
+  asks for approval; **approval/get** → `{ ok, required, pending: { by, at, message, current, mine,
+  mayApprove, changes } | null }` (`changes` against what is published; `current: false` once the
+  draft changed since); **approval/approve** publishes it, by someone other than who asked, and only
+  while the draft is as it was; **approval/cancel** withdraws or rejects it.
+- **audit/list** `{ limit?, what?, failed? }` → `{ ok, entries: [{ at, who, ip, what, detail, ok }] }`,
+  newest first, for the local `admin`: sign-ins (and failed ones), publishing, approvals, restores,
+  connections, settings, the setup script, the add-in's upload, backups. Never a password, a token
+  or a signature's content (server/audit.js, `audit.log` in the data volume).
+- **backup/export** `{ passphrase }` → `{ ok, name, data }` (base64 of the file) and
+  **backup/restore** `{ data, passphrase }` → `{ ok, at, version, files }`, for the local `admin`:
+  the data volume (not the audit log) in one file locked with the passphrase (scrypt, AES-256-GCM).
+  The server's key goes with it, so a server with another key seals the passwords again with its own.
+- `features.update` is `{ version, url, at }` when a newer release is out (`OSIGN_UPDATE_CHECK=1`,
+  twice a day one request to GitHub), else `null`. `features.graphCredential` is `certificate` (the
+  server's own, server/cert.js, put on the app by the setup script) or `secret`; `features.secretExpires`
+  and `features.secretDaysLeft` are for whichever it is. `connections/get` answers `cert: { thumbprint,
+  expires } | null`; `connections/save` with `removeCert: true` goes back to a client secret.
 - **connections/test** `{ what: signIn | directory | graph | pages }` → `{ ok, message }`: that part
   of the server's connections tried for real, with what is saved (for the local account `admin`).
 - **sp/share** `{ url }` → `{ ok, webUrl, name }`: where a sharing link of SharePoint or OneDrive
@@ -75,8 +98,8 @@ asked.
   file, one that is gone, or one the app may not open answers `ok: false` with why.
 - **sp/check** `{ spSite, spFolder }` → `{ ok, found, photos, where }`: whether the server reaches
   that folder, before it is saved (the setup assistant). `found: false` means the site is reached
-  and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,
-`sp/*`, `ad/*`, `addin/*`, `quit`) answers `ok: false` with a sentence saying so.
+  and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows or OneDrive (`pick-folder`, `sp/resolve`, `sp/local`, `quit`)
+answers `ok: false` with a sentence saying so.
 
 ## ping
 

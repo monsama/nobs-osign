@@ -181,3 +181,21 @@ test('the images of a signature are listed, a stray % in a name as it is', () =>
   const list = core.localImages('<img src="assets/logo%20blue.png"><img src="photos/100%.jpg"><img src="https://x/y.png">');
   assert.deepEqual(list.map((i) => i.dir + '/' + i.name), ['assets/logo blue.png', 'photos/100%.jpg']);
 });
+
+test('campaigns: only on their days, and then they win as default; before and after, the usual one', () => {
+  const cfg = { schemaVersion: 1, options: {}, signatures: [
+    { id: 'std', name: 'Standard', defaultNew: true, audience: { groups: ['sg-sales'] } },
+    { id: 'xmas', name: 'Weihnachten', defaultNew: true, validFrom: '2026-12-01', validUntil: '2026-12-31', audience: {} }
+  ] };
+  const on = (d) => core.pick(cfg, {}, 'a@x.ch', 'new', null, ['sg-sales'], new Date(d + 'T12:00:00')).id;
+  assert.equal(on('2026-11-30'), 'std');
+  assert.equal(on('2026-12-01'), 'xmas', 'the first day is included');
+  assert.equal(on('2026-12-31'), 'xmas', 'the last day too');
+  assert.equal(on('2027-01-01'), 'std');
+  // Picked by the user in the pane, outside its days: the default instead.
+  assert.equal(core.pick(cfg, {}, '', 'new', { new: 'xmas' }, ['sg-sales'], new Date('2027-02-01T12:00:00')).id, 'std');
+  assert.equal(core.isCampaign(cfg.signatures[0]), false);
+  assert.equal(core.inPeriod({ validFrom: '2026-12-01' }, new Date('2030-01-01T12:00:00')), true, 'open-ended');
+  assert.deepEqual(core.validate({ schemaVersion: 1, signatures: [{ id: 'a', name: 'A', validFrom: '2026-12-31', validUntil: '2026-12-01' }] }), ['Signature 1: the campaign ends before it starts.']);
+  assert.deepEqual(core.validate({ schemaVersion: 1, signatures: [{ id: 'a', name: 'A', validFrom: '1.12.2026' }] }), ['Signature 1: the campaign\'s days are dates like 2026-12-01.']);
+});

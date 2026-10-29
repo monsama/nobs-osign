@@ -44,7 +44,8 @@ will get.
     "html": "<p>@@givenName @@sn</p>…",            // what the editor edits
     "compiled": "<!--sig-if:givenName,sn-->…",     // what the add-in renders
     "defaultNew": true, "defaultReply": false, "removeEmptyLines": true,
-    "audience": { "groups": [], "departments": [], "domains": [] }
+    "audience": { "groups": [], "departments": [], "domains": [] },
+    "validFrom": "", "validUntil": ""              // a campaign's days (YYYY-MM-DD), or always
   } ]
 }
 ```
@@ -73,7 +74,13 @@ the text is JSON with `schemaVersion` 1. All other meaning lives in the UI and i
 7. Its connections (AD, Graph, Cloudflare) are set in the editor by the local account `admin`,
    sealed with the server's key (`server/connections.js`); the setup script for Microsoft 365
    makes both app registrations and sends its result back (`server/setup.js`,
-   `server/setup-template.ps1`).
+   `server/setup-template.ps1`). The server signs in to Entra ID with its own certificate: it
+   makes the key and a self-signed certificate (`server/cert.js`), the script puts only the
+   certificate on the app, and each token request carries a signed client assertion.
+8. It keeps an audit log (`server/audit.js`), a backup locked with a passphrase
+   (`server/backup.js`), four eyes before publishing (`approval.json`), what changed between
+   versions (`server/diff.js`), and asks GitHub twice a day whether a newer release is out
+   (`server/updates.js`, `OSIGN_UPDATE_CHECK`).
 
 The Docker setup is `Dockerfile`, `docker-compose.yml` and `deploy-nobs-osign.sh`; updates,
 backups and restores are `scripts/*.sh`.

@@ -91,10 +91,9 @@ function createConnections({ dataDir, env }) {
   const file = path.join(dataDir, 'connections.json');
   const caFile = path.join(dataDir, 'ldap-ca.pem');
   // The key: whatever secrets/app_key holds, made into 32 bytes.
-  function key() {
-    const raw = env.OSIGN_APP_KEY_FILE ? readFileValue(env.OSIGN_APP_KEY_FILE) : String(env.OSIGN_APP_KEY || '').trim();
-    return raw.length >= 16 ? crypto.createHash('sha256').update(raw).digest() : null;
-  }
+  const rawKey = () => (env.OSIGN_APP_KEY_FILE ? readFileValue(env.OSIGN_APP_KEY_FILE) : String(env.OSIGN_APP_KEY || '').trim());
+  const keyFrom = (raw) => (String(raw || '').length >= 16 ? crypto.createHash('sha256').update(String(raw)).digest() : null);
+  function key() { return keyFrom(rawKey()); }
   function seal(name, value) {
     const iv = crypto.randomBytes(12);
     const c = crypto.createCipheriv('aes-256-gcm', key(), iv);
@@ -103,8 +102,7 @@ function createConnections({ dataDir, env }) {
     return { iv: iv.toString('base64'), tag: c.getAuthTag().toString('base64'), data: data.toString('base64'), at: new Date().toISOString() };
   }
   // The value, or '' when it cannot be opened (no key, or another one).
-  function open(name, s) {
-    const k = key();
+  function open(name, s, k = key()) {
     if (!k || !s) return '';
     try {
       const d = crypto.createDecipheriv('aes-256-gcm', k, Buffer.from(s.iv, 'base64'));
@@ -197,7 +195,32 @@ function createConnections({ dataDir, env }) {
     return { saved: true };
   }
 
-  return { effectiveEnv, answer, save };
+  // After a backup from another server came back: what it sealed with its key (oldRaw), sealed
+  // again with this one's. Values this server can open already stay as they are.
+  function reseal(oldRaw) {
+    const old = keyFrom(oldRaw);
+    if (!old || !key()) return;
+    const again = (name, s) => {
+      if (!s || open(name, s)) return s;
+      const v = open(name, s, old);
+      return v ? seal(name, v) : s;
+    };
+    let saved = null;
+    try { saved = JSON.parse(readText(file) || 'null'); } catch (e) { saved = null; }
+    if (saved && saved.secrets) {
+      for (const k of Object.keys(saved.secrets)) saved.secrets[k] = again(k, saved.secrets[k]);
+      writeAtomic(file, JSON.stringify(saved));
+    }
+    const certFile = path.join(dataDir, 'graph-cert.json');
+    let certs = null;
+    try { certs = JSON.parse(readText(certFile) || 'null'); } catch (e) { certs = null; }
+    if (certs) {
+      for (const k of ['active', 'pending']) if (certs[k] && certs[k].key) certs[k].key = again('graphCertKey', certs[k].key);
+      writeAtomic(certFile, JSON.stringify(certs));
+    }
+  }
+
+  return { effectiveEnv, answer, save, seal, open, reseal, rawKey, keyOk: () => !!key() };
 }
 
 module.exports = { createConnections, parseCa, FIELDS, SECRETS };

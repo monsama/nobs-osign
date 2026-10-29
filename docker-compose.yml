@@ -7,7 +7,7 @@ services:
   app:
     container_name: nobs-osign
     # Pinned release image (set OSIGN_IMAGE in .env). Built locally only if the pull is not possible.
-    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.8.0}
+    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.9.0}
     build: .
     restart: unless-stopped
     # No extra rights, and no writing outside its data: it needs neither.
@@ -47,6 +47,8 @@ services:
       OSIGN_CF_ACCOUNT_ID: ${OSIGN_CF_ACCOUNT_ID:-}
       OSIGN_CF_PROJECT: ${OSIGN_CF_PROJECT:-}
       OSIGN_CF_API_TOKEN_FILE: /run/secrets/cf_api_token
+      # Twice a day, whether a newer release is out (one request to GitHub, nothing comes in): 0 is off.
+      OSIGN_UPDATE_CHECK: ${OSIGN_UPDATE_CHECK:-1}
     secrets:
       - admin_password
       - app_key

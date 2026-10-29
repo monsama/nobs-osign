@@ -16,6 +16,8 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
   const shares = {};
   const users = {};
   let busy = 0, tokens = 0;
+  // Certificates on the app (X509Certificate), for a client assertion.
+  const certs = [];
 
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x');
@@ -25,7 +27,17 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
 
     if (req.method === 'POST' && u.pathname === '/' + tenantId + '/oauth2/v2.0/token') {
       const f = new URLSearchParams(body.toString());
-      if (f.get('client_id') !== clientId || f.get('client_secret') !== secret || f.get('grant_type') !== 'client_credentials') return json(401, { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.\r\nTrace ID: x' });
+      // A client assertion signed with a certificate on the app (certs), or the secret.
+      const assertion = f.get('client_assertion');
+      if (assertion) {
+        const [h, b, sig] = assertion.split('.');
+        const head = JSON.parse(Buffer.from(h, 'base64url')), claims = JSON.parse(Buffer.from(b, 'base64url'));
+        const cert = certs.find((c) => crypto.createHash('sha1').update(c.raw).digest('base64url') === head.x5t);
+        const good = cert && head.alg === 'RS256' && f.get('client_assertion_type') === 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer' &&
+          crypto.verify('sha256', Buffer.from(h + '.' + b), cert.publicKey, Buffer.from(sig, 'base64url')) &&
+          claims.iss === clientId && claims.sub === clientId && claims.aud === 'http://' + req.headers.host + u.pathname && claims.exp > Date.now() / 1000;
+        if (!good || f.get('client_id') !== clientId) return json(401, { error: 'invalid_client', error_description: 'AADSTS700027: Client assertion failed signature validation.\r\nTrace ID: x' });
+      } else if (f.get('client_id') !== clientId || f.get('client_secret') !== secret || f.get('grant_type') !== 'client_credentials') return json(401, { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.\r\nTrace ID: x' });
       tokens++;
       return json(200, { access_token: 'tok-' + tokens, expires_in: 3600, token_type: 'Bearer' });
     }
@@ -103,7 +115,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
     return json(405, { error: { code: 'notAllowed', message: req.method + ' ' + suffix } });
   });
   return {
-    sites, requests, shares, users,
+    sites, requests, shares, users, certs,
     busyOnce: () => { busy = 1; },
     listen: () => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve('http://127.0.0.1:' + server.address().port))),
     close: () => server.close()
