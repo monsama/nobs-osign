@@ -218,7 +218,9 @@
       <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button> <small>(root: the home site; or paste the address of a site or OneDrive)</small><input id="setSpSite" placeholder="root"></label>
       <label>Folder in its library<input id="setSpFolder" placeholder="OSign"></label>
     </div>
-    <p><button id="setAddinBuild" type="button">Make the add-in files</button></p>
+    <p><button id="setAddinBuild" type="button">Make the add-in files</button>
+      <button id="setAddinUpload" type="button" hidden>Upload to Cloudflare Pages</button>
+      <a id="setAddinZip" href="/addin.zip" download hidden>Download as ZIP</a></p>
     <p id="setAddinOk" class="ok"></p>
     <p id="setErr" class="err"></p>
     <div class="dlg-foot">
@@ -374,10 +376,15 @@
     <section class="wiz-step" data-step="files" data-title="Make the add-in's files">
       <p class="wiz-intro" data-th="wizFilesLead">OSign now generates the add-in's files for your address, app registration and SharePoint folder,
         and saves them in a folder on this PC.</p>
+      <p class="wiz-intro" id="wizFilesServer" data-th="wizFilesServer" hidden>OSign now generates the add-in's files for your address, app
+        registration and SharePoint folder, on the server. It uploads them to Cloudflare Pages itself, or you download them as a ZIP.</p>
       <div class="wiz-fields">
         <label>Write the files to<span class="pick"><input id="wizAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="wizAddinFolder">Choose folder…</button></span></label>
         <p class="wiz-actions"><button type="button" id="wizMake" class="primary">Make the add-in files</button></p>
         <p id="wizMakeOk" class="ok"></p>
+        <p id="wizServerFiles" class="wiz-actions" hidden><button type="button" id="wizCfUpload" class="primary" hidden>Upload to Cloudflare Pages</button>
+          <a id="wizZip" href="/addin.zip" download>Download as ZIP</a></p>
+        <p id="wizCfOk" class="ok"></p>
       </div>
       <div id="wizUpload" hidden>
         <h3 class="wiz-h">Upload the files</h3>

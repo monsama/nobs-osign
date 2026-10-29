@@ -414,11 +414,21 @@
     'The server has no service account for Active Directory (OSIGN_LDAP_SERVICE_DN).': 'Der Server hat kein Dienstkonto für Active Directory (OSIGN_LDAP_SERVICE_DN).',
     "The service account's password is missing (secrets/ldap_service_password).": 'Das Passwort des Dienstkontos fehlt (secrets/ldap_service_password).',
     'Enter a user name or mail address.': 'Einen Benutzernamen oder eine Mailadresse eingeben.',
+    // the server version: the add-in's files
+    'Upload to Cloudflare Pages': 'Zu Cloudflare Pages hochladen',
+    'Download as ZIP': 'Als ZIP herunterladen',
+    'Uploading…': 'Wird hochgeladen…',
+    'Uploaded to Cloudflare Pages ({0} of {1} files new): {2}': 'Zu Cloudflare Pages hochgeladen ({0} von {1} Dateien neu): {2}',
+    '{0} files (version {1}) made.': '{0} Dateien (Version {1}) erstellt.',
+    '{0} files (version {1}) made. Upload them, add the redirect URI {2} to the app registration, and upload {3} in the admin center.': '{0} Dateien (Version {1}) erstellt. Hochladen, die Umleitungs-URI {2} in der App-Registrierung eintragen und {3} im Admin Center hochladen.',
+    "The add-in's template is not on the server (addin-template).": 'Die Vorlage des Add-ins ist nicht auf dem Server (addin-template).',
+    'Uploading to Cloudflare Pages is not set up on the server (OSIGN_CF_* in .env).': 'Hochladen zu Cloudflare Pages ist auf dem Server nicht eingerichtet (OSIGN_CF_* in .env).',
     'Name the folder in the site, like OSign.': 'Den Ordner in der Site angeben, z. B. OSign.',
     'Publishing to SharePoint is not set up on the server (OSIGN_GRAPH_* in .env).': 'Veröffentlichen nach SharePoint ist auf dem Server nicht eingerichtet (OSIGN_GRAPH_* in .env).'
   };
 
   DE.html = {
+    wizFilesServer: 'OSign erstellt jetzt die Dateien des Add-ins für Ihre Adresse, App-Registrierung und Ihren SharePoint-Ordner, auf dem Server. Es lädt sie selbst zu Cloudflare Pages hoch, oder Sie laden sie als ZIP herunter.',
     wizGrantLead: '<b>Dem Server Schreibzugriff auf diese Site geben</b>, einmalig, als SharePoint- oder globaler Administrator. Seine App-Registrierung braucht die Anwendungsberechtigung <b>Sites.Selected</b> (mit Administratorzustimmung); damit erhält sie genau diese eine Site und keine andere:',
     wizGrant1: '<code>https://aka.ms/ge</code> (Graph Explorer) öffnen, anmelden und diese Abfrage ausführen. Die <b>id</b> aus der Antwort kopieren:',
     wizGrant2: '<b>POST</b> auf <code>https://graph.microsoft.com/v1.0/sites/&lt;id&gt;/permissions</code> mit diesem Inhalt ausführen (Graph Explorer fragt nach der Zustimmung für <i>Sites.FullControl.All</i>):',

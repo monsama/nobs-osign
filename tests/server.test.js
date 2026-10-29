@@ -275,8 +275,8 @@ test('load published replaces the draft and its images, and keeps the old draft 
   assert.match(fs.readFileSync(path.join(dataDir, 'draft.json.bak'), 'utf8'), /Local only/);
 });
 
-test('what the server version cannot do (yet) is said plainly', async () => {
-  for (const name of ['pick-folder', 'sp/resolve', 'ad/lookup', 'ad/read', 'addin/build', 'quit']) {
+test('what the server version cannot do is said plainly', async () => {
+  for (const name of ['pick-folder', 'sp/resolve', 'ad/lookup', 'ad/read', 'quit']) {
     const r = await api(name);
     assert.equal(r.ok, false, name);
     assert.ok(r.error, name);

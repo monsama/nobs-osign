@@ -1,5 +1,8 @@
-# Makes a release as one zip: the editor (OSign.ps1, its UI, the shared engine) and the add-in's
-# files with blanks for a company's settings, which the editor fills in (Settings → Outlook add-in).
+# Makes a release:
+#  - OSign-vX.Y.Z.zip: the editor for Windows (OSign.ps1, its UI, the shared engine) and the add-in's
+#    files with blanks for a company's settings, which the editor fills in (Settings → Outlook add-in)
+#  - osign-server-X.Y.Z.tar.gz: what an install of the server needs (Compose, deploy and update scripts)
+#  - the Docker image ghcr.io/<owner>/osign:X.Y.Z, scanned before it is pushed
 #
 # Runs on a version tag such as v0.5.0 (scripts/release.sh pushes one), or by hand (Actions →
 # release → Run workflow) on main, which tags the version in package.json first. Tests must pass
@@ -41,9 +44,10 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write
+      packages: write
       # A signed statement of where the zip was built (GitHub artifact attestation, Sigstore).
       id-token: write
       attestations: write
@@ -55,6 +59,7 @@ jobs:
           v="$(node -p 'require("./package.json").version')"
           echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Not a version: $v"; exit 1; }
           grep -q "AppVersion = '$v'" editor/OSign.ps1 || { echo "editor/OSign.ps1 is not version $v: node scripts/bump-version.mjs $v"; exit 1; }
+          grep -q "ghcr.io/monsama/osign:$v}" docker-compose.yml || { echo "docker-compose.yml is not version $v: node scripts/bump-version.mjs $v"; exit 1; }
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             [ "${GITHUB_REF_NAME#v}" = "$v" ] || { echo "Tag $GITHUB_REF_NAME does not match package.json $v"; exit 1; }
           fi
@@ -83,13 +88,44 @@ jobs:
           cp -r dist/template out/OSign/addin
           cp LICENSE out/OSign/
           (cd out && zip -r "OSign-$TAG.zip" OSign)
-          (cd out && sha256sum "OSign-$TAG.zip" > SHA256SUMS.txt)
+          # The server: only what an install needs; the code is in the image.
+          V="${{ steps.v.outputs.version }}"
+          git archive --format=tar.gz --prefix="osign-server-$V/" -o "out/osign-server-$V.tar.gz" HEAD \
+            deploy-osign.sh docker-compose.yml .env.example certificates/README.md \
+            scripts/osign-lib.sh scripts/update.sh scripts/backup.sh scripts/restore.sh README.md LICENSE
+          (cd out && sha256sum "osign-server-$V.tar.gz" > "osign-server-$V.tar.gz.sha256")
+          (cd out && sha256sum "OSign-$TAG.zip" "osign-server-$V.tar.gz" > SHA256SUMS.txt)
       # Signs that this zip was built here, from this commit, by this workflow: `gh attestation verify <zip>
       # --repo <owner>/osign` checks it. A plan that has no attestations for this repository does not stop the release.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         continue-on-error: true
         with:
-          subject-path: out/OSign-v${{ steps.v.outputs.version }}.zip
+          subject-path: |
+            out/OSign-v${{ steps.v.outputs.version }}.zip
+            out/osign-server-${{ steps.v.outputs.version }}.tar.gz
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The image is built and scanned before anything is published: a high or critical problem in it stops the release.
+      # The image pushed is the one scanned, and the release comes last, so there is never a release without its image.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          load: true
+          tags: |
+            osign:scan
+            ghcr.io/${{ github.repository }}:${{ steps.v.outputs.version }}
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: osign:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Push the scanned image
+        run: docker push "ghcr.io/${{ github.repository }}:${{ steps.v.outputs.version }}"
       - name: Tag the version
         if: github.event_name == 'workflow_dispatch'
         run: |
@@ -101,5 +137,7 @@ jobs:
           name: OSign v${{ steps.v.outputs.version }}
           files: |
             out/OSign-v${{ steps.v.outputs.version }}.zip
+            out/osign-server-${{ steps.v.outputs.version }}.tar.gz
+            out/osign-server-${{ steps.v.outputs.version }}.tar.gz.sha256
             out/SHA256SUMS.txt
           generate_release_notes: true

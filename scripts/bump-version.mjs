@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-/* Sets the version everywhere it is kept: package.json, package-lock.json and the editor
-   (editor/OSign.ps1, $script:AppVersion). The add-in's manifest takes its version from package.json.
+/* Sets the version everywhere it is kept: package.json, package-lock.json, the editor
+   (editor/OSign.ps1, $script:AppVersion) and the server's image (docker-compose.yml). The add-in's manifest takes its version from package.json.
    Usage: node scripts/bump-version.mjs 0.5.0 */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,4 +29,5 @@ edit('package.json', /("version": ")[^"]+(")/, `$1${version}$2`);
   fs.writeFileSync(p, text);
 }
 edit('editor/OSign.ps1', /(\$script:AppVersion = ')[^']+(')/, `$1${version}$2`);
-console.log(`Version set to ${version} in package.json, package-lock.json and editor/OSign.ps1.`);
+edit('docker-compose.yml', /(ghcr\.io\/monsama\/osign:)\d+\.\d+\.\d+/, `$1${version}`);
+console.log(`Version set to ${version} in package.json, package-lock.json, editor/OSign.ps1 and docker-compose.yml.`);

@@ -945,6 +945,7 @@
     for (const id of ['setFolder', 'setPhotos', 'setAddinFolder']) $(id).closest('label').hidden = onServer();
     document.querySelector('#dlgSettings [data-th=settingsLead]').hidden = onServer();
     $('setAddinBuild').closest('p').hidden = onServer() && $('setAddinBuild').disabled;
+    $('setAddinUpload').hidden = true; $('setAddinZip').hidden = true;
     $('setAddinOk').textContent = $('setAddinBuild').disabled ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
@@ -971,8 +972,26 @@
       const saved = await api('settings/save', { settings: settingsFromDialog() });
       S.settings = saved.settings; lastSettings = saved;
       const r = await api('addin/build');
-      $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
+      if (onServer()) {
+        // On the server: uploaded from there, or downloaded to upload by hand.
+        $('setAddinUpload').hidden = !S.info.features.pagesUpload; $('setAddinZip').hidden = false;
+        $('setAddinOk').textContent = t('{0} files (version {1}) made. Upload them, add the redirect URI {2} to the app registration, and upload {3} in the admin center.', r.files, r.version, r.redirectUri, r.manifestUrl);
+      } else $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
     } catch (err) { $('setErr').textContent = t(err.message); }
+  });
+
+  // The server version: the files made go to Cloudflare Pages from the server.
+  async function pagesUpload(out, btn) {
+    btn.disabled = true; out.textContent = t('Uploading…');
+    try {
+      const r = await api('addin/upload');
+      out.textContent = t('Uploaded to Cloudflare Pages ({0} of {1} files new): {2}', r.uploaded, r.files, r.url);
+      return true;
+    } catch (err) { out.textContent = ''; throw err; } finally { btn.disabled = false; }
+  }
+  $('setAddinUpload').addEventListener('click', async () => {
+    $('setErr').textContent = '';
+    try { await pagesUpload($('setAddinOk'), $('setAddinUpload')); } catch (err) { $('setErr').textContent = t(err.message); }
   });
 
   // A site's or OneDrive's address as copied from the browser, or a sharing link (Share → Copy
@@ -1153,7 +1172,15 @@
     const perms = ['User.Read', 'Sites.Read.All'];
     if (radio('wvsrc') === 'graph') perms.push('GroupMember.Read.All');
     $('wizPerms').textContent = perms.join(', ');
-    $('wizUpload').hidden = !wiz.built;
+    // The server version makes the files there: uploaded from there, or downloaded as a ZIP. The
+    // steps to upload by hand only when the server cannot.
+    const srv = onServer();
+    $('wizAddinFolder').closest('label').hidden = srv;
+    document.querySelector('#dlgWizard [data-th=wizFilesLead]').hidden = srv;
+    $('wizFilesServer').hidden = !srv;
+    $('wizServerFiles').hidden = !srv || !wiz.built;
+    $('wizCfUpload').hidden = !srv || !S.info.features.pagesUpload;
+    $('wizUpload').hidden = !wiz.built || (srv && S.info.features.pagesUpload && host === 'cloudflare');
     document.querySelectorAll('#wizUpload [data-host]').forEach((p) => { p.hidden = p.dataset.host !== (host || 'other'); });
   }
   // Step 1: where the folder is, given one way or the other - its SharePoint address (OSign finds
@@ -1314,13 +1341,17 @@
   document.querySelectorAll('input[name=whost], input[name=wvsrc]').forEach((r) => r.addEventListener('change', wizRender));
   $('wizUrl').addEventListener('input', wizRender);
   $('wizFolder').addEventListener('input', () => { $('wizFolderNote').textContent = ''; wiz.warned = ''; });
+  $('wizCfUpload').addEventListener('click', async () => {
+    $('wizErr').textContent = '';
+    try { await pagesUpload($('wizCfOk'), $('wizCfUpload')); } catch (err) { $('wizErr').textContent = t(err.message); }
+  });
   $('wizMake').addEventListener('click', async () => {
     $('wizErr').textContent = ''; $('wizMakeOk').textContent = '';
     try {
-      await wizSave({ addinFolder: $('wizAddinFolder').value });
+      if (!onServer()) await wizSave({ addinFolder: $('wizAddinFolder').value });
       const r = await api('addin/build');
       wiz.built = true;
-      $('wizMakeOk').textContent = t('{0} files (version {1}) in {2}.', r.files, r.version, r.folder);
+      $('wizMakeOk').textContent = onServer() ? t('{0} files (version {1}) made.', r.files, r.version) : t('{0} files (version {1}) in {2}.', r.files, r.version, r.folder);
       wizRender();
     } catch (err) { $('wizErr').textContent = t(err.message); }
   });

@@ -186,13 +186,44 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 - **OSign → Signatures** in the message toolbar opens the pane: insert another signature, or choose
   the one for new mail and for replies (if allowed under *Add-in*).
 
-## The editor on a server (under way)
+## The editor on a server (Docker)
 
-The editor is moving into a container (`server/`, Docker Compose like nobs-inventory). Admins
-sign in there with their Windows account (members of an AD group) instead of starting
-`OSign.ps1`, and the server writes into SharePoint itself, through Microsoft Graph: no synced
-folder, no PC. The Docker setup itself comes with a later version; these are the parts that are
-there already.
+Instead of `OSign.ps1` on a PC, the editor can run as a container (`server/`, Docker Compose), on
+the same server as NOBS Inventory and behind its shared proxy. Admins sign in there with their
+Windows account (members of an AD group); the server writes into SharePoint itself, through
+Microsoft Graph, reads AD with a service account, and uploads the add-in's files to Cloudflare
+Pages. Nothing on the server is reachable from the internet.
+
+**Install** (on the server, with NOBS Inventory and its proxy running):
+
+```bash
+mkdir -p /opt/osign && cd /opt/osign
+curl -fsSLO https://github.com/monsama/osign/releases/download/vX.Y.Z/osign-server-X.Y.Z.tar.gz
+tar -xzf osign-server-X.Y.Z.tar.gz --strip-components=1
+sudo OSIGN_HOST=osign.example.ch ./deploy-osign.sh
+```
+
+`deploy-osign.sh` creates `.env` and `secrets/` (the password of the local account `admin`, shown
+once), starts the release image `ghcr.io/monsama/osign:X.Y.Z`, adds `osign.caddy` to the shared
+proxy's sites (with its default certificate; your own with NOBS Inventory's
+`scripts/install-cert.sh osign <bundle.pem>`), and a daily backup at 03:25. Then fill in `.env` and
+the files in `secrets/` as below, run `sudo ./deploy-osign.sh` again, sign in as `admin` and let the
+setup assistant do the rest.
+
+| Task | Command |
+|---|---|
+| Update to the latest release | `sudo ./scripts/update.sh` (backs up first; switches back if the new one is not healthy) |
+| Update to a release | `sudo ./scripts/update.sh 0.5.0` |
+| Back up | `sudo ./scripts/backup.sh` → `backup/osign-<time>.tar.gz` (the draft, settings and secrets; with `BACKUP_PASSPHRASE_FILE` in `.env` encrypted) |
+| Restore | `sudo ./scripts/restore.sh backup/<file>` (`RESTORE_SECRETS=yes` restores `.env` and the secrets too) |
+| Logs | `docker logs -f osign` |
+
+**The add-in's files on Cloudflare Pages.** In Cloudflare: **My Profile → API Tokens → Create
+Token**, with the permission *Account → Cloudflare Pages → Edit* for your account. Put it in
+`secrets/cf_api_token`, the account ID (on the account's overview page) and a project name in
+`.env` (`OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT`; the project is made on the first upload). The
+setup assistant's step *Make the add-in's files* then uploads them; *Download as ZIP* is there for
+an upload by hand.
 
 **Its own app registration**, not the add-in's: the add-in reads with each user's sign-in, the
 server writes with its own.
