@@ -1359,14 +1359,96 @@
     $('wizGrantGet').textContent = 'GET https://graph.microsoft.com/v1.0/sites/' + sitePath + '?$select=id,webUrl';
     $('wizGrantBody').textContent = JSON.stringify({ roles: ['write'], grantedToIdentities: [{ application: { id: (S.info.features && S.info.features.graphClientId) || '<the server app\'s client ID>', displayName: 'NOBS OSign server' } }] });
     if (!site) $('wizGrant').hidden = true;
+    $('wizGrantRedirect').textContent = location.origin + '/ui/signin.html';
+    $('wizSetupClient').value = stored(SETUP_KEY) || '';
   }
+
+  // The quick way to give the server the site: the admin signs in with Microsoft here (a popup,
+  // the authorization code flow with PKCE, for the app registration "NOBS OSign setup": a
+  // single-page application without a secret), and this page makes the two requests to Graph
+  // itself. The token stays in this page, for these requests only; the server never gets it.
+  const SETUP_KEY = 'osign.setupClientId';
+  const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  async function msToken(clientId, tenant, scope) {
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+    const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+    const redirect = location.origin + '/ui/signin.html';
+    const auth = 'https://login.microsoftonline.com/' + encodeURIComponent(tenant || 'organizations') + '/oauth2/v2.0';
+    const popup = window.open(auth + '/authorize?' + new URLSearchParams({
+      client_id: clientId, response_type: 'code', redirect_uri: redirect, response_mode: 'fragment', scope: scope + ' openid',
+      code_challenge: challenge, code_challenge_method: 'S256', state, prompt: 'select_account'
+    }), 'osign-signin', 'width=520,height=700');
+    if (!popup) throw new Error(t('The browser blocked the sign-in window. Allow pop-ups for this page and try again.'));
+    // The answer comes back to /ui/signin.html: read from there (same site again), or sent from there.
+    const answer = await new Promise((resolve, reject) => {
+      let timer = null;
+      const done = (a) => { clearInterval(timer); window.removeEventListener('message', onMsg); try { popup.close(); } catch (e) { /* closed */ } if (a) resolve(a); else reject(new Error(t('The sign-in window was closed.'))); };
+      const onMsg = (e) => { if (e.origin === location.origin && e.data && e.data.osignSignIn && e.data.state === state) done(e.data); };
+      window.addEventListener('message', onMsg);
+      timer = setInterval(() => {
+        let h = '';
+        try { if (popup.location.origin === location.origin) h = popup.location.hash; } catch (e) { /* still at Microsoft */ }
+        const p = new URLSearchParams(h.slice(1));
+        if (h && p.get('state') === state) return done({ code: p.get('code') || '', error: p.get('error') || '', errorText: p.get('error_description') || '' });
+        if (popup.closed) done(null);
+      }, 250);
+    });
+    const said = (x) => String(x || '').split(/\r?\n/)[0];
+    if (answer.error) throw new Error(t('Microsoft did not sign you in: {0}', said(answer.errorText || answer.error)));
+    let r, j;
+    try {
+      r = await fetch(auth + '/token', { method: 'POST', body: new URLSearchParams({ client_id: clientId, grant_type: 'authorization_code', code: answer.code, redirect_uri: redirect, code_verifier: verifier, scope: scope + ' openid' }) });
+      j = await r.json().catch(() => ({}));
+    } catch (e) { throw new Error(t('Microsoft cannot be reached from this browser: {0}', e.message)); }
+    if (!r.ok || !j.access_token) throw new Error(t('Microsoft did not sign you in: {0}', said(j.error_description || j.error || r.status)));
+    return j.access_token;
+  }
+  async function grantSite(site) {
+    const clientId = $('wizSetupClient').value.trim();
+    const serverApp = S.info.features && S.info.features.graphClientId;
+    if (!serverApp) throw new Error(t('Set up publishing to SharePoint first (Server connections): the server\'s client ID is what gets the site.'));
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) throw new Error(t('Enter the client ID of NOBS OSign setup, a GUID.'));
+    stored(SETUP_KEY, clientId);
+    const tok = await msToken(clientId, S.info.features.graphTenantId, 'https://graph.microsoft.com/Sites.FullControl.All');
+    async function graph(method, path, body) {
+      const r = await fetch('https://graph.microsoft.com/v1.0' + path, { method, headers: Object.assign({ Authorization: 'Bearer ' + tok }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401 || r.status === 403) throw new Error(t('Your account may not do this: sign in as a SharePoint or Global administrator.'));
+      if (r.status === 404) throw new Error(t('There is no such SharePoint site. Check the address.'));
+      if (!r.ok) throw new Error(t('Microsoft Graph answered {0}: {1}', r.status, (j.error && j.error.message) || ''));
+      return j;
+    }
+    const m = /^([A-Za-z0-9.-]+):\/(sites|teams|personal)\/([^:/]+):$/.exec(site || '');
+    const s = await graph('GET', (m ? '/sites/' + m[1] + ':/' + m[2] + '/' + encodeURIComponent(m[3]) + ':' : '/sites/root') + '?$select=id,webUrl');
+    // Granted already (write or more): nothing to add.
+    const perms = await graph('GET', '/sites/' + encodeURIComponent(s.id) + '/permissions');
+    const has = (perms.value || []).some((p) => (p.roles || []).some((x) => ['write', 'owner', 'fullcontrol'].includes(String(x).toLowerCase()))
+      && (p.grantedToIdentitiesV2 || p.grantedToIdentities || []).some((x) => x.application && String(x.application.id).toLowerCase() === serverApp.toLowerCase()));
+    if (!has) await graph('POST', '/sites/' + encodeURIComponent(s.id) + '/permissions', { roles: ['write'], grantedToIdentities: [{ application: { id: serverApp, displayName: 'NOBS OSign server' } }] });
+    return { already: has, webUrl: s.webUrl };
+  }
+  $('wizGrantGo').addEventListener('click', async () => {
+    const out = $('wizGrantMsNote');
+    out.className = 'where'; out.textContent = t('Signing in with Microsoft…');
+    $('wizGrantGo').disabled = true;
+    try {
+      const r = await grantSite($('wizSpSite').value || 'root');
+      out.textContent = r.already ? t('✓ The server had write access to {0} already.', r.webUrl) : t('✓ The server may now write to {0}.', r.webUrl);
+      out.classList.add('good');
+      toast(out.textContent);
+      // And whether it can, now: as the Test button does (the box goes once it can).
+      wiz.checking = wizServerCheck($('wizSpSite').value || 'root', $('wizSpFolder').value);
+    } catch (err) { out.textContent = t(err.message); out.classList.add('warn'); }
+    finally { $('wizGrantGo').disabled = false; }
+  });
 
   function wizOpen(step) {
     WIZ = wizSteps();
     wizFill();
     wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
-    $('wizWhereFound').textContent = ''; $('wizLinkNote').textContent = '';
+    $('wizWhereFound').textContent = ''; $('wizLinkNote').textContent = ''; $('wizGrantMsNote').textContent = '';
     // A folder set already: that one, with where it is in SharePoint as set. The server version
     // has no folder on a PC: only the SharePoint link.
     setRadio('wlib', onServer() ? 'link' : S.settings.folder ? 'own' : '');

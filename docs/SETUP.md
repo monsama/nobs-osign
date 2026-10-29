@@ -254,6 +254,13 @@ server writes with its own.
      `{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<client ID of NOBS OSign server>","displayName":"NOBS OSign server"}}]}`.
      Graph Explorer asks for consent to *Sites.FullControl.All* for this.
 
+   Or let the setup assistant make both requests: it signs you in with Microsoft in a pop-up
+   (authorization code with PKCE) and calls Graph from your browser; the server never gets your
+   sign-in. For that, once, a third, small app registration *NOBS OSign setup*: platform
+   **Single-page application** with the redirect URI the assistant shows
+   (`https://<editor>/ui/signin.html`), the **delegated** permission `Sites.FullControl.All`, no
+   client secret. Delete it once the site is granted, if you like.
+
    `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every
    site of the tenant.
 

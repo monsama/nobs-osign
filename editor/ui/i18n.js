@@ -520,10 +520,25 @@
     "Cloudflare Pages: uploading the add-in's files": 'Cloudflare Pages: Hochladen der Dateien des Add-ins',
     '(optional)': '(optional)',
     'ready': 'bereit',
-    'Publishing to SharePoint is not set up yet: the server cannot publish. Next again to go on anyway.': 'Das Veröffentlichen nach SharePoint ist noch nicht eingerichtet: der Server kann nicht veröffentlichen. Nochmals Weiter, um trotzdem fortzufahren.'
+    'Publishing to SharePoint is not set up yet: the server cannot publish. Next again to go on anyway.': 'Das Veröffentlichen nach SharePoint ist noch nicht eingerichtet: der Server kann nicht veröffentlichen. Nochmals Weiter, um trotzdem fortzufahren.',
+    'Client ID of NOBS OSign setup': 'Client-ID von NOBS OSign setup',
+    'Sign in with Microsoft and grant': 'Mit Microsoft anmelden und freigeben',
+    'The browser blocked the sign-in window. Allow pop-ups for this page and try again.': 'Der Browser hat das Anmeldefenster blockiert. Pop-ups für diese Seite erlauben und nochmals versuchen.',
+    'The sign-in window was closed.': 'Das Anmeldefenster wurde geschlossen.',
+    'Microsoft did not sign you in: {0}': 'Microsoft hat Sie nicht angemeldet: {0}',
+    'Microsoft cannot be reached from this browser: {0}': 'Microsoft ist von diesem Browser aus nicht erreichbar: {0}',
+    "Set up publishing to SharePoint first (Server connections): the server's client ID is what gets the site.": 'Zuerst das Veröffentlichen nach SharePoint einrichten (Server-Verbindungen): die Site wird der Client-ID des Servers freigegeben.',
+    'Enter the client ID of NOBS OSign setup, a GUID.': 'Die Client-ID von NOBS OSign setup eingeben, eine GUID.',
+    'Your account may not do this: sign in as a SharePoint or Global administrator.': 'Ihr Konto darf das nicht: als SharePoint- oder Global-Administrator anmelden.',
+    'Microsoft Graph answered {0}: {1}': 'Microsoft Graph hat mit {0} geantwortet: {1}',
+    'Signing in with Microsoft…': 'Anmelden bei Microsoft…',
+    '✓ The server had write access to {0} already.': '✓ Der Server hatte bereits Schreibzugriff auf {0}.',
+    '✓ The server may now write to {0}.': '✓ Der Server darf jetzt in {0} schreiben.'
   };
 
   DE.html = {
+    wizGrantMsLead: '<b>Der schnelle Weg:</b> hier mit Ihrem Administratorkonto anmelden, und NOBS OSign macht die zwei Aufrufe unten für Sie. Ihre Anmeldung bleibt in diesem Browser; der Server sieht sie nie. Dafür braucht es einmal eine kleine eigene App-Registrierung (nicht die des Servers und nicht die des Add-ins): <b>NOBS OSign setup</b>, Plattform <b>Single-Page-Anwendung</b> mit dieser Umleitungs-URI, die delegierte Berechtigung <b>Sites.FullControl.All</b> und kein geheimer Clientschlüssel. Sie können sie löschen, sobald die Site freigegeben ist.',
+    wizGrantOr: 'Oder von Hand, im Graph Explorer:',
     wizConnLead: 'Der Server meldet Personen mit Active Directory an, schreibt die Signaturen nach SharePoint und lädt die Dateien des Add-ins selbst hoch. Richten Sie ein, was Sie nutzen: zum Veröffentlichen braucht es nur <b>SharePoint</b>. Alles lässt sich später unter <b>Einstellungen → Server-Verbindungen</b> ändern.',
     wizConnApp: 'Für SharePoint braucht der Server <b>eine eigene App-Registrierung</b> in Entra ID (nicht die des Add-ins): <b>Anwendungsberechtigungen</b> → <b>Sites.Selected</b> mit Administratorzustimmung, und einen geheimen Clientschlüssel. Der nächste Schritt zeigt, wie Sie ihr die eine Site freigeben.',
     wizFilesServer: 'NOBS OSign erstellt jetzt die Dateien des Add-ins für Ihre Adresse, App-Registrierung und Ihren SharePoint-Ordner, auf dem Server. Es lädt sie selbst zu Cloudflare Pages hoch, oder Sie laden sie als ZIP herunter.',
