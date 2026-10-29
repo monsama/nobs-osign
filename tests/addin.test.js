@@ -37,7 +37,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, deny, signInFails } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -51,6 +51,11 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
     getAttachmentsAsync: (cb) => ok(atts.slice())(cb),
     removeAttachmentAsync: (id, cb) => { calls.push(['remove', id]); atts.splice(atts.findIndex((a) => a.id === id), 1); ok()(cb); },
     addFileAttachmentFromBase64Async: (b64, name, opts, cb) => { calls.push(['attach', name, b64, opts.isInline]); atts.push({ id: 'a' + (++n), name, isInline: opts.isInline }); ok('a' + n)(cb); },
+    // The notices above the message, by key, when the test asks for them.
+    notificationMessages: notices && {
+      replaceAsync: (k, m, cb) => { notices[k] = m; calls.push(['notice', k, m.message]); ok()(cb); },
+      removeAsync: (k, cb) => { delete notices[k]; calls.push(['unnotice', k]); ok()(cb); }
+    },
     // sessionData (Mailbox 1.11), when the test gives one: a missing key answers an error, as in Outlook.
     sessionData: session && {
       getAsync: (k, cb) => cb(k in session ? { status: 'succeeded', value: session[k] } : { status: 'failed', error: new Error('not found') }),
@@ -145,6 +150,27 @@ test('a reply keeps the images of the OSign signature it quotes; its own carry a
   await r.fire('onMessageFromChangedHandler');
   assert.deepEqual(r.calls.filter((c) => c[0] === 'remove').map((c) => c[1]).sort(), ['a1', 'a2']);
   assert.deepEqual(r.atts.map((a) => a.name).sort(), ['osign-1a2b3c4d-photos-muellerb.jpg', 'osign-assets-logo.png', p + 'assets-logo.png', p + 'photos-mustera.jpg'].sort());
+});
+
+test('when no signature could be put in, a notice on the message says why; one that works takes it away', async () => {
+  const notices = {};
+  const r = runtime({ notices, signInFails: true });
+  await r.fire('onNewMessageComposeHandler');
+  assert.ok(!setCall(r));
+  assert.match(notices.osign.message, /^OSign inserted no signature; see Signatures\. .*sign-in failed/);
+  assert.equal(notices.osign.type, 'informationalMessage');
+  assert.ok(notices.osign.message.length <= 150);
+  // No signature meant for this message is no failure: no notice.
+  const quiet = {};
+  const q = runtime({ notices: quiet, config: makeConfig((c) => { c.signatures.forEach((s) => { s.defaultNew = false; }); }) });
+  await q.fire('onNewMessageComposeHandler');
+  assert.deepEqual(quiet, {});
+  // Signed: a notice an earlier attempt left goes.
+  const left = { osign: { message: 'old' } };
+  const w = runtime({ notices: left });
+  await w.fire('onNewMessageComposeHandler');
+  assert.ok(setCall(w));
+  assert.deepEqual(left, {});
 });
 
 test('a reply gets the reply signature; plain text gets text and no images', async () => {

@@ -190,7 +190,7 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 
 | What | Why, and what to do |
 |---|---|
-| No signature at all | Open the pane: it says what failed. Usually: no admin consent yet, the OSign folder not readable for that user, the redirect URI missing in the app registration, or no client ID when the add-in's files were made. |
+| No signature at all | A notice above the message ("OSign inserted no signature; see Signatures.") gives the reason in short. Open the pane: it says what failed. Usually: no admin consent yet, the OSign folder not readable for that user, the redirect URI missing in the app registration, or no client ID when the add-in's files were made. |
 | "No signatures are published yet" | `OSign\signatures.json` is not in SharePoint: publish, and check that OneDrive has synced it. |
 | Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign\users\` (no mail address in AD, or not exported yet). |
 | No photo | No `OSign\photos\<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
