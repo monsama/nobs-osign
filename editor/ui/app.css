@@ -1,28 +1,39 @@
 :root {
+  /* The NOBS family's tokens (as NOBS Inventory): neutral greys, one blue for what is primary or
+     active, radii 4/7/10, controls 28px high. */
   --bg: #f4f5f7;
   --panel: #ffffff;
-  --panel-2: #f9fafb;
-  --line: #e2e5ea;
-  --text: #1d2330;
-  --muted: #667085;
-  /* Restrained: slate for what is active or primary, blue only for links and focus. */
-  --accent: #2b3442;
+  --panel-2: #eaecef;
+  --line: #d6d9de;
+  --line-2: #e7e9ec;
+  --text: #1b1d21;
+  --muted: #5c5c5c;
+  --accent: #1565c0;
+  --accent-btn: #1565c0;
   --accent-ink: #ffffff;
-  --accent-soft: #eceef2;
-  --link: #2457a6;
-  --focus: #2457a6;
-  --danger: #c4372d;
-  --ok: #1f8a4c;
-  --warn: #b26a00;
-  --radius: 6px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  --accent-soft: #eef3fa;
+  --hover: #eaf2fb;
+  --link: #1565c0;
+  --focus: #1565c0;
+  --in: #ffffff;
+  --btn: #fafafa;
+  --danger: #b42318;
+  --ok: #2e7d46;
+  --warn: #b45309;
+  --r-s: 4px; --r-m: 7px; --r-l: 10px;
+  --radius: 7px;
+  --mono: 'Cascadia Code', Consolas, 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace;
+  --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%235c5c5c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --shadow: 0 1px 2px rgba(0, 0, 0, .06);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14171c; --panel: #1c2027; --panel-2: #222731; --line: #2f3542; --text: #e6e8ec; --muted: #98a1b2;
-    --accent: #dfe3ea; --accent-ink: #14171c; --accent-soft: #2a303b; --link: #8fb1ee; --focus: #8fb1ee;
-    --danger: #ef6a5f; --ok: #45c07c; --warn: #e3a33b;
+    --bg: #16181b; --panel: #1d2024; --panel-2: #272a2f; --line: #34383e; --line-2: #2a2d32; --text: #e4e6ea; --muted: #b4b4b4;
+    --accent: #3b82f6; --accent-btn: #1d4ed8; --accent-ink: #ffffff; --accent-soft: #1e242c; --hover: #33404d;
+    --link: #6ea8fe; --focus: #3b82f6; --in: #1b1e22; --btn: #24272c;
+    --danger: #ff9b93; --ok: #7ad59a; --warn: #e0a35a;
+    --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%23b4b4b4' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --shadow: 0 1px 3px rgba(0, 0, 0, .4);
     color-scheme: dark;
   }
@@ -31,41 +42,51 @@
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  font: 13px/1.45 system-ui, "Segoe UI", Roboto, Arial, sans-serif;
   display: flex; flex-direction: column;
 }
 button, input, select, textarea { font: inherit; color: inherit; }
-code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--line); padding: 0 4px; border-radius: 4px; }
+code { font-family: var(--mono); font-size: 12px; background: var(--panel-2); border: 1px solid var(--line-2); padding: 0 4px; border-radius: var(--r-s); }
 a { color: var(--link); }
 [hidden] { display: none !important; }
 .spacer { flex: 1; }
 small { color: var(--muted); font-weight: normal; }
 
-/* buttons */
-button { cursor: pointer; border-radius: 6px; padding: 6px 12px; border: 1px solid var(--line); background: var(--panel); }
-button:hover { border-color: var(--muted); }
-button:disabled { opacity: .5; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-button.primary:hover { filter: brightness(1.07); }
+/* buttons: 28px high, small corners, quiet; the primary one blue */
+button { cursor: pointer; border-radius: var(--r-s); height: 28px; padding: 0 10px; border: 1px solid var(--line); background: var(--btn);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+button:hover:not(:disabled) { filter: brightness(1.04); border-color: var(--muted); }
+button:active:not(:disabled) { filter: brightness(.95); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+button.primary { background: var(--accent-btn); border-color: var(--accent-btn); color: var(--accent-ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--accent-btn); }
 button.ghost { background: transparent; }
 button.danger { color: var(--danger); }
-button.small { padding: 2px 8px; font-size: 12.5px; }
+button.small { height: 24px; padding: 0 8px; font-size: 12px; }
 /* A link that looks like a button (Buy me a coffee), with its line icon. */
-a.btnlike { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 6px 12px; border: 1px solid var(--line); background: var(--panel); color: inherit; text-decoration: none; }
+a.btnlike { display: inline-flex; align-items: center; gap: 6px; height: 28px; border-radius: var(--r-s); padding: 0 10px; border: 1px solid var(--line); background: var(--btn); color: inherit; text-decoration: none; }
 a.btnlike:hover { border-color: var(--muted); }
-a.btnlike.icon { padding: 6px 8px; background: transparent; }
-.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.icon-btn { width: 26px; height: 26px; padding: 0; font-size: 18px; line-height: 1; border-radius: 6px; }
+a.btnlike.icon { padding: 0 7px; background: transparent; }
+.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn { width: 26px; height: 26px; padding: 0; font-size: 16px; line-height: 1; border-radius: var(--r-s); }
 
-input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]), select, textarea {
-  border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 8px; width: 100%;
+/* fields: 28px high; a dropdown with the same chevron everywhere, grey while nothing is chosen */
+input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]), select {
+  border: 1px solid var(--line); background: var(--in); border-radius: var(--r-s); height: 28px; padding: 3px 7px; width: 100%;
 }
-input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--focus) 25%, transparent); border-color: var(--focus); }
-label { display: block; font-weight: 600; font-size: 13px; }
-label > input, label > select { margin-top: 4px; font-weight: normal; }
-label.check { display: inline-flex; align-items: center; gap: 6px; font-weight: normal; margin-right: 16px; }
+textarea { border: 1px solid var(--line); background: var(--in); border-radius: var(--r-s); padding: 5px 7px; width: 100%; }
+select { appearance: none; -webkit-appearance: none; padding-right: 26px; background: var(--in) var(--chev) no-repeat right 7px center / 12px 12px; text-overflow: ellipsis; }
+select:has(option[value=""]:checked) { color: var(--muted); }
+select option { color: var(--text); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .75; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
+input[type=file] { font-size: 12px; max-width: 100%; }
+label { display: block; font-weight: 600; font-size: 12px; }
+label > input, label > select { margin-top: 4px; font-weight: normal; font-size: 13px; }
+label.check { display: inline-flex; align-items: center; gap: 6px; font-weight: normal; font-size: 13px; margin-right: 16px; }
 label.check.block { display: flex; margin: 8px 0; }
-label.check.small { font-size: 12.5px; margin: 0; }
+label.check.small { font-size: 12px; margin: 0; }
 
 /* top bar */
 .top { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
@@ -119,15 +140,18 @@ main { flex: 1; overflow: auto; padding: 20px 24px; min-width: 0; }
 .workbench { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .workbench { grid-template-columns: 1fr; } }
 .pane { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
-.tabs { display: flex; border-bottom: 1px solid var(--line); background: var(--panel-2); }
-.tab { border: 0; border-radius: 0; background: transparent; padding: 8px 16px; color: var(--muted); border-bottom: 2px solid transparent; }
-.tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs { display: flex; gap: 4px; padding: 5px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+/* A tab: quiet; the active one has its own background and a short line under its text. */
+.tab { position: relative; height: 28px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--r-s); background: transparent; color: var(--muted); }
+.tab:hover:not(:disabled) { background: var(--hover); color: var(--text); border-color: transparent; filter: none; }
+.tab.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
+.tab.active::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 2px; height: 2px; border-radius: 1px; background: var(--accent); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); align-items: center; }
-.toolbar button { border: 1px solid transparent; background: transparent; padding: 4px 6px; min-width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; }
+.toolbar button { border: 1px solid transparent; background: transparent; padding: 0 6px; min-width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; }
 .toolbar button:hover { background: var(--panel-2); border-color: var(--line); }
 .toolbar button.on { background: var(--accent-soft); color: var(--text); }
 .toolbar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.toolbar select { width: auto; padding: 3px 6px; height: 30px; }
+.toolbar select { width: auto; height: 28px; padding: 3px 26px 3px 7px; }
 .toolbar .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
 .toolbar input[type=color] { width: 30px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; }
 .toolbar .field-pick { font-weight: 600; color: var(--text); max-width: 180px; }
@@ -165,16 +189,18 @@ table.fields td:last-child { width: 40px; text-align: center; }
 .callout b { color: var(--text); }
 
 /* dialogs */
-dialog { border: 1px solid var(--line); border-radius: 8px; padding: 0; background: var(--panel); color: var(--text); box-shadow: 0 20px 50px rgba(0,0,0,.25); width: min(620px, 94vw); }
+dialog { border: 1px solid var(--line); border-radius: var(--r-l); padding: 0; background: var(--panel); color: var(--text); box-shadow: 0 20px 50px rgba(0,0,0,.25); width: min(620px, 94vw); }
 dialog::backdrop { background: rgba(15, 20, 30, .45); }
-.dlg { padding: 18px 22px; }
-.dlg h2 { margin: 0 0 10px; font-size: 18px; }
-.dlg h3 { margin: 18px 0 4px; font-size: 15px; padding-top: 12px; border-top: 1px solid var(--line); }
+.dlg { padding: 0 16px; }
+/* A dialog as in NOBS Inventory: its title in a bar of its own, the buttons in one at the foot. */
+.dlg > h2:first-child { margin: 0 -16px 14px; padding: 11px 16px; font-size: 14px; border-bottom: 1px solid var(--line); }
+.dlg h2 { margin: 0 0 10px; font-size: 14px; }
+.dlg h3 { margin: 16px 0 4px; font-size: 13px; padding-top: 12px; border-top: 1px solid var(--line-2); }
 .dlg > label { margin: 10px 0; }
 .dlg fieldset { border: 0; padding: 0; margin: 0 0 6px; }
 .dlg legend { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .dlg fieldset label.check { display: flex; margin: 4px 0; }
-.dlg-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.dlg-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: 16px -16px 0; padding: 10px 16px; border-top: 1px solid var(--line); }
 .dlg-foot .foot-left { margin-right: auto; }
 .err { color: var(--danger); min-height: 0; margin: 6px 0; }
 .err:empty, .ok:empty { display: none; }
@@ -326,3 +352,18 @@ th button.help { text-transform: none; }
 #dlgConn .lead.warn { color: var(--warn); }
 #dlgConn .lead.ok { color: var(--ok); }
 #dlgConn h3 { margin-top: 18px; }
+
+/* Tabs in a dialog (Server connections): one row, each with a dot for whether it is ready. */
+.dtabs { display: flex; gap: 4px; margin: 0 -16px 14px; padding: 6px 12px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.dtabs .tab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .5; flex: none; }
+.dtabs .tab .dot.good { background: var(--ok); opacity: 1; }
+.dtabs .tab .dot.warn { background: var(--warn); opacity: 1; }
+.dpane { min-height: 330px; }
+/* A form as in NOBS Inventory: the label and its field on one row, help under the field. */
+.form { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 8px 14px; align-items: center; margin: 8px 0; }
+.form > label { font-weight: 400; font-size: 12px; color: var(--muted); }
+.form > label:has(+ div > small) { align-self: start; padding-top: 6px; }
+.form > div { min-width: 0; }
+.form > div > small { display: block; margin-top: 3px; font-size: 11.5px; }
+.form > div > .pick { display: flex; gap: 6px; }
+@media (max-width: 640px) { .form { grid-template-columns: 1fr; } }

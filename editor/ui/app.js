@@ -527,7 +527,7 @@
     if (mode === 'html') { $('source').value = s ? s.html : ''; }
     else { flushSource(); loadDesign(s ? s.html : ''); }
     S.mode = mode;
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
+    document.querySelectorAll('.tab[data-mode]').forEach((t) => t.classList.toggle('active', t.dataset.mode === mode));
     design.hidden = mode !== 'design';
     $('source').hidden = mode !== 'html';
     document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
@@ -642,7 +642,7 @@
     S.config.signatures = S.config.signatures.filter((x) => x !== s);
     changed(); openSig(S.config.signatures[0] ? S.config.signatures[0].id : null);
   });
-  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setMode(t.dataset.mode)));
+  document.querySelectorAll('.tab[data-mode]').forEach((t) => t.addEventListener('click', () => setMode(t.dataset.mode)));
   ['imgW', 'imgAlt', 'imgHref'].forEach((id) => $(id).addEventListener('change', applyImg));
   $('imgDone').addEventListener('click', () => { applyImg(); hideImgBar(); });
 
@@ -1017,17 +1017,27 @@
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
     $('connCaFile').value = '';
-    const line = (id, problem, okText) => { $(id).textContent = problem ? t(problem) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
+    // In this dialog, "(Settings → Server connections)" would point to itself.
+    const here = (p) => String(p).replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')');
+    const line = (id, problem, okText) => { $(id).textContent = problem ? t(here(problem)) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
     line('connSignIn', r.problems.signIn, 'Ready: members of the sign-in group can sign in.');
     line('connDirectory', r.problems.directory, 'Ready: the editor reads the users\' values from AD.');
     line('connGraph', r.problems.graph, 'Ready: publishing goes into SharePoint.');
     line('connPages', r.problems.pages, 'Ready: the add-in\'s files can be uploaded from here.');
+    // Each tab's dot: ready, or something to set.
+    document.querySelectorAll('#dlgConn [data-cdot]').forEach((d) => { d.className = 'dot ' + (r.problems[d.dataset.cdot] ? 'warn' : 'good'); });
     connDrop = {}; connCa = undefined; connCaReading = null;
     $('connErr').textContent = '';
   }
+  // Server connections in tabs: one part at a time.
+  function connTab(name) {
+    document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => { b.classList.toggle('active', b.dataset.ctab === name); b.setAttribute('aria-selected', b.dataset.ctab === name); });
+    document.querySelectorAll('#dlgConn [data-cpane]').forEach((p) => { p.hidden = p.dataset.cpane !== name; });
+  }
+  document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
   $('setConn').addEventListener('click', async () => {
     $('setErr').textContent = '';
-    try { renderConnections(await api('connections/get')); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('signin'); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
   });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
@@ -1528,7 +1538,7 @@
   }
   $('wizConnOpen').addEventListener('click', async () => {
     $('wizErr').textContent = '';
-    try { renderConnections(await api('connections/get')); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('signin'); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
   });
   // The setup script (server/setup.js): made for the folder and the add-in's address as saved,
   // downloaded, run on a Windows PC; its result comes back to the server, and here by asking.
