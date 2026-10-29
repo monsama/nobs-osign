@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- OSign add-in manifest. The build fills in {{BASE}} (where the add-in is served, ending in /)
+<!-- NOBS OSign add-in manifest. The build fills in {{BASE}} (where the add-in is served, ending in /)
      and {{VERSION}}; the published manifest.xml is what goes into the admin center. -->
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -10,7 +10,7 @@
   <Version>{{VERSION}}</Version>
   <ProviderName>{{PROVIDER}}</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="OSign"/>
+  <DisplayName DefaultValue="NOBS OSign"/>
   <Description DefaultValue="Inserts the company email signature in new messages, replies and forwards.">
     <Override Locale="de-DE" Value="Fügt die Firmensignatur in neue Mails, Antworten und Weiterleitungen ein."/>
   </Description>
@@ -131,7 +131,7 @@
           <bt:Url id="RuntimeJs.Url" DefaultValue="{{BASE}}launchevent.js"/>
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="Group.Label" DefaultValue="OSign"/>
+          <bt:String id="Group.Label" DefaultValue="NOBS OSign"/>
           <bt:String id="Pane.Label" DefaultValue="Signatures">
             <bt:Override Locale="de-DE" Value="Signaturen"/>
           </bt:String>

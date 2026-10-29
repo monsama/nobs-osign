@@ -94,7 +94,7 @@ test('serves the UI and the shared engine, nothing outside them', opts, async ()
   const ui = await fetch('http://127.0.0.1:' + PORT + '/');
   assert.equal(ui.status, 200);
   assert.match(ui.headers.get('content-security-policy'), /script-src 'self'/);
-  assert.match(await ui.text(), /<title>OSign<\/title>/);
+  assert.match(await ui.text(), /<title>NOBS OSign<\/title>/);
   const coreJs = await fetch('http://127.0.0.1:' + PORT + '/shared/signature-core.js');
   assert.equal(coreJs.status, 200);
   assert.match(await coreJs.text(), /SignatureCore/);

@@ -29,5 +29,5 @@ edit('package.json', /("version": ")[^"]+(")/, `$1${version}$2`);
   fs.writeFileSync(p, text);
 }
 edit('editor/OSign.ps1', /(\$script:AppVersion = ')[^']+(')/, `$1${version}$2`);
-edit('docker-compose.yml', /(ghcr\.io\/monsama\/osign:)\d+\.\d+\.\d+/, `$1${version}`);
+edit('docker-compose.yml', /(ghcr\.io\/monsama\/nobs-osign:)\d+\.\d+\.\d+/, `$1${version}`);
 console.log(`Version set to ${version} in package.json, package-lock.json, editor/OSign.ps1 and docker-compose.yml.`);

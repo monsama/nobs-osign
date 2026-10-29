@@ -262,7 +262,7 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   // The same address with only a #: reload, so the page really starts again.
   await page.goto(url); await page.reload();
   await page.waitForSelector('#dlgWizard[open]');
-  assert.equal(await page.textContent('#wizTitle'), 'Welcome to OSign');
+  assert.equal(await page.textContent('#wizTitle'), 'Welcome to NOBS OSign');
   await page.click('#wizLater');
   assert.equal(await page.isVisible('#dlgWizard'), false);
 

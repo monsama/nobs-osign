@@ -1,6 +1,6 @@
 // node --test tests/deploy.test.js
 //
-// The server's install (docker-compose.yml, Dockerfile, deploy-osign.sh, .env.example) against the
+// The server's install (docker-compose.yml, Dockerfile, deploy-nobs-osign.sh, .env.example) against the
 // server's code: every setting Compose hands over is one the server reads, every secret is made by
 // the deploy script, and the image is the version of this release.
 const test = require('node:test');
@@ -25,19 +25,19 @@ test('every setting in .env.example reaches the container (or is the install\'s 
   for (const v of listed) assert.ok(own.includes(v) || compose.includes('${' + v + ':-'), v + ' is not handed to the container');
 });
 
-test('every secret is made by deploy-osign.sh, and read from its file', () => {
+test('every secret is made by deploy-nobs-osign.sh, and read from its file', () => {
   const secrets = [...compose.matchAll(/^\s{2}([a-z_]+):\n\s+file: \.\/secrets\/\1$/gm)].map((m) => m[1]);
   assert.deepEqual(secrets.sort(), ['admin_password', 'cf_api_token', 'graph_client_secret', 'ldap_service_password']);
-  const deploy = read('deploy-osign.sh');
+  const deploy = read('deploy-nobs-osign.sh');
   for (const s of secrets) {
-    assert.ok(deploy.includes(s), s + ' is not made by deploy-osign.sh');
+    assert.ok(deploy.includes(s), s + ' is not made by deploy-nobs-osign.sh');
     assert.match(compose, new RegExp('_FILE: /run/secrets/' + s + '$', 'm'));
   }
 });
 
 test('the image is this release\'s, and the Dockerfile copies what the server needs', () => {
   const v = JSON.parse(read('package.json')).version;
-  assert.match(compose, new RegExp('ghcr\\.io/monsama/osign:' + v.replace(/\./g, '\\.') + '\\}'));
+  assert.match(compose, new RegExp('ghcr\\.io/monsama/nobs-osign:' + v.replace(/\./g, '\\.') + '\\}'));
   const docker = read('Dockerfile');
   for (const p of ['server', 'shared', 'editor/ui', 'addin/fill.mjs', 'dist/template']) assert.ok(docker.includes(p), 'Dockerfile: ' + p);
   // What the server requires at run time is in the image, and is a dependency (not a dev one).

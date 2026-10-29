@@ -1,5 +1,5 @@
 /*
- * OSign editor - the web UI.
+ * NOBS OSign editor - the web UI.
  *
  * Talks to its backend only through the HTTP API in docs/API.md (today OSign.ps1; a container
  * later). Everything about signatures themselves - placeholders, the lines left out when empty,
@@ -33,15 +33,15 @@
       });
     } catch (e) {
       // Without a start token this is the server version: it is not started by hand.
-      if (!serverDown) { serverDown = true; toast(TOKEN ? t('The OSign server is not running. Start OSign.ps1 again.') : t('The OSign server cannot be reached.'), true); }
-      throw new Error(TOKEN ? t('The OSign server is not running.') : t('The OSign server cannot be reached.'));
+      if (!serverDown) { serverDown = true; toast(TOKEN ? t('The NOBS OSign server is not running. Start OSign.ps1 again.') : t('The NOBS OSign server cannot be reached.'), true); }
+      throw new Error(TOKEN ? t('The NOBS OSign server is not running.') : t('The NOBS OSign server cannot be reached.'));
     }
     serverDown = false;
     // The server version signs in with a page of its own: a session that ended goes back there.
     if (r.status === 401 && !TOKEN) { location.replace('/login'); throw new Error(t('Not signed in.')); }
     let j;
     try { j = await r.json(); } catch (e) { throw new Error(t('The server answered {0}.', r.status)); }
-    if (r.status === 401) throw new Error(t('This window is not signed in to the server: open the address OSign printed.'));
+    if (r.status === 401) throw new Error(t('This window is not signed in to the server: open the address NOBS OSign printed.'));
     if (!j.ok) throw new Error(t(j.error || 'Failed.'));
     return j;
   }
@@ -1103,8 +1103,8 @@
     try { r = await api('sp/resolve', { path }); } catch (e) { return null; }
     if (!r.found || r.location.uncertain) {
       out.textContent = !r.found
-        ? t('OSign cannot tell where this folder is in SharePoint: OneDrive does not sync it. Choose «SharePoint link» instead, or a folder OneDrive syncs.')
-        : t('This is a shortcut in your OneDrive («Add shortcut to My files»): OSign cannot tell which SharePoint folder it is. Choose «SharePoint link» and paste the folder\'s address.');
+        ? t('NOBS OSign cannot tell where this folder is in SharePoint: OneDrive does not sync it. Choose «SharePoint link» instead, or a folder OneDrive syncs.')
+        : t('This is a shortcut in your OneDrive («Add shortcut to My files»): NOBS OSign cannot tell which SharePoint folder it is. Choose «SharePoint link» and paste the folder\'s address.');
       out.classList.add('warn');
       if (details) details.open = true;
       return null;
@@ -1123,7 +1123,7 @@
   });
 
   // ---------------------------------------------------------------------------------------------
-  // Setup assistant: opens by itself until it was finished once, while OSign is not set up
+  // Setup assistant: opens by itself until it was finished once, while NOBS OSign is not set up
   // (no publish folder or no app registration). Each step saves what it asks for.
   // ---------------------------------------------------------------------------------------------
   const ALL_WIZ = Array.from(document.querySelectorAll('#dlgWizard .wiz-step')).map((sec) => sec.dataset.step);
@@ -1183,8 +1183,8 @@
     $('wizUpload').hidden = !wiz.built || (srv && S.info.features.pagesUpload && host === 'cloudflare');
     document.querySelectorAll('#wizUpload [data-host]').forEach((p) => { p.hidden = p.dataset.host !== (host || 'other'); });
   }
-  // Step 1: where the folder is, given one way or the other - its SharePoint address (OSign finds
-  // the synced folder on this PC), or the folder on this PC (OSign finds where it is in SharePoint).
+  // Step 1: where the folder is, given one way or the other - its SharePoint address (NOBS OSign finds
+  // the synced folder on this PC), or the folder on this PC (NOBS OSign finds where it is in SharePoint).
   const isPersonal = (site) => /:\/personal\//.test(site || '');
   function wizPermNote() {
     const site = $('wizSpFolder').value ? $('wizSpSite').value : '';
@@ -1217,7 +1217,7 @@
       $('wizFolder').value = r.path;
       out.textContent = '✓ ' + t('On this PC: {0}', r.path); out.classList.add('good');
     } else {
-      warn(t('This folder is not on this PC yet: OSign publishes through OneDrive. In SharePoint, open the library and choose Sync, wait until the folder is there, then paste the link again.'));
+      warn(t('This folder is not on this PC yet: NOBS OSign publishes through OneDrive. In SharePoint, open the library and choose Sync, wait until the folder is there, then paste the link again.'));
     }
     wizPermNote();
   }
@@ -1248,7 +1248,7 @@
   function wizGrantFill(site) {
     const sitePath = !site || site === 'root' ? 'root' : site;
     $('wizGrantGet').textContent = 'GET https://graph.microsoft.com/v1.0/sites/' + sitePath + '?$select=id,webUrl';
-    $('wizGrantBody').textContent = JSON.stringify({ roles: ['write'], grantedToIdentities: [{ application: { id: (S.info.features && S.info.features.graphClientId) || '<the server app\'s client ID>', displayName: 'OSign server' } }] });
+    $('wizGrantBody').textContent = JSON.stringify({ roles: ['write'], grantedToIdentities: [{ application: { id: (S.info.features && S.info.features.graphClientId) || '<the server app\'s client ID>', displayName: 'NOBS OSign server' } }] });
     if (!site) $('wizGrant').hidden = true;
   }
 
@@ -1293,8 +1293,8 @@
       const choice = radio('wlib');
       if (!choice) throw new Error(t('Choose where the signatures are kept.'));
       if (choice === 'link' && !$('wizSpFolder').value) throw new Error(t('Paste the address of the folder in SharePoint.'));
-      if (!$('wizFolder').value.trim()) throw new Error(choice === 'link' ? t('This folder is not on this PC yet: OSign publishes through OneDrive. In SharePoint, open the library and choose Sync, wait until the folder is there, then paste the link again.') : t('Choose the folder on this PC.'));
-      if (!$('wizSpFolder').value) throw new Error(t('OSign cannot tell where this folder is in SharePoint. Choose «SharePoint link» and paste the folder\'s address.'));
+      if (!$('wizFolder').value.trim()) throw new Error(choice === 'link' ? t('This folder is not on this PC yet: NOBS OSign publishes through OneDrive. In SharePoint, open the library and choose Sync, wait until the folder is there, then paste the link again.') : t('Choose the folder on this PC.'));
+      if (!$('wizSpFolder').value) throw new Error(t('NOBS OSign cannot tell where this folder is in SharePoint. Choose «SharePoint link» and paste the folder\'s address.'));
       const r = await wizSave({ folder: $('wizFolder').value, spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value });
       if (!r.folderFound && wiz.warned !== 'folder') {
         wiz.warned = 'folder';
@@ -1328,7 +1328,7 @@
     $('wizNext').disabled = true;
     try {
       if (wizLeave[name]) await wizLeave[name]();
-      if (name === 'done') { $('dlgWizard').close(); toast(t('OSign is set up.')); return; }
+      if (name === 'done') { $('dlgWizard').close(); toast(t('NOBS OSign is set up.')); return; }
       wiz.step++; wiz.warned = ''; wizRender();
     } catch (err) { $('wizErr').textContent = err.message ? t(err.message) : ''; }
     finally { $('wizNext').disabled = false; }
@@ -1336,7 +1336,7 @@
   $('wizBack').addEventListener('click', () => { if (wiz.step) { wiz.step--; wizRender(); } });
   $('wizLater').addEventListener('click', () => $('dlgWizard').close());
   // Closed in any way (Later, Esc, finished): it opens by itself again at the next start only if
-  // OSign is still not set up.
+  // NOBS OSign is still not set up.
   $('dlgWizard').addEventListener('close', () => stored(WIZ_KEY, null));
   document.querySelectorAll('input[name=whost], input[name=wvsrc]').forEach((r) => r.addEventListener('change', wizRender));
   $('wizUrl').addEventListener('input', wizRender);

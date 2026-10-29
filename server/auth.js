@@ -91,7 +91,7 @@ function createAuth({ env, ldap, now = Date.now, log = console }) {
         log.warn('sign-in: the directory could not be asked: ' + (e && e.message));
         return { status: 503, error: 'Active Directory cannot be reached. The local account admin still works.' };
       }
-      if (r && !r.allowed) return { status: 403, error: 'You are not in the group that may use OSign. Ask IT to add you.' };
+      if (r && !r.allowed) return { status: 403, error: 'You are not in the group that may use NOBS OSign. Ask IT to add you.' };
       if (r) user = { login: r.login, name: r.name, local: false };
     }
     if (!user) { failed(key); return { status: 401, error: 'The sign-in name or the password is wrong.' }; }

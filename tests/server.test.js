@@ -186,7 +186,7 @@ test('the API takes only JSON POSTs from this site', async () => {
 
 test('serves the UI and the shared engine, nothing outside them', async () => {
   const ui = await request('/', { headers: { Cookie: admin } });
-  assert.match(ui.body.toString(), /<title>OSign<\/title>/);
+  assert.match(ui.body.toString(), /<title>NOBS OSign<\/title>/);
   assert.equal(ui.headers['x-frame-options'], 'DENY');
   assert.match((await request('/shared/signature-core.js', { headers: { Cookie: admin } })).body.toString(), /SignatureCore/);
   for (const p of ['/ui/../../package.json', '/ui/..%2f..%2fpackage.json', '/assets/..%2fdraft.json', '/ui/%2e%2e/%2e%2e/server/app.js', '/photos/..%2f..%2fadmin_password']) {

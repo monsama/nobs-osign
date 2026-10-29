@@ -348,7 +348,7 @@ export async function fromAddress(item) {
   return (Office.context.mailbox.userProfile || {}).emailAddress || '';
 }
 
-// A reply or forward also carries the images of the mail it quotes, and that may be signed by OSign
+// A reply or forward also carries the images of the mail it quotes, and that may be signed by NOBS OSign
 // too (osign-assets-logo.png). So this message's own images are named osign-<tag>-…, with a tag of
 // its own kept with the message (sessionData, which the event handler and the pane share): only
 // those are ever taken out, and none has the name, and so the cid, of an image in the quoted mail.

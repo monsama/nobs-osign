@@ -14,7 +14,7 @@ function showNotice(item, reason) {
   const n = notices(item); if (!n || !n.replaceAsync) return Promise.resolve();
   const german = /^de/i.test(Office.context.displayLanguage || '');
   // What to do first (the pane shows the whole story, and signs in where that is needed), then why.
-  let text = (german ? 'OSign hat keine Signatur eingefügt; mehr unter Signaturen. ' : 'OSign inserted no signature; see Signatures. ') + reason;
+  let text = (german ? 'NOBS OSign hat keine Signatur eingefügt; mehr unter Signaturen. ' : 'NOBS OSign inserted no signature; see Signatures. ') + reason;
   // Outlook takes at most 150 characters.
   if (text.length > 150) text = text.slice(0, 149) + '\u2026';
   return new Promise((resolve) => {

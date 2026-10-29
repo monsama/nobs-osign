@@ -1,4 +1,4 @@
-# OSign
+# NOBS OSign
 
 Central email signatures for **classic and new Outlook**, managed in one place.
 
@@ -21,7 +21,7 @@ add-in reads that folder with each user's own sign-in, and embeds the images in 
 ```
  OSign.ps1 (editor, admin PC)        Company SharePoint (home site)       Outlook (every user)
  ┌──────────────────────────┐ write  ┌───────────────────────────┐ Graph  ┌───────────────────────────┐
- │ web UI on 127.0.0.1      │ ─────> │ OSign\signatures.json     │ ─────> │ OSign add-in              │
+ │ web UI on 127.0.0.1      │ ─────> │ OSign\signatures.json     │ ─────> │ NOBS OSign add-in         │
  │ publishes into the       │ (One-  │ OSign\assets\*.png        │ user's │  new mail / reply → sign  │
  │ synced OSign folder      │ Drive) │ OSign\photos\<user>.jpg   │ sign-in│  details, groups ← Graph  │
  └──────────────────────────┘        └───────────────────────────┘        │  images embedded (cid:)   │
@@ -163,7 +163,7 @@ The tests need `pwsh` (PowerShell 7). CI also runs the editor under Windows Powe
 | `shared/signature-core.js` | Placeholders, empty lines, who gets which signature. The editor's preview and the add-in both run this one file. |
 | `editor/OSign.ps1` | The editor's backend: local web server, draft, folder publishing, AD lookup, the add-in's files |
 | `editor/ui/` | The editor's web UI |
-| `server/` | The editor's backend for the container: the same API, with a sign-in (Docker: `Dockerfile`, `docker-compose.yml`, `deploy-osign.sh`) |
+| `server/` | The editor's backend for the container: the same API, with a sign-in (Docker: `Dockerfile`, `docker-compose.yml`, `deploy-nobs-osign.sh`) |
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
 | `tests/` | Engine, add-in runtime (with a stand-in Graph and SharePoint), backend API, editor and pane in a browser |
 
@@ -176,9 +176,9 @@ the internet. [docs/SETUP.md](docs/SETUP.md) ("The editor on a server") has the 
 
 ## Releases
 
-Each version is a tag (`v0.5.0`) with the zip `OSign-v0.5.0.zip` (the editor for Windows), the
-server's install files `osign-server-0.5.0.tar.gz`, their checksums on the GitHub releases page,
-and the Docker image `ghcr.io/monsama/osign:0.5.0`, scanned before it is pushed. The version is
+Each version is a tag (`v0.5.0`) with the zip `NOBS-OSign-v0.5.0.zip` (the editor for Windows), the
+server's install files `nobs-osign-server-0.5.0.tar.gz`, their checksums on the GitHub releases page,
+and the Docker image `ghcr.io/monsama/nobs-osign:0.5.0`, scanned before it is pushed. The version is
 kept in `package.json`, `package-lock.json`, `editor/OSign.ps1` and `docker-compose.yml`; the
 add-in's manifest takes it from `package.json`.
 
