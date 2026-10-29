@@ -38,7 +38,7 @@ reachable from the internet.
 | Outlook on the web | yes | yes |
 | Classic Outlook for Windows (Microsoft 365, current channel) | yes | yes |
 | Outlook for Mac (new Outlook) | yes | yes |
-| Outlook for iOS / Android | not yet | - |
+| Outlook for iOS / Android (4.2352 and later) | preview, when switched on | - |
 
 All of these need Exchange Online (Microsoft 365) mailboxes.
 
@@ -86,9 +86,9 @@ and the **setup assistant** walks through the rest:
 2. **SharePoint:** a folder `OSign` in a site everyone can read; paste its address (or a sharing
    link). Photos go into `OSign/photos` (`<username>.jpg`).
 3. **Microsoft 365:** download the **setup script** and run it once on a Windows PC as SharePoint
-   or Global administrator. It makes both app registrations (the add-in's and the server's), gives
-   the server write access to that one site, sends the result to the server, and takes back the
-   rights it used.
+   or Global administrator. It makes both app registrations (the add-in's and the server's), puts
+   the server's own certificate on its app (no client secret), gives the server write access to
+   that one site, sends the result to the server, and takes back the rights it used.
 4. **The add-in's files:** made and uploaded to Cloudflare Pages from the assistant (or downloaded
    as a ZIP for another web server).
 5. **Microsoft 365 admin center:** Settings → Integrated apps → Upload custom apps, with
@@ -104,6 +104,9 @@ limited to **AD groups** (nested groups count), departments or sender domains. F
 2. Otherwise the default for that kind of message is used. When several defaults apply, the one for
    fewer people wins: sender domain before group before department before everyone.
 
+A signature can also be a **campaign**: on its days only (say, December), and then it wins over the
+usual default; before and after, the usual one comes back by itself.
+
 Outlook's own signature is switched off for messages the add-in signs (an option in the editor), so
 a mail never gets two.
 
@@ -112,15 +115,20 @@ a mail never gets two.
 **⤓** next to *Signatures* imports `.htm` templates with their images: from CI-Sign (it keeps them
 next to `CI-Sign.exe`, as UTF-16, with images in `images\`) or from classic Outlook. Pick the
 template files and images together. A per-person image (`images/@@sAMAccountName.jpg`) becomes the
-photo from `OSign/photos`. Not imported (yet): CI-Sign's text blocks
-(`{##Name}…{end ##Name}` in `__intern.htm`).
+photo from `OSign/photos`. CI-Sign's text blocks (`{##Name}…{end ##Name}` in
+`__intern.htm`, picked with the templates) go into the templates that use them; one with days
+(`{dats …}{date …}`) becomes a campaign of its own.
 
 ## Privacy
 
 - GitHub holds only code; nothing at run time comes from it. The add-in's files on the company's
   web server are only code too, with the app registration ID filled in (it is not a secret).
-- The server writes into one SharePoint site only (`Sites.Selected`); its passwords and tokens are
-  kept encrypted in its data volume.
+- The server writes into one SharePoint site only (`Sites.Selected`), signed in with its own
+  certificate; its key, passwords and tokens are kept encrypted in its data volume.
+- Every sign-in, publish and change of the server's connections is in the audit log; publishing can
+  need a second person's approval (four eyes); a backup is locked with a passphrase.
+- Twice a day the server asks GitHub whether a newer release is out (`OSIGN_UPDATE_CHECK=0` stops
+  that); nothing else leaves it except to Microsoft 365, the domain controller and Cloudflare.
 - The signatures, images and photos are in the company's SharePoint, readable for its employees.
   The add-in reads them, and each user's details and groups, with that user's own sign-in
   (delegated permissions): it can never read more than the user can.
@@ -167,16 +175,16 @@ Windows PowerShell 5.1.
 
 ## Releases
 
-Each version is a tag (`v0.7.2`) with the server's install files `nobs-osign-server-0.7.2.tar.gz`
+Each version is a tag (`v0.9.0`) with the server's install files `nobs-osign-server-0.9.0.tar.gz`
 and their checksums on the GitHub releases page, and the Docker image
-`ghcr.io/monsama/nobs-osign:0.7.2`, scanned before it is pushed. The install files name the image
+`ghcr.io/monsama/nobs-osign:0.9.0`, scanned before it is pushed. The install files name the image
 by its digest, so an install runs exactly the image that was scanned; both carry a build
 attestation, which `scripts/update.sh` checks where the GitHub CLI is there (`gh attestation verify
 <file> --repo monsama/nobs-osign`). The version is kept in `package.json`, `package-lock.json` and
 `docker-compose.yml`; the add-in's manifest takes it from `package.json`.
 
-To release, raise the version on main (`node scripts/bump-version.mjs 0.7.2`), then either push
-the tag with `scripts/release.sh 0.7.2`, or run the **release** workflow by hand on main (Actions →
+To release, raise the version on main (`node scripts/bump-version.mjs 0.9.0`), then either push
+the tag with `scripts/release.sh 0.9.0`, or run the **release** workflow by hand on main (Actions →
 release → Run workflow): it tags the version in `package.json` and publishes it. The tests have to
 pass first, and a version that is already tagged is refused.
 

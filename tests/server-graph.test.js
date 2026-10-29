@@ -6,6 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -193,4 +194,45 @@ test('entra/lookup: a real person for the preview, values from Graph and the gro
   assert.match((await api('entra/lookup', { query: 'nobody@contoso.com', fields })).error, /No user nobody@contoso.com/);
   sp.users.denied = true;
   try { assert.match((await api('entra/lookup', { query: 'anna@contoso.com', fields })).error, /may not read users from Entra ID/); } finally { delete sp.users.denied; }
+});
+
+test('the server\'s certificate: made for the setup script, put on the app, and then it signs in with it, no secret', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-cert-'));
+  const env = envFor(dir, { OSIGN_APP_KEY: 'a-key-for-the-cert-test', OSIGN_GRAPH_CLIENT_SECRET_FILE: '' });
+  delete env.OSIGN_GRAPH_CLIENT_SECRET_FILE;
+  const s = await start(env);
+  const at = 'http://127.0.0.1:' + s.address().port;
+  try {
+    const c = await signIn(at);
+    assert.match((await call(at, c, 'info')).features.graphProblem, /client secret is missing/);
+    await call(at, c, 'settings/save', { settings: { spSite: SITE, spFolder: 'OSign', addinUrl: 'https://osign.contoso.com/' } });
+    const st = await call(at, c, 'setup/start', { origin: at });
+    const text = await (await fetch(at + '/setup/nobs-osign-setup.ps1?id=' + st.id, { headers: { Cookie: c } })).text();
+    const der = /\$Cert = '([^']+)'/.exec(text)[1], thumb = /\$CertThumbprint = '([^']+)'/.exec(text)[1];
+    const token = /\$Token = '([^']+)'/.exec(text)[1];
+    const cert = new crypto.X509Certificate(Buffer.from(der, 'base64'));
+    assert.equal(cert.fingerprint.replace(/:/g, ''), thumb);
+    assert.match(cert.subject, /CN=NOBS OSign server/);
+    // What the script sends when it put another certificate on the app: refused.
+    const result = (t) => ({ token, tenantId: TENANT, addin: { clientId: '22222222-2222-2222-2222-222222222222' }, server: { clientId: CLIENT, certThumbprint: t } });
+    const post = (b) => fetch(at + '/api/setup/finish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((r) => r.json());
+    assert.match((await post(result('A'.repeat(40)))).error, /another certificate/);
+    // As Entra: the certificate is on the app.
+    sp.certs.push(cert);
+    const r = await post(result(thumb));
+    assert.equal(r.ok, true, r.error);
+    const info = (await call(at, c, 'info')).features;
+    assert.equal(info.graphCredential, 'certificate');
+    assert.equal(info.graphProblem, '');
+    const p = await call(at, c, 'publish', { configJson: cfg([{ id: 's', name: 'S', html: '<p>x</p>' }]) });
+    assert.equal(p.ok, true, p.error);
+    // Taken off the app in Entra: the sign-in fails, said as that.
+    sp.certs.length = 0;
+    const s2 = await start(env);
+    try {
+      const at2 = 'http://127.0.0.1:' + s2.address().port;
+      const c2 = await signIn(at2);
+      assert.match((await call(at2, c2, 'connections/test', { what: 'graph' })).error, /AADSTS700027.*certificate is on the app registration/);
+    } finally { s2.close(); }
+  } finally { s.close(); }
 });

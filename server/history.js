@@ -68,7 +68,18 @@ function createHistory({ dataDir, assetDir }) {
     return { configJson: h.configJson, at: h.at };
   }
 
-  return { add, list, restore };
+  // One version's configuration, and the one published before it ('' for the first).
+  function get(id) {
+    if (!ID.test(String(id || ''))) return null;
+    const h = load(id); if (!h) return null;
+    const older = ids().filter((x) => x < id)[0];
+    const prev = older ? load(older) : null;
+    return { at: h.at, by: h.by, configJson: h.configJson, previous: prev ? prev.configJson : '' };
+  }
+  // The last one published ('' before the first).
+  function latest() { const id = ids()[0]; const h = id ? load(id) : null; return h ? h.configJson : ''; }
+
+  return { add, list, restore, get, latest };
 }
 
 module.exports = { createHistory };

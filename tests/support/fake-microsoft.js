@@ -61,9 +61,17 @@ function fakeMicrosoft() {
     if (p === '/v1.0/applications' && req.method === 'POST') { const a = Object.assign({ id: 'obj-' + id(), appId: id(), spa: { redirectUris: [] }, owners: [ME] }, j); state.apps.push(a); return json(201, a); }
     if ((m = /^\/v1\.0\/applications\(appId='([^']+)'\)$/.exec(p))) { const a = state.apps.find((x) => x.appId === m[1]); return a ? json(200, a) : json(404, { error: { message: 'Resource not found' } }); }
     if ((m = /^\/v1\.0\/applications\/([^/]+)\/owners$/.exec(p))) return json(200, { value: (state.apps.find((x) => x.id === m[1]).owners || []).map((o) => ({ id: o })) });
-    if ((m = /^\/v1\.0\/applications\/([^/]+)$/.exec(p)) && req.method === 'PATCH') { Object.assign(state.apps.find((a) => a.id === m[1]), j); return json(204); }
+    if ((m = /^\/v1\.0\/applications\/([^/]+)$/.exec(p)) && req.method === 'PATCH') {
+      // A tenant may refuse certificates on apps (a policy): then the script makes a secret.
+      if (j.keyCredentials && state.refuseCerts) return json(400, { error: { message: 'Certificates are not allowed by policy.' } });
+      Object.assign(state.apps.find((a) => a.id === m[1]), j); return json(204);
+    }
+    if ((m = /^\/v1\.0\/applications\/([^/]+)$/.exec(p)) && req.method === 'GET') {
+      return json(200, { passwordCredentials: state.passwords.filter((x) => x.app === m[1] && !x.removed).map((x) => ({ keyId: x.keyId, displayName: x.displayName, endDateTime: x.endDateTime })) });
+    }
+    if ((m = /^\/v1\.0\/applications\/([^/]+)\/removePassword$/.exec(p))) { const x = state.passwords.find((y) => y.app === m[1] && y.keyId === j.keyId); if (x) x.removed = true; return json(204); }
     if ((m = /^\/v1\.0\/applications\/([^/]+)\/addPassword$/.exec(p))) {
-      const pw = { secretText: 'secret-' + id(), endDateTime: j.passwordCredential.endDateTime, app: m[1] };
+      const pw = { keyId: 'key-' + id(), secretText: 'secret-' + id(), displayName: j.passwordCredential.displayName, endDateTime: j.passwordCredential.endDateTime, app: m[1] };
       state.passwords.push(pw); return json(200, pw);
     }
     if (p === '/v1.0/oauth2PermissionGrants' && req.method === 'GET') {

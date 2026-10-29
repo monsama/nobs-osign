@@ -11,9 +11,9 @@
 const path = require('node:path');
 const { writeAtomic, readText } = require('./store');
 
-const KEYS = ['folder', 'photosFolder', 'addinUrl', 'clientId', 'tenantId', 'spSite', 'spFolder', 'addinFolder', 'addinHost', 'setupDone'];
+const KEYS = ['folder', 'photosFolder', 'addinUrl', 'clientId', 'tenantId', 'spSite', 'spFolder', 'addinFolder', 'addinHost', 'setupDone', 'requireApproval', 'addinMobile'];
 const SERVER_KEYS = ['folder', 'photosFolder', 'addinFolder'];
-const DEFAULTS = { folder: '', photosFolder: '', addinUrl: '', clientId: '', tenantId: '', spSite: 'root', spFolder: 'OSign', addinFolder: '', addinHost: '', setupDone: '' };
+const DEFAULTS = { folder: '', photosFolder: '', addinUrl: '', clientId: '', tenantId: '', spSite: 'root', spFolder: 'OSign', addinFolder: '', addinHost: '', setupDone: '', requireApproval: '', addinMobile: '' };
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // How long what was found in SharePoint (is the folder there?) is believed.
 const FOUND_MS = 60 * 1000;
@@ -25,6 +25,8 @@ function check(s) {
   if (s.tenantId && !GUID.test(s.tenantId)) return 'The tenant ID is a Directory (tenant) ID, a GUID.';
   if (s.spSite && !/^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/(sites|teams|personal)\/[A-Za-z0-9._-]+:$/.test(s.spSite)) return 'The SharePoint site is root, <host>.sharepoint.com:/sites/<name>: or, for a OneDrive, <host>-my.sharepoint.com:/personal/<name>:';
   if (s.addinHost && !['cloudflare', 'azure', 'iis', 'apache', 'other'].includes(s.addinHost)) return 'The web server is cloudflare, azure, iis, apache or other.';
+  if (s.requireApproval && s.requireApproval !== 'on') return 'Approval before publishing is on or off.';
+  if (s.addinMobile && s.addinMobile !== 'on') return 'Outlook on iOS and Android is on or off.';
   const f = String(s.spFolder || '').replace(/^\/+|\/+$/g, '');
   if (s.spFolder && (/["\\\u0000-\u001f]/.test(f) || f.split('/').some((p) => !p || p === '.' || p === '..'))) return 'The SharePoint folder is a folder like OSign.';
   return null;

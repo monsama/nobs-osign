@@ -58,6 +58,15 @@
         <label class="check"><input type="checkbox" id="sigNew"> Default for new mail</label>
         <label class="check"><input type="checkbox" id="sigReply"> Default for replies &amp; forwards</label>
         <label class="check"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines <button type="button" class="help" data-help="hRemoveEmpty" aria-label="Help">?</button></label>
+        <details class="audience campaign" id="sigCampaign">
+          <summary>When: <span id="campaignSummary">always</span></summary>
+          <div class="grid3">
+            <label>From <small>(the first day, included)</small><input id="sigFrom" type="date"></label>
+            <label>Until <small>(the last day, included)</small><input id="sigUntil" type="date"></label>
+          </div>
+          <p class="hint">A campaign: on those days only, and as a default it wins over the others, for whoever it is open to. Before and after,
+            the usual signatures again, by themselves.</p>
+        </details>
         <details class="audience">
           <summary>Who gets it: <span id="audienceSummary">everyone</span></summary>
           <div class="grid3">
@@ -72,9 +81,9 @@
 
       <div class="workbench">
         <div class="pane editor-pane">
-          <div class="tabs">
-            <button class="tab active" data-mode="design">Design</button>
-            <button class="tab" data-mode="html">HTML</button>
+          <div class="tabs" role="tablist" aria-label="Edit as">
+            <button class="tab active" data-mode="design" role="tab" aria-selected="true" aria-controls="design">Design</button>
+            <button class="tab" data-mode="html" role="tab" aria-selected="false" aria-controls="source">HTML</button>
           </div>
           <div id="toolbar" class="toolbar"></div>
           <div id="imgBar" class="imgbar" hidden>
@@ -103,6 +112,7 @@
             </span>
             <div class="spacer"></div>
             <label class="check small"><input type="checkbox" id="pvText"> Plain text</label>
+            <label class="check small" title="Roughly as Outlook's dark mode shows it to recipients who use it"><input type="checkbox" id="pvDark"> Dark mode</label>
           </div>
           <div id="pvNote" class="pv-note"></div>
           <div class="mail">
@@ -191,6 +201,8 @@
   <span id="stSigs"></span>
   <span id="stTarget"></span>
   <span id="stSecret" class="sb-warn" hidden></span>
+  <button type="button" id="stApproval" class="sb-link sb-warn" hidden></button>
+  <a id="stUpdate" class="sb-link" target="_blank" rel="noopener noreferrer" hidden></a>
   <span id="verFoot" class="sb-right"></span>
   <button type="button" id="keysBtn" class="sb-keys" title="Keyboard shortcuts">? Shortcuts</button>
 </footer>
@@ -203,6 +215,60 @@
     <div class="table-wrap"><table class="fields history"><thead><tr><th>Published</th><th>By</th><th>What changed</th><th>Signatures</th><th></th></tr></thead>
       <tbody id="historyRows"></tbody></table></div>
     <p id="historyErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgDiff">
+  <form method="dialog" class="dlg wide">
+    <h2 id="diffTitle">What changed</h2>
+    <p class="lead"><label class="check"><input type="radio" name="diffAgainst" value="previous" checked> Against the version before it</label>
+      <label class="check"><input type="radio" name="diffAgainst" value="draft"> Against the draft now</label></p>
+    <div id="diffChanges" class="changes"></div>
+    <p id="diffErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgAudit">
+  <form method="dialog" class="dlg wide">
+    <h2>Audit log</h2>
+    <p class="lead">Who signed in, published, brought back a version, changed the server's connections or settings, ran the setup script
+      or made a backup: the last few thousand entries. Never a password or a signature's content.</p>
+    <p><select id="auditWhat" aria-label="Show">
+      <option value="">Everything</option><option value="signin">Sign-ins</option><option value="publish">Publishing</option>
+      <option value="connections/save">Server connections</option><option value="failed">Refused only</option></select></p>
+    <div class="table-wrap"><table class="fields audit"><thead><tr><th>When</th><th>Who</th><th>From</th><th>What</th><th>Details</th></tr></thead>
+      <tbody id="auditRows"></tbody></table></div>
+    <p id="auditErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgBackup">
+  <form method="dialog" class="dlg">
+    <h2>Backup</h2>
+    <p class="lead">One file with the draft and its images, the settings, the server's connections (with their passwords), the certificate
+      and the history, locked with a passphrase. Keep it somewhere else; with it, this server or a new one is set up as it was.</p>
+    <h3>Download a backup</h3>
+    <div class="form">
+      <label for="bakPass">Passphrase</label>
+      <div><input id="bakPass" type="password" autocomplete="new-password" minlength="12">
+        <small>(at least 12 characters; without it, the backup cannot be opened, not even by us)</small></div>
+      <label for="bakPass2">Again</label>
+      <div><input id="bakPass2" type="password" autocomplete="new-password"></div>
+    </div>
+    <p><button type="button" id="bakExport">Download the backup</button> <span id="bakExportOk" class="where"></span></p>
+    <h3>Bring a backup back</h3>
+    <p class="lead warn">This replaces the draft, the settings, the connections and the history here with the backup's.</p>
+    <div class="form">
+      <label for="bakFile">Backup file</label>
+      <div><input id="bakFile" type="file" accept=".osignbak"></div>
+      <label for="bakRestorePass">Its passphrase</label>
+      <div><input id="bakRestorePass" type="password" autocomplete="off"></div>
+    </div>
+    <p><button type="button" id="bakRestore" class="danger">Bring it back</button> <span id="bakRestoreOk" class="where"></span></p>
+    <p id="bakErr" class="err"></p>
     <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
   </form>
 </dialog>
@@ -232,7 +298,12 @@
       <h3>Server</h3>
       <p class="lead">Active Directory, SharePoint and Cloudflare: the server's own connections. Only the local account admin can
         change them.</p>
-      <p><button type="button" id="setConn">Server connections…</button></p>
+      <p class="btn-row"><button type="button" id="setConn">Server connections…</button>
+        <button type="button" id="setAudit">Audit log…</button>
+        <button type="button" id="setBackup">Backup…</button></p>
+      <label class="check"><input type="checkbox" id="setApproval"> Publishing needs a second person's approval (four eyes)
+        <button type="button" class="help" data-help="hApproval" aria-label="Help">?</button></label>
+      <small id="setApprovalNote" class="where"></small>
     </section>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
       <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
@@ -266,6 +337,8 @@
       <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button> <small>(root: the home site; or paste the address of a site or OneDrive)</small><input id="setSpSite" placeholder="root"></label>
       <label>Folder in its library<input id="setSpFolder" placeholder="OSign"></label>
     </div>
+    <label class="check"><input type="checkbox" id="setAddinMobile"> Also in Outlook for iOS and Android (preview)
+      <button type="button" class="help" data-help="hMobile" aria-label="Help">?</button></label>
     <p><button id="setAddinBuild" type="button">Create the add-in files</button>
       <button id="setAddinUpload" type="button" hidden>Upload to Cloudflare Pages</button>
       <a id="setAddinZip" href="/addin.zip" download hidden>Download as ZIP</a></p>
@@ -287,14 +360,14 @@
     <p id="connKey" class="err" hidden>The server has no key to keep passwords with (secrets/app_key): run sudo ./deploy-nobs-osign.sh
       again. Until then, passwords and the token go in ./secrets.</p>
 
-    <nav class="dtabs" role="tablist">
-      <button type="button" class="tab active" data-ctab="signin"><span class="dot" data-cdot="signIn"></span>Sign-in</button>
-      <button type="button" class="tab" data-ctab="service"><span class="dot" data-cdot="directory"></span>Service account</button>
-      <button type="button" class="tab" data-ctab="graph"><span class="dot" data-cdot="graph"></span>SharePoint</button>
-      <button type="button" class="tab" data-ctab="pages"><span class="dot" data-cdot="pages"></span>Cloudflare Pages</button>
+    <nav class="dtabs" role="tablist" aria-label="Server connections">
+      <button type="button" class="tab active" data-ctab="signin" role="tab"><span class="dot" data-cdot="signIn"></span>Sign-in</button>
+      <button type="button" class="tab" data-ctab="service" role="tab"><span class="dot" data-cdot="directory"></span>Service account</button>
+      <button type="button" class="tab" data-ctab="graph" role="tab"><span class="dot" data-cdot="graph"></span>SharePoint</button>
+      <button type="button" class="tab" data-ctab="pages" role="tab"><span class="dot" data-cdot="pages"></span>Cloudflare Pages</button>
     </nav>
 
-    <section class="dpane" data-cpane="signin">
+    <section class="dpane" role="tabpanel" data-cpane="signin">
       <p id="connSignIn" class="lead"></p>
       <div class="form">
         <label for="cn_ldapUrl">Domain controller</label>
@@ -320,7 +393,7 @@
       <p class="ctest"><button type="button" class="small" data-ctest="signIn">Save and test the connection</button> <span class="where" data-ctestout="signIn"></span></p>
     </section>
 
-    <section class="dpane" data-cpane="service" hidden>
+    <section class="dpane" role="tabpanel" data-cpane="service" hidden>
       <p id="connDirectory" class="lead"></p>
       <div class="form">
         <label for="cn_ldapServiceDn">Service account</label>
@@ -337,7 +410,7 @@
       <p class="ctest"><button type="button" class="small" data-ctest="directory">Save and test the connection</button> <span class="where" data-ctestout="directory"></span></p>
     </section>
 
-    <section class="dpane" data-cpane="graph" hidden>
+    <section class="dpane" role="tabpanel" data-cpane="graph" hidden>
       <p id="connGraph" class="lead"></p>
       <div class="form">
         <label for="cn_graphTenantId">Directory (tenant) ID</label>
@@ -345,16 +418,18 @@
         <label for="cn_graphClientId">Application (client) ID</label>
         <div><input id="cn_graphClientId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off">
           <small>(the server's app registration, not the add-in's)</small></div>
-        <label for="cs_graphClientSecret">Client secret</label>
-        <div><span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span><small id="cx_graphClientSecret"></small></div>
-        <label for="cn_graphSecretExpires">Client secret valid until</label>
-        <div><input id="cn_graphSecretExpires" type="date" data-ph="">
+        <label>Sign-in</label>
+        <div><span id="connCert"></span> <button type="button" class="small" id="connCertRemove" hidden>Use a client secret instead</button></div>
+        <label for="cs_graphClientSecret" data-nocert>Client secret</label>
+        <div data-nocert><span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span><small id="cx_graphClientSecret"></small></div>
+        <label for="cn_graphSecretExpires" data-nocert>Client secret valid until</label>
+        <div data-nocert><input id="cn_graphSecretExpires" type="date" data-ph="">
           <small>(as Entra shows it; set by the setup script by itself. The editor warns 30 days before)</small></div>
       </div>
       <p class="ctest"><button type="button" class="small" data-ctest="graph">Save and test the connection</button> <span class="where" data-ctestout="graph"></span></p>
     </section>
 
-    <section class="dpane" data-cpane="pages" hidden>
+    <section class="dpane" role="tabpanel" data-cpane="pages" hidden>
       <p id="connPages" class="lead"></p>
       <div class="form">
         <label for="cn_cfAccountId">Account ID</label>
@@ -380,7 +455,13 @@
     <h2>Publish</h2>
     <p id="pubWhere" class="lead"></p>
     <ul id="pubChecks" class="checks"></ul>
-    <label>What changed<input id="pubMsg" maxlength="200" placeholder="Update signatures"></label>
+    <div id="pubApproval" class="approval" hidden>
+      <p id="pubApprovalWho" class="lead"></p>
+      <div id="pubApprovalChanges" class="changes"></div>
+      <p class="btn-row"><button type="button" id="pubApprove" class="primary">Approve and publish</button>
+        <button type="button" id="pubWithdraw" class="ghost">Withdraw</button></p>
+    </div>
+    <label id="pubMsgRow">What changed<input id="pubMsg" maxlength="200" placeholder="Update signatures"></label>
     <p id="pubErr" class="err"></p>
     <p id="pubOk" class="ok"></p>
     <div class="dlg-foot">
@@ -692,6 +773,8 @@
 </dialog>
 
 <div id="helpTexts" hidden>
+  <div data-help-text="hApproval" data-th="hApproval">With this on, nobody publishes alone: <b>Publish…</b> asks for approval, and a second person who signs in to the editor sees what would change and publishes it (or not). A change to the draft after that withdraws the request. It needs the sign-in with Active Directory: the local admin alone cannot approve their own.</div>
+  <div data-help-text="hMobile" data-th="hMobile">Outlook on iPhone, iPad and Android (version 4.2352 and later) can put the signature in new messages, replies and forwards too. There is no pane there, and the signature does not change with the From address. New in this version and not yet tried with every tenant: create the add-in files again, upload the new <code>manifest.xml</code> in the admin center, and try it on one phone first.</div>
   <div data-help-text="hRemoveEmpty" data-th="hRemoveEmpty">A line whose placeholders are all empty for a user is removed, label included. Example: <code>Mobile: @@mobile</code> disappears for someone without a mobile number, instead of showing «Mobile:» with nothing after it. Lines without placeholders always stay. Works for paragraphs, line breaks and table rows.</div>
   <div data-help-text="hGroups" data-th="hGroups">The signature is offered only to members of at least one of these groups. Members of nested groups count too: someone in «SG-Sales-Zurich», itself a member of «SG-Sales», gets the signature for «SG-Sales». Enter the group names as in Active Directory, separated by commas. With values from Entra ID only, the groups must be synchronised to Entra ID and the app needs <code>GroupMember.Read.All</code>.</div>
   <div data-help-text="hDeps" data-th="hDeps">The signature is offered only to users whose <b>department</b> attribute is one of these, compared as a whole and regardless of capitals: <code>Sales</code> matches «sales», but not «Sales Europe». Separate several with commas.</div>

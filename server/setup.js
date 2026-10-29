@@ -7,8 +7,10 @@
  * The script is made for one setup: it carries this server's address, the site, the add-in's
  * address and a one-time code. With that code, and only for an hour, it may send its result
  * (setup/finish, no session: it is not the browser). The result goes where the admin would type
- * it: the add-in's client ID into the settings, the server's client ID and secret into the server
- * connections (sealed there, server/connections.js).
+ * it: the add-in's client ID into the settings, the server's client ID into the server connections.
+ * The server signs in with its own certificate (server/cert.js): the script gets only its public
+ * half and puts it on the server's app. Where that is refused, it makes a client secret instead,
+ * sent here and sealed (server/connections.js).
  */
 'use strict';
 const crypto = require('node:crypto');
@@ -48,7 +50,8 @@ function createSetup({ now = Date.now } = {}) {
     const values = {
       __OSIGN_SERVER__: psq(s.origin), __OSIGN_TOKEN__: psq(pending.token), __OSIGN_SITE__: psq(s.site),
       __OSIGN_ADDIN_HOST__: psq(new URL(s.addinUrl).host), __OSIGN_GROUPS__: s.groups ? '$true' : '$false', __OSIGN_USERS__: s.users ? '$true' : '$false',
-      __OSIGN_KNOWN_ADDIN__: psq(s.knownAddin || ''), __OSIGN_KNOWN_SERVER__: psq(s.knownServer || '')
+      __OSIGN_KNOWN_ADDIN__: psq(s.knownAddin || ''), __OSIGN_KNOWN_SERVER__: psq(s.knownServer || ''),
+      __OSIGN_CERT__: psq(s.cert || ''), __OSIGN_CERT_THUMBPRINT__: psq(s.certThumbprint || '')
     };
     let text = fs.readFileSync(TEMPLATE, 'utf8');
     for (const [k, v] of Object.entries(values)) text = text.split(k).join(v);
@@ -61,12 +64,17 @@ function createSetup({ now = Date.now } = {}) {
     if (!pending || now() > pending.until || !body || !same(String(body.token || ''), pending.token)) return { error: 'This setup script is not valid (any more): download it again in the setup assistant.', status: 403 };
     if (typeof body.error === 'string' && body.error) { pending.error = body.error.slice(0, 500); return { failed: true }; }
     const s = body.server || {}, a = body.addin || {};
-    if (!GUID.test(String(body.tenantId || '')) || !GUID.test(String(a.clientId || '')) || !GUID.test(String(s.clientId || '')) || !line(s.secret, 500)) return { error: 'The script sent something that is not a setup result.', status: 400 };
-    const data = { tenantId: body.tenantId, addinClientId: a.clientId, serverClientId: s.clientId, secret: s.secret.trim(), secretExpires: String(s.secretExpires || '').slice(0, 40), siteUrl: String(body.siteUrl || '').slice(0, 500) };
-    // Once only: the code is used up.
-    last = { at: new Date(now()).toISOString(), tenantId: data.tenantId, addinClientId: data.addinClientId, serverClientId: data.serverClientId, secretExpires: data.secretExpires, siteUrl: data.siteUrl };
-    pending = null;
+    // The server signs in with its certificate (its thumbprint, as put on the app), or with a secret.
+    const cert = /^[0-9A-F]{40}$/i.test(String(s.certThumbprint || '')) ? String(s.certThumbprint).toUpperCase() : '';
+    if (!GUID.test(String(body.tenantId || '')) || !GUID.test(String(a.clientId || '')) || !GUID.test(String(s.clientId || '')) || (!cert && !line(s.secret, 500))) return { error: 'The script sent something that is not a setup result.', status: 400 };
+    const data = { tenantId: body.tenantId, addinClientId: a.clientId, serverClientId: s.clientId, certThumbprint: cert, secret: cert ? '' : s.secret.trim(), secretExpires: String(s.secretExpires || '').slice(0, 40), siteUrl: String(body.siteUrl || '').slice(0, 500) };
     return { data };
+  }
+  // The result taken: once only, the code is used up. (Until then, a result the server could not
+  // take, such as another certificate than this setup's, leaves the code as it was.)
+  function done(data) {
+    last = { at: new Date(now()).toISOString(), tenantId: data.tenantId, addinClientId: data.addinClientId, serverClientId: data.serverClientId, credential: data.certThumbprint ? 'certificate' : 'secret', secretExpires: data.secretExpires, siteUrl: data.siteUrl };
+    pending = null;
   }
 
   function status() {
@@ -74,7 +82,7 @@ function createSetup({ now = Date.now } = {}) {
     return last ? { state: 'done', result: last } : { state: 'none' };
   }
 
-  return { start, script, finish, status };
+  return { start, script, finish, done, status };
 }
 
 module.exports = { createSetup };

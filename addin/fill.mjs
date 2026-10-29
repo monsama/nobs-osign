@@ -26,6 +26,19 @@ export function checkSetup(s) {
 
 export const HOSTS = ['cloudflare', 'azure', 'iis', 'apache', 'other'];
 
+// Outlook on iOS and Android (4.2352 and later), when asked for (setup.mobile): the signature in
+// new messages, replies and forwards. There is no pane there, and no change of the From address.
+const MOBILE = `
+          <MobileFormFactor>
+            <FunctionFile resid="Runtime.Url"/>
+            <ExtensionPoint xsi:type="LaunchEvent">
+              <LaunchEvents>
+                <LaunchEvent Type="OnNewMessageCompose" FunctionName="onNewMessageComposeHandler"/>
+              </LaunchEvents>
+              <SourceLocation resid="Runtime.Url"/>
+            </ExtensionPoint>
+          </MobileFormFactor>`;
+
 // Copies the template `from` into outDir, with the blanks filled in, and the caching file for the
 // web server setup.host (if it has one).
 export function fillTemplate(from, outDir, setup) {
@@ -33,7 +46,8 @@ export function fillTemplate(from, outDir, setup) {
   const host = String(setup.host || '');
   if (host && !HOSTS.includes(host)) throw new Error('The web server is one of ' + HOSTS.join(', ') + '.');
   const js = { '@@OSIGN_CLIENT_ID@@': s.clientId, '@@OSIGN_TENANT_ID@@': s.tenantId, '@@OSIGN_SP_SITE@@': s.site, '@@OSIGN_SP_FOLDER@@': s.folder };
-  const xml = { '{{BASE}}': xmlEscape(s.base), '{{ORIGIN}}': xmlEscape(new URL(s.base).origin), '{{SUPPORT}}': xmlEscape(s.base) };
+  const xml = { '{{BASE}}': xmlEscape(s.base), '{{ORIGIN}}': xmlEscape(new URL(s.base).origin), '{{SUPPORT}}': xmlEscape(s.base),
+    '{{MIN_VERSION}}': setup.mobile ? '1.5' : '1.10', '{{MOBILE}}': setup.mobile ? MOBILE : '' };
   fs.mkdirSync(outDir, { recursive: true });
   fs.cpSync(from, outDir, { recursive: true, filter: (src) => path.relative(from, src).split(path.sep)[0] !== 'hosting' });
   const hosting = path.join(from, 'hosting', host);

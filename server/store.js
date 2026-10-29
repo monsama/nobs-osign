@@ -156,7 +156,7 @@ function createStore(dataDir) {
     return getDraft();
   }
 
-  return { assetDir, getDraft, saveDraft, uploadAsset, deleteAsset, publish, loadPublished };
+  return { assetDir, getDraft, saveDraft, uploadAsset, deleteAsset, publish, loadPublished, draftHash };
 }
 
 module.exports = { createStore, safeAssetName, checkConfigJson, ASSET_TYPES, writeAtomic, readText };

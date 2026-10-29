@@ -62,7 +62,7 @@ const manifest = fs.readFileSync(path.join(root, 'addin/manifest.template.xml'),
   .replace(/\{\{ID\}\}/g, addin.id)
   .replace(/\{\{VERSION\}\}/g, version)
   .replace(/\{\{PROVIDER\}\}/g, xmlEscape(addin.provider));
-const left = /\{\{(?!BASE\}\}|ORIGIN\}\}|SUPPORT\}\})[A-Z]+\}\}/.exec(manifest);
+const left = /\{\{(?!BASE\}\}|ORIGIN\}\}|SUPPORT\}\}|MIN_VERSION\}\}|MOBILE\}\})[A-Z_]+\}\}/.exec(manifest);
 if (left) throw new Error('manifest.template.xml: ' + left[0] + ' is not filled in.');
 fs.writeFileSync(path.join(template, 'manifest.xml'), manifest);
 
@@ -92,7 +92,7 @@ console.log('Built dist/template/ (version ' + pkg.version + ').');
 if (process.env.BASE_URL) {
   const s = fillTemplate(template, path.join(dist, 'site'), {
     base: process.env.BASE_URL, clientId: process.env.OSIGN_CLIENT_ID, tenantId: process.env.OSIGN_TENANT_ID,
-    site: process.env.OSIGN_SP_SITE, folder: process.env.OSIGN_SP_FOLDER, host: process.env.OSIGN_HOST
+    site: process.env.OSIGN_SP_SITE, folder: process.env.OSIGN_SP_FOLDER, host: process.env.OSIGN_HOST, mobile: process.env.OSIGN_MOBILE === '1'
   });
   console.log('Built dist/site/ for ' + s.base + ' (signatures from SharePoint ' + s.site + ', folder ' + s.folder + (s.clientId ? '' : '; no app registration') + ').');
 }

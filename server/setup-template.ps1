@@ -6,9 +6,10 @@
        brk-multihub://<add-in host>, Microsoft Graph delegated User.Read, Sites.Read.All (and
        GroupMember.Read.All where groups come from Entra ID), with admin consent;
     2. the server's app registration "NOBS OSign server": application permission Sites.Selected
-       with admin consent, and a client secret;
+       with admin consent, and the server's certificate on it (the server keeps the key; where
+       that is refused, a client secret instead);
     3. write access for "NOBS OSign server" on the one SharePoint site of the signatures;
-    4. sends the client IDs and the secret to your NOBS OSign server (with the one-time code
+    4. sends the client IDs (and the secret, if one was made) to your NOBS OSign server (with the one-time code
        below, valid for an hour), so nothing has to be copied;
     5. takes back the rights it was given for this (the consent for "Microsoft Graph Command Line
        Tools", the sign-in it uses), and deletes itself.
@@ -33,6 +34,9 @@ $WantUsers = __OSIGN_USERS__
 # app is never used, whatever its name: anyone may register an app called "NOBS OSign server".
 $KnownAddin = __OSIGN_KNOWN_ADDIN__
 $KnownServer = __OSIGN_KNOWN_SERVER__
+# The server's certificate (only the public half, base64 DER; the key stays on the server).
+$Cert = __OSIGN_CERT__
+$CertThumbprint = __OSIGN_CERT_THUMBPRINT__
 
 # Microsoft's endpoints; only the tests point them elsewhere.
 $LoginUrl = if ($env:OSIGN_SETUP_LOGIN_URL) { $env:OSIGN_SETUP_LOGIN_URL } else { 'https://login.microsoftonline.com' }
@@ -232,12 +236,28 @@ try {
         if (-not ($have | Where-Object { $_.appRoleId -eq $rid -and $_.resourceId -eq $graphSp.id })) { Graph POST "/servicePrincipals/$($srvSp.id)/appRoleAssignments" @{ principalId = $srvSp.id; resourceId = $graphSp.id; appRoleId = $rid } -Retries 6 | Out-Null }
     }
     Step ("Admin consent for " + ($roles -join ', ') + " (application)") ("Administratorzustimmung für " + ($roles -join ', ') + " (Anwendung)")
-    $secret = $null
-    foreach ($months in 24, 12, 6) {
-        try { $secret = Graph POST "/applications/$($srv.id)/addPassword" @{ passwordCredential = @{ displayName = 'NOBS OSign server ' + (Get-Date -Format 'yyyy-MM-dd'); endDateTime = (Get-Date).ToUniversalTime().AddMonths($months).ToString('yyyy-MM-ddTHH:mm:ssZ') } }; break }
-        catch { if ($months -eq 6) { throw } }
+    # The server signs in with its certificate: it goes on the app in place of the ones before.
+    $secret = $null; $certOn = $false
+    if ($Cert) {
+        try {
+            Graph PATCH "/applications/$($srv.id)" @{ keyCredentials = @(@{ type = 'AsymmetricX509Cert'; usage = 'Verify'; key = $Cert; displayName = 'NOBS OSign server ' + (Get-Date -Format 'yyyy-MM-dd') }) } | Out-Null
+            $certOn = $true
+            Step "The server's certificate is on ""$ServerName"" (thumbprint $CertThumbprint)" "Das Zertifikat des Servers ist auf ""$ServerName"" (Fingerabdruck $CertThumbprint)"
+            # Client secrets of earlier runs are not needed any more.
+            $old = @((Graph GET "/applications/$($srv.id)?`$select=passwordCredentials").passwordCredentials) | Where-Object { $_ -and ([string]$_.displayName).StartsWith($ServerName) }
+            foreach ($p in $old) { try { Graph POST "/applications/$($srv.id)/removePassword" @{ keyId = $p.keyId } | Out-Null } catch { } }
+            if ($old) { Step ("Old client secrets removed: " + @($old).Count) ("Alte geheime Clientschlüssel entfernt: " + @($old).Count) }
+        } catch {
+            Say ("The certificate could not be put on the app (" + (Error-Text $_) + "): a client secret instead.") ("Das Zertifikat konnte nicht auf die App (" + (Error-Text $_) + "): stattdessen ein geheimer Clientschlüssel.") 'Yellow'
+        }
     }
-    Step ("Client secret made, valid until " + ([datetime]$secret.endDateTime).ToString('yyyy-MM-dd')) ("Geheimer Clientschlüssel erstellt, gültig bis " + ([datetime]$secret.endDateTime).ToString('yyyy-MM-dd'))
+    if (-not $certOn) {
+        foreach ($months in 24, 12, 6) {
+            try { $secret = Graph POST "/applications/$($srv.id)/addPassword" @{ passwordCredential = @{ displayName = 'NOBS OSign server ' + (Get-Date -Format 'yyyy-MM-dd'); endDateTime = (Get-Date).ToUniversalTime().AddMonths($months).ToString('yyyy-MM-ddTHH:mm:ssZ') } }; break }
+            catch { if ($months -eq 6) { throw } }
+        }
+        Step ("Client secret made, valid until " + ([datetime]$secret.endDateTime).ToString('yyyy-MM-dd')) ("Geheimer Clientschlüssel erstellt, gültig bis " + ([datetime]$secret.endDateTime).ToString('yyyy-MM-dd'))
+    }
 
     # 3. The site.
     $m = [regex]::Match($Site, '^([A-Za-z0-9.-]+):/(sites|teams|personal)/([^:/]+):$')
@@ -252,7 +272,8 @@ try {
     if (-not $has) { Graph POST "/sites/$($s.id)/permissions" @{ roles = @('write'); grantedToIdentities = @(@{ application = @{ id = $srv.appId; displayName = $ServerName } }) } -Retries 6 | Out-Null }
     Step "Write access for ""$ServerName"" on $($s.webUrl)" "Schreibzugriff für ""$ServerName"" auf $($s.webUrl)"
 
-    $result = @{ token = $Token; tenantId = $tenant; siteUrl = $s.webUrl; addin = @{ clientId = $app.appId }; server = @{ clientId = $srv.appId; secret = $secret.secretText; secretExpires = $(if ($secret.endDateTime -is [datetime]) { $secret.endDateTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } else { [string]$secret.endDateTime }) } }
+    $srvResult = if ($certOn) { @{ clientId = $srv.appId; certThumbprint = $CertThumbprint } } else { @{ clientId = $srv.appId; secret = $secret.secretText; secretExpires = $(if ($secret.endDateTime -is [datetime]) { $secret.endDateTime.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } else { [string]$secret.endDateTime }) } }
+    $result = @{ token = $Token; tenantId = $tenant; siteUrl = $s.webUrl; addin = @{ clientId = $app.appId }; server = $srvResult }
 } catch {
     $failure = $_.Exception.Message
     Say '' ''
@@ -271,7 +292,8 @@ if ($result) {
         Write-Host "  Tenant ID:                   $($result.tenantId)"
         Write-Host "  Add-in client ID:            $($result.addin.clientId)"
         Write-Host "  Server client ID:            $($result.server.clientId)"
-        Write-Host "  Server client secret:        $($result.server.secret)"
+        if ($result.server.secret) { Write-Host "  Server client secret:        $($result.server.secret)" }
+        else { Say '  (The server signs in with its certificate: run this script again once the server can be reached.)' '  (Der Server meldet sich mit seinem Zertifikat an: dieses Skript nochmals ausführen, sobald der Server erreichbar ist.)' 'Yellow' }
     }
 }
 

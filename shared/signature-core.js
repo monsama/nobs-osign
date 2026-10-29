@@ -83,7 +83,10 @@
       defaultReply: false,
       removeEmptyLines: true,
       // Who gets this signature. Empty lists mean everyone.
-      audience: { departments: [], domains: [], groups: [] }
+      audience: { departments: [], domains: [], groups: [] },
+      // A campaign: only from / until these days (YYYY-MM-DD, both included); empty is always.
+      validFrom: '',
+      validUntil: ''
     };
   }
 
@@ -285,10 +288,27 @@
     return at < 0 ? '' : s.slice(at + 1);
   }
 
+  // The day as the user's clock has it, YYYY-MM-DD.
+  function today(now) {
+    var d = now instanceof Date ? now : new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  var DAY = /^\d{4}-\d{2}-\d{2}$/;
+  // A campaign's days: is the signature on that day? One with no days set always is.
+  function inPeriod(sig, now) {
+    var d = today(now), from = String(sig.validFrom || ''), until = String(sig.validUntil || '');
+    if (DAY.test(from) && d < from) return false;
+    if (DAY.test(until) && d > until) return false;
+    return true;
+  }
+  function isCampaign(sig) { return DAY.test(String(sig.validFrom || '')) || DAY.test(String(sig.validUntil || '')); }
+
   // values: the user's fields (department is matched); from: the sender address of the mail;
   // groups: the names (or ids) of the user's groups, nested ones included - null when they are not
-  // known, and then no signature limited to groups is open to the user.
-  function isAvailable(sig, values, from, groups) {
+  // known, and then no signature limited to groups is open to the user. now: the day (a Date),
+  // for campaigns; today when left out.
+  function isAvailable(sig, values, from, groups, now) {
+    if (!inPeriod(sig, now)) return false;
     var a = sig.audience || {};
     var deps = lowerList(a.departments), doms = lowerList(a.domains), grps = lowerList(a.groups);
     if (deps.length && deps.indexOf(String((values || {}).department || '').trim().toLowerCase()) < 0) return false;
@@ -300,8 +320,8 @@
     return true;
   }
 
-  function available(config, values, from, groups) {
-    return ((config && config.signatures) || []).filter(function (s) { return isAvailable(s, values, from, groups); });
+  function available(config, values, from, groups, now) {
+    return ((config && config.signatures) || []).filter(function (s) { return isAvailable(s, values, from, groups, now); });
   }
 
   // The group names the configuration limits signatures to: the add-in only needs to know these.
@@ -315,19 +335,19 @@
 
   // kind: 'new' or 'reply'. prefs: what the user picked in the add-in, { new: id|'none', reply: id|'none' }.
   // Returns the signature, or null for none.
-  function pick(config, values, from, kind, prefs, groups) {
-    var list = available(config, values, from, groups);
+  function pick(config, values, from, kind, prefs, groups, now) {
+    var list = available(config, values, from, groups, now);
     var allowChoice = !config.options || config.options.allowUserChoice !== false;
     var want = allowChoice && prefs ? prefs[kind] : null;
     if (want === 'none') return null;
     if (want) { for (var i = 0; i < list.length; i++) if (list[i].id === want) return list[i]; }
-    // Of the defaults open to the user, the one meant for fewer people wins: a default for one
-    // sender domain, group or department beats the default for everyone.
+    // Of the defaults open to the user, a campaign running now wins; then the one meant for fewer
+    // people: a default for one sender domain, group or department beats the default for everyone.
     var flag = kind === 'reply' ? 'defaultReply' : 'defaultNew', best = null, bestScore = -1;
     for (var j = 0; j < list.length; j++) {
       if (!list[j][flag]) continue;
       var a = list[j].audience || {};
-      var score = (lowerList(a.domains).length ? 4 : 0) + (lowerList(a.groups).length ? 2 : 0) + (lowerList(a.departments).length ? 1 : 0);
+      var score = (isCampaign(list[j]) ? 8 : 0) + (lowerList(a.domains).length ? 4 : 0) + (lowerList(a.groups).length ? 2 : 0) + (lowerList(a.departments).length ? 1 : 0);
       if (score > bestScore) { best = list[j]; bestScore = score; }
     }
     return best;
@@ -423,6 +443,8 @@
       else if (ids[s.id]) errors.push('Two signatures share the id ' + s.id + '.');
       else ids[s.id] = 1;
       if (s && !String(s.name || '').trim()) errors.push('Signature ' + (i + 1) + ' has no name.');
+      if (s && ((s.validFrom && !DAY.test(s.validFrom)) || (s.validUntil && !DAY.test(s.validUntil)))) errors.push('Signature ' + (i + 1) + ': the campaign\'s days are dates like 2026-12-01.');
+      else if (s && s.validFrom && s.validUntil && s.validFrom > s.validUntil) errors.push('Signature ' + (i + 1) + ': the campaign ends before it starts.');
     });
     return errors;
   }
@@ -469,6 +491,9 @@
     localImages: localImages,
     domainOf: domainOf,
     isAvailable: isAvailable,
+    inPeriod: inPeriod,
+    isCampaign: isCampaign,
+    today: today,
     available: available,
     pick: pick,
     groupsUsed: groupsUsed,

@@ -6,6 +6,9 @@
  *   OSIGN_GRAPH_CLIENT_ID           the server's app registration (not the add-in's)
  *   OSIGN_GRAPH_CLIENT_SECRET_FILE  its client secret, as a Docker secret
  *
+ * Or, instead of the secret, the server's own certificate (server/cert.js), which the setup
+ * script puts on the app: then the server signs in with a signed client assertion.
+ *
  * The app needs the application permission Sites.Selected with write access granted on that one
  * site (docs/SETUP.md), or Sites.ReadWrite.All, which reaches every site and is not recommended.
  *
@@ -16,10 +19,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { writeAtomic } = require('./store');
+const { clientAssertion } = require('./cert');
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function graphConfig(env) {
+function graphConfig(env, cert) {
   let secret = '';
   if (env.OSIGN_GRAPH_CLIENT_SECRET_FILE) { try { secret = fs.readFileSync(env.OSIGN_GRAPH_CLIENT_SECRET_FILE, 'utf8').trim(); } catch (e) { secret = ''; } }
   else secret = String(env.OSIGN_GRAPH_CLIENT_SECRET || '').trim();
@@ -27,6 +31,8 @@ function graphConfig(env) {
     tenantId: String(env.OSIGN_GRAPH_TENANT_ID || '').trim(),
     clientId: String(env.OSIGN_GRAPH_CLIENT_ID || '').trim(),
     secret,
+    // The certificate in use (server/cert.js): it wins over a secret.
+    cert: cert || null,
     // Only the tests point these elsewhere (a stand-in Graph).
     graphUrl: env.OSIGN_GRAPH_URL || 'https://graph.microsoft.com/v1.0',
     loginUrl: env.OSIGN_LOGIN_URL || 'https://login.microsoftonline.com'
@@ -37,7 +43,7 @@ function graphProblem(c) {
   if (!graphEnabled(c)) return '';
   if (!GUID.test(c.tenantId)) return 'The tenant ID is the Directory (tenant) ID, a GUID.';
   if (!GUID.test(c.clientId)) return "The client ID is the server's app registration's Application (client) ID, a GUID.";
-  if (!c.secret) return "The server's client secret is missing (secrets/graph_client_secret, or Server connections).";
+  if (!c.secret && !c.cert) return "The server's client secret is missing (secrets/graph_client_secret, or Server connections).";
   return '';
 }
 
@@ -54,14 +60,19 @@ function createGraph(c, opts) {
   let tok = null;
   async function token() {
     if (tok && tok.until > Date.now()) return tok.value;
-    const body = new URLSearchParams({ client_id: c.clientId, client_secret: c.secret, grant_type: 'client_credentials', scope: 'https://graph.microsoft.com/.default' });
+    const url = c.loginUrl + '/' + encodeURIComponent(c.tenantId) + '/oauth2/v2.0/token';
+    const body = new URLSearchParams({ client_id: c.clientId, grant_type: 'client_credentials', scope: 'https://graph.microsoft.com/.default' });
+    if (c.cert) {
+      body.set('client_assertion_type', 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
+      body.set('client_assertion', clientAssertion({ keyPem: c.cert.keyPem, x5t: c.cert.x5t, clientId: c.clientId, audience: url }));
+    } else body.set('client_secret', c.secret);
     let r;
-    try { r = await fetchFn(c.loginUrl + '/' + encodeURIComponent(c.tenantId) + '/oauth2/v2.0/token', { method: 'POST', body, signal: AbortSignal.timeout(15000) }); }
+    try { r = await fetchFn(url, { method: 'POST', body, signal: AbortSignal.timeout(15000) }); }
     catch (e) { throw new Error('Microsoft Entra ID cannot be reached from the server: ' + e.message); }
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.access_token) {
       const code = String(j.error_description || j.error || r.status).split(/\r?\n/)[0];
-      throw new Error("The server's app registration could not sign in (" + code.slice(0, 200) + '). Check the tenant ID, the client ID and the client secret.');
+      throw new Error("The server's app registration could not sign in (" + code.slice(0, 200) + '). Check the tenant ID, the client ID and ' + (c.cert ? "that the server's certificate is on the app registration (run the setup script again)." : 'the client secret.'));
     }
     // Used until five minutes before it ends.
     tok = { value: j.access_token, until: Date.now() + Math.max(60, (Number(j.expires_in) || 3600) - 300) * 1000 };
