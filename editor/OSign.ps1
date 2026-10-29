@@ -772,8 +772,12 @@ function Write-UserSnapshot([string]$Root, $Snapshot) {
 }
 
 # The scheduled export (-ExportUsers): read and write in one go, unattended.
+# A read that found nobody (a domain controller that answered nothing) would remove every user's
+# file, and with values from AD nobody would get a signature: then nothing is written.
 function Export-UsersToFolder([string]$Root, $Fields, [string[]]$GroupNames) {
-    return (Write-UserSnapshot $Root (New-UserSnapshot $Root $Fields $GroupNames))
+    $snap = New-UserSnapshot $Root $Fields $GroupNames
+    if (-not @($snap.entries).Count -and @($snap.removed).Count) { throw 'Active Directory returned no users: the files in users\ are left as they are.' }
+    return (Write-UserSnapshot $Root $snap)
 }
 
 function Read-ExportRequest($data) {

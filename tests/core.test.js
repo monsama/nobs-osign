@@ -176,3 +176,8 @@ test('value source: each field from Entra ID, from AD, or from nowhere', () => {
   assert.equal(core.userFileName("o'neil+x@example.com"), 'o_neil_x@example.com.json');
   assert.equal(core.userFileName('not-a-mail'), '');
 });
+
+test('the images of a signature are listed, a stray % in a name as it is', () => {
+  const list = core.localImages('<img src="assets/logo%20blue.png"><img src="photos/100%.jpg"><img src="https://x/y.png">');
+  assert.deepEqual(list.map((i) => i.dir + '/' + i.name), ['assets/logo blue.png', 'photos/100%.jpg']);
+});
