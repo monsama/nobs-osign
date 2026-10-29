@@ -193,7 +193,24 @@
   <span id="stSigs"></span>
   <span id="stTarget"></span>
   <span id="verFoot" class="sb-right"></span>
+  <button type="button" id="keysBtn" class="sb-keys" title="Keyboard shortcuts">? Shortcuts</button>
 </footer>
+
+<dialog id="dlgKeys">
+  <form method="dialog" class="dlg">
+    <h2>Keyboard shortcuts</h2>
+    <table class="keys">
+      <tr><td><kbd>Ctrl</kbd> + <kbd>S</kbd></td><td>Save the draft now</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Publish…</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd></td><td>Bold, italic, underline (in the design view)</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd> / <kbd>Y</kbd></td><td>Undo, redo</td></tr>
+      <tr><td><kbd>?</kbd></td><td>This list (outside a field)</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close a dialog</td></tr>
+    </table>
+    <p class="lead">On a Mac, use the Command key (⌘) instead of Ctrl.</p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
 
 <dialog id="dlgSettings">
   <form method="dialog" class="dlg wide">

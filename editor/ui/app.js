@@ -251,6 +251,7 @@
     designReady = new Promise((resolve) => {
       design.addEventListener('load', () => {
         ddoc = design.contentDocument;
+        ddoc.addEventListener('keydown', (e) => onKeys(e));
         ddoc.body.contentEditable = 'true';
         try { ddoc.execCommand('styleWithCSS', false, true); ddoc.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { }
         ddoc.addEventListener('input', onDesignInput);
@@ -1736,6 +1737,17 @@
     return out;
   }
 
+  // Keyboard shortcuts, in the page and in the design view (its own document).
+  function onKeys(e) {
+    const mod = e.ctrlKey || e.metaKey;
+    const inDialog = document.querySelector('dialog[open]');
+    if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); toast(t('Draft saved.')); return; }
+    if (mod && e.key === 'Enter' && !inDialog) { e.preventDefault(); $('btnPublish').click(); return; }
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable) || (e.target && e.target.ownerDocument === ddoc);
+    if (e.key === '?' && !mod && !typing && !inDialog) { e.preventDefault(); $('dlgKeys').showModal(); }
+  }
+  document.addEventListener('keydown', onKeys);
+  $('keysBtn').addEventListener('click', () => $('dlgKeys').showModal());
   $('btnPublish').addEventListener('click', async () => {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
