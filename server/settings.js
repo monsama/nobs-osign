@@ -23,7 +23,7 @@ function check(s) {
   if (s.addinUrl && !/^https:\/\/[^\s"<>'&]+$/.test(s.addinUrl)) return 'The add-in address is an https:// address, like https://osign.contoso.com/.';
   if (s.clientId && !GUID.test(s.clientId)) return "The client ID is the app registration's Application (client) ID, a GUID.";
   if (s.tenantId && !GUID.test(s.tenantId)) return 'The tenant ID is a Directory (tenant) ID, a GUID.';
-  if (s.spSite && !/^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/(sites|teams|personal)\/[^:/"\\\s]+:$/.test(s.spSite)) return 'The SharePoint site is root, <host>.sharepoint.com:/sites/<name>: or, for a OneDrive, <host>-my.sharepoint.com:/personal/<name>:';
+  if (s.spSite && !/^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/(sites|teams|personal)\/[A-Za-z0-9._-]+:$/.test(s.spSite)) return 'The SharePoint site is root, <host>.sharepoint.com:/sites/<name>: or, for a OneDrive, <host>-my.sharepoint.com:/personal/<name>:';
   if (s.addinHost && !['cloudflare', 'azure', 'iis', 'apache', 'other'].includes(s.addinHost)) return 'The web server is cloudflare, azure, iis, apache or other.';
   const f = String(s.spFolder || '').replace(/^\/+|\/+$/g, '');
   if (s.spFolder && (/["\\\u0000-\u001f]/.test(f) || f.split('/').some((p) => !p || p === '.' || p === '..'))) return 'The SharePoint folder is a folder like OSign.';

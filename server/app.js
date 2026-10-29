@@ -16,6 +16,7 @@ const { ldapConfig, ldapProblem } = require('./ldap');
 const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
+const { createSetup } = require('./setup');
 const addin = require('./addin');
 
 const VERSION = require('../package.json').version;
@@ -79,6 +80,13 @@ function sameSite(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
   try { return new URL(origin).host === String(req.headers.host || ''); } catch (e) { return false; }
+}
+
+// Who is asking: the shared proxy (Caddy) puts the client's address in X-Forwarded-For, replacing
+// what the client sent; without a proxy, the connection's own.
+function clientAddress(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return fwd.length ? fwd[fwd.length - 1] : String(req.socket.remoteAddress || '');
 }
 
 function createApp(opts) {
@@ -165,9 +173,22 @@ function createApp(opts) {
     settings.forget(); photos.clear();
   }
   configure();
+  // The setup script for Microsoft 365 (server/setup.js): one at a time, for an hour.
+  const setup = createSetup();
+  // Its result goes where the admin would type it, and takes effect at once.
+  async function setupApply(r) {
+    const c = connections.save({ values: { graphTenantId: r.tenantId, graphClientId: r.serverClientId }, secrets: { graphClientSecret: r.secret } });
+    if (c.error) return c;
+    const s = await settings.save({ clientId: r.addinClientId, tenantId: r.tenantId });
+    if (s.error) return s;
+    configure();
+    log.info('setup: the setup script set up Microsoft 365 (add-in ' + r.addinClientId + ', server ' + r.serverClientId + ')');
+    return {};
+  }
   // The connections are the local account admin's alone: whoever sets the directory's address
   // gets the passwords people sign in with.
   const adminOnly = (s) => (s.user.local ? '' : 'Only the local account admin can change the server\'s connections.');
+  const ADMIN_SETTINGS = ['addinUrl', 'clientId', 'tenantId', 'spSite', 'spFolder', 'addinHost'];
   function connectionsAnswer() {
     return Object.assign(connections.answer(), {
       problems: {
@@ -205,7 +226,26 @@ function createApp(opts) {
     'assets/upload': (d) => store.uploadAsset(d.name, d.data),
     'assets/delete': (d) => store.deleteAsset(d.name),
     'settings/get': () => settings.answer(),
-    'settings/save': (d) => settings.save(d.settings || {}),
+    // Where the server publishes and what the add-in is made with: the local account admin's, like
+    // the connections (the site goes into the setup script, the add-in's address is fetched).
+    'settings/save': (d, s) => {
+      const sent = d.settings || {}, now = settings.get();
+      if (!s.user.local && ADMIN_SETTINGS.some((k) => sent[k] !== undefined && sent[k] !== null && String(sent[k]).trim().replace(/[\\/]+$/, '') !== now[k])) {
+        return { error: 'Only the local account admin can change these settings.' };
+      }
+      return settings.save(sent);
+    },
+    // The setup script: made for this setup (the site and the add-in's address as saved), and
+    // whether it has sent its result yet.
+    'setup/start': (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
+      if (!connections.answer().keyOk) return { error: 'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
+      const st = settings.get();
+      return setup.start({ origin: String(d.origin || ''), site: st.spFolder ? st.spSite || 'root' : '', addinUrl: st.addinUrl, groups: !!d.groups,
+        // The apps of an earlier run, the only ones the script may use again.
+        knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
+    },
+    'setup/status': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : setup.status()),
     // The server's connections (Settings → Server connections), for the local account admin.
     'connections/get': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : connectionsAnswer()),
     'connections/save': (d, s) => {
@@ -235,11 +275,11 @@ function createApp(opts) {
     'addin/check': async () => {
       const s = settings.get();
       if (!s.addinUrl) return { error: 'Enter the address the add-in will be served from.' };
-      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Make the add-in files first.' };
+      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
       return addin.check(s.addinUrl, addinDir, fetchFn);
     },
     'addin/upload': async () => {
-      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Make the add-in files first.' };
+      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
       try { return await addin.pagesDeploy(pages, addinDir, fetchFn); } catch (e) { return { error: e.message }; }
     },
     // Active Directory, with the service account.
@@ -310,11 +350,18 @@ function createApp(opts) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
 
     if (name === 'login') {
-      const r = await auth.login(data.login, data.password);
+      const r = await auth.login(data.login, data.password, clientAddress(req));
       if (r.error) return fail(res, r.error, r.status);
       return ok(res, { user: { login: r.user.login, name: r.user.name } }, { 'Set-Cookie': r.cookie });
     }
     if (name === 'login-methods') return ok(res, auth.methods());
+    // The setup script sends its result with its one-time code, not with a session.
+    if (name === 'setup/finish') {
+      const r = setup.finish(data);
+      if (r.error) return fail(res, r.error, r.status);
+      if (r.data) { const a = await setupApply(r.data); if (a.error) return fail(res, a.error); }
+      return ok(res, {});
+    }
     if (name === 'logout') return ok(res, {}, { 'Set-Cookie': auth.logout(req) });
 
     const s = auth.session(req);
@@ -353,9 +400,15 @@ function createApp(opts) {
       if (!s) return send(res, 401, 'text/plain; charset=utf-8', '401 Not signed in');
       if (pathname === '/shared/signature-core.js') return sendFile(res, path.dirname(CORE_FILE), path.basename(CORE_FILE), STATIC_TYPES);
       if (pathname.startsWith('/ui/')) return sendFile(res, UI_DIR, pathname.slice(4), STATIC_TYPES);
+      // The setup script, for the local account admin (made by setup/start).
+      if (pathname === '/setup/nobs-osign-setup.ps1') {
+        const text = s.user.local ? setup.script(new URL(req.url, 'http://x').searchParams.get('id') || '') : null;
+        if (!text) return send(res, 404, 'text/plain; charset=utf-8', 'Download the setup script again in the setup assistant.');
+        return send(res, 200, 'text/plain; charset=utf-8', text, { 'Content-Disposition': 'attachment; filename="nobs-osign-setup.ps1"' });
+      }
       // The add-in's files as last made, to upload by hand.
       if (pathname === '/addin.zip') {
-        if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return send(res, 404, 'text/plain; charset=utf-8', 'Make the add-in files first.');
+        if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return send(res, 404, 'text/plain; charset=utf-8', 'Create the add-in files first.');
         return send(res, 200, 'application/zip', addin.zip(addinDir), { 'Content-Disposition': 'attachment; filename="osign-addin.zip"' });
       }
       if (pathname.startsWith('/assets/')) return sendFile(res, store.assetDir, pathname.slice(8), ASSET_TYPES);

@@ -48,8 +48,8 @@ function ldapProblem(c) {
   if (!c.bindTemplate.includes('{login}')) return 'The sign-in name names where the login goes, like {login}@example.ch.';
   if (!c.searchBase) return 'Where the users are is not set (like OU=Users,DC=example,DC=ch).';
   if (!c.group) return 'The sign-in group is not set: without it, every account in the directory could sign in.';
-  if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(c.loginAttr)) return 'OSIGN_LDAP_LOGIN_ATTR is the name of one attribute, such as sAMAccountName.';
-  if (/^ldap:\/\//i.test(c.url) && !c.startTls && !c.allowPlain) return 'OSIGN_LDAP_URL starts with ldap://, which sends passwords unencrypted. Use ldaps://, or set OSIGN_LDAP_STARTTLS=1.';
+  if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(c.loginAttr)) return 'The login attribute is the name of one attribute, such as sAMAccountName.';
+  if (/^ldap:\/\//i.test(c.url) && !c.startTls && !c.allowPlain) return "The domain controller's address starts with ldap://, which sends passwords unencrypted. Use ldaps://, or turn on StartTLS.";
   return '';
 }
 

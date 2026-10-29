@@ -32,7 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$script:AppVersion = '0.6.2'
+$script:AppVersion = '0.7.0'
 $script:OnWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($IsWindows -eq $true)
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
 
@@ -550,7 +550,7 @@ function Test-AddinOnline([string]$Base, [string]$Dir) {
 function Api-AddinCheck {
     $s = Get-Settings
     if (-not $s.addinUrl) { return (Fail 'Enter the address the add-in will be served from.') }
-    if (-not $s.addinFolder -or -not (Test-Path -LiteralPath (Join-Path $s.addinFolder 'manifest.xml'))) { return (Fail 'Make the add-in files first.') }
+    if (-not $s.addinFolder -or -not (Test-Path -LiteralPath (Join-Path $s.addinFolder 'manifest.xml'))) { return (Fail 'Create the add-in files first.') }
     $checks = Test-AddinOnline $s.addinUrl $s.addinFolder
     return (Ok @{ checks = $checks; allOk = -not @($checks | Where-Object { -not $_.ok -and $_.what -ne 'Cache-Control' }).Count })
 }

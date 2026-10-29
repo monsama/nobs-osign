@@ -57,6 +57,8 @@ proxy_find() {
 proxy_site() {
     local host short names
     host="$(env_get OSIGN_HOST)"
+    # A name and nothing else, as the deploy script checks it: it goes into the proxy's site file.
+    [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]] || fail "OSIGN_HOST in .env is not a host name: $host"
     names="https://$host"; short="${host%%.*}"; [ "$short" != "$host" ] && names="$names, https://$short"
     { echo "# NOBS OSign. Written from OSIGN_HOST by deploy-nobs-osign.sh and scripts/update.sh of NOBS OSign: a change here is overwritten."
       echo "$names {"

@@ -46,6 +46,8 @@ step_env() {
         if [ -t 0 ]; then read -r -p "Name people will type (e.g. osign.example.ch): " host; fi
         if [ -z "$host" ] || [ "$host" = osign.example.ch ]; then fail "Set OSIGN_HOST, e.g. OSIGN_HOST=osign.example.ch sudo ./deploy-nobs-osign.sh"; fi
     fi
+    # A name and nothing else: it goes into the proxy's site file.
+    [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]] || fail "OSIGN_HOST is a host name like osign.example.ch: $host"
     env_set OSIGN_HOST "$host"
     # The image follows the release that was installed. A custom image name is kept as it is.
     local img; img="$(env_get OSIGN_IMAGE)"

@@ -111,7 +111,7 @@ test('make, preview and publish a signature', { skip }, async () => {
 
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
-  assert.match(await page.textContent('#pubChecks'), /Not fields, left as typed: @@nope/);
+  assert.match(await page.textContent('#pubChecks'), /Unknown placeholders, left as typed: @@nope/);
   await page.fill('#pubMsg', 'First signatures');
   await page.click('#pubGo');
   await page.waitForFunction(() => /Published/.test(document.querySelector('#pubOk').textContent));
@@ -317,8 +317,8 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   await page.fill('#wizClientId', 'nope');
   await nextFails(/GUID/);
   await page.fill('#wizClientId', '11111111-2222-3333-4444-555555555555');
-  await next("Make the add-in's files");
-  await nextFails(/Make the add-in files first/);
+  await next("Create the add-in files");
+  await nextFails(/Create the add-in files first/);
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-ui-addin-'));
   await page.fill('#wizAddinFolder', out);
   await page.click('#wizMake');

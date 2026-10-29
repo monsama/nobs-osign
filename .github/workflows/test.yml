@@ -42,6 +42,10 @@ jobs:
       - run: node --test tests/editor.test.js tests/ui.test.js
         env:
           OSIGN_TEST_SHELL: ${{ matrix.shell }}
+      # The setup script for Microsoft 365, in this shell: a step of its own, not next to the UI test.
+      - run: node --test tests/server-setup.test.js
+        env:
+          OSIGN_TEST_SHELL: ${{ matrix.shell }}
 
   # The server's image: it builds, starts, answers its health check and shows the sign-in page;
   # and the scripts that install and update it pass shellcheck.

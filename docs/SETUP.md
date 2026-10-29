@@ -105,7 +105,7 @@ server only reachable inside the network means signatures only inside the networ
   It makes Outlook check for a newer version before using its copy, so updates arrive within
   minutes. For another server, have it send `Cache-Control: no-cache`.
 
-Click **Make the add-in files**, then copy the folder's content to the web server. The setup
+Click **Create the add-in files**, then copy the folder's content to the web server. The setup
 assistant's last step, **Check the address**, then confirms that the files there are the ones made
 here.
 
@@ -234,8 +234,19 @@ Token**, with the permission *Account → Cloudflare Pages → Edit* for your ac
 account ID (on the account's overview page) and a project name in Settings → Server connections (or
 `secrets/cf_api_token`, `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT` in `.env`); the project is made on
 the first upload. The
-setup assistant's step *Make the add-in's files* then uploads them; *Download as ZIP* is there for
+setup assistant's step *Create the add-in files* then uploads them; *Download as ZIP* is there for
 an upload by hand.
+
+**The setup script does all of Entra ID.** In the setup assistant's step *Register the app in
+Entra ID*, **Download the setup script**, and run it on a Windows PC
+(`powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"`). Signed in once in the
+browser as a SharePoint or Global administrator (through *Microsoft Graph Command Line Tools*,
+Microsoft's own app for Graph scripts), it makes the add-in's app registration *NOBS OSign* and the
+server's *NOBS OSign server* as described here, with admin consent and a client secret, gives the
+server's write access to the one site, and sends the IDs and the secret straight to the server
+(with a one-time code, valid for an hour; no session, no copying). Then it takes back the consent
+it was given for this, and deletes itself. Apps that are there by name are used again, so it can
+run again (a new secret each time). By hand, as follows:
 
 **Its own app registration**, not the add-in's: the add-in reads with each user's sign-in, the
 server writes with its own.

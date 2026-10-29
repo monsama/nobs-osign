@@ -92,7 +92,7 @@ On the first start, the editor's **setup assistant** walks through all of it.
    ```
    In Settings, pick the synced `OSign` folder. Import or make the signatures and click **Publish**.
 4. **The add-in's files:** in Settings → *Outlook add-in*, enter the address they will be served
-   from and the app's client ID, click **Make the add-in files**, and copy that folder to the web
+   from and the app's client ID, click **Create the add-in files**, and copy that folder to the web
    server.
 5. **Microsoft 365 admin center:** Settings → Integrated apps → Upload custom apps, with
    `https://<host of the add-in>/manifest.xml`, and assign it to the users.

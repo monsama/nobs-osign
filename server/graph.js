@@ -35,9 +35,9 @@ function graphConfig(env) {
 const graphEnabled = (c) => !!(c.tenantId || c.clientId);
 function graphProblem(c) {
   if (!graphEnabled(c)) return '';
-  if (!GUID.test(c.tenantId)) return 'OSIGN_GRAPH_TENANT_ID is the Directory (tenant) ID, a GUID.';
-  if (!GUID.test(c.clientId)) return "OSIGN_GRAPH_CLIENT_ID is the server's app registration's Application (client) ID, a GUID.";
-  if (!c.secret) return "The server's client secret is missing (secrets/graph_client_secret).";
+  if (!GUID.test(c.tenantId)) return 'The tenant ID is the Directory (tenant) ID, a GUID.';
+  if (!GUID.test(c.clientId)) return "The client ID is the server's app registration's Application (client) ID, a GUID.";
+  if (!c.secret) return "The server's client secret is missing (secrets/graph_client_secret, or Server connections).";
   return '';
 }
 
