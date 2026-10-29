@@ -244,13 +244,16 @@
     return m ? (m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : '';
   }
 
+  // A % that starts no escape ("photos/100%.jpg", a user name with a %) is the name as it is.
+  function decodeName(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+
   // The images a rendered signature loads from its own folders, as { tag, src, dir, name }:
   // what the add-in has to fetch and embed.
   function localImages(html) {
     var out = [], re = /<img\b[^>]*>/gi, m;
     while ((m = re.exec(String(html || '')))) {
       var src = imgSrc(m[0]), mm = /^(assets|photos)\/([^/?#]+)$/i.exec(src);
-      if (mm) out.push({ tag: m[0], src: src, dir: mm[1].toLowerCase(), name: decodeURIComponent(mm[2]) });
+      if (mm) out.push({ tag: m[0], src: src, dir: mm[1].toLowerCase(), name: decodeName(mm[2]) });
     }
     return out;
   }

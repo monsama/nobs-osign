@@ -79,11 +79,19 @@ async function graphGet(token, url, what, allowNotFound) {
   return r.json();
 }
 
+// MSAL keeps the token and renews it; this only saves asking it again for each call of one message.
+// Kept well below a token's life (an hour at least): a runtime Outlook reuses never sends an expired one.
+const TOKEN_REUSE_MS = 10 * 60 * 1000;
 let tokens = {};
 async function token(scopes, interactive) {
   const key = scopes.join(' ');
-  if (!tokens[key] || interactive) tokens[key] = getGraphToken(interactive, scopes).catch((e) => { delete tokens[key]; throw e; });
-  return tokens[key];
+  const had = tokens[key];
+  if (!had || interactive || Date.now() - had.at > TOKEN_REUSE_MS) {
+    const entry = { at: Date.now() };
+    entry.p = getGraphToken(interactive, scopes).catch((e) => { if (tokens[key] === entry) delete tokens[key]; throw e; });
+    tokens[key] = entry;
+  }
+  return tokens[key].p;
 }
 
 // A file in the OSign folder, by its path in there ("signatures.json", "assets/logo.png").
