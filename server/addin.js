@@ -113,7 +113,7 @@ function pagesConfig(env) {
 }
 const pagesEnabled = (c) => !!(c.account || c.project);
 function pagesProblem(c) {
-  if (!pagesEnabled(c)) return 'Uploading to Cloudflare Pages is not set up on the server (OSIGN_CF_* in .env).';
+  if (!pagesEnabled(c)) return 'Uploading to Cloudflare Pages is not set up on the server (Settings → Server connections).';
   if (!/^[0-9a-f]{32}$/i.test(c.account)) return 'OSIGN_CF_ACCOUNT_ID is the Cloudflare account ID (32 letters and digits, on the account\'s overview page).';
   if (!/^[a-z0-9][a-z0-9-]{0,57}$/.test(c.project)) return 'OSIGN_CF_PROJECT is a Pages project name: lower-case letters, digits and -.';
   if (!c.token) return 'The Cloudflare API token is missing (secrets/cf_api_token).';

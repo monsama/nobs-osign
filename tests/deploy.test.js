@@ -27,7 +27,7 @@ test('every setting in .env.example reaches the container (or is the install\'s 
 
 test('every secret is made by deploy-nobs-osign.sh, and read from its file', () => {
   const secrets = [...compose.matchAll(/^\s{2}([a-z_]+):\n\s+file: \.\/secrets\/\1$/gm)].map((m) => m[1]);
-  assert.deepEqual(secrets.sort(), ['admin_password', 'cf_api_token', 'graph_client_secret', 'ldap_service_password']);
+  assert.deepEqual(secrets.sort(), ['admin_password', 'app_key', 'cf_api_token', 'graph_client_secret', 'ldap_service_password']);
   const deploy = read('deploy-nobs-osign.sh');
   for (const s of secrets) {
     assert.ok(deploy.includes(s), s + ' is not made by deploy-nobs-osign.sh');

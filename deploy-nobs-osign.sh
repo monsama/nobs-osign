@@ -65,6 +65,7 @@ step_secrets() {
     else
         info "secrets/admin_password exists - kept"
     fi
+    app_key_ensure
     for s in ldap_service_password graph_client_secret cf_api_token; do
         [ -f "secrets/$s" ] || { ( umask 077; : > "secrets/$s" ); info "secrets/$s created (empty until you fill it in)"; }
     done

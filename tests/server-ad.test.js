@@ -186,8 +186,8 @@ test('without a service account AD says what is missing', async () => {
   const call = (n, d) => fetch(at + '/api/' + n, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: c }, body: JSON.stringify(d || {}) }).then((r) => r.json());
   const info = await call('info');
   assert.equal(info.features.adLookup, false);
-  assert.match(info.features.adProblem, /OSIGN_LDAP_SERVICE_DN/);
-  assert.match((await call('ad/lookup', { query: 'x' })).error, /OSIGN_LDAP_SERVICE_DN/);
-  assert.match((await call('ad/read', { fields: FIELDS })).error, /OSIGN_LDAP_SERVICE_DN/);
+  assert.match(info.features.adProblem, /no service account/);
+  assert.match((await call('ad/lookup', { query: 'x' })).error, /no service account/);
+  assert.match((await call('ad/read', { fields: FIELDS })).error, /no service account/);
   other.close();
 });

@@ -14,6 +14,16 @@ env_set() { sed -i -E "/^$1=/d" .env; echo "$1=$2" >> .env; }
 
 compose() { docker compose -p "$PROJECT" "$@"; }
 
+# The key the passwords set in the editor are kept with (secrets/app_key): made once, never changed;
+# without it they cannot be read. Readable by the app's user (UID 1000) only.
+app_key_ensure() {
+    [ -s secrets/app_key ] && return 0
+    mkdir -p secrets; chmod 700 secrets
+    ( umask 077; openssl rand -base64 48 | tr -d '\n' > secrets/app_key )
+    chown 1000:1000 secrets/app_key; chmod 400 secrets/app_key
+    info "secrets/app_key generated"
+}
+
 # The image of the release in this folder: the version in docker-compose.yml.
 release_image() { grep -oE 'ghcr\.io/monsama/nobs-osign:[0-9]+\.[0-9]+\.[0-9]+' docker-compose.yml | head -1; }
 

@@ -47,6 +47,14 @@ asked.
   them. **addin/upload** → `{ ok, id, url, uploaded, files }` uploads them to Cloudflare Pages
   (Direct Upload; `features.pagesUpload`, `features.pagesProblem`). `GET /addin.zip` gives them as a
   ZIP, to upload by hand.
+- **connections/get** → `{ ok, keyOk, fields, secrets, ca, passwordPinned, problems }`: the
+  server's connections (server/connections.js), for the local account `admin` only (anyone else:
+  `ok: false`). `fields.<name>` is `{ value, env }`: what is saved, and what `.env` gives (it counts
+  when `value` is empty). `secrets.<name>` is `{ saved, readable, file, fileName }`, never the value.
+  `problems` says per connection (`signIn`, `directory`, `graph`, `pages`) what is missing, or `''`.
+- **connections/save** `{ values: { <name>: text }, secrets: { <name>: text | null }, ca: base64 | null }`
+  → like `connections/get`. A value `''` goes back to `.env`; a secret `null` is removed, one not
+  sent stays; `ca` is a CA certificate file (.cer or PEM). Takes effect at once.
 - **sp/check** `{ spSite, spFolder }` → `{ ok, found, photos, where }`: whether the server reaches
   that folder, before it is saved (the setup assistant). `found: false` means the site is reached
   and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows, OneDrive, or is not in the server version yet (`pick-folder`,

@@ -192,6 +192,8 @@
     <h2>Settings</h2>
     <label>Language<select id="setLang"></select></label>
     <p id="setServerWhere" class="lead" hidden></p>
+    <p id="setConnRow" hidden><button type="button" id="setConn">Server connections…</button>
+      <small>Active Directory, SharePoint and Cloudflare: the server's own settings, for the local account admin.</small></p>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
       <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
       <small id="setFolderNote"></small> <small id="setWhere" class="where"></small>
@@ -228,6 +230,65 @@
     <div class="dlg-foot">
       <button value="cancel" class="ghost" formnovalidate>Cancel</button>
       <button id="setSave" value="default" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgConn">
+  <form method="dialog" class="dlg wide">
+    <h2>Server connections</h2>
+    <p class="lead">What is set here wins over .env; an empty field takes the value .env gives (shown in grey).
+      Passwords and the token are kept encrypted on the server and never shown again: type one to replace it.</p>
+    <p id="connKey" class="err" hidden>The server has no key to keep passwords with (secrets/app_key): run sudo ./deploy-nobs-osign.sh
+      again. Until then, passwords and the token go in ./secrets.</p>
+
+    <h3>Sign-in with Active Directory</h3>
+    <p id="connSignIn" class="lead"></p>
+    <div class="grid2">
+      <label>Domain controller <small>(ldaps://, port 636)</small><input id="cn_ldapUrl" data-ph="ldaps://dc01.example.ch" autocomplete="off"></label>
+      <label>StartTLS <small>(only for an ldap:// address)</small><select id="cn_ldapStartTls"><option value="">As in .env</option><option value="on">On</option><option value="off">Off</option></select></label>
+      <label>Sign-in name <small>({login} is what people type)</small><input id="cn_ldapBind" data-ph="{login}@example.ch" autocomplete="off"></label>
+      <label>Where the users are<input id="cn_ldapBase" data-ph="OU=Users,DC=example,DC=ch" autocomplete="off"></label>
+      <label>Sign-in group <small>(its members may use the editor; nested groups count)</small><input id="cn_ldapGroup" data-ph="CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch" autocomplete="off"></label>
+      <label>Login attribute<input id="cn_ldapLoginAttr" data-ph="sAMAccountName" autocomplete="off"></label>
+    </div>
+    <label>CA certificate of the domain controller <small>(when it comes from your own CA: .cer, .crt or .pem)</small>
+      <span class="pick"><input id="connCaFile" type="file" accept=".cer,.crt,.pem"><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
+      <small id="connCa"></small>
+    </label>
+
+    <h3>Values from AD: the service account</h3>
+    <p id="connDirectory" class="lead"></p>
+    <div class="grid2">
+      <label>Service account <small>(read-only)</small><input id="cn_ldapServiceDn" data-ph="CN=svc-osign,OU=Service,DC=example,DC=ch" autocomplete="off"></label>
+      <label>Its password<span class="pick"><input id="cs_ldapServicePassword" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="ldapServicePassword" hidden>Remove</button></span>
+        <small id="cx_ldapServicePassword"></small></label>
+      <label>Where users and groups are read <small>(empty: the whole domain)</small><input id="cn_ldapDirectoryBase" data-ph="DC=example,DC=ch" autocomplete="off"></label>
+      <label>Export the users' values every day at<input id="cn_adExportAt" data-ph="06:00" autocomplete="off"></label>
+    </div>
+
+    <h3>Publishing into SharePoint (Microsoft Graph)</h3>
+    <p id="connGraph" class="lead"></p>
+    <div class="grid2">
+      <label>Tenant ID<input id="cn_graphTenantId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
+      <label>Client ID <small>(the server's app registration, not the add-in's)</small><input id="cn_graphClientId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></label>
+      <label>Client secret<span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span>
+        <small id="cx_graphClientSecret"></small></label>
+    </div>
+
+    <h3>The add-in's files to Cloudflare Pages</h3>
+    <p id="connPages" class="lead"></p>
+    <div class="grid2">
+      <label>Account ID<input id="cn_cfAccountId" data-ph="0123456789abcdef0123456789abcdef" autocomplete="off"></label>
+      <label>Pages project<input id="cn_cfProject" data-ph="company-osign" autocomplete="off"></label>
+      <label>API token <small>(Cloudflare Pages: Edit)</small><span class="pick"><input id="cs_cfApiToken" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="cfApiToken" hidden>Remove</button></span>
+        <small id="cx_cfApiToken"></small></label>
+    </div>
+
+    <p id="connErr" class="err"></p>
+    <div class="dlg-foot">
+      <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+      <button id="connSave" value="default" class="primary">Save</button>
     </div>
   </form>
 </dialog>
