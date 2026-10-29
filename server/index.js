@@ -11,5 +11,5 @@ const server = http.createServer(createApp());
 // A client that sends its request slowly holds a connection; not for long.
 server.requestTimeout = 60000;
 server.headersTimeout = 20000;
-server.listen(port, () => console.info('OSign ' + require('../package.json').version + ' listening on port ' + port));
+server.listen(port, () => console.info('NOBS OSign ' + require('../package.json').version + ' listening on port ' + port));
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => server.close(() => process.exit(0)));

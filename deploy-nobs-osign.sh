@@ -1,8 +1,8 @@
 #!/bin/bash
 # ============================================================
-# deploy-osign.sh - the OSign editor with Docker Compose, behind the shared proxy of NOBS Inventory
+# deploy-nobs-osign.sh - the NOBS OSign editor with Docker Compose, behind the shared proxy of NOBS Inventory
 #
-#   sudo ./deploy-osign.sh        first install, or re-run after changes (safe to repeat)
+#   sudo ./deploy-nobs-osign.sh        first install, or re-run after changes (safe to repeat)
 #
 # Creates (never overwrites existing values):
 #   .env                         non-secret settings (from .env.example)
@@ -11,7 +11,7 @@
 #                                empty until you fill them in (see .env.example)
 #
 # Then starts the app, waits until it is healthy, and adds its site to the shared proxy (nobs-proxy,
-# installed with NOBS Inventory): osign.caddy in the proxy's sites, reloaded. Nothing is opened to
+# installed with NOBS Inventory): nobs-osign.caddy in the proxy's sites, reloaded. Nothing is opened to
 # the internet.
 #
 # Environment overrides (optional):
@@ -44,12 +44,12 @@ step_env() {
     [ -n "$host" ] || host="$(env_get OSIGN_HOST)"
     if [ -z "$host" ] || [ "$host" = osign.example.ch ]; then
         if [ -t 0 ]; then read -r -p "Name people will type (e.g. osign.example.ch): " host; fi
-        if [ -z "$host" ] || [ "$host" = osign.example.ch ]; then fail "Set OSIGN_HOST, e.g. OSIGN_HOST=osign.example.ch sudo ./deploy-osign.sh"; fi
+        if [ -z "$host" ] || [ "$host" = osign.example.ch ]; then fail "Set OSIGN_HOST, e.g. OSIGN_HOST=osign.example.ch sudo ./deploy-nobs-osign.sh"; fi
     fi
     env_set OSIGN_HOST "$host"
     # The image follows the release that was installed. A custom image name is kept as it is.
     local img; img="$(env_get OSIGN_IMAGE)"
-    if [ -z "$img" ] || [[ "$img" == ghcr.io/monsama/osign:* ]]; then env_set OSIGN_IMAGE "$(release_image)"; fi
+    if [ -z "$img" ] || [[ "$img" == ghcr.io/monsama/nobs-osign:* ]]; then env_set OSIGN_IMAGE "$(release_image)"; fi
     chmod 640 .env
     info ".env: OSIGN_HOST=$host, OSIGN_IMAGE=$(env_get OSIGN_IMAGE)"
 }
@@ -80,16 +80,16 @@ step_start() {
     else warn "Could not pull $image - building it from this folder instead."; docker build -t "$image" . >/dev/null; fi
     proxy_network
     compose up -d --no-build
-    wait_healthy || fail "The app did not become healthy. See: docker logs osign"
+    wait_healthy || fail "The app did not become healthy. See: docker logs nobs-osign"
     info "App healthy"
 }
 
 step_proxy() {
     echo; echo "Step 5: Shared proxy (HTTPS)"
-    proxy_find || { warn "The shared proxy (nobs-proxy) is not running here: install NOBS Inventory first, or put your own proxy in front of osign:8080 on the Docker network nobs-proxy."; return 0; }
+    proxy_find || { warn "The shared proxy (nobs-proxy) is not running here: install NOBS Inventory first, or put your own proxy in front of nobs-osign:8080 on the Docker network nobs-proxy."; return 0; }
     proxy_site
     docker restart nobs-proxy >/dev/null
-    info "Site added: $PROXY_DIR/sites/osign.caddy (proxy reloaded)"
+    info "Site added: $PROXY_DIR/sites/nobs-osign.caddy (proxy reloaded)"
     local host code; host="$(env_get OSIGN_HOST)"; sleep 3
     code="$(curl -sk -o /dev/null -w '%{http_code}' --resolve "$host:443:127.0.0.1" "https://$host/health" || true)"
     if [ "$code" = 200 ]; then info "HTTPS OK: https://$host/"; else warn "HTTPS check returned ${code:-none}. Check: docker logs nobs-proxy"; fi
@@ -99,19 +99,19 @@ step_cron() {
     echo; echo "Step 6: Backups"
     if [ "$INSTALL_BACKUP_CRON" != true ]; then info "Daily backup not installed (INSTALL_BACKUP_CRON=false)"; return; fi
     if [ "$(id -u)" -ne 0 ]; then warn "Not root - daily backup cron not installed."; return; fi
-    cat > /etc/cron.d/osign-backup <<CRON
-# OSign backup - installed by deploy-osign.sh
+    cat > /etc/cron.d/nobs-osign-backup <<CRON
+# NOBS OSign backup - installed by deploy-nobs-osign.sh
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-25 3 * * * root $BASE_DIR/scripts/backup.sh >> /var/log/osign-backup.log 2>&1
+25 3 * * * root $BASE_DIR/scripts/backup.sh >> /var/log/nobs-osign-backup.log 2>&1
 CRON
-    chmod 644 /etc/cron.d/osign-backup
-    info "Daily backup at 03:25 -> $BASE_DIR/backup/ (log: /var/log/osign-backup.log)"
+    chmod 644 /etc/cron.d/nobs-osign-backup
+    info "Daily backup at 03:25 -> $BASE_DIR/backup/ (log: /var/log/nobs-osign-backup.log)"
 }
 
 summary() {
     echo; echo "=========================================="
-    echo "  OSign is running"
+    echo "  NOBS OSign is running"
     echo "=========================================="
     echo "  URL:     https://$(env_get OSIGN_HOST)/"
     if [ -n "$FIRST_PASSWORD" ]; then
@@ -122,9 +122,9 @@ summary() {
         echo "  Admin:   login 'admin'. Password: $BASE_DIR/secrets/admin_password (sudo cat to read it)"
     fi
     echo "  Next:    fill in .env and ./secrets (Active Directory, Graph, Cloudflare; docs/SETUP.md),"
-    echo "           then sudo ./deploy-osign.sh again. The setup assistant in the editor does the rest."
+    echo "           then sudo ./deploy-nobs-osign.sh again. The setup assistant in the editor does the rest."
     echo "  Update:  sudo ./scripts/update.sh      Backup: sudo ./scripts/backup.sh"
-    echo "  Logs:    docker logs -f osign"
+    echo "  Logs:    docker logs -f nobs-osign"
     echo "=========================================="
 }
 

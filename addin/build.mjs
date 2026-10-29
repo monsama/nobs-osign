@@ -67,9 +67,9 @@ if (left) throw new Error('manifest.template.xml: ' + left[0] + ' is not filled 
 fs.writeFileSync(path.join(template, 'manifest.xml'), manifest);
 
 // A page for whoever opens the address in a browser.
-fs.writeFileSync(path.join(template, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OSign</title>
+fs.writeFileSync(path.join(template, 'index.html'), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NOBS OSign</title>
 <style>body{font:15px/1.5 "Segoe UI",system-ui,Arial,sans-serif;max-width:640px;margin:48px auto;padding:0 16px;color:#1d2330}code{background:#f2f4f7;padding:1px 5px;border-radius:4px}</style></head>
-<body><h1><img src="assets/icon-64.png" alt="" width="32" height="32" style="vertical-align:-6px"> OSign</h1>
+<body><h1><img src="assets/icon-64.png" alt="" width="32" height="32" style="vertical-align:-6px"> NOBS OSign</h1>
 <p>The Outlook add-in that inserts the company signature. Version ${xmlEscape(pkg.version)}.</p>
 <p>Admins: upload <a href="manifest.xml">manifest.xml</a> in the Microsoft 365 admin center, under Settings → Integrated apps → Upload custom apps.</p>
 </body></html>`);

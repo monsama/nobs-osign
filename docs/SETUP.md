@@ -1,4 +1,4 @@
-# Setting up OSign
+# Setting up NOBS OSign
 
 You do this once. Afterwards, changing a signature only means editing it and clicking **Publish**.
 
@@ -7,7 +7,7 @@ and walks through steps 1–3 and 5, saving each one, with what to do in SharePo
 host and the admin center. It can be opened again any time: **Settings → Setup assistant**. This
 page has the same steps in full.
 
-OSign does not need GitHub to run: you download the release once, and everything else is the
+NOBS OSign does not need GitHub to run: you download the release once, and everything else is the
 company's own. The add-in's code is served from your own web server; the signatures, images and
 photos live in the company's own SharePoint.
 
@@ -32,10 +32,10 @@ has that site, so the add-in finds it without being told.
 itself:
 
 - **SharePoint link:** open the folder in SharePoint in the browser and paste the address from the
-  address bar. OSign finds the folder on this PC that OneDrive syncs it to. The library has to be
-  synced with *Sync* (OSign publishes through OneDrive). Sharing links (*Copy link*) usually do not
+  address bar. NOBS OSign finds the folder on this PC that OneDrive syncs it to. The library has to be
+  synced with *Sync* (NOBS OSign publishes through OneDrive). Sharing links (*Copy link*) usually do not
   say which folder they are; use the address bar.
-- **An existing folder on this PC:** choose it with **Choose folder…**; OSign finds out where it is in
+- **An existing folder on this PC:** choose it with **Choose folder…**; NOBS OSign finds out where it is in
   SharePoint from OneDrive's own notes and shows it (e.g. *✓ In SharePoint: IT › Documents ›
   General › OSign*). For a folder added with *Add shortcut to My files* OneDrive does not note which
   folder it is: use the SharePoint link instead.
@@ -45,7 +45,7 @@ Your OneDrive is readable only by you: good for testing. For the rollout, take a
 
 Another site or folder by hand: set it in the editor (setup assistant step 1, or Settings →
 *Outlook add-in*) before making the add-in's files (step 3). *SharePoint site*: paste the folder's address from
-the browser or a sharing link to it (*Share → Copy link*); OSign takes the site from it, and the
+the browser or a sharing link to it (*Share → Copy link*); NOBS OSign takes the site from it, and the
 folder where the address names it. Or write it as `<host>.sharepoint.com:/sites/<name>:` (also `/teams/<name>`). *Folder in
 its library*: the path within *Documents*, e.g. `General/OSign` in a team's channel folder.
 
@@ -109,13 +109,13 @@ Click **Make the add-in files**, then copy the folder's content to the web serve
 assistant's last step, **Check the address**, then confirms that the files there are the ones made
 here.
 
-The files only have to be made again for a new OSign version or when these settings change, never
+The files only have to be made again for a new NOBS OSign version or when these settings change, never
 for a new signature. After a new version, upload the new `manifest.xml` in the admin center too
 (step 5).
 
 ## 4. The editor
 
-1. Download `OSign-vX.Y.Z.zip` from the releases once and unpack it, e.g. to `C:\Tools\OSign`. It
+1. Download `NOBS-OSign-vX.Y.Z.zip` from the releases once and unpack it, e.g. to `C:\Tools\OSign`. It
    holds the editor and the add-in's files (`addin\`). From a clone of the repository, run
    `npm ci` and `npm run build` first, so the add-in's files are there.
 2. Run:
@@ -183,7 +183,7 @@ the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**
 ## 6. What users see
 
 - A new message, reply or forward gets its signature by itself, images included.
-- **OSign → Signatures** in the message toolbar opens the pane: insert another signature, or choose
+- **NOBS OSign → Signatures** in the message toolbar opens the pane: insert another signature, or choose
   the one for new mail and for replies (if allowed under *Add-in*).
 
 ## The editor on a server (Docker)
@@ -197,26 +197,26 @@ Pages. Nothing on the server is reachable from the internet.
 **Install** (on the server, with NOBS Inventory and its proxy running):
 
 ```bash
-mkdir -p /opt/osign && cd /opt/osign
-curl -fsSLO https://github.com/monsama/osign/releases/download/vX.Y.Z/osign-server-X.Y.Z.tar.gz
-tar -xzf osign-server-X.Y.Z.tar.gz --strip-components=1
-sudo OSIGN_HOST=osign.example.ch ./deploy-osign.sh
+mkdir -p /opt/nobs-osign && cd /opt/nobs-osign
+curl -fsSLO https://github.com/monsama/osign/releases/download/vX.Y.Z/nobs-osign-server-X.Y.Z.tar.gz
+tar -xzf nobs-osign-server-X.Y.Z.tar.gz --strip-components=1
+sudo OSIGN_HOST=osign.example.ch ./deploy-nobs-osign.sh
 ```
 
-`deploy-osign.sh` creates `.env` and `secrets/` (the password of the local account `admin`, shown
-once), starts the release image `ghcr.io/monsama/osign:X.Y.Z`, adds `osign.caddy` to the shared
+`deploy-nobs-osign.sh` creates `.env` and `secrets/` (the password of the local account `admin`, shown
+once), starts the release image `ghcr.io/monsama/nobs-osign:X.Y.Z`, adds `nobs-osign.caddy` to the shared
 proxy's sites (with its default certificate; your own with NOBS Inventory's
-`scripts/install-cert.sh osign <bundle.pem>`), and a daily backup at 03:25. Then fill in `.env` and
-the files in `secrets/` as below, run `sudo ./deploy-osign.sh` again, sign in as `admin` and let the
+`scripts/install-cert.sh nobs-osign <bundle.pem>`), and a daily backup at 03:25. Then fill in `.env` and
+the files in `secrets/` as below, run `sudo ./deploy-nobs-osign.sh` again, sign in as `admin` and let the
 setup assistant do the rest.
 
 | Task | Command |
 |---|---|
 | Update to the latest release | `sudo ./scripts/update.sh` (backs up first; switches back if the new one is not healthy) |
 | Update to a release | `sudo ./scripts/update.sh 0.5.0` |
-| Back up | `sudo ./scripts/backup.sh` → `backup/osign-<time>.tar.gz` (the draft, settings and secrets; with `BACKUP_PASSPHRASE_FILE` in `.env` encrypted) |
+| Back up | `sudo ./scripts/backup.sh` → `backup/nobs-osign-<time>.tar.gz` (the draft, settings and secrets; with `BACKUP_PASSPHRASE_FILE` in `.env` encrypted) |
 | Restore | `sudo ./scripts/restore.sh backup/<file>` (`RESTORE_SECRETS=yes` restores `.env` and the secrets too) |
-| Logs | `docker logs -f osign` |
+| Logs | `docker logs -f nobs-osign` |
 
 **The add-in's files on Cloudflare Pages.** In Cloudflare: **My Profile → API Tokens → Create
 Token**, with the permission *Account → Cloudflare Pages → Edit* for your account. Put it in
@@ -228,7 +228,7 @@ an upload by hand.
 **Its own app registration**, not the add-in's: the add-in reads with each user's sign-in, the
 server writes with its own.
 
-1. <https://entra.microsoft.com> → **App registrations** → **New registration**: name *OSign
+1. <https://entra.microsoft.com> → **App registrations** → **New registration**: name *NOBS OSign
    server*, *Accounts in this organizational directory only*, no redirect URI.
 2. **Certificates & secrets** → **New client secret**. Note when it expires (at most 24 months):
    after that, publishing says the server *could not sign in* until a new secret is in place.
@@ -239,7 +239,7 @@ server writes with its own.
    - `GET https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/IT:?$select=id`
      (for the home site: `…/sites/root?$select=id`), and copy the `id`;
    - `POST https://graph.microsoft.com/v1.0/sites/<id>/permissions` with
-     `{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<client ID of OSign server>","displayName":"OSign server"}}]}`.
+     `{"roles":["write"],"grantedToIdentities":[{"application":{"id":"<client ID of NOBS OSign server>","displayName":"NOBS OSign server"}}]}`.
      Graph Explorer asks for consent to *Sites.FullControl.All* for this.
 
    `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every
@@ -249,7 +249,7 @@ server writes with its own.
 
 | Variable | |
 |---|---|
-| `OSIGN_GRAPH_TENANT_ID`, `OSIGN_GRAPH_CLIENT_ID` | the tenant, and the client ID of *OSign server* |
+| `OSIGN_GRAPH_TENANT_ID`, `OSIGN_GRAPH_CLIENT_ID` | the tenant, and the client ID of *NOBS OSign server* |
 | `OSIGN_GRAPH_CLIENT_SECRET_FILE` | a file holding its client secret |
 | `OSIGN_ADMIN_PASSWORD_FILE` | a file holding the password of the local account `admin` |
 | `OSIGN_LDAP_URL` | `ldaps://dc01.example.ch` (or `ldap://…` with `OSIGN_LDAP_STARTTLS=1`) |
@@ -281,12 +281,12 @@ Where it publishes is the SharePoint site and folder of the add-in (Settings →
 | Signature without name, title… | The Graph source of those fields is empty, or the user's Entra profile has no value there. With values from AD: the user has no file in `OSign\users\` (no mail address in AD, or not exported yet). |
 | No photo | No `OSign\photos\<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
-| The editor shows plain text, no layout | Its server had stopped right after the page: an OSign window of an earlier start was still open, and the browser opened the new one in it. Fixed in 0.4.3; with an older version, close every OSign window (and a leftover Edge in Task Manager), then start OSign again. |
+| The editor shows plain text, no layout | Its server had stopped right after the page: an NOBS OSign window of an earlier start was still open, and the browser opened the new one in it. Fixed in 0.4.3; with an older version, close every NOBS OSign window (and a leftover Edge in Task Manager), then start NOBS OSign again. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |
 
 ## Security software (EDR / XDR)
 
-OSign is a plain PowerShell script; it starts no other PowerShell, and runs no encoded or downloaded
+NOBS OSign is a plain PowerShell script; it starts no other PowerShell, and runs no encoded or downloaded
 code. What it does that security software looks at:
 
 - It listens on `127.0.0.1` (ports 17690–17697) for its own window; nothing from the network can

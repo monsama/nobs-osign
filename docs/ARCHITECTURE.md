@@ -86,7 +86,7 @@ or the local account `admin`), the draft in `OSIGN_DATA`, and publishing into Sh
 Microsoft Graph (`server/graph.js`, `Sites.Selected`), and Active Directory over LDAP with a service
 account (`server/directory.js`, `server/users.js`: preview, groups, the users' values, a daily export)
 are there, as are the add-in's files (`server/addin.js`: made with `addin/fill.mjs`, uploaded to
-Cloudflare Pages) and the Docker setup (`Dockerfile`, `docker-compose.yml`, `deploy-osign.sh`).
+Cloudflare Pages) and the Docker setup (`Dockerfile`, `docker-compose.yml`, `deploy-nobs-osign.sh`).
 
 `OSign.ps1` already reads `OSIGN_DATA`. So it also runs as it is
 in a `mcr.microsoft.com/powershell` container, as a stopgap, publishing into a mounted folder. It

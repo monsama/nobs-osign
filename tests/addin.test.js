@@ -157,7 +157,7 @@ test('when no signature could be put in, a notice on the message says why; one t
   const r = runtime({ notices, signInFails: true });
   await r.fire('onNewMessageComposeHandler');
   assert.ok(!setCall(r));
-  assert.match(notices.osign.message, /^OSign inserted no signature; see Signatures\. .*sign-in failed/);
+  assert.match(notices.osign.message, /^NOBS OSign inserted no signature; see Signatures\. .*sign-in failed/);
   assert.equal(notices.osign.type, 'informationalMessage');
   assert.ok(notices.osign.message.length <= 150);
   // No signature meant for this message is no failure: no notice.

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The editor brings its own languages: the browser is not to offer translating it. -->
 <meta name="google" content="notranslate">
-<title>OSign</title>
+<title>NOBS OSign</title>
 <link rel="icon" href="/ui/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/ui/app.css">
 <script src="/ui/i18n.js"></script>
@@ -14,7 +14,7 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><img src="/ui/icon.svg" alt=""><span>OSign</span></div>
+  <div class="brand"><img src="/ui/icon.svg" alt=""><span>NOBS OSign</span></div>
   <div id="status" class="status" title=""></div>
   <div class="spacer"></div>
   <button id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button>
@@ -265,7 +265,7 @@
     </div>
 
     <section class="wiz-step" data-step="welcome" data-title="Welcome to OSign">
-      <p class="wiz-intro" data-th="wizWelcome">OSign manages your organisation's email signatures centrally and adds them
+      <p class="wiz-intro" data-th="wizWelcome">NOBS OSign manages your organisation's email signatures centrally and adds them
         automatically to every message in classic Outlook, new Outlook and Outlook on the web. This assistant guides you
         through the one-time setup. Each step explains what to do in Microsoft 365 and saves your entries right away, so
         you can pause at any time and continue later under <b>Settings → Setup assistant</b>.</p>
@@ -280,9 +280,9 @@
     </section>
 
     <section class="wiz-step" data-step="folder" data-title="Where the signatures are kept">
-      <p class="wiz-intro" data-th="wizFolderLead">OSign keeps the signatures, their images and the photos in a folder in your company's SharePoint,
+      <p class="wiz-intro" data-th="wizFolderLead">NOBS OSign keeps the signatures, their images and the photos in a folder in your company's SharePoint,
         where Outlook reads them with each user's own sign-in. Make a folder <b>OSign</b> there (with a folder <b>photos</b> in it), and tell
-        OSign which one. This is not the folder you unpacked OSign itself into.</p>
+        NOBS OSign which one. This is not the folder you unpacked NOBS OSign itself into.</p>
       <label class="wiz-opt"><input type="radio" name="wlib" value="link"> <span data-th="wizLibLink"><b>SharePoint link</b><span class="sub">Open the
         folder in SharePoint in the browser and copy the address from the address bar.</span></span></label>
       <div id="wizLinkBox" class="wiz-fields" hidden>
@@ -307,7 +307,7 @@
           <li><span data-th="wizGrant2">Run <b>POST</b> on <code>https://graph.microsoft.com/v1.0/sites/&lt;id&gt;/permissions</code> with this
             body (Graph Explorer asks for consent to <i>Sites.FullControl.All</i>):</span>
             <span class="copyline"><code id="wizGrantBody"></code><button type="button" class="copy" data-copy="wizGrantBody">Copy</button></span></li>
-          <li data-th="wizGrant3">Then paste the link here again: OSign checks the access.</li>
+          <li data-th="wizGrant3">Then paste the link here again: NOBS OSign checks the access.</li>
         </ol>
       </div>
     </section>
@@ -317,7 +317,7 @@
         sender's details. Choose where these details come from:</p>
       <label class="wiz-opt"><input type="radio" name="wvsrc" value="mixed"> <span data-th="wizVsrcMixed"><b>Entra ID and Active Directory</b>
         <em>recommended</em><span class="sub">Attributes that Entra ID has are read from there; the others (e.g. description, homePhone,
-        info) from Active Directory. OSign exports them to SharePoint when you publish, and you review them beforehand under
+        info) from Active Directory. NOBS OSign exports them to SharePoint when you publish, and you review them beforehand under
         <i>Users</i>.</span></span></label>
       <label class="wiz-opt"><input type="radio" name="wvsrc" value="graph"> <span data-th="wizVsrcGraph"><b>Entra ID only</b><span class="sub">Nothing is
         exported. Attributes Entra ID does not have stay empty, unless Entra Connect synchronises them.</span></span></label>
@@ -354,7 +354,7 @@
       <h3 class="wiz-h">What to do</h3>
       <ol class="wiz-list">
         <li data-th="wizApp1"><b>Register the app.</b> Open <code>https://entra.microsoft.com</code> → <b>App registrations</b> → <b>New
-          registration</b>. Name: <i>OSign</i>. Supported account types: <i>Accounts in this organizational directory only</i>. Select
+          registration</b>. Name: <i>NOBS OSign</i>. Supported account types: <i>Accounts in this organizational directory only</i>. Select
           <b>Register</b>.</li>
         <li><span data-th="wizApp2"><b>Add the redirect URI.</b> <b>Authentication</b> → <b>Add a platform</b> → <b>Single-page application</b>,
           with this URI:</span>
@@ -374,9 +374,9 @@
     </section>
 
     <section class="wiz-step" data-step="files" data-title="Make the add-in's files">
-      <p class="wiz-intro" data-th="wizFilesLead">OSign now generates the add-in's files for your address, app registration and SharePoint folder,
+      <p class="wiz-intro" data-th="wizFilesLead">NOBS OSign now generates the add-in's files for your address, app registration and SharePoint folder,
         and saves them in a folder on this PC.</p>
-      <p class="wiz-intro" id="wizFilesServer" data-th="wizFilesServer" hidden>OSign now generates the add-in's files for your address, app
+      <p class="wiz-intro" id="wizFilesServer" data-th="wizFilesServer" hidden>NOBS OSign now generates the add-in's files for your address, app
         registration and SharePoint folder, on the server. It uploads them to Cloudflare Pages itself, or you download them as a ZIP.</p>
       <div class="wiz-fields">
         <label>Write the files to<span class="pick"><input id="wizAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="wizAddinFolder">Choose folder…</button></span></label>
@@ -460,7 +460,7 @@
   <form method="dialog" class="dlg wide">
     <h2>Register the add-in in Entra ID</h2>
     <ol class="steps">
-      <li data-th="help1">Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>OSign</i>. Accounts:
+      <li data-th="help1">Entra admin center → <b>App registrations</b> → <b>New registration</b>. Name: <i>NOBS OSign</i>. Accounts:
         <i>this organizational directory only</i> (then enter the tenant ID too, in Settings → Outlook add-in).</li>
       <li data-th="help2"><b>Authentication</b> → Add a platform → <b>Single-page application</b>, redirect URI
         <code>brk-multihub://&lt;host the add-in is served from&gt;</code>, e.g. <code>brk-multihub://osign.contoso.com</code>.</li>
@@ -503,11 +503,11 @@
   <div data-help-text="hAdAttr" data-th="hAdAttr">The attribute's name in Active Directory (the <i>lDAPDisplayName</i>, as in <i>Attribute Editor</i>), e.g. <code>telephoneNumber</code> or <code>extensionAttribute1</code>. Used for the preview, and for what the add-in shows when the values come from Active Directory.</div>
   <div data-help-text="hGraph" data-th="hGraph">Where the add-in finds the value in Entra ID, as Microsoft Graph names it, e.g. <code>mobilePhone</code>, <code>onPremisesExtensionAttributes.extensionAttribute1</code> or <code>extension_&lt;appId&gt;_description</code>. Leave it empty for fields Entra ID does not have; with <i>Entra ID and Active Directory</i> they then come from AD.</div>
   <div data-help-text="hDisable" data-th="hDisable">Outlook may insert the user's own signature as well (from Outlook's own signature settings). When this is on, the add-in switches it off in every message it signs, so no mail ends up with two. Users' own signatures are not deleted.</div>
-  <div data-help-text="hChoice" data-th="hChoice">When this is on, users can pick another signature in the add-in's pane (<i>OSign → Signatures</i>), for new mail and for replies separately, from the ones they are allowed. When it is off, everyone gets the default, and the pane only inserts.</div>
+  <div data-help-text="hChoice" data-th="hChoice">When this is on, users can pick another signature in the add-in's pane (<i>NOBS OSign → Signatures</i>), for new mail and for replies separately, from the ones they are allowed. When it is off, everyone gets the default, and the pane only inserts.</div>
   <div data-help-text="hNoProfile" data-th="hNoProfile">If the user's details cannot be read (offline, sign-in not yet possible), the add-in normally inserts nothing and tries again with the next message. When this is on, it inserts the signature anyway, with empty fields; only the mail address is filled in. Lines with empty fields are left out as usual.</div>
   <div data-help-text="hVsrc" data-th="hVsrc">Decides where the add-in reads each sender's details. <b>Entra ID</b> needs nothing exported but lacks some AD attributes. <b>Active Directory</b> values are exported to SharePoint when you publish (and, if set up, by a scheduled task); you review them first under <i>Users</i>. Groups for <i>Who gets it</i> come from the same source.</div>
   <div data-help-text="hPreview" data-th="hPreview"><b>Sample values</b>: each field's sample value (see <i>Fields</i>). <b>All fields empty</b>: shows which lines disappear. <b>User from Active Directory</b>: a real user's values and groups, read from AD on this PC (only in the domain); shows which signature they would get.</div>
-  <div data-help-text="hSpSite" data-th="hSpSite">Where the add-in finds the OSign folder in SharePoint. OSign fills it in by itself from the folder you choose on this PC, if OneDrive syncs it. <code>root</code> is the home site (<code>https://&lt;tenant&gt;.sharepoint.com</code>). To set it by hand, paste the folder's address from the browser or a sharing link to it; OSign converts it, e.g. to <code>contoso.sharepoint.com:/sites/IT:</code>.</div>
+  <div data-help-text="hSpSite" data-th="hSpSite">Where the add-in finds the OSign folder in SharePoint. NOBS OSign fills it in by itself from the folder you choose on this PC, if OneDrive syncs it. <code>root</code> is the home site (<code>https://&lt;tenant&gt;.sharepoint.com</code>). To set it by hand, paste the folder's address from the browser or a sharing link to it; NOBS OSign converts it, e.g. to <code>contoso.sharepoint.com:/sites/IT:</code>.</div>
 </div>
 <div id="helpPop" class="help-pop" popover="auto" role="tooltip"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>

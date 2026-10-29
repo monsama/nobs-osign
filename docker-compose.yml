@@ -1,13 +1,13 @@
-# OSign, the signature editor, as a server. Generated values live in ./secrets and .env (see deploy-osign.sh).
-# HTTPS comes from the shared proxy (nobs-proxy, as for NOBS Inventory): deploy-osign.sh puts osign.caddy in its sites.
+# NOBS OSign, the signature editor, as a server. Generated values live in ./secrets and .env (see deploy-nobs-osign.sh).
+# HTTPS comes from the shared proxy (nobs-proxy, as for NOBS Inventory): deploy-nobs-osign.sh puts nobs-osign.caddy in its sites.
 # Nothing here is reachable from the internet: the add-in's files go to Cloudflare Pages, uploaded from here.
-name: osign
+name: nobs-osign
 
 services:
   app:
-    container_name: osign
+    container_name: nobs-osign
     # Pinned release image (set OSIGN_IMAGE in .env). Built locally only if the pull is not possible.
-    image: ${OSIGN_IMAGE:-ghcr.io/monsama/osign:0.5.0}
+    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.5.0}
     build: .
     restart: unless-stopped
     # No extra rights, and no writing outside its data: it needs neither.
@@ -48,10 +48,10 @@ services:
       - graph_client_secret
       - cf_api_token
     volumes:
-      - osign-data:/data
+      - nobs-osign-data:/data
       # A CA certificate for the domain controller (OSIGN_LDAP_CA=/run/osign-certs/ldap-ca.pem).
       - ./certificates:/run/osign-certs:ro
-    # The shared proxy reaches the app as osign:8080 on this network.
+    # The shared proxy reaches the app as nobs-osign:8080 on this network.
     networks:
       - default
       - nobs-proxy
@@ -78,8 +78,8 @@ secrets:
     file: ./secrets/cf_api_token
 
 volumes:
-  osign-data:
-    name: osign-data
+  nobs-osign-data:
+    name: nobs-osign-data
 
 networks:
   nobs-proxy:

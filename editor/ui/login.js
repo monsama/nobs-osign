@@ -1,6 +1,6 @@
 /*
  * The sign-in page of the server version: your Windows sign-in name and password (members of the
- * OSign group in Active Directory), or the local account admin.
+ * NOBS OSign group in Active Directory), or the local account admin.
  */
 'use strict';
 (function () {
@@ -13,7 +13,7 @@
     .then((r) => r.json())
     .then((m) => {
       $('loginHint').textContent = m.ad
-        ? t('Your Windows sign-in name and password. Only members of the OSign group may sign in.')
+        ? t('Your Windows sign-in name and password. Only members of the NOBS OSign group may sign in.')
         : t('Active Directory is not set up on the server yet: sign in as admin.');
     })
     .catch(() => {});
@@ -32,7 +32,7 @@
       if (!j.ok) { error(t(j.error || 'Failed.')); $('loginPassword').select(); return; }
       location.replace('/');
     } catch (err) {
-      error(t('The OSign server cannot be reached.'));
+      error(t('The NOBS OSign server cannot be reached.'));
     } finally {
       $('loginGo').disabled = false;
     }
