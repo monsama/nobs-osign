@@ -4,12 +4,12 @@ Three parts, joined by one file format and one HTTP API.
 
 ```
 editor/ui  (web UI, static)
-   │  HTTP API (docs/API.md): JSON over POST, Authorization: Bearer
+   │  HTTP API (docs/API.md): JSON over POST, a session cookie (AD group or the local admin)
    ▼
-editor backend  ── today: editor/OSign.ps1        later: a container (Node, …)
-   │  publishes  signatures.json + assets/*  into a folder
+server/  (Node, in Docker, behind the shared proxy)
+   │  publishes  signatures.json + assets/* (+ users/*) through Microsoft Graph (Sites.Selected)
    ▼
-the OSign folder in the company's SharePoint (synced by OneDrive)   + photos/<user>.jpg (by hand)
+the OSign folder in one SharePoint site   + photos/<user>.jpg (by hand)
    │  Microsoft Graph, with each user's own sign-in
    ▼
 addin (event handler + pane), served as code only from any HTTPS web server of the company's
@@ -52,46 +52,28 @@ will get.
 The backend stores this file as the text the UI sent and publishes it unchanged. It checks only that
 the text is JSON with `schemaVersion` 1. All other meaning lives in the UI and in the shared engine.
 
-## The editor backend's job
+## The server
 
-Whatever runs it, a backend has to:
+`server/` is the editor's backend, in Node:
 
-1. Serve `editor/ui/` at `/` and `/ui/*`, `shared/signature-core.js` at `/shared/signature-core.js`,
-   and the draft's images at `/assets/*`.
-2. Answer the API in [API.md](API.md), with authentication.
-3. Keep a draft: the configuration text and its images.
-4. Publish the draft into the target folder (images first, the configuration last; only what
-   changed is written), and load from it.
-5. Optionally, look up a user in AD for the preview.
+1. It serves `editor/ui/` (only after the sign-in, the sign-in page and `/health` aside),
+   `shared/signature-core.js`, the draft's images at `/assets/*` and the photos at `/photos/*`.
+2. It answers the API in [API.md](API.md), with a session cookie (HttpOnly, SameSite=Strict) and
+   same-site checks. Who may sign in: members of an AD group, and the local account `admin`.
+3. It keeps a draft in the data volume (`OSIGN_DATA`): the configuration text, its images, the
+   settings, the history of what was published.
+4. It publishes into the SharePoint folder through Microsoft Graph with its own app registration,
+   which has write access to that one site (`Sites.Selected`): images first, the configuration
+   last, only what changed (`server/graph.js`, `server/store.js`).
+5. It reads Active Directory over LDAP with a read-only service account: the preview, group names,
+   and the users' values written into `users/` on Publish and every day (`server/directory.js`,
+   `server/users.js`); and, when allowed, a person from Entra ID for the preview.
+6. It makes the add-in's files with `addin/fill.mjs` and uploads them to Cloudflare Pages
+   (`server/addin.js`).
+7. Its connections (AD, Graph, Cloudflare) are set in the editor by the local account `admin`,
+   sealed with the server's key (`server/connections.js`); the setup script for Microsoft 365
+   makes both app registrations and sends its result back (`server/setup.js`,
+   `server/setup-template.ps1`).
 
-`OSign.ps1` does this for one person on their own PC. It listens on 127.0.0.1 only, checks the Host
-header (against DNS rebinding), and uses a token that is new on every start and passed in the URL
-fragment. It holds no credentials: writing to SharePoint is OneDrive's job.
-
-## Moving the editor into a container
-
-What changes, and what doesn't:
-
-| | PowerShell (now) | Container (later) |
-|---|---|---|
-| UI | `editor/ui` | the same files |
-| API | `OSign.ps1` | a new server with the same routes (e.g. Node) |
-| Who may use it | whoever started it (token in the URL) | sign-in in front: Entra ID (App Service / Container Apps authentication, or a reverse proxy with OIDC). The API then accepts that session instead of the start token. |
-| Writing to SharePoint | the synced folder (OneDrive) | Microsoft Graph with an app permission for that one site (`Sites.Selected`) |
-| Draft | `%APPDATA%\OSign` | a volume (`OSIGN_DATA`), shared by everyone |
-| AD lookup | ADSI on a domain PC | LDAP to a DC, or Graph (`User.Read.All`) |
-
-`server/` is that new backend, in Node, under way: the API, the sign-in (Active Directory group
-or the local account `admin`), the draft in `OSIGN_DATA`, and publishing into SharePoint through
-Microsoft Graph (`server/graph.js`, `Sites.Selected`), and Active Directory over LDAP with a service
-account (`server/directory.js`, `server/users.js`: preview, groups, the users' values, a daily export)
-are there, as are the add-in's files (`server/addin.js`: made with `addin/fill.mjs`, uploaded to
-Cloudflare Pages) and the Docker setup (`Dockerfile`, `docker-compose.yml`, `deploy-nobs-osign.sh`).
-
-`OSign.ps1` already reads `OSIGN_DATA`. So it also runs as it is
-in a `mcr.microsoft.com/powershell` container, as a stopgap, publishing into a mounted folder. It
-would need a port mapping and a proxy in front: it only listens on 127.0.0.1 and has no sign-in of
-its own.
-
-The UI reads the token from `#t=` and sends it as `Authorization: Bearer`. A backend that
-authenticates by cookie instead can simply ignore that header.
+The Docker setup is `Dockerfile`, `docker-compose.yml` and `deploy-nobs-osign.sh`; updates,
+backups and restores are `scripts/*.sh`.

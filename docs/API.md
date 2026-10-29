@@ -1,6 +1,8 @@
 # Editor API
 
-The contract between `editor/ui` and any backend (`editor/OSign.ps1` today).
+The contract between `editor/ui` and its backend, `server/` (the sections below the server's own are
+the routes it shares with the editor; `pick-folder`, `sp/resolve`, `sp/local` and `quit` were the
+Windows editor's and answer `ok: false`).
 
 - Every call is `POST /api/<name>` with `Content-Type: application/json` and
   `Authorization: Bearer <token>`. The body is a JSON object, `{}` when there is nothing to send.

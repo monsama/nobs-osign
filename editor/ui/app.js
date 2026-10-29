@@ -842,7 +842,6 @@
     $('installLink').hidden = !base; $('installNone').hidden = !!base;
     const mode = core.valueSource(S.config);
     document.querySelectorAll('input[name=vsrc]').forEach((r) => { r.checked = r.value === mode; });
-    $('vsrcNote').hidden = mode === 'graph' || onServer();
     // The server version: it exports the users itself, every day at the time set on it.
     const sn = $('vsrcServerNote');
     sn.hidden = mode === 'graph' || !onServer();

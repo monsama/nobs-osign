@@ -150,10 +150,6 @@
         <label class="check block"><input type="radio" name="vsrc" value="mixed"> <span data-th="vsrcMixed"><b>Entra ID and Active Directory</b>: fields with a Graph source from Entra ID, the others (e.g. description, homePhone, info) from AD. Groups from AD.</span></label>
         <label class="check block"><input type="radio" name="vsrc" value="ad"> <span data-th="vsrcAd"><b>Active Directory</b>: every field by its AD attribute. Groups from AD.</span></label>
       </fieldset>
-      <p class="lead" id="vsrcNote" data-th="vsrcNote">With AD, the editor exports every active user with a mail address on Publish, into <code>users\</code> in the OSign
-        folder: one small file per person with their fields and groups. The add-in reads only the file of whoever writes. To keep
-        the values current without publishing, let Windows run the export, e.g. nightly, on a PC in the domain:
-        <code>powershell -ExecutionPolicy Bypass -File OSign.ps1 -ExportUsers</code></p>
       <p class="lead" id="vsrcServerNote" hidden></p>
       <h2>Sign-in and permissions</h2>
       <p class="lead" data-th="signinLead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their

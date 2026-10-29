@@ -2,11 +2,10 @@
   "name": "nobs-osign",
   "version": "0.7.1",
   "private": true,
-  "description": "Central email signatures for classic and new Outlook: an Outlook add-in, and the editor that publishes the signatures it reads.",
+  "description": "Central email signatures for classic and new Outlook: an Outlook add-in, and the editor on a server that publishes the signatures it reads.",
   "scripts": {
     "build": "node addin/build.mjs",
     "test": "node addin/build.mjs && node --test \"tests/*.test.js\"",
-    "editor": "pwsh -NoProfile -File editor/OSign.ps1",
     "server": "node server/index.js"
   },
   "dependencies": {
