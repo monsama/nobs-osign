@@ -9,7 +9,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createStore, ASSET_TYPES } = require('./store');
-const { createSettings } = require('./settings');
+const { createSettings, check: checkSettings } = require('./settings');
+const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
 const { ldapConfig } = require('./ldap');
 
@@ -18,6 +19,9 @@ const ROOT = path.resolve(__dirname, '..');
 const UI_DIR = path.join(ROOT, 'editor', 'ui');
 const CORE_FILE = path.join(ROOT, 'shared', 'signature-core.js');
 const STATIC_TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
+// A person's photo by name (photos/<username>.jpg): one file name, an image.
+const PHOTO_NAME = /^[^/\\:*?"<>|\u0000-\u001f]{1,120}\.(png|jpe?g|gif)$/i;
+const PHOTO_CACHE_MS = 5 * 60 * 1000;
 // A request body larger than this is refused: a configuration is at most 1.5 MB, an image 1 MB
 // (as base64, 1.4 MB).
 const MAX_BODY = 4 * 1024 * 1024;
@@ -76,10 +80,30 @@ function createApp(opts) {
   const log = (opts && opts.log) || console;
   const dataDir = env.OSIGN_DATA || '/data';
   const publishDir = env.OSIGN_PUBLISH_DIR || path.join(dataDir, 'publish');
+  if (graphProblem(graphConfig(env))) log.warn('Publishing to SharePoint is not set up right: ' + graphProblem(graphConfig(env)));
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(publishDir, { recursive: true });
   const store = createStore(dataDir);
-  const settings = createSettings(dataDir, publishDir);
+  // Where publishing goes: SharePoint through Graph when the server's app registration is set
+  // up, its own folder otherwise (development, tests).
+  const graphCfg = graphConfig(env);
+  const graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch }) : null;
+  const spFolder = (s) => String(s.spFolder || 'OSign').replace(/^\/+|\/+$/g, '');
+  const local = folderTarget(publishDir);
+  const targetFor = (s) => (graph ? graph.target(s.spSite || 'root', spFolder(s)) : local);
+  const settings = createSettings(dataDir, targetFor);
+  // Photos for the preview, read from the target: kept a few minutes, so a preview that is drawn
+  // again does not ask SharePoint each time.
+  const photos = new Map();
+  async function photo(name) {
+    const key = settings.target().describe() + '|' + name.toLowerCase();
+    const hit = photos.get(key);
+    if (hit && Date.now() - hit.at < PHOTO_CACHE_MS) return hit.bytes;
+    const bytes = await settings.target().read('photos/' + name);
+    if (photos.size > 300) photos.clear();
+    photos.set(key, { at: Date.now(), bytes });
+    return bytes;
+  }
   const auth = createAuth({ env, ldap: Object.assign(ldapConfig(env), (opts && opts.ldap) || {}), log });
 
   const routes = {
@@ -87,7 +111,13 @@ function createApp(opts) {
     info: (data, s) => ({
       backend: 'node', version: VERSION, dataDir,
       // Not here yet: AD lookup and export (LDAP), and the add-in's files (Cloudflare Pages).
-      features: { adLookup: false, addinFiles: false, pickFolder: false, signOut: true },
+      features: {
+        adLookup: false, addinFiles: false, pickFolder: false, signOut: true,
+        // 'sharepoint': publishing goes through Graph; 'folder': into the server's folder.
+        publishTarget: graph ? 'sharepoint' : 'folder',
+        graphClientId: graph ? graphCfg.clientId : '',
+        graphProblem: graphProblem(graphCfg)
+      },
       user: { login: s.user.login, name: s.user.name }
     }),
     'draft/get': () => store.getDraft(),
@@ -96,11 +126,32 @@ function createApp(opts) {
     'assets/delete': (d) => store.deleteAsset(d.name),
     'settings/get': () => settings.answer(),
     'settings/save': (d) => settings.save(d.settings || {}),
-    publish: (d) => {
-      const r = store.publish(publishDir, typeof d.configJson === 'string' ? d.configJson : '');
-      return r.error ? r : { changed: r.changed, folder: publishDir };
+    publish: async (d) => {
+      const t = settings.target();
+      let r;
+      try { r = await store.publish(t, typeof d.configJson === 'string' ? d.configJson : ''); }
+      catch (e) { return { error: e.message }; }
+      settings.forget(); photos.clear();
+      return r.error ? r : { changed: r.changed, folder: t.describe() };
     },
-    'load-published': () => store.loadPublished(publishDir)
+    'load-published': async () => {
+      try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }
+    },
+    // Whether the server reaches a SharePoint folder, before it is saved (the setup assistant).
+    'sp/check': async (d) => {
+      const s = Object.assign(settings.get(), { spSite: String(d.spSite || 'root').trim(), spFolder: String(d.spFolder || '').trim() });
+      if (!s.spFolder) return { error: 'Name the folder in the site, like OSign.' };
+      const err = checkSettings(s); if (err) return { error: err };
+      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up on the server (OSIGN_GRAPH_* in .env).' };
+      const t = targetFor(s);
+      try { return { found: await t.exists(''), photos: await t.exists('photos'), where: t.describe() }; }
+      catch (e) {
+        // The usual two, in words the assistant can show next to its instructions.
+        if (e.status === 401 || e.status === 403) return { error: 'The server may not reach this site yet: its app registration needs write access to it (Sites.Selected).' };
+        if (e.status === 404) return { error: 'There is no such SharePoint site. Check the address.' };
+        return { error: e.message };
+      }
+    }
   };
   // What only Windows, OneDrive or (for now) the PowerShell editor can do: said plainly.
   const NOT_HERE = {
@@ -141,7 +192,7 @@ function createApp(opts) {
     const fn = Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
     if (!fn) return fail(res, 'unknown', 404);
     let r;
-    try { r = fn(data, s); } catch (e) {
+    try { r = await fn(data, s); } catch (e) {
       log.error('api ' + name + ': ' + (e && e.stack || e));
       return fail(res, 'The server could not do that: ' + (e && e.message), 500);
     }
@@ -169,7 +220,14 @@ function createApp(opts) {
       if (pathname === '/shared/signature-core.js') return sendFile(res, path.dirname(CORE_FILE), path.basename(CORE_FILE), STATIC_TYPES);
       if (pathname.startsWith('/ui/')) return sendFile(res, UI_DIR, pathname.slice(4), STATIC_TYPES);
       if (pathname.startsWith('/assets/')) return sendFile(res, store.assetDir, pathname.slice(8), ASSET_TYPES);
-      if (pathname.startsWith('/photos/')) return sendFile(res, settings.photosDir(), pathname.slice(8), ASSET_TYPES);
+      if (pathname.startsWith('/photos/')) {
+        const name = pathname.slice(8);
+        if (!PHOTO_NAME.test(name) || name.startsWith('.')) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
+        let bytes = null;
+        try { bytes = await photo(name); } catch (e) { log.warn('photo ' + name + ': ' + e.message); }
+        if (!bytes) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
+        return send(res, 200, ASSET_TYPES[path.extname(name).toLowerCase()], bytes, { 'Cache-Control': 'private, max-age=300' });
+      }
       return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
     } catch (e) {
       log.error('request ' + pathname + ': ' + (e && e.stack || e));

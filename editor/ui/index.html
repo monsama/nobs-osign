@@ -189,6 +189,7 @@
   <form method="dialog" class="dlg wide">
     <h2>Settings</h2>
     <label>Language<select id="setLang"></select></label>
+    <p id="setServerWhere" class="lead" hidden></p>
     <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
       <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
       <small id="setFolderNote"></small> <small id="setWhere" class="where"></small>
@@ -293,6 +294,19 @@
       </div>
       <input type="hidden" id="wizSpSite"><input type="hidden" id="wizSpFolder">
       <p id="wizPerm" class="wiz-note" hidden></p>
+      <!-- The server version: it writes there itself, through Microsoft Graph, with its own app registration. -->
+      <div id="wizGrant" class="wiz-note" hidden>
+        <p data-th="wizGrantLead"><b>Give the server write access to this site</b>, once, as a SharePoint or Global administrator. Its app
+          registration needs the application permission <b>Sites.Selected</b> (with admin consent); this grants it this one site and no other:</p>
+        <ol class="wiz-list">
+          <li><span data-th="wizGrant1">Open <code>https://aka.ms/ge</code> (Graph Explorer), sign in, and run this request. Copy the <b>id</b> from
+            the answer:</span> <span class="copyline"><code id="wizGrantGet"></code><button type="button" class="copy" data-copy="wizGrantGet">Copy</button></span></li>
+          <li><span data-th="wizGrant2">Run <b>POST</b> on <code>https://graph.microsoft.com/v1.0/sites/&lt;id&gt;/permissions</code> with this
+            body (Graph Explorer asks for consent to <i>Sites.FullControl.All</i>):</span>
+            <span class="copyline"><code id="wizGrantBody"></code><button type="button" class="copy" data-copy="wizGrantBody">Copy</button></span></li>
+          <li data-th="wizGrant3">Then paste the link here again: OSign checks the access.</li>
+        </ol>
+      </div>
     </section>
 
     <section class="wiz-step" data-step="values" data-title="Where the users' values come from">

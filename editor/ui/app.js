@@ -54,6 +54,10 @@
     view: 'sig', sigId: null, mode: 'design', adValues: null, adName: '', 
   };
   const sig = () => (S.config.signatures || []).find((s) => s.id === S.sigId) || null;
+  // The server version (server/): publishing goes to SharePoint through Graph, or, without it, into
+  // the server's own folder. No synced folder, no Windows.
+  const onServer = () => !!(S.info && S.info.backend === 'node');
+  const toSharePoint = () => onServer() && S.info.features.publishTarget === 'sharepoint';
   // Signatures are compiled in a document of their own: one that is not shown loads no images.
   const scratchDoc = document.implementation.createHTMLDocument('');
   const fieldKeys = () => S.config.fields.map((f) => f.key);
@@ -824,7 +828,10 @@
   $('lnkSetup').addEventListener('click', (e) => { e.preventDefault(); $('dlgHelp').showModal(); });
 
   document.querySelectorAll('.nav-list a').forEach((a) => a.addEventListener('click', (e) => {
-    e.preventDefault(); flushSource();
+    e.preventDefault();
+    // Not loaded yet (a slow server): nothing to show.
+    if (!S.config) return;
+    flushSource();
     show(a.dataset.view);
     if (a.dataset.view === 'fields') renderFields(); else if (a.dataset.view === 'users') renderUsers(); else renderOptions();
   }));
@@ -893,6 +900,16 @@
   // Settings
   // ---------------------------------------------------------------------------------------------
   function renderSettingsNotes(r) {
+    if (onServer()) {
+      const w = $('setServerWhere');
+      const where = toSharePoint()
+        ? t('Publishing goes to {0}: the SharePoint site and folder of the add-in below, through Microsoft Graph.', S.settings.folder)
+        : t("Publishing goes into the server's own folder ({0}), not to SharePoint: Microsoft Graph is not set up on the server.", S.settings.folder);
+      const state = r.folderError ? t('SharePoint cannot be reached: {0}', t(r.folderError)) : r.folderFound ? t('Found.') : toSharePoint() ? t('The folder is not there yet: it is made on the first publish.') : '';
+      w.textContent = where + (state ? ' ' + state : '');
+      w.className = 'lead' + (r.folderError || !toSharePoint() ? ' warn' : '');
+      return;
+    }
     $('setFolderNote').textContent = !S.settings.folder ? t('Not set yet.') : r.folderFound ? t('Found.') : t('Not found on this PC: is the library synced?');
     $('setPhotosNote').textContent = r.photosFound ? t('Found.') : t('No photos folder there (yet): the preview shows no photos.');
   }
@@ -908,6 +925,11 @@
     $('setPhotos').value = S.settings.photosFolder || '';
     for (const [id, k] of ADDIN_FIELDS) $(id).value = S.settings[k] || '';
     $('setAddinBuild').disabled = !(S.info.features && S.info.features.addinFiles);
+    // The server version: where publishing goes is the site and folder below; no folders on a PC.
+    $('setServerWhere').hidden = !onServer();
+    for (const id of ['setFolder', 'setPhotos', 'setAddinFolder']) $(id).closest('label').hidden = onServer();
+    document.querySelector('#dlgSettings [data-th=settingsLead]').hidden = onServer();
+    $('setAddinBuild').closest('p').hidden = onServer() && $('setAddinBuild').disabled;
     $('setAddinOk').textContent = $('setAddinBuild').disabled ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
@@ -921,7 +943,9 @@
       // Another language: the page starts again in it (the draft is saved, nothing is lost).
       if ($('setLang').value !== I18N.lang) { await saving; I18N.setLang($('setLang').value); return; }
       S.settings = r.settings; lastSettings = r;
-      $('dlgSettings').close(); toast(r.folderFound || !r.settings.folder ? t('Settings saved.') : t('Saved, but the folder is not there on this PC.'), !r.folderFound && !!r.settings.folder);
+      $('dlgSettings').close();
+      if (onServer()) toast(r.folderError ? t('SharePoint cannot be reached: {0}', t(r.folderError)) : t('Settings saved.'), !!r.folderError);
+      else toast(r.folderFound || !r.settings.folder ? t('Settings saved.') : t('Saved, but the folder is not there on this PC.'), !r.folderFound && !!r.settings.folder);
       schedulePreview();
     } catch (err) { $('setErr').textContent = t(err.message); }
   });
@@ -1068,9 +1092,12 @@
   // Setup assistant: opens by itself until it was finished once, while OSign is not set up
   // (no publish folder or no app registration). Each step saves what it asks for.
   // ---------------------------------------------------------------------------------------------
-  const WIZ = Array.from(document.querySelectorAll('#dlgWizard .wiz-step')).map((sec) => sec.dataset.step);
+  const ALL_WIZ = Array.from(document.querySelectorAll('#dlgWizard .wiz-step')).map((sec) => sec.dataset.step);
+  // The steps for this backend: the server version cannot make the add-in's files yet.
+  let WIZ = ALL_WIZ;
+  const wizSteps = () => ALL_WIZ.filter((n) => !(onServer() && (n === 'files' || n === 'deploy') && !S.info.features.addinFiles));
   const WIZ_KEY = 'osign.wizStep';
-  const wiz = { step: 0, built: false, warned: '', checking: null };
+  const wiz = { step: 0, built: false, warned: '', checking: null, spOk: false };
   const stored = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no storage */ } return null; };
   const radio = (name) => (document.querySelector('input[name=' + name + ']:checked') || {}).value || '';
   const setRadio = (name, v) => document.querySelectorAll('input[name=' + name + ']').forEach((r) => { r.checked = r.value === v; });
@@ -1141,6 +1168,7 @@
     if (!/^https:\/\/[^/]+\.sharepoint\.com/i.test(v)) return warn(t('That is not an address in SharePoint (https://….sharepoint.com/…).'));
     if (!p.folder) return warn(t('This link does not say which folder it is (sharing links usually do not). Open the folder in the browser and copy the address from the address bar.'));
     $('wizSpSite').value = p.site; $('wizSpFolder').value = p.folder;
+    if (onServer()) { await wizServerCheck(p.site, p.folder); return; }
     let r = { found: false };
     try { r = await api('sp/local', { url: p.url }); } catch (e) { /* said below */ }
     if (r.found && r.exists) {
@@ -1154,13 +1182,48 @@
   // Next may come right after the change (a click on it ends the field): it waits for the check.
   $('wizLink').addEventListener('change', () => { wiz.checking = wizLinkCheck(); });
 
+  // The server version writes there itself: whether it reaches the site and folder, said under the
+  // link, with how to give it access when it does not.
+  async function wizServerCheck(site, folder) {
+    const out = $('wizLinkNote');
+    out.textContent = ''; out.className = 'where';
+    wiz.spOk = false;
+    wizGrantFill(site);
+    $('wizSpSite').value = site; $('wizSpFolder').value = folder;
+    try {
+      const c = await api('sp/check', { spSite: site, spFolder: folder });
+      wiz.spOk = true;
+      $('wizGrant').hidden = true;
+      out.textContent = c.found ? t('✓ Found in SharePoint: {0}', c.where) : t('The server reaches the site; the folder is not there yet and is made on the first publish: {0}', c.where);
+      out.classList.add('good');
+    } catch (e) {
+      $('wizGrant').hidden = !toSharePoint();
+      out.textContent = t(e.message); out.classList.add('warn');
+    }
+    wizPermNote();
+  }
+  // The server version: how to give its app registration write access to the site (Sites.Selected).
+  function wizGrantFill(site) {
+    const sitePath = !site || site === 'root' ? 'root' : site;
+    $('wizGrantGet').textContent = 'GET https://graph.microsoft.com/v1.0/sites/' + sitePath + '?$select=id,webUrl';
+    $('wizGrantBody').textContent = JSON.stringify({ roles: ['write'], grantedToIdentities: [{ application: { id: (S.info.features && S.info.features.graphClientId) || '<the server app\'s client ID>', displayName: 'OSign server' } }] });
+    if (!site) $('wizGrant').hidden = true;
+  }
+
   function wizOpen(step) {
+    WIZ = wizSteps();
     wizFill();
     wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
     $('wizWhereFound').textContent = ''; $('wizLinkNote').textContent = '';
-    // A folder set already: that one, with where it is in SharePoint as set.
-    setRadio('wlib', S.settings.folder ? 'own' : '');
+    // A folder set already: that one, with where it is in SharePoint as set. The server version
+    // has no folder on a PC: only the SharePoint link.
+    setRadio('wlib', onServer() ? 'link' : S.settings.folder ? 'own' : '');
+    document.querySelector('#dlgWizard input[name=wlib][value=own]').closest('label').hidden = onServer();
+    document.querySelector('#dlgWizard input[name=wlib][value=link]').closest('label').hidden = onServer();
+    wizGrantFill(null);
+    // What is set already: checked right away, so the step says whether it works.
+    if (onServer() && S.settings.spFolder) wiz.checking = wizServerCheck(S.settings.spSite || 'root', S.settings.spFolder);
     if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null);
     wizLibChanged();
     wizRender();
@@ -1175,6 +1238,16 @@
   const wizLeave = {
     async folder() {
       await wiz.checking;
+      if (onServer()) {
+        if (!$('wizSpFolder').value) throw new Error(t('Paste the address of the folder in SharePoint.'));
+        if (!wiz.spOk && wiz.warned !== 'folder') {
+          wiz.warned = 'folder';
+          throw new Error(t('The server cannot reach this folder yet. Give it access as described below, then paste the link again. Next again to go on anyway.'));
+        }
+        await wizSave({ spSite: $('wizSpSite').value || 'root', spFolder: $('wizSpFolder').value });
+        schedulePreview();
+        return;
+      }
       const choice = radio('wlib');
       if (!choice) throw new Error(t('Choose where the signatures are kept.'));
       if (choice === 'link' && !$('wizSpFolder').value) throw new Error(t('Paste the address of the folder in SharePoint.'));
@@ -1266,7 +1339,10 @@
     if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', t('No signature is the default for new mail: users get none unless they pick one.')]);
     else if (!plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.')]);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
-    if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
+    if (onServer()) {
+      if (!toSharePoint()) out.push(['warn', t("Publishing goes into the server's own folder, not to SharePoint: Microsoft Graph is not set up on the server.")]);
+      else if (lastSettings.folderError) out.push(['warn', t('SharePoint cannot be reached: {0}', t(lastSettings.folderError))]);
+    } else if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
     if (core.groupsUsed(c).length && core.valueSource(c) === 'graph') out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.')]);
     const perPerson = c.signatures.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
     if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; who has none gets the signature without.', perPerson.join(', '))]);
@@ -1293,8 +1369,8 @@
   $('btnPublish').addEventListener('click', async () => {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
-    $('pubWhere').textContent = S.settings.folder
-      ? t('To {0}. OneDrive uploads it to SharePoint; new messages use it a minute or two later.', S.settings.folder)
+    $('pubWhere').textContent = onServer() ? t('To {0}. New messages use it a minute or two later.', S.settings.folder)
+      : S.settings.folder ? t('To {0}. OneDrive uploads it to SharePoint; new messages use it a minute or two later.', S.settings.folder)
       : t('No folder set yet (Settings).');
     const checks = publishChecks();
     $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
@@ -1323,6 +1399,8 @@
       }
       const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
       S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
+      // The server version: whether the folder is there now (it is made on the first publish).
+      if (onServer()) { try { lastSettings = await api('settings/get'); } catch (e2) { /* as it was */ } }
       $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
     finally { $('pubGo').disabled = false; }
@@ -1399,8 +1477,11 @@
       wl.value = I18N.lang;
       // A step stored: the assistant was open when the page started again (another language).
       const resume = stored(WIZ_KEY);
-      if (resume !== null || (S.settings.setupDone !== '1' && (!S.settings.folder || !S.settings.clientId))) wizOpen(+resume || 0);
+      // The server version always has a target: the assistant opens until it was finished once.
+      if (resume !== null || (S.settings.setupDone !== '1' && (onServer() || !S.settings.folder || !S.settings.clientId))) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
+      // Loaded: what waits for the editor (the tests) can go on.
+      document.documentElement.dataset.ready = '1';
     } catch (e) {
       document.body.classList.add('failed');
       $('main').replaceChildren(el('section', { class: 'view empty' }, el('h1', null, t('Not connected')), el('p', null, t(e.message))));

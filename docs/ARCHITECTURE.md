@@ -82,9 +82,9 @@ What changes, and what doesn't:
 | AD lookup | ADSI on a domain PC | LDAP to a DC, or Graph (`User.Read.All`) |
 
 `server/` is that new backend, in Node, under way: the API, the sign-in (Active Directory group
-or the local account `admin`) and the draft in `OSIGN_DATA` are there. Publishing still goes into a
-folder (`OSIGN_PUBLISH_DIR`) until it writes through Microsoft Graph; AD lookup and export, the
-add-in's files (uploaded to Cloudflare Pages) and the Docker setup follow.
+or the local account `admin`), the draft in `OSIGN_DATA`, and publishing into SharePoint through
+Microsoft Graph (`server/graph.js`, `Sites.Selected`) are there. AD lookup and export, the add-in's
+files (uploaded to Cloudflare Pages) and the Docker setup follow.
 
 `OSign.ps1` already reads `OSIGN_DATA`. So it also runs as it is
 in a `mcr.microsoft.com/powershell` container, as a stopgap, publishing into a mounted folder. It

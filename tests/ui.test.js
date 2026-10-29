@@ -214,7 +214,7 @@ test('German: in a German browser the editor speaks German, and offers no transl
   assert.equal(await de.inputValue('#setLang'), 'de');
   await de.selectOption('#setLang', 'en');
   await Promise.all([de.waitForNavigation(), de.click('#setSave')]);
-  await de.waitForSelector('#btnPublish');
+  await de.waitForSelector('html[data-ready]');
   assert.equal((await de.textContent('#btnPublish')).trim(), 'Publish…');
   assert.equal(await de.getAttribute('html', 'lang'), 'en');
   await de.evaluate(() => localStorage.removeItem('osign.lang'));
@@ -338,15 +338,15 @@ test('setup assistant: opens by itself until OSign is set up, and walks through 
   assert.match(fs.readFileSync(path.join(out, 'launchevent.js'), 'utf8'), /site:"contoso-my\.sharepoint\.com:\/personal\/anna_contoso_com:"/);
   // Finished: it does not open by itself any more.
   await page.reload();
-  await page.waitForSelector('#btnPublish');
-  await page.waitForTimeout(300);
+  await page.waitForSelector('html[data-ready]');
   assert.equal(await page.isVisible('#dlgWizard'), false);
   assert.deepEqual(errors, []);
 });
 
 test('help: a ? opens a short explanation, above dialogs too, and closes again', { skip }, async () => {
   await page.goto(url); await page.reload();
-  await page.waitForSelector('#btnPublish');
+  // Loaded from the server, not only the page: a slow server (Windows, PowerShell 7) answers later.
+  await page.waitForSelector('html[data-ready]');
   await page.click('a[data-view=fields]');
   await page.click('button.help[data-help=hGraph]');
   await page.waitForSelector('#helpPop:popover-open');
