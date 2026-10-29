@@ -71,10 +71,13 @@ async function connect(c) {
 }
 function close(client) { try { client.unbind(() => {}); } catch (e) { /* closed */ } }
 const bind = (client, dn, password) => new Promise((resolve, reject) => client.bind(dn, password, (e) => (e ? reject(e) : resolve())));
-function search(client, base, filter, attributes) {
+// sizeLimit: at most that many (a list to pick from); the directory then says it has more, which
+// is no error here.
+function search(client, base, filter, attributes, sizeLimit) {
   return new Promise((resolve, reject) => {
     const out = [];
-    client.search(base, { scope: 'sub', filter, attributes, paged: { pageSize: 500 } }, (err, res) => {
+    const opts = sizeLimit ? { scope: 'sub', filter, attributes, sizeLimit } : { scope: 'sub', filter, attributes, paged: { pageSize: 500 } };
+    client.search(base, opts, (err, res) => {
       if (err) return reject(err);
       res.on('searchEntry', (e) => {
         const attrs = {};
@@ -82,7 +85,7 @@ function search(client, base, filter, attributes) {
         out.push({ dn: (e.pojo && e.pojo.objectName) || '', attrs });
       });
       res.on('pageError', () => {});
-      res.on('error', reject);
+      res.on('error', (e) => (sizeLimit && e instanceof ldap.SizeLimitExceededError ? resolve(out) : reject(e)));
       res.on('end', () => resolve(out));
     });
   });
@@ -110,4 +113,4 @@ async function ldapLogin(c, login, password) {
   } finally { close(client); }
 }
 
-module.exports = { ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf };
+module.exports = { ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf, connect, close, bind, search, chain };

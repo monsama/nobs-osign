@@ -403,6 +403,17 @@
     'The server cannot reach this folder yet. Give it access as described below, then paste the link again. Next again to go on anyway.': 'Der Server erreicht diesen Ordner noch nicht. Zugriff wie unten beschrieben geben, dann den Link nochmals einfügen. Nochmals Weiter, um trotzdem fortzufahren.',
     'The server may not reach this site yet: its app registration needs write access to it (Sites.Selected).': 'Der Server darf diese Site noch nicht erreichen: Seine App-Registrierung braucht Schreibzugriff darauf (Sites.Selected).',
     'There is no such SharePoint site. Check the address.': 'Diese SharePoint-Site gibt es nicht. Die Adresse prüfen.',
+    // the server version: Active Directory
+    'With AD, the users are written into users/ in the OSign folder on Publish: one small file per person with their fields and groups. The add-in reads only the file of whoever writes.': 'Mit AD werden die Benutzer beim Veröffentlichen nach users/ im OSign-Ordner geschrieben: eine kleine Datei pro Person mit ihren Feldern und Gruppen. Das Add-in liest nur die Datei der Person, die schreibt.',
+    'Active Directory is not set up on the server: {0}': 'Active Directory ist auf dem Server nicht eingerichtet: {0}',
+    'The server does not export them by itself (OSIGN_AD_EXPORT_AT is not set): the values change only when you publish.': 'Der Server exportiert sie nicht von sich aus (OSIGN_AD_EXPORT_AT ist nicht gesetzt): Die Werte ändern sich nur beim Veröffentlichen.',
+    'The server exports them every day at {0}.': 'Der Server exportiert sie jeden Tag um {0}.',
+    'Last run {0}: fine.': 'Letzter Lauf {0}: in Ordnung.',
+    'Last run {0} failed: {1}': 'Letzter Lauf {0} fehlgeschlagen: {1}',
+    'Active Directory is not set up on the server (OSIGN_LDAP_URL).': 'Active Directory ist auf dem Server nicht eingerichtet (OSIGN_LDAP_URL).',
+    'The server has no service account for Active Directory (OSIGN_LDAP_SERVICE_DN).': 'Der Server hat kein Dienstkonto für Active Directory (OSIGN_LDAP_SERVICE_DN).',
+    "The service account's password is missing (secrets/ldap_service_password).": 'Das Passwort des Dienstkontos fehlt (secrets/ldap_service_password).',
+    'Enter a user name or mail address.': 'Einen Benutzernamen oder eine Mailadresse eingeben.',
     'Name the folder in the site, like OSign.': 'Den Ordner in der Site angeben, z. B. OSign.',
     'Publishing to SharePoint is not set up on the server (OSIGN_GRAPH_* in .env).': 'Veröffentlichen nach SharePoint ist auf dem Server nicht eingerichtet (OSIGN_GRAPH_* in .env).'
   };

@@ -123,18 +123,24 @@ function createGraph(c, opts) {
         }).then((x) => x.arrayBuffer());
       }
     }
+    // The folders known to be there, so writing many files asks for each folder once.
+    const made = new Set();
     return {
       describe: () => where,
       async exists(rel) { const m = await meta(rel || '', 'Finding ' + (rel || 'the folder')); return !!(m && m.folder); },
       // The names of the files in a folder ([] when it is not there).
-      async list(rel) {
+      async list(rel) { return (await this.listInfo(rel)).map((f) => f.name); },
+      // The same, each with a tag that changes when the file does (its eTag): what changed since
+      // it was last read can be told without reading every file.
+      async listInfo(rel) {
         const out = [];
-        let url = itemUrl(rel) + '/children?$select=name,file&$top=999';
-        for (let page = 0; url && page < 20; page++) {
+        let url = itemUrl(rel) + '/children?$select=name,file,eTag&$top=999';
+        // A page holds up to 999: 200 pages are some 200 000 users.
+        for (let page = 0; url && page < 200; page++) {
           const r = await call('GET', url, { what: 'Listing ' + rel, okStatus: [404] });
           if (r.status === 404) return [];
           const j = await r.json();
-          for (const it of j.value || []) if (it.file) out.push(it.name);
+          for (const it of j.value || []) if (it.file) out.push({ name: it.name, tag: String(it.eTag || '') });
           url = j['@odata.nextLink'];
         }
         return out;
@@ -144,9 +150,13 @@ function createGraph(c, opts) {
         return r.status === 404 ? null : Buffer.from(await r.arrayBuffer());
       },
       // Simple upload: signatures.json and the images are far below its 250 MB.
+      // Answers the file's new tag (as listInfo has it).
       async write(rel, bytes, type) {
-        await ensureFolder(path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel));
-        await call('PUT', itemUrl(rel) + '/content', { what: 'Writing ' + rel, body: bytes, type: type || 'application/octet-stream' }).then((x) => x.arrayBuffer());
+        const dir = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel);
+        if (!made.has(dir)) { await ensureFolder(dir); made.add(dir); }
+        const r = await call('PUT', itemUrl(rel) + '/content', { what: 'Writing ' + rel, body: bytes, type: type || 'application/octet-stream' });
+        const j = await r.json().catch(() => ({}));
+        return String(j.eTag || '');
       },
       async remove(rel) { await call('DELETE', itemUrl(rel), { what: 'Removing ' + rel, okStatus: [404] }).then((x) => x.arrayBuffer().catch(() => {})); }
     };
@@ -160,9 +170,16 @@ function folderTarget(root) {
   return {
     describe: () => root,
     async exists(rel) { try { return fs.statSync(full(rel)).isDirectory(); } catch (e) { return false; } },
-    async list(rel) { try { return fs.readdirSync(full(rel)).filter((n) => fs.statSync(path.join(full(rel), n)).isFile()); } catch (e) { return []; } },
+    async list(rel) { return (await this.listInfo(rel)).map((f) => f.name); },
+    async listInfo(rel) {
+      let names = [];
+      try { names = fs.readdirSync(full(rel)); } catch (e) { return []; }
+      const out = [];
+      for (const n of names) { const st = fs.statSync(path.join(full(rel), n)); if (st.isFile()) out.push({ name: n, tag: st.size + ':' + st.mtimeMs }); }
+      return out;
+    },
     async read(rel) { try { return fs.readFileSync(full(rel)); } catch (e) { return null; } },
-    async write(rel, bytes) { writeAtomic(full(rel), bytes); },
+    async write(rel, bytes) { writeAtomic(full(rel), bytes); const st = fs.statSync(full(rel)); return st.size + ':' + st.mtimeMs; },
     async remove(rel) { fs.rmSync(full(rel), { force: true }); }
   };
 }

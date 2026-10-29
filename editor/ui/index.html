@@ -150,6 +150,7 @@
         folder: one small file per person with their fields and groups. The add-in reads only the file of whoever writes. To keep
         the values current without publishing, let Windows run the export, e.g. nightly, on a PC in the domain:
         <code>powershell -ExecutionPolicy Bypass -File OSign.ps1 -ExportUsers</code></p>
+      <p class="lead" id="vsrcServerNote" hidden></p>
       <h2>Sign-in and permissions</h2>
       <p class="lead" data-th="signinLead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
         details and groups from Entra ID and the signatures from the OSign folder in SharePoint. It uses one app registration,

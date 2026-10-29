@@ -586,7 +586,7 @@
   $('pvSource').addEventListener('change', () => {
     const ad = $('pvSource').value === 'ad';
     $('pvAd').hidden = !ad;
-    if (ad && !(S.info && S.info.features && S.info.features.adLookup)) toast(t('Active Directory is not reachable from here: this needs Windows on a machine in the domain.'), true);
+    if (ad && !(S.info && S.info.features && S.info.features.adLookup)) toast(onServer() ? t('Active Directory is not set up on the server: {0}', t(S.info.features.adProblem)) : t('Active Directory is not reachable from here: this needs Windows on a machine in the domain.'), true);
     if (ad && !S.adValues) $('pvUser').focus();
     renderPreview();
   });
@@ -818,7 +818,22 @@
     $('installLink').hidden = !base; $('installNone').hidden = !!base;
     const mode = core.valueSource(S.config);
     document.querySelectorAll('input[name=vsrc]').forEach((r) => { r.checked = r.value === mode; });
-    $('vsrcNote').hidden = mode === 'graph';
+    $('vsrcNote').hidden = mode === 'graph' || onServer();
+    // The server version: it exports the users itself, every day at the time set on it.
+    const sn = $('vsrcServerNote');
+    sn.hidden = mode === 'graph' || !onServer();
+    if (!sn.hidden) {
+      const f = S.info.features, x = f.adExport;
+      let text = t('With AD, the users are written into users/ in the OSign folder on Publish: one small file per person with their fields and groups. The add-in reads only the file of whoever writes.');
+      if (!f.adLookup) text += ' ' + t('Active Directory is not set up on the server: {0}', t(f.adProblem));
+      else if (!x) text += ' ' + t('The server does not export them by itself (OSIGN_AD_EXPORT_AT is not set): the values change only when you publish.');
+      else {
+        text += ' ' + t('The server exports them every day at {0}.', x.at);
+        if (x.last) text += ' ' + (x.last.ok ? t('Last run {0}: fine.', new Date(x.last.at).toLocaleString(I18N.lang)) : t('Last run {0} failed: {1}', new Date(x.last.at).toLocaleString(I18N.lang), x.last.error));
+      }
+      sn.textContent = text;
+      sn.className = 'lead' + (!f.adLookup || (x && x.last && !x.last.ok) ? ' warn' : '');
+    }
   }
   document.querySelectorAll('input[name=vsrc]').forEach((r) => r.addEventListener('change', () => {
     if (!r.checked) return;

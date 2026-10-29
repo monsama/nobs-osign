@@ -83,8 +83,9 @@ What changes, and what doesn't:
 
 `server/` is that new backend, in Node, under way: the API, the sign-in (Active Directory group
 or the local account `admin`), the draft in `OSIGN_DATA`, and publishing into SharePoint through
-Microsoft Graph (`server/graph.js`, `Sites.Selected`) are there. AD lookup and export, the add-in's
-files (uploaded to Cloudflare Pages) and the Docker setup follow.
+Microsoft Graph (`server/graph.js`, `Sites.Selected`), and Active Directory over LDAP with a service
+account (`server/directory.js`, `server/users.js`: preview, groups, the users' values, a daily export)
+are there. The add-in's files (uploaded to Cloudflare Pages) and the Docker setup follow.
 
 `OSign.ps1` already reads `OSIGN_DATA`. So it also runs as it is
 in a `mcr.microsoft.com/powershell` container, as a stopgap, publishing into a mounted folder. It

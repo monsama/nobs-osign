@@ -13,6 +13,8 @@ const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
 const { ldapConfig } = require('./ldap');
+const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith } = require('./directory');
+const { createUsers, nextAt } = require('./users');
 
 const VERSION = require('../package.json').version;
 const ROOT = path.resolve(__dirname, '..');
@@ -104,7 +106,41 @@ function createApp(opts) {
     photos.set(key, { at: Date.now(), bytes });
     return bytes;
   }
-  const auth = createAuth({ env, ldap: Object.assign(ldapConfig(env), (opts && opts.ldap) || {}), log });
+  const ldapCfg = Object.assign(ldapConfig(env), (opts && opts.ldap) || {});
+  const auth = createAuth({ env, ldap: ldapCfg, log });
+  // Active Directory with the service account: the preview's users and groups, and the users'
+  // values for signatures that take them from AD.
+  const dir = directoryConfig(env, ldapCfg);
+  const adOn = directoryEnabled(dir) && !directoryProblem(dir);
+  if (directoryEnabled(dir) && directoryProblem(dir)) log.warn('Active Directory is not set up right: ' + directoryProblem(dir));
+  const users = createUsers({ dataDir, directory: dir, log });
+  // The scheduled export (OSIGN_AD_EXPORT_AT, hh:mm in TZ): every day, what the published
+  // signatures ask for, so the values stay as current as AD without anyone publishing.
+  const exportAt = String(env.OSIGN_AD_EXPORT_AT || '').trim();
+  let lastExport = null, exportTimer = null;
+  async function runExport() {
+    const at = Date.now();
+    try {
+      const r = await users.exportPublished(settings.target());
+      lastExport = { at, ok: true, result: r };
+      log.info('AD export: ' + (r.skipped ? 'skipped, ' + r.skipped : r.users + ' users, ' + r.written + ' written, ' + r.unchanged + ' unchanged, ' + r.removed + ' removed'));
+    } catch (e) {
+      lastExport = { at, ok: false, error: e.message };
+      log.error('AD export failed: ' + e.message);
+    }
+    return lastExport;
+  }
+  function scheduleExport() {
+    const next = nextAt(exportAt, Date.now());
+    if (!next) return;
+    exportTimer = setTimeout(async () => { await runExport(); scheduleExport(); }, next - Date.now());
+    // The timer alone never keeps the process (or a test) running.
+    if (exportTimer.unref) exportTimer.unref();
+  }
+  if (adOn && exportAt) {
+    if (nextAt(exportAt, Date.now())) scheduleExport();
+    else log.warn('OSIGN_AD_EXPORT_AT is a time of day like 06:00: ' + exportAt);
+  }
 
   const routes = {
     ping: () => ({}),
@@ -112,11 +148,14 @@ function createApp(opts) {
       backend: 'node', version: VERSION, dataDir,
       // Not here yet: AD lookup and export (LDAP), and the add-in's files (Cloudflare Pages).
       features: {
-        adLookup: false, addinFiles: false, pickFolder: false, signOut: true,
+        adLookup: adOn, addinFiles: false, pickFolder: false, signOut: true,
         // 'sharepoint': publishing goes through Graph; 'folder': into the server's folder.
         publishTarget: graph ? 'sharepoint' : 'folder',
         graphClientId: graph ? graphCfg.clientId : '',
-        graphProblem: graphProblem(graphCfg)
+        graphProblem: graphProblem(graphCfg),
+        // AD with the server's service account; the scheduled export, and how its last run went.
+        adProblem: adOn ? '' : directoryProblem(dir),
+        adExport: adOn && exportAt ? { at: exportAt, last: lastExport } : null
       },
       user: { login: s.user.login, name: s.user.name }
     }),
@@ -136,6 +175,25 @@ function createApp(opts) {
     },
     'load-published': async () => {
       try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }
+    },
+    // Active Directory, with the service account.
+    'ad/lookup': async (d, s) => {
+      if (!adOn) return { error: directoryProblem(dir) };
+      // Nothing typed: the one signed in, as OSign.ps1 takes the Windows user.
+      const q = String(d.query || '').trim() || (s.user.local ? '' : s.user.login);
+      try { return await lookup(dir, q, Array.isArray(d.fields) ? d.fields : []); } catch (e) { return { error: e.message }; }
+    },
+    'ad/groups': async (d) => {
+      if (!adOn) return { error: directoryProblem(dir) };
+      try { return { groups: await groupsStartingWith(dir, d.query) }; } catch (e) { return { error: e.message }; }
+    },
+    'ad/read': async (d) => {
+      if (!adOn) return { error: directoryProblem(dir) };
+      try { return await users.apiRead(settings.target(), d); } catch (e) { return { error: 'Active Directory: ' + e.message }; }
+    },
+    'ad/snapshot': (d) => users.apiSnapshot(d),
+    'ad/export': async (d) => {
+      try { return await users.apiExport(settings.target(), d); } catch (e) { return { error: 'Writing the users: ' + e.message }; }
     },
     // Whether the server reaches a SharePoint folder, before it is saved (the setup assistant).
     'sp/check': async (d) => {
@@ -158,11 +216,6 @@ function createApp(opts) {
     'pick-folder': 'Choosing a folder needs Windows.',
     'sp/resolve': 'The server does not use a synced folder.',
     'sp/local': 'The server does not use a synced folder.',
-    'ad/lookup': 'Looking up users in Active Directory is not in the server version yet.',
-    'ad/groups': 'Looking up groups in Active Directory is not in the server version yet.',
-    'ad/read': 'Reading users from Active Directory is not in the server version yet.',
-    'ad/snapshot': null,
-    'ad/export': 'Writing users from Active Directory is not in the server version yet.',
     'addin/build': "Making the add-in's files is not in the server version yet.",
     'addin/check': "Checking the add-in's files is not in the server version yet.",
     quit: 'The server keeps running; sign out instead.'
@@ -187,7 +240,6 @@ function createApp(opts) {
 
     const s = auth.session(req);
     if (!s) return fail(res, 'Not signed in.', 401);
-    if (name === 'ad/snapshot') return ok(res, { snapshot: null, matches: false });
     if (Object.prototype.hasOwnProperty.call(NOT_HERE, name)) return fail(res, NOT_HERE[name]);
     const fn = Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
     if (!fn) return fail(res, 'unknown', 404);
@@ -200,7 +252,7 @@ function createApp(opts) {
     return ok(res, r || {});
   }
 
-  return async function handle(req, res) {
+  async function handle(req, res) {
     let pathname;
     try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch (e) { return send(res, 400, 'text/plain; charset=utf-8', '400 Bad Request'); }
     try {
@@ -233,7 +285,10 @@ function createApp(opts) {
       log.error('request ' + pathname + ': ' + (e && e.stack || e));
       if (!res.headersSent) send(res, 500, 'text/plain; charset=utf-8', '500 Internal Server Error');
     }
-  };
+  }
+  // For the tests and a manual run: the scheduled export, now.
+  handle.runExport = runExport;
+  return handle;
 }
 
 module.exports = { createApp };
