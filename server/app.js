@@ -12,7 +12,7 @@ const { createStore, ASSET_TYPES } = require('./store');
 const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
-const { ldapConfig, ldapProblem, testSignIn } = require('./ldap');
+const { ldapConfig, ldapProblem, testSignIn, detect } = require('./ldap');
 const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, testService } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
@@ -255,6 +255,8 @@ function createApp(opts) {
   function connectionsAnswer() {
     const cert = certs.active();
     return Object.assign(connections.answer(), {
+      // What follows from the domain, for the fields left empty (shown as their placeholders).
+      derived: { ldapBind: ldapCfg.bindTemplate, ldapBase: ldapCfg.searchBase, ldapDirectoryBase: dir.base, ldapServiceDn: dir.serviceDn },
       // The certificate in use, if any: it wins over a client secret.
       cert: cert ? { thumbprint: cert.thumbprint, expires: cert.expires } : null,
       problems: {
@@ -334,6 +336,22 @@ function createApp(opts) {
           if (r.group === false) return { error: 'The domain controller answers, but there is no sign-in group by that name: check the group\'s DN.' };
           return { message: r.group ? 'The domain controller answers, and the sign-in group is there.' : 'The domain controller answers (TLS as set). With the service account set, the group is checked too.' };
         }
+        // Active Directory as a whole: the domain controller, the sign-in group, the service account.
+        if (d.what === 'ad') {
+          if (!ldapCfg.url) return { error: 'Enter the domain controller.' };
+          const look = dir.serviceDn && dir.servicePassword ? { dn: dir.serviceDn, password: dir.servicePassword } : null;
+          let r;
+          try { r = await testSignIn(ldapCfg, look); }
+          catch (e) {
+            if (look && e instanceof Error && /InvalidCredentials|invalid credentials|52e/i.test(e.name + ' ' + e.message)) return { error: 'The domain controller answers, but the service account cannot sign in: check its login and password.' };
+            throw e;
+          }
+          if (!look) return { message: 'The domain controller answers (TLS as set). Enter the service account to check the group and read users.' };
+          if (r.group === false) return { error: 'The domain controller answers and the service account signs in, but there is no sign-in group by that name: check it.' };
+          const u = await testService(dir);
+          return u.users ? { message: 'All set: the domain controller answers, the service account signs in and reads users, and the sign-in group is there.' }
+            : { error: 'The service account signs in, but sees no users with a mail address: check where users and groups are read (Advanced).' };
+        }
         if (d.what === 'directory') {
           const r = await testService(dir);
           return r.users ? { message: 'The service account signs in and reads users.' } : { error: 'The service account signs in, but sees no users with a mail address there: check where users and groups are read.' };
@@ -355,6 +373,11 @@ function createApp(opts) {
         }
         return { error: 'unknown' };
       } catch (e) { return { error: e.message }; }
+    },
+    // The domain, read from the domain controller (its RootDSE): "Detect" in Server connections.
+    'connections/detect': async (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
+      try { return await detect(ldapCfg); } catch (e) { return { error: e.message }; }
     },
     // The server's connections (Settings → Server connections), for the local account admin.
     'connections/get': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : connectionsAnswer()),

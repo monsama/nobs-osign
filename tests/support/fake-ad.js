@@ -64,7 +64,13 @@ function fakeAd({ base, people, groups, service }) {
     if (who && pw === people[who].pw) { res.end(); return next(); }
     return next(new ldap.InvalidCredentialsError());
   });
-  server.search(base, (req, res, next) => {
+  server.search('', (req, res, next) => {
+    // The RootDSE, which AD lets anyone read: the domain it serves.
+    if (req.dn.toString() === '') {
+      res.send(new ldap.SearchEntry({ objectName: '', attributes: [
+        new ldap.Attribute({ type: 'defaultNamingContext', values: [base] }), new ldap.Attribute({ type: 'dnsHostName', values: ['dc01.example.ch'] })] }));
+      res.end(); return next();
+    }
     // What was asked: the filter, and the attributes asked for.
     searches.push(req.filter.toString() + ' attributes=' + (req.attributes || []).join(','));
     const scope = lc(req.dn.toString());

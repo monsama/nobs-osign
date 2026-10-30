@@ -4,10 +4,12 @@
  * nobs-inventory's server/ldap.js, so both tools are set up alike.
  *
  *   OSIGN_LDAP_URL         ldaps://dc01.example.ch (636), or ldap://… with OSIGN_LDAP_STARTTLS=1
+ *   OSIGN_AD_DOMAIN        the domain's DNS name, example.ch (read from the domain controller by
+ *                          "Detect"). The rest follows from it unless set:
  *   OSIGN_LDAP_BIND        how a login becomes a bind name: {login}@example.ch
- *   OSIGN_LDAP_BASE        where users are searched: OU=Users,DC=example,DC=ch
- *   OSIGN_LDAP_GROUP       the sign-in group. As a DN (CN=OSign-Admins,OU=…), nested groups count;
- *                          as a plain name, only direct membership.
+ *   OSIGN_LDAP_BASE        where users are searched: DC=example,DC=ch (or an OU in it)
+ *   OSIGN_LDAP_GROUP       the sign-in group, by name (NOBS-OSign-Admins) or as a DN; nested
+ *                          groups count either way.
  *   OSIGN_LDAP_LOGIN_ATTR  the attribute a login is (sAMAccountName)
  *   OSIGN_LDAP_CA          a file with the CA certificate(s) the domain controller's comes from
  *   OSIGN_LDAP_ALLOW_PLAIN=1  allows ldap:// without StartTLS, which sends passwords readable
@@ -29,11 +31,23 @@ const isDn = (g) => /=/.test(String(g || ''));
 // Active Directory's "in chain" rule: in the group directly or through groups nested in it.
 const chain = (dn) => '(memberOf:1.2.840.113556.1.4.1941:=' + escapeFilter(dn) + ')';
 
+// example.ch → DC=example,DC=ch
+const dnOfDomain = (d) => (String(d || '').trim() ? String(d).trim().split('.').map((p) => 'DC=' + p).join(',') : '');
+// DC=example,DC=ch (the DC= parts of any DN) → example.ch
+const domainOfDn = (dn) => String(dn || '').split(',').map((x) => x.trim()).filter((x) => /^DC=/i.test(x)).map((x) => x.slice(3)).join('.');
+
 function ldapConfig(env) {
+  const domain = String(env.OSIGN_AD_DOMAIN || '').trim().toLowerCase();
+  const searchBase = env.OSIGN_LDAP_BASE || dnOfDomain(domain);
   return {
     url: env.OSIGN_LDAP_URL || '',
-    bindTemplate: env.OSIGN_LDAP_BIND || '',
-    searchBase: env.OSIGN_LDAP_BASE || '',
+    domain,
+    // Without a format of its own: login@domain, which Active Directory takes for any account of
+    // that domain, whatever UPN suffix the account has.
+    bindTemplate: env.OSIGN_LDAP_BIND || (domain ? '{login}@' + domain : ''),
+    searchBase,
+    // The whole domain, where groups are found.
+    domainBase: dnOfDomain(domainOfDn(searchBase)) || dnOfDomain(domain),
     group: env.OSIGN_LDAP_GROUP || '',
     loginAttr: env.OSIGN_LDAP_LOGIN_ATTR || 'sAMAccountName',
     caFile: env.OSIGN_LDAP_CA || '',
@@ -45,8 +59,9 @@ function ldapConfig(env) {
 function ldapProblem(c) {
   if (!c.url) return '';
   if (!/^ldaps?:\/\/[^\s/]+\/?$/i.test(c.url)) return 'The address of the domain controller is like ldaps://dc01.example.ch.';
-  if (!c.bindTemplate.includes('{login}')) return 'The sign-in name names where the login goes, like {login}@example.ch.';
-  if (!c.searchBase) return 'Where the users are is not set (like OU=Users,DC=example,DC=ch).';
+  if (!c.bindTemplate) return 'Enter the domain (like example.ch), or use Detect.';
+  if (!c.bindTemplate.includes('{login}')) return 'The sign-in name format names where the login goes, like {login}@example.ch (Advanced). Leave it empty to use the domain.';
+  if (!c.searchBase) return 'Enter the domain (like example.ch), or use Detect.';
   if (!c.group) return 'The sign-in group is not set: without it, every account in the directory could sign in.';
   if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(c.loginAttr)) return 'The login attribute is the name of one attribute, such as sAMAccountName.';
   if (/^ldap:\/\//i.test(c.url) && !c.startTls && !c.allowPlain) return "The domain controller's address starts with ldap://, which sends passwords unencrypted. Use ldaps://, or turn on StartTLS.";
@@ -93,6 +108,34 @@ function search(client, base, filter, attributes, sizeLimit) {
   });
 }
 
+// The sign-in group's DN: as set, or found by its name (sAMAccountName or CN) in the domain. null
+// when there is no such group.
+async function groupDn(client, c) {
+  if (isDn(c.group)) return c.group;
+  const g = escapeFilter(c.group);
+  const [hit] = await search(client, c.domainBase || c.searchBase, '(&(objectClass=group)(|(sAMAccountName=' + g + ')(cn=' + g + ')))', ['cn'], 2);
+  return hit ? hit.dn : null;
+}
+
+// What the domain controller says of itself, without signing in (its RootDSE, which AD lets anyone
+// read): the domain's DNS name and DN. For "Detect" in Server connections.
+async function detect(c) {
+  if (!/^ldaps?:\/\/[^\s/]+\/?$/i.test(c.url || '')) throw new Error('The address of the domain controller is like ldaps://dc01.example.ch.');
+  const client = await connect(c);
+  try {
+    const [root] = await new Promise((resolve, reject) => client.search('', { scope: 'base', filter: '(objectClass=*)', attributes: ['defaultNamingContext', 'dnsHostName'] }, (err, res) => {
+      if (err) return reject(err);
+      const out = [];
+      res.on('searchEntry', (e) => { const a = {}; for (const x of (e.pojo && e.pojo.attributes) || []) a[x.type.toLowerCase()] = [].concat(x.values); out.push(a); });
+      res.on('error', reject);
+      res.on('end', () => resolve(out));
+    }));
+    const dn = root && (root.defaultnamingcontext || [])[0];
+    if (!dn) throw new Error('The domain controller answers, but does not say its domain. Enter it by hand.');
+    return { domain: domainOfDn(dn).toLowerCase(), base: dn, host: (root.dnshostname || [])[0] || '' };
+  } finally { close(client); }
+}
+
 // { login, name, allowed } for a right password, null for a wrong one. Throws when the directory
 // cannot be asked, so the caller can tell the two apart.
 async function ldapLogin(c, login, password) {
@@ -105,8 +148,10 @@ async function ldapLogin(c, login, password) {
     // written still answers.
     const [entry] = await search(client, c.searchBase, '(' + attr + '=' + escapeFilter(login) + ')', ['displayname', 'memberof', attr.toLowerCase()]);
     if (!entry) return null;
-    let allowed;
-    if (isDn(c.group)) allowed = (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(login) + ')' + chain(c.group) + ')', ['cn'])).length > 0;
+    // In the group, directly or through nested groups (found by name, when a name is set).
+    const group = await groupDn(client, c);
+    let allowed = false;
+    if (group) allowed = (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(login) + ')' + chain(group) + ')', ['cn'])).length > 0;
     else allowed = (entry.attrs.memberof || []).some((g) => cnOf(g).toLowerCase() === c.group.toLowerCase());
     return { login, name: (entry.attrs.displayname || [])[0] || login, allowed };
   } catch (e) {
@@ -124,7 +169,7 @@ async function testSignIn(c, lookWith) {
   try {
     if (!lookWith) return { reached: true };
     await bind(client, lookWith.dn, lookWith.password);
-    if (!isDn(c.group)) return { reached: true };
+    if (!isDn(c.group)) return { reached: true, group: !!(await groupDn(client, c)) };
     const found = await new Promise((resolve, reject) => client.search(c.group, { scope: 'base', filter: '(objectClass=*)', attributes: ['cn'] }, (err, res) => {
       if (err) return reject(err);
       let n = 0;
@@ -136,4 +181,4 @@ async function testSignIn(c, lookWith) {
   } finally { close(client); }
 }
 
-module.exports = { testSignIn, ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf, connect, close, bind, search, chain };
+module.exports = { testSignIn, detect, dnOfDomain, domainOfDn, ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf, connect, close, bind, search, chain };

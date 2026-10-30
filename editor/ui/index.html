@@ -361,53 +361,55 @@
       again. Until then, passwords and the token go in ./secrets.</p>
 
     <nav class="dtabs" role="tablist" aria-label="Server connections">
-      <button type="button" class="tab active" data-ctab="signin" role="tab"><span class="dot" data-cdot="signIn"></span>Sign-in</button>
-      <button type="button" class="tab" data-ctab="service" role="tab"><span class="dot" data-cdot="directory"></span>Service account</button>
+      <button type="button" class="tab active" data-ctab="ad" role="tab"><span class="dot" data-cdot="ad"></span>Active Directory</button>
       <button type="button" class="tab" data-ctab="graph" role="tab"><span class="dot" data-cdot="graph"></span>SharePoint</button>
       <button type="button" class="tab" data-ctab="pages" role="tab"><span class="dot" data-cdot="pages"></span>Cloudflare Pages</button>
     </nav>
 
-    <section class="dpane" role="tabpanel" data-cpane="signin">
-      <p id="connSignIn" class="lead"></p>
+    <section class="dpane" role="tabpanel" data-cpane="ad">
+      <p id="connAd" class="lead"></p>
       <div class="form">
         <label for="cn_ldapUrl">Domain controller</label>
-        <div><input id="cn_ldapUrl" data-ph="ldaps://dc01.example.ch" autocomplete="off">
-          <small>(ldaps://, port 636)</small></div>
-        <label for="cn_ldapStartTls">StartTLS</label>
-        <div><select id="cn_ldapStartTls"><option value="">As in .env</option><option value="on">On</option><option value="off">Off</option></select>
-          <small>(only for an ldap:// address)</small></div>
-        <label for="cn_ldapBind">User name format</label>
-        <div><input id="cn_ldapBind" data-ph="{login}@example.ch" autocomplete="off">
-          <small>({login} is what people type)</small></div>
-        <label for="cn_ldapBase">Where the users are</label>
-        <div><input id="cn_ldapBase" data-ph="OU=Users,DC=example,DC=ch" autocomplete="off"></div>
+        <div><span class="pick"><input id="cn_ldapUrl" data-ph="ldaps://dc01.example.ch" autocomplete="off"><button type="button" id="connDetect" class="small">Detect</button></span>
+          <small>(ldaps://, port 636. «Detect» reads the domain from it)</small></div>
+        <label for="cn_adDomain">Domain</label>
+        <div><input id="cn_adDomain" data-ph="example.ch" autocomplete="off">
+          <small>(its DNS name. People sign in with their Windows login, like on a PC)</small></div>
         <label for="cn_ldapGroup">Sign-in group</label>
-        <div><input id="cn_ldapGroup" data-ph="CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch" autocomplete="off">
-          <small>(its members may use the editor; nested groups count)</small></div>
-        <label for="cn_ldapLoginAttr">Login attribute</label>
-        <div><input id="cn_ldapLoginAttr" data-ph="sAMAccountName" autocomplete="off"></div>
-        <label for="connCaFile">CA certificate of the domain controller</label>
-        <div><span class="pick"><input id="connCaFile" type="file" accept=".cer,.crt,.pem"><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
-          <small>(when it comes from your own CA: .cer, .crt or .pem)</small> <small id="connCa"></small></div>
-      </div>
-      <p class="ctest"><button type="button" class="small" data-ctest="signIn">Save and test the connection</button> <span class="where" data-ctestout="signIn"></span></p>
-    </section>
-
-    <section class="dpane" role="tabpanel" data-cpane="service" hidden>
-      <p id="connDirectory" class="lead"></p>
-      <div class="form">
+        <div><input id="cn_ldapGroup" data-ph="NOBS-OSign-Admins" autocomplete="off">
+          <small>(the name of an AD group: its members may use the editor, nested groups count)</small></div>
         <label for="cn_ldapServiceDn">Service account</label>
-        <div><input id="cn_ldapServiceDn" data-ph="CN=svc-osign,OU=Service,DC=example,DC=ch" autocomplete="off">
-          <small>(read-only)</small></div>
+        <div><input id="cn_ldapServiceDn" data-ph="svc-osign" autocomplete="off">
+          <small>(its login. A plain domain user is enough: it only reads)</small></div>
         <label for="cs_ldapServicePassword">Its password</label>
         <div><span class="pick"><input id="cs_ldapServicePassword" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="ldapServicePassword" hidden>Remove</button></span><small id="cx_ldapServicePassword"></small></div>
-        <label for="cn_ldapDirectoryBase">Where users and groups are read</label>
-        <div><input id="cn_ldapDirectoryBase" data-ph="DC=example,DC=ch" autocomplete="off">
-          <small>(empty: the whole domain)</small></div>
-        <label for="cn_adExportAt">Export the users' values every day at</label>
-        <div><input id="cn_adExportAt" data-ph="06:00" autocomplete="off"></div>
+        <label for="connCaFile">CA certificate</label>
+        <div><span class="pick"><input id="connCaFile" type="file" accept=".cer,.crt,.pem"><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
+          <small>(of your own CA, when the domain controller's certificate comes from it: .cer, .crt or .pem)</small> <small id="connCa"></small></div>
+        <label for="cn_adExportAt">Export the users' values daily at</label>
+        <div><input id="cn_adExportAt" data-ph="06:00" autocomplete="off">
+          <small>(empty: only when publishing)</small></div>
       </div>
-      <p class="ctest"><button type="button" class="small" data-ctest="directory">Save and test the connection</button> <span class="where" data-ctestout="directory"></span></p>
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <p class="hint">Only when your directory differs from the usual: an empty field follows from the domain (shown in grey).</p>
+        <div class="form">
+          <label for="cn_ldapStartTls">StartTLS</label>
+          <div><select id="cn_ldapStartTls"><option value="">As in .env</option><option value="on">On</option><option value="off">Off</option></select>
+            <small>(only for an ldap:// address)</small></div>
+          <label for="cn_ldapBind">Sign-in name format</label>
+          <div><input id="cn_ldapBind" data-ph="{login}@example.ch" autocomplete="off">
+            <small>({login} is what people type)</small></div>
+          <label for="cn_ldapBase">Where the users are</label>
+          <div><input id="cn_ldapBase" data-ph="DC=example,DC=ch" autocomplete="off">
+            <small>(an OU, to let in only the users below it)</small></div>
+          <label for="cn_ldapLoginAttr">Login attribute</label>
+          <div><input id="cn_ldapLoginAttr" data-ph="sAMAccountName" autocomplete="off"></div>
+          <label for="cn_ldapDirectoryBase">Where users and groups are read</label>
+          <div><input id="cn_ldapDirectoryBase" data-ph="DC=example,DC=ch" autocomplete="off"></div>
+        </div>
+      </details>
+      <p class="ctest"><button type="button" class="small" data-ctest="ad">Save and test</button> <span class="where" data-ctestout="ad"></span></p>
     </section>
 
     <section class="dpane" role="tabpanel" data-cpane="graph" hidden>

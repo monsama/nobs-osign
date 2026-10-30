@@ -4,7 +4,8 @@
  * preview, group names to pick from, and every user's values for signatures whose values come
  * from AD (users/<mail>.json next to signatures.json, see docs/API.md, ad/read and ad/export).
  *
- *   OSIGN_LDAP_SERVICE_DN             a read-only account: CN=svc-osign,OU=Service,DC=example,DC=ch
+ *   OSIGN_LDAP_SERVICE_DN             a read-only account: its login (svc-osign, signed in as
+ *                                     svc-osign@<domain>), or its DN
  *   OSIGN_LDAP_SERVICE_PASSWORD_FILE  its password, as a Docker secret
  *   OSIGN_LDAP_DIRECTORY_BASE         where users and groups are searched; empty: the whole
  *                                     domain the sign-in base (OSIGN_LDAP_BASE) is in
@@ -29,7 +30,10 @@ function directoryConfig(env, ldapCfg) {
   else pw = String(env.OSIGN_LDAP_SERVICE_PASSWORD || '').trim();
   // The domain the sign-in base is in: its DC= parts.
   const dcs = String(ldapCfg.searchBase || '').split(',').map((x) => x.trim()).filter((x) => /^DC=/i.test(x)).join(',');
-  return Object.assign({}, ldapCfg, { serviceDn: String(env.OSIGN_LDAP_SERVICE_DN || '').trim(), servicePassword: pw, base: String(env.OSIGN_LDAP_DIRECTORY_BASE || '').trim() || dcs || ldapCfg.searchBase,
+  // A login without a domain (svc-osign): as svc-osign@<domain>, as people sign in.
+  let serviceDn = String(env.OSIGN_LDAP_SERVICE_DN || '').trim();
+  if (serviceDn && !/[=@\\]/.test(serviceDn) && ldapCfg.domain) serviceDn += '@' + ldapCfg.domain;
+  return Object.assign({}, ldapCfg, { serviceDn, servicePassword: pw, base: String(env.OSIGN_LDAP_DIRECTORY_BASE || '').trim() || dcs || ldapCfg.searchBase,
     // The password in ./secrets is for this domain controller only (server/connections.js).
     pinnedTo: String(env.OSIGN_PASSWORD_PINNED || '') });
 }

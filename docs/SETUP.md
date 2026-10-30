@@ -55,13 +55,23 @@ so backups are encrypted, and keep them as private as the server.
 
 **Settings → Server connections** (also the setup assistant's first step), for the local account
 `admin` only: whoever sets the domain controller's address gets the passwords people sign in with.
-Each tab has **Save and test the connection**.
+Each tab has **Save and test**.
 
-- **Sign-in:** the domain controller (`ldaps://dc01.example.ch`; `ldap://` only with StartTLS), the
-  user name format (`{login}@example.ch`), where the users are, the sign-in group (a DN, nested
-  groups count), and the CA certificate of the domain controller when it comes from your own CA.
-- **Service account:** a read-only AD account for the preview, the group list and the users'
-  values, its password, where users and groups are read, and the time of the daily export.
+- **Active Directory:**
+  1. **Domain controller**: `ldaps://dc01.example.ch` (`ldap://` only with StartTLS), and, when its
+     certificate comes from your own CA, that **CA certificate** (.cer). **Detect** reads the
+     domain from the domain controller.
+  2. **Domain**: its DNS name (`example.ch`). People then sign in with their Windows login, as on
+     a PC (`anna`, signed in as `anna@example.ch`); users are looked for in the whole domain.
+  3. **Sign-in group**: the name of an AD group (`NOBS-OSign-Admins`); its members may use the
+     editor, nested groups count.
+  4. **Service account**: the login of an account that reads the directory (`svc-osign`; a plain
+     domain user is enough) and its password: for the preview, the group list and the users'
+     values. Optionally the time of the daily export.
+
+  **Advanced** is only for a directory that differs from the usual: another sign-in name format
+  (`DOMAIN\{login}`), an OU to let in only the users below it, another login attribute, another
+  place to read users and groups. Empty fields there follow from the domain (shown in grey).
 - **SharePoint:** set by the setup script (step 4); by hand: the tenant ID, the server's client ID
   and secret, and when the secret runs out (the editor warns 30 days before).
 - **Cloudflare Pages:** in Cloudflare, **My Profile → API Tokens → Create Token** with *Account →
@@ -287,10 +297,11 @@ In Settings → Server connections, or as environment variables in `.env` with t
 | `OSIGN_ADMIN_PASSWORD_FILE` | a file holding the password of the local account `admin` (only here) |
 | `OSIGN_APP_KEY_FILE` | a file holding the key the passwords set in Settings are kept with (only here) |
 | `OSIGN_LDAP_URL` | `ldaps://dc01.example.ch` (or `ldap://…` with `OSIGN_LDAP_STARTTLS=1`) |
-| `OSIGN_LDAP_BIND`, `OSIGN_LDAP_BASE` | `{login}@example.ch`, `OU=Users,DC=example,DC=ch` |
-| `OSIGN_LDAP_GROUP` | who may sign in: `CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch` (as a DN, nested groups count) |
+| `OSIGN_AD_DOMAIN` | the domain's DNS name, `example.ch`; the two below follow from it |
+| `OSIGN_LDAP_BIND`, `OSIGN_LDAP_BASE` | only when they differ: `{login}@example.ch`, `OU=Users,DC=example,DC=ch` |
+| `OSIGN_LDAP_GROUP` | who may sign in: `NOBS-OSign-Admins` (its name, or a DN; nested groups count) |
 | `OSIGN_LDAP_CA` | the CA certificate the domain controller's certificate comes from, if it is not a public one |
-| `OSIGN_LDAP_SERVICE_DN` | a read-only account for the preview, the group list and the users' values |
+| `OSIGN_LDAP_SERVICE_DN` | the login of an account that reads the directory (`svc-osign`, or its DN): the preview, the group list and the users' values |
 | `OSIGN_LDAP_SERVICE_PASSWORD_FILE` | a file holding its password |
 | `OSIGN_LDAP_DIRECTORY_BASE` | where users and groups are searched; empty: the whole domain of `OSIGN_LDAP_BASE` |
 | `OSIGN_AD_EXPORT_AT` | `06:00`: the users' values are exported every day at that time (`TZ`) |
