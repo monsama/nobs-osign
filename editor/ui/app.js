@@ -1153,7 +1153,7 @@
     cfAddress();
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
-    $('connCaFile').value = '';
+    $('connCaFile').value = ''; fileName('connCaFile');
     const line = (id, problem, okText) => { $(id).textContent = problem ? connText(problem) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
     // SharePoint: the setup script first; "again" once it is set up (a new certificate).
     connSpRender();
@@ -2174,6 +2174,7 @@
   // A backup: downloaded locked with a passphrase, or brought back.
   $('setBackup').addEventListener('click', () => {
     for (const id of ['bakPass', 'bakPass2', 'bakRestorePass', 'bakFile']) $(id).value = '';
+    fileName('bakFile');
     for (const id of ['bakErr', 'bakExportOk', 'bakRestoreOk']) $(id).textContent = '';
     $('dlgBackup').showModal();
   });
@@ -2318,6 +2319,10 @@
     const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (isError ? ' error' : '');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 6000 : 3000);
   }
+
+  // A file picked through a button-like label: its name next to it.
+  function fileName(id) { const s = document.querySelector('.fname[data-for="' + id + '"]'); if (s) s.textContent = $(id).files && $(id).files[0] ? $(id).files[0].name : ''; }
+  document.querySelectorAll('.fname[data-for]').forEach((s) => $(s.dataset.for).addEventListener('change', () => fileName(s.dataset.for)));
 
   // Accessibility: each dialog is named by its heading; tabs move with the arrow keys; the list
   // says which signature is open.

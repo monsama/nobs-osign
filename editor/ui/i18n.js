@@ -267,6 +267,7 @@
     'A link starts with https://, mailto: or tel:.': 'Ein Link beginnt mit https://, mailto: oder tel:.',
     // import
     'Choose files…': 'Dateien wählen…',
+    'Choose file…': 'Datei wählen…',
     'Choose a folder…': 'Ordner wählen…',
     'Import': 'Importieren',
     'CI-Sign text blocks ({##…}), not a signature. ': 'CI-Sign-Textbausteine ({##…}), keine Signatur. ',

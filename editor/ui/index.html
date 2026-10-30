@@ -269,7 +269,7 @@
     <p class="lead warn">This replaces the draft, the settings, the connections and the history here with the backup's.</p>
     <div class="form">
       <label for="bakFile">Backup file</label>
-      <div><input id="bakFile" type="file" accept=".osignbak"></div>
+      <div><span class="pick"><label class="filepick small">Choose file… <input id="bakFile" type="file" accept=".osignbak"></label> <span class="fname" data-for="bakFile"></span></span></div>
       <label for="bakRestorePass">Its passphrase</label>
       <div><input id="bakRestorePass" type="password" autocomplete="off"></div>
     </div>
@@ -435,7 +435,7 @@
         <label for="cs_ldapServicePassword">Its password</label>
         <div><span class="pick"><input id="cs_ldapServicePassword" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="ldapServicePassword" hidden>Remove</button></span><small id="cx_ldapServicePassword"></small></div>
         <label for="connCaFile">CA certificate</label>
-        <div><span class="pick"><input id="connCaFile" type="file" accept=".cer,.crt,.pem"><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
+        <div><span class="pick"><label class="filepick small">Choose file… <input id="connCaFile" type="file" accept=".cer,.crt,.pem"></label> <span class="fname" data-for="connCaFile"></span><button type="button" id="connCaRemove" class="small" hidden>Remove</button></span>
           <small>(of your own CA, when the domain controller's certificate comes from it: .cer, .crt or .pem)</small> <small id="connCa"></small></div>
         <label for="cn_adExportAt">Export the users' values daily at</label>
         <div><input id="cn_adExportAt" data-ph="06:00" autocomplete="off">
