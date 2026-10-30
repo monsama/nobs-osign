@@ -111,20 +111,34 @@ function createGraph(c, opts) {
     return c.graphUrl + '/sites/' + m[1] + ':/' + m[2] + '/' + encodeURIComponent(m[3]) + ':';
   }
 
+  // A site by its id: Graph takes a site's path, or a path in its drive, but not both in one URL
+  // ("Resource not found for the segment 'root:'"), so the path is asked for the id once.
+  const siteIds = new Map();
+  function siteBase(site) {
+    if (!site || site === 'root') return Promise.resolve(c.graphUrl + '/sites/root');
+    if (!siteIds.has(site)) {
+      const p = call('GET', siteUrl(site) + '?$select=id', { what: 'Finding the site ' + site.replace(/:\//, '/').replace(/:$/, '') })
+        .then((r) => r.json()).then((j) => { if (!j.id) throw new Error('Microsoft Graph did not name the site\'s id.'); return c.graphUrl + '/sites/' + j.id; });
+      p.catch(() => siteIds.delete(site));
+      siteIds.set(site, p);
+    }
+    return siteIds.get(site);
+  }
+
   function target(site, folder) {
-    const base = siteUrl(site) + '/drive/root';
+    const baseOf = async () => (await siteBase(site)) + '/drive/root';
     const parts = (rel) => (String(folder || '') + '/' + String(rel || '')).split('/').filter(Boolean);
-    const itemUrl = (rel) => base + ':/' + parts(rel).map(encodeURIComponent).join('/') + ':';
+    const itemUrl = async (rel) => (await baseOf()) + ':/' + parts(rel).map(encodeURIComponent).join('/') + ':';
     // As people read it: SharePoint contoso.sharepoint.com/sites/IT › OSign (root: the home site).
     const where = 'SharePoint ' + (!site || site === 'root' ? 'root' : site.replace(/:\//, '/').replace(/:$/, '')) + ' › ' + folder;
 
     async function meta(rel, what) {
-      const r = await call('GET', itemUrl(rel) + '?$select=id,name,folder,file,size', { what, okStatus: [404] });
+      const r = await call('GET', (await itemUrl(rel)) + '?$select=id,name,folder,file,size', { what, okStatus: [404] });
       return r.status === 404 ? null : r.json();
     }
     // The folders on the way, made where they are missing (a new OSign folder, its assets/).
     async function ensureFolder(rel) {
-      const p = parts(rel);
+      const p = parts(rel), base = await baseOf();
       for (let i = 1; i <= p.length; i++) {
         const sub = p.slice(0, i);
         const r = await call('GET', base + ':/' + sub.map(encodeURIComponent).join('/') + ':?$select=id,folder', { what: 'Finding the folder ' + sub.join('/'), okStatus: [404] });
@@ -147,7 +161,7 @@ function createGraph(c, opts) {
       // it was last read can be told without reading every file.
       async listInfo(rel) {
         const out = [];
-        let url = itemUrl(rel) + '/children?$select=name,file,eTag&$top=999';
+        let url = (await itemUrl(rel)) + '/children?$select=name,file,eTag&$top=999';
         // A page holds up to 999: 200 pages are some 200 000 users.
         for (let page = 0; url && page < 200; page++) {
           const r = await call('GET', url, { what: 'Listing ' + rel, okStatus: [404] });
@@ -159,7 +173,7 @@ function createGraph(c, opts) {
         return out;
       },
       async read(rel) {
-        const r = await call('GET', itemUrl(rel) + '/content', { what: 'Reading ' + rel, okStatus: [404] });
+        const r = await call('GET', (await itemUrl(rel)) + '/content', { what: 'Reading ' + rel, okStatus: [404] });
         return r.status === 404 ? null : Buffer.from(await r.arrayBuffer());
       },
       // Simple upload: signatures.json and the images are far below its 250 MB.
@@ -167,11 +181,11 @@ function createGraph(c, opts) {
       async write(rel, bytes, type) {
         const dir = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel);
         if (!made.has(dir)) { await ensureFolder(dir); made.add(dir); }
-        const r = await call('PUT', itemUrl(rel) + '/content', { what: 'Writing ' + rel, body: bytes, type: type || 'application/octet-stream' });
+        const r = await call('PUT', (await itemUrl(rel)) + '/content', { what: 'Writing ' + rel, body: bytes, type: type || 'application/octet-stream' });
         const j = await r.json().catch(() => ({}));
         return String(j.eTag || '');
       },
-      async remove(rel) { await call('DELETE', itemUrl(rel), { what: 'Removing ' + rel, okStatus: [404] }).then((x) => x.arrayBuffer().catch(() => {})); }
+      async remove(rel) { await call('DELETE', await itemUrl(rel), { what: 'Removing ' + rel, okStatus: [404] }).then((x) => x.arrayBuffer().catch(() => {})); }
     };
   }
   // A sharing link (https://…/:f:/g/…): what it leads to, as Graph names it (/shares, with the

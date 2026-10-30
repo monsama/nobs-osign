@@ -6,7 +6,11 @@ const crypto = require('node:crypto');
 // A file's eTag changes when its content does.
 const etag = (buf) => '"{' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 32) + '},1"';
 
-const SITE_RE = /^\/v1\.0\/sites\/(root|[^/]+:\/(?:sites|teams|personal)\/[^:/]+:)\/drive\/root(?::\/([^:]*):)?(\/children|\/content)?$/;
+// A site by its id (host,guid,guid, as Graph answers it for its path) or root, then its drive.
+const SITE_RE = /^\/v1\.0\/sites\/(root|[^/:]+,[^/:]+,[^/:]+)\/drive\/root(?::\/([^:]*):)?(\/children|\/content)?$/;
+// A site by its path: only on its own (Graph refuses a second path after it, as below).
+const SITE_PATH_RE = /^\/v1\.0\/sites\/([^/]+:\/(?:sites|teams|personal)\/[^:/]+:)$/;
+const siteId = (key) => key.split(':')[0] + ',' + crypto.createHash('md5').update(key).digest('hex').slice(0, 8) + ',1';
 
 function fakeSharePoint({ tenantId, clientId, secret, granted }) {
   // Per site: files (path → Buffer) and folders (path), paths like "OSign/assets/logo.png".
@@ -68,9 +72,14 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
       if (!item) return json(404, { error: { code: 'itemNotFound', message: 'The sharing link no longer exists.' } });
       return json(200, Object.assign({ name: item.name, webUrl: item.webUrl }, item.folder ? { folder: { childCount: 0 } } : { file: {} }));
     }
-    const m = SITE_RE.exec(decodeURIComponent(u.pathname));
+    const path0 = decodeURIComponent(u.pathname);
+    // As Graph: a site by its path, then a path in its drive, in one URL, is refused.
+    if (/\/sites\/[^/]+:\/[^:]*:\/drive\/root:/.test(path0)) return json(400, { error: { code: 'BadRequest', message: "Resource not found for the segment 'root:'." } });
+    const sp = SITE_PATH_RE.exec(path0);
+    if (sp && req.method === 'GET') return sites[sp[1]] ? json(200, { id: siteId(sp[1]), webUrl: 'https://' + sp[1].replace(/:\//, '/').replace(/:$/, '') }) : json(403, { error: { code: 'accessDenied', message: 'Access denied' } });
+    const m = SITE_RE.exec(path0);
     if (!m) return json(400, { error: { code: 'BadRequest', message: 'not understood: ' + u.pathname } });
-    const site = sites[m[1]];
+    const site = m[1] === 'root' ? sites.root : sites[Object.keys(sites).find((k) => siteId(k) === m[1])];
     if (!site) return json(403, { error: { code: 'accessDenied', message: 'Access denied' } });
     const rel = (m[2] || '').split('/').filter(Boolean).join('/');
     const suffix = m[3] || '';
