@@ -253,11 +253,14 @@ too (step 7).
    before and after, the usual one again, by itself. CI-Sign's text blocks with days
    (`{dats …}{date …}` in `__intern.htm`) become such campaigns when imported; text blocks
    without days go straight into the template.
-6. **Four eyes** (Settings, the local `admin`): with *Publishing needs a second person's approval*
-   on, *Publish…* asks for approval. A second person signed in with AD sees what would change
+6. **Four eyes** (Settings → Server, the local `admin`): with *Four eyes* on, *Publish…* asks for approval. A second person signed in with AD sees what would change
    and publishes it, or rejects it; a change to the draft after that withdraws the request.
 7. **Dark mode**: the preview's *Dark mode* shows roughly what recipients with Outlook's dark mode
    see. Check that the logo still shows on a dark background.
+8. **Status** (Settings, the local `admin`): every part the server depends on, tried now: Active
+   Directory, SharePoint, Cloudflare Pages, the web certificate, the sign-in to Microsoft 365 and
+   until when, the key for passwords, the daily export of the users, the last publish and the
+   version. Each part to set up opens its tab in Server connections.
 
 ## 7. Deploy the add-in
 

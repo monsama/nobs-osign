@@ -557,3 +557,27 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
+
+test('Status: every part the server depends on, tried now; a part opens its tab in Server connections', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnSettings');
+  await page.click('#dlgSettings [data-stab=status]');
+  await page.waitForFunction(() => document.querySelectorAll('#healthRows .setrow').length >= 8 && !document.querySelector('#healthRows .hdot.run'));
+  const rows = await page.$$eval('#healthRows .setrow', (rs) => rs.map((r) => [r.querySelector('b').textContent, r.dataset.state]));
+  assert.deepEqual(rows.find((r) => r[0] === 'Active Directory'), ['Active Directory', 'good']);
+  assert.deepEqual(rows.find((r) => r[0] === 'Key for passwords'), ['Key for passwords', 'good']);
+  assert.equal(rows.find((r) => r[0] === 'Cloudflare Pages')[1], 'off');
+  assert.match(await page.textContent('#healthSum'), /not working|to look at|works/);
+  // Its button: Server connections on that tab; closed, Status is checked again.
+  await page.click('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) button');
+  await page.waitForSelector('#dlgConn[open]');
+  assert.equal(await page.isVisible('#connScriptGet'), true);
+  await page.click('#dlgConn .wc-close');
+  await page.waitForFunction(() => !document.querySelector('#healthRows .hdot.run'));
+  // The Server tab names Active Directory itself.
+  await page.click('#dlgSettings [data-stab=server]');
+  assert.equal((await page.textContent('#setConn')).trim(), 'Active Directory…');
+  await page.click('#dlgSettings button[value=cancel]');
+  assert.deepEqual(errors, []);
+});

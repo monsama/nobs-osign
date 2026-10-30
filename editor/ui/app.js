@@ -92,19 +92,29 @@
     const json = JSON.stringify(prepared()), seq = changeSeq;
     saving = saving.then(() => api('draft/save', { configJson: json }, opts))
       // The answer to an older save says nothing about changes made since: those are still coming.
-      .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; renderStatus(); } })
+      .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; S.savedAt = Date.now(); renderStatus(); } })
       .catch((e) => { renderStatus(t('Not saved')); toast(t(e.message), true); });
     return saving;
   }
   window.addEventListener('beforeunload', () => { if (saveTimer) save({ keepalive: true }); });
   setInterval(() => { api('ping').catch(() => {}); }, 60000);
 
+  // Two states, side by side: the draft (saved by itself on the server) and what Outlook gets
+  // (only what was published). A change not published yet: one click to Publish….
   function renderStatus(text) {
-    const el = $('status');
-    if (text) { el.textContent = text; el.className = 'status'; return; }
-    if (S.dirty) { el.textContent = t('Unpublished changes'); el.className = 'status dirty'; }
-    else { el.textContent = S.publishedAt ? t('Published') : t('Saved'); el.className = 'status clean'; }
-    el.title = S.publishedAt ? t('Last published {0}', new Date(S.publishedAt).toLocaleString(I18N.lang)) : '';
+    const d = $('stDraft'), p = $('stPub');
+    const time = (at) => new Date(at).toLocaleTimeString(I18N.lang === 'de' ? 'de-CH' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (text) { d.textContent = text; d.className = 'status' + (text === t('Not saved') ? ' bad' : ' busy'); }
+    else { d.textContent = S.savedAt ? t('Draft saved {0}', time(S.savedAt)) : t('Draft saved'); d.className = 'status clean'; }
+    d.title = t('Every change is saved on the server by itself (Ctrl+S: at once). Outlook gets it only when you publish.');
+    const when = S.publishedAt ? new Date(S.publishedAt).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '';
+    if (S.dirty) {
+      p.textContent = S.publishedAt ? t('Unpublished changes') : t('Not published yet'); p.className = 'status pub dirty'; p.disabled = false;
+      p.title = (S.publishedAt ? t('Outlook still uses what was published {0}.', when) : t('Outlook gets no signatures from here yet.')) + ' ' + t('Click to publish.');
+    } else {
+      p.textContent = S.publishedAt ? t('Published') : t('Not published yet'); p.className = 'status pub' + (S.publishedAt ? ' clean' : ''); p.disabled = true;
+      p.title = S.publishedAt ? t('Last published {0}: Outlook uses the draft as it is.', when) : '';
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1067,16 +1077,19 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = true;
     $('setTabServer').hidden = !(onServer() && S.info.user && S.info.user.local);
+    $('setTabStatus').hidden = $('setTabServer').hidden;
     $('setApproval').checked = S.settings.requireApproval === 'on';
     $('setTls').textContent = '…';
     // Under its own heading: without the "Web certificate:" in front.
-    loadTls().then((c) => { const x = tlsText(c).replace(/^[^:]*:\s*/, ''); $('setTls').textContent = x.charAt(0).toUpperCase() + x.slice(1); $('setTls').className = c && !c.error && c.trusted && c.daysLeft > 30 ? '' : 'warn'; });
+    loadTls().then((c) => { const x = tlsText(c).replace(/^[^:]*:\s*/, ''); $('setTls').textContent = x.charAt(0).toUpperCase() + x.slice(1); $('setTls').className = !c || (!c.error && c.trusted && c.daysLeft > 30) ? '' : 'warn'; });
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
     for (const [id] of ADDIN_FIELDS) $(id).disabled = locked;
     $('setAddinMobile').disabled = locked;
     $('setAddinUpload').hidden = true; $('setAddinZip').hidden = true;
+    // For "Add from file" in Outlook, or "Upload manifest file" in the admin center.
+    $('setAddinManifest').hidden = !(onServer() && S.info.features.addinBuilt);
     $('setAddinOk').textContent = $('setAddinBuild').disabled && !onServer() ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
@@ -1088,8 +1101,79 @@
   function setTab(name) {
     document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
+    document.querySelector('#dlgSettings .dlg').scrollTop = 0;
   }
-  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.stab)));
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'status') runHealth(); }));
+
+  // Status: every part the server depends on, tried now, in one list; a part to set up opens
+  // its tab in Server connections.
+  let healthRunning = null;
+  function runHealth() {
+    if (!healthRunning) healthRunning = health().finally(() => { healthRunning = null; });
+    return healthRunning;
+  }
+  async function health() {
+    $('healthRun').disabled = true;
+    try { S.info = await api('info'); } catch (e) { /* the last one known */ }
+    const f = S.info.features || {};
+    const test = (what) => async () => {
+      try { return { state: 'good', text: connText((await api('connections/test', { what })).message) }; } catch (e) {
+        return { state: /^(Not set up yet|Noch nicht eingerichtet)/.test(e.message) ? 'off' : 'bad', text: connText(e.message) };
+      }
+    };
+    const checks = [
+      { name: 'Active Directory', tab: 'ad', run: test('ad') },
+      { name: 'SharePoint (Microsoft 365)', tab: 'graph', run: test('graph') },
+      { name: 'Cloudflare Pages', tab: 'pages', run: test('pages') },
+      { name: 'Web certificate', run: async () => {
+        const c = await loadTls();
+        const x = tlsText(c).replace(/^[^:]*:\s*/, '');
+        return { state: !c ? 'off' : !c.error && c.trusted && c.nameOk !== false && c.daysLeft > 30 ? 'good' : c.error || c.daysLeft < 0 ? 'bad' : 'warn', text: x.charAt(0).toUpperCase() + x.slice(1) };
+      } },
+      { name: 'Sign-in to Microsoft 365', run: async () => {
+        if (f.publishTarget !== 'sharepoint') return { state: 'off', text: t('Not set up yet: the setup script does it (Server connections → SharePoint).') };
+        const left = f.secretDaysLeft, how = f.graphCredential === 'certificate' ? t('With the server\'s certificate') : t('With a client secret');
+        if (left === null) return { state: 'good', text: how + '.' };
+        return { state: left < 0 ? 'bad' : left <= 30 ? 'warn' : 'good', text: how + ', ' + (left < 0 ? t('ran out on {0}: run the setup script again.', day(f.secretExpires)) : t('valid until {0} ({1}).', day(f.secretExpires), t('{0} days', left))) };
+      } },
+      { name: 'Key for passwords', run: async () => (f.keyOk ? { state: 'good', text: t('There (secrets/app_key): passwords and the certificate\'s key are kept encrypted.') }
+        : { state: 'bad', text: t('Missing (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.') }) },
+      { name: 'Users from AD, daily', run: async () => {
+        const x = f.adExport;
+        if (!x) return { state: 'off', text: t('Not scheduled: the users are written when publishing.') };
+        if (!x.last) return { state: 'good', text: t('Every day at {0}; not run yet since the server started.', x.at) };
+        return x.last.ok ? { state: 'good', text: t('Every day at {0}; last run {1}.', x.at, new Date(x.last.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) }
+          : { state: 'bad', text: t('Every day at {0}; the last run failed: {1}', x.at, t(x.last.error)) };
+      } },
+      { name: 'Last publish', run: async () => {
+        const v = (await api('history/list')).versions[0];
+        if (!v) return { state: 'off', text: t('Nothing published yet.') };
+        return { state: 'good', text: new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' · ' + v.by + (f.requireApproval ? ' · ' + t('four eyes on') : '') };
+      } },
+      { name: 'Version', run: async () => (f.update ? { state: 'warn', text: t('{0} runs here; {1} is out: sudo ./scripts/update.sh {1}', S.info.version, f.update.version) }
+        : { state: 'good', text: S.info.version }) }
+    ];
+    const rows = checks.map((c) => {
+      const dot = el('span', { class: 'hdot run' }), text = el('small', null, t('Checking…'));
+      const row = el('div', { class: 'setrow' }, dot, el('div', { class: 'setrow-text' }, el('b', null, t(c.name)), text),
+        c.tab ? el('button', { type: 'button', class: 'ghost', onclick: () => openConn(c.tab) }, t('Open…')) : null);
+      return { c, row, dot, text };
+    });
+    $('healthRows').replaceChildren(...rows.map((r) => r.row));
+    $('healthSum').textContent = t('Checking…'); $('healthSum').className = 'health-sum';
+    await Promise.all(rows.map(async (r) => {
+      let x;
+      try { x = await r.c.run(); } catch (e) { x = { state: 'bad', text: t(e.message) }; }
+      r.dot.className = 'hdot ' + x.state; r.dot.title = t({ good: 'All right', warn: 'Needs attention', bad: 'Not working', off: 'Not set up' }[x.state]);
+      r.text.textContent = x.text; r.row.dataset.state = x.state;
+    }));
+    const n = (s) => rows.filter((r) => r.row.dataset.state === s).length;
+    const bad = n('bad'), warn = n('warn');
+    $('healthSum').textContent = bad && warn ? t('{0} not working, {1} to look at.', bad, warn) : bad ? t('{0} not working.', bad) : warn ? t('{0} to look at.', warn) : t('Everything set up works.');
+    $('healthSum').className = 'health-sum ' + (bad ? 'bad' : warn ? 'warn' : 'good');
+    $('healthRun').disabled = false;
+  }
+  $('healthRun').addEventListener('click', runHealth);
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
     try {
@@ -1111,6 +1195,7 @@
       const saved = await api('settings/save', { settings: settingsFromDialog() });
       S.settings = saved.settings; lastSettings = saved;
       const r = await api('addin/build');
+      if (onServer()) { $('setAddinManifest').hidden = false; S.info.features.addinBuilt = true; }
       if (onServer() && S.info.features.pagesUpload) {
         // Made and uploaded in one go; the ZIP stays there for another web server.
         $('setAddinZip').hidden = false;
@@ -1153,7 +1238,7 @@
     cfAddress();
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
-    $('connCaFile').value = '';
+    $('connCaFile').value = ''; fileName('connCaFile');
     const line = (id, problem, okText) => { $(id).textContent = problem ? connText(problem) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
     // SharePoint: the setup script first; "again" once it is set up (a new certificate).
     connSpRender();
@@ -1275,10 +1360,14 @@
     document.querySelectorAll('#dlgConn [data-cpane]').forEach((p) => { p.hidden = p.dataset.cpane !== name; });
   }
   document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
-  $('setConn').addEventListener('click', async () => {
+  async function openConn(tab) {
     $('setErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab('ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
-  });
+    try { renderConnections(await api('connections/get')); connTab(tab || 'ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+  }
+  $('setConn').addEventListener('click', () => openConn('ad'));
+  document.querySelectorAll('#dlgSettings [data-conn]').forEach((b) => b.addEventListener('click', () => openConn(b.dataset.conn)));
+  // Back from Server connections to Status: checked again, with what was just changed.
+  $('dlgConn').addEventListener('close', () => { if ($('dlgSettings').open && !document.querySelector('#dlgSettings [data-spane=status]').hidden) runHealth(); });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
     if (!b) return;
@@ -2037,6 +2126,7 @@
   }
   document.addEventListener('keydown', onKeys);
   $('keysBtn').addEventListener('click', () => $('dlgKeys').showModal());
+  $('stPub').addEventListener('click', () => $('btnPublish').click());
   $('btnPublish').addEventListener('click', async () => {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
@@ -2062,7 +2152,8 @@
       // The users as read and checked under Users (never a fresh read nobody has seen), first, so a
       // signature never asks for a file that is not there yet.
       let exported = '';
-      if (core.usesAdExport(c) && S.snap && S.snapMatches && !S.snap.written) {
+      // With four eyes, the server writes them when the publish is approved.
+      if (core.usesAdExport(c) && S.snap && S.snapMatches && !S.snap.written && !S.info.features.requireApproval) {
         try {
           const x = await api('ad/export', adRequest(c));
           exported = ' ' + t('{0} users written ({1} changed, {2} removed).', x.users, x.written, x.removed);
@@ -2174,6 +2265,7 @@
   // A backup: downloaded locked with a passphrase, or brought back.
   $('setBackup').addEventListener('click', () => {
     for (const id of ['bakPass', 'bakPass2', 'bakRestorePass', 'bakFile']) $(id).value = '';
+    fileName('bakFile');
     for (const id of ['bakErr', 'bakExportOk', 'bakRestoreOk']) $(id).textContent = '';
     $('dlgBackup').showModal();
   });
@@ -2318,6 +2410,10 @@
     const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (isError ? ' error' : '');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 6000 : 3000);
   }
+
+  // A file picked through a button-like label: its name next to it.
+  function fileName(id) { const s = document.querySelector('.fname[data-for="' + id + '"]'); if (s) s.textContent = $(id).files && $(id).files[0] ? $(id).files[0].name : ''; }
+  document.querySelectorAll('.fname[data-for]').forEach((s) => $(s.dataset.for).addEventListener('change', () => fileName(s.dataset.for)));
 
   // Accessibility: each dialog is named by its heading; tabs move with the arrow keys; the list
   // says which signature is open.

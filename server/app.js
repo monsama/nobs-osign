@@ -241,13 +241,15 @@ function createApp(opts) {
   const approvalFile = path.join(dataDir, 'approval.json');
   const approval = () => { try { return JSON.parse(readText(approvalFile) || 'null'); } catch (e) { return null; } };
   const needsApproval = () => settings.get().requireApproval === 'on';
+  // The same person, however they typed their login (AD does not mind the case).
+  const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
   function approvalAnswer(s) {
     const a = approval();
     if (!a) return { pending: null, required: needsApproval() };
     const current = store.draftHash() === a.hash;
     return {
       required: needsApproval(),
-      pending: { by: a.by, at: a.at, message: a.message, current, mine: a.login === s.user.login, mayApprove: a.login !== s.user.login && current,
+      pending: { by: a.by, at: a.at, message: a.message, current, mine: same(a.login, s.user.login), mayApprove: !same(a.login, s.user.login) && current,
         changes: diffConfigs(history.latest(), a.configJson) }
     };
   }
@@ -283,6 +285,8 @@ function createApp(opts) {
       // Not here yet: AD lookup and export (LDAP), and the add-in's files (Cloudflare Pages).
       features: {
         adLookup: adOn, addinFiles: !!addin.templateDir(env), pickFolder: false, signOut: true,
+        // Made already: its manifest.xml to download (Settings → Outlook add-in).
+        addinBuilt: fs.existsSync(path.join(addinDir, 'manifest.xml')),
         // The add-in's files go to Cloudflare Pages from here, or by hand as a ZIP.
         pagesUpload: !addin.pagesProblem(pages),
         pagesProblem: addin.pagesProblem(pages),
@@ -304,7 +308,9 @@ function createApp(opts) {
         // Four eyes: publishing waits for a second person.
         requireApproval: needsApproval(),
         // Others than the local admin can sign in (Active Directory).
-        adSignIn: !!ldapCfg.url && !ldapProblem(ldapCfg)
+        adSignIn: !!ldapCfg.url && !ldapProblem(ldapCfg),
+        // The key the passwords and the certificate's key are kept with (secrets/app_key).
+        keyOk: connections.keyOk()
       },
       user: { login: s.user.login, name: s.user.name, local: !!s.user.local }
     }),
@@ -433,13 +439,24 @@ function createApp(opts) {
     'approval/approve': async (d, s) => {
       const a = approval();
       if (!a) return { error: 'Nothing is waiting for approval.' };
-      if (a.login === s.user.login) return { error: 'Someone else has to approve what you asked for.' };
+      if (same(a.login, s.user.login)) return { error: 'Someone else has to approve what you asked for.' };
       if (store.draftHash() !== a.hash) return { error: 'The draft changed after approval was asked for: it has to be asked for again.' };
       const r = await publishNow(a.configJson, a.by + ' (' + (s.user.name || s.user.login) + ' approved)', a.message);
-      if (!r.error) fs.rmSync(approvalFile, { force: true });
+      if (r.error) return r;
+      fs.rmSync(approvalFile, { force: true });
+      // The users' values from AD, as the approved signatures ask for them (not as anyone asked
+      // before approval): read and written now.
+      if (adOn) {
+        try { const u = await users.exportPublished(settings.target()); if (!u.skipped) r.users = u; } catch (e) { r.usersError = 'Writing the users: ' + e.message; }
+      }
       return r;
     },
-    'approval/cancel': () => { fs.rmSync(approvalFile, { force: true }); return {}; },
+    'approval/cancel': (d, s) => {
+      const a = approval();
+      if (a && !same(a.login, s.user.login) && !s.user.local) return { error: 'Only who asked for it, or the local account admin, can withdraw it.' };
+      fs.rmSync(approvalFile, { force: true });
+      return {};
+    },
     // What changed: a version against the one before it, or against the draft.
     'history/diff': (d) => {
       const v = history.get(String(d.id || ''));
@@ -526,6 +543,8 @@ function createApp(opts) {
     },
     'ad/snapshot': (d) => users.apiSnapshot(d),
     'ad/export': async (d) => {
+      // With four eyes, the users are written when the publish is approved, as it was approved.
+      if (needsApproval()) return { error: 'With approval on, the users are written when the publish is approved.' };
       try { return await users.apiExport(settings.target(), d); } catch (e) { return { error: 'Writing the users: ' + e.message }; }
     },
     // A sharing link: the folder it leads to (its own address), for the setup assistant.
@@ -587,8 +606,13 @@ function createApp(opts) {
 
   async function api(req, res, name) {
     if (req.method !== 'POST' || !/^application\/json\b/i.test(String(req.headers['content-type'] || '')) || !sameSite(req)) return send(res, 403, 'text/plain; charset=utf-8', '403 Forbidden');
+    // Signed in first, then the body is read: nobody who is not signed in makes the server hold a
+    // large one, and only the local account admin may send a backup.
+    const open = ['login', 'login-methods', 'setup/finish', 'logout'].includes(name);
+    const s = open ? null : auth.session(req);
+    if (!open && !s) return fail(res, 'Not signed in.', 401);
     let data = {};
-    try { const body = await readBody(req, name === 'backup/restore' ? MAX_BACKUP_BODY : MAX_BODY); data = body ? JSON.parse(body) : {}; } catch (e) {
+    try { const body = await readBody(req, name === 'backup/restore' && s && s.user.local ? MAX_BACKUP_BODY : MAX_BODY); data = body ? JSON.parse(body) : {}; } catch (e) {
       if (e.status === 413) return fail(res, 'The request is too large.', 413);
       return fail(res, 'The request is not valid JSON.');
     }
@@ -622,8 +646,6 @@ function createApp(opts) {
       return ok(res, {}, { 'Set-Cookie': auth.logout(req) });
     }
 
-    const s = auth.session(req);
-    if (!s) return fail(res, 'Not signed in.', 401);
     if (Object.prototype.hasOwnProperty.call(NOT_HERE, name)) return fail(res, NOT_HERE[name]);
     const fn = Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
     if (!fn) return fail(res, 'unknown', 404);

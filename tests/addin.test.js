@@ -17,8 +17,11 @@ const fakeGraph = require('./support/fake-graph.js');
 const doc = new JSDOM('').window.document;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
 const JPG = Buffer.from('ffd8ffe000104a46494600010100000100010000ffd9', 'hex');
-let bundle;
-test.before(async () => { bundle = fs.readFileSync(path.join(await buildTestAddin(), 'launchevent.js'), 'utf8'); });
+let bundle, siteBundle;
+test.before(async () => {
+  bundle = fs.readFileSync(path.join(await buildTestAddin(), 'launchevent.js'), 'utf8');
+  siteBundle = fs.readFileSync(path.join(await buildTestAddin('contoso.sharepoint.com:/sites/Signatures:'), 'launchevent.js'), 'utf8');
+});
 
 function sig(id, name, html, extra) {
   const s = Object.assign(core.newSignature(id, name), { html }, extra || {});
@@ -37,7 +40,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, site } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -80,12 +83,12 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
   };
   const graph = fakeGraph({
     files: files || { 'signatures.json': JSON.stringify(config || makeConfig()), 'assets/logo.png': PNG, 'photos/mustera.jpg': JPG },
-    me, groups, deny
+    me, groups, deny, site
   });
   const sandbox = { Office, console: { log: (m) => calls.push(['log', String(m)]) }, setTimeout, clearTimeout, fetch: graph.fetch, __osignSignInFails: !!signInFails };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(bundle, sandbox, { filename: 'launchevent.js' });
+  vm.runInContext(site ? siteBundle : bundle, sandbox, { filename: 'launchevent.js' });
   const fire = (name) => new Promise((resolve) => handlers[name]({ completed: () => resolve() }));
   return { calls, graph, handlers, fire, settings, atts };
 }
@@ -277,4 +280,13 @@ test('values from AD only: no /me, and no signature for someone not in the expor
   await r2.fire('onNewMessageComposeHandler');
   assert.ok(!setCall(r2));
   assert.ok(r2.calls.some((c) => c[0] === 'log' && /not in the AD export/.test(c[1])));
+});
+
+test('a site of its own: found once by its id, then the folder in its library (not the site\'s path and a path after it)', async () => {
+  const r = runtime({ site: 'contoso.sharepoint.com:/sites/Signatures:' });
+  await r.fire('onNewMessageComposeHandler');
+  assert.match(setCall(r)[1], /Anna Muster/);
+  const found = r.graph.requests.filter((u) => u.includes('/sites/contoso.sharepoint.com:/sites/Signatures:'));
+  assert.deepEqual(found, ['https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/Signatures:?$select=id']);
+  assert.ok(r.graph.requests.some((u) => u.endsWith('/sites/' + encodeURIComponent('contoso.sharepoint.com,1111,2222') + '/drive/root:/OSign/signatures.json')));
 });

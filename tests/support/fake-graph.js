@@ -3,9 +3,12 @@
 //   files: { 'signatures.json': string, 'assets/logo.png': Buffer, 'photos/mustera.jpg': Buffer }
 // Returns { fetch, requests } - fetch(url, init) answers like the real one.
 const GRAPH = 'https://graph.microsoft.com/v1.0';
-const ROOT = GRAPH + '/sites/root/drive/root:/OSign';
+// The home site, or a site of its own (contoso.sharepoint.com:/sites/Signatures:), found by its id.
+const SITE_PATH = GRAPH + '/sites/contoso.sharepoint.com:/sites/Signatures:';
+const SITE_ID = 'contoso.sharepoint.com,1111,2222';
 
-module.exports = function fakeGraph({ files = {}, me = {}, groups = [], deny = [] } = {}) {
+module.exports = function fakeGraph({ files = {}, me = {}, groups = [], deny = [], site = 'root' } = {}) {
+  const ROOT = GRAPH + '/sites/' + (site === 'root' ? 'root' : encodeURIComponent(SITE_ID)) + '/drive/root:/OSign';
   const requests = [];
   const etag = (k) => '"' + k + ':' + String(files[k] && files[k].length) + '"';
   const resp = (status, body, bytes) => {
@@ -26,6 +29,9 @@ module.exports = function fakeGraph({ files = {}, me = {}, groups = [], deny = [
     }
     if (!url.startsWith(GRAPH)) return resp(404);
     if (deny.some((d) => url.includes(d))) return resp(403, { error: { code: 'Authorization_RequestDenied' } });
+    // As Graph does: a site's path, then a path into its library, is refused.
+    if (url.startsWith(SITE_PATH + '/')) return resp(400, { error: { code: 'BadRequest', message: "Resource not found for the segment 'root:'." } });
+    if (url.startsWith(SITE_PATH)) return site === 'root' ? resp(404, {}) : resp(200, { id: SITE_ID });
     if (url.startsWith(ROOT)) {
       if (!/Sites\.Read\.All/.test(auth)) return resp(403, {});
       const rest = decodeURIComponent(url.slice(ROOT.length + 1));

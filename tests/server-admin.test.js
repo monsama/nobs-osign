@@ -97,6 +97,12 @@ test('four eyes: asked for by one, published by another, never by the same; a ch
     // What would go out, against what is published.
     assert.deepEqual(r.pending.changes.map((c) => c.kind + ' ' + c.name), ['html A', 'added B']);
     assert.match((await anna('approval/approve')).error, /Someone else/);
+    // Signed in again with the login typed otherwise: still Anna, as AD writes her login.
+    const ANNA = s.as(await s.signIn('ANNA', 'anna-pw'));
+    assert.equal((await ANNA('info')).user.login, 'anna');
+    assert.match((await ANNA('approval/approve')).error, /Someone else/);
+    // With four eyes, the users from AD are written when it is approved, not before.
+    assert.match((await anna('ad/export', { fields: [{ key: 'title', ad: 'homePhone' }] })).error, /written when the publish is approved/);
     r = await beat('approval/get');
     assert.equal(r.pending.by, 'Anna Muster');
     assert.equal(r.pending.mayApprove, true);
@@ -113,9 +119,27 @@ test('four eyes: asked for by one, published by another, never by the same; a ch
     await anna('draft/save', { configJson: cfg([{ id: 'a', name: 'A', html: '<p>four</p>' }]) });
     assert.equal((await beat('approval/get')).pending.current, false);
     assert.match((await beat('approval/approve')).error, /draft changed/);
-    assert.equal((await beat('approval/cancel')).ok, true);
+    // Withdrawn by who asked (or the local admin), not by anyone else.
+    assert.match((await beat('approval/cancel')).error, /Only who asked for it/);
+    assert.equal((await anna('approval/cancel')).ok, true);
     const log = (await admin('audit/list', { what: 'approval/approve' })).entries;
-    assert.deepEqual(log.map((x) => [x.who, x.ok]), [['beat', false], ['beat', true], ['anna', false]]);
+    assert.deepEqual(log.map((x) => [x.who, x.ok]), [['beat', false], ['beat', true], ['anna', false], ['anna', false]]);
+  } finally { s.srv.close(); }
+});
+
+test('nobody who is not signed in makes the server read a large body', async () => {
+  const s = await server();
+  try {
+    const big = JSON.stringify({ data: 'x'.repeat(6 * 1024 * 1024) });
+    for (const name of ['backup/restore', 'draft/save']) {
+      const r = await fetch(s.at + '/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: big }).catch((e) => ({ status: 'reset' }));
+      assert.ok(r.status === 401 || r.status === 'reset', name + ': ' + r.status);
+    }
+    // Signed in but not the local admin: a backup as large as a normal request at most.
+    const anna = s.as(await s.signIn('anna', 'anna-pw'));
+    const r = await fetch(s.at + '/api/backup/restore', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: await s.signIn('anna', 'anna-pw') }, body: big }).catch(() => ({ status: 'reset' }));
+    assert.ok(r.status === 413 || r.status === 'reset', String(r.status));
+    assert.equal((await anna('info')).user.login, 'anna');
   } finally { s.srv.close(); }
 });
 

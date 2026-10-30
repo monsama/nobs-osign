@@ -142,18 +142,24 @@ async function ldapLogin(c, login, password) {
   if (!password || !LOGIN_OK.test(String(login || ''))) return null;
   const client = await connect(c);
   try {
-    await bind(client, c.bindTemplate.replace('{login}', login), password);
+    const bound = c.bindTemplate.replace('{login}', login);
+    await bind(client, bound, password);
     const attr = c.loginAttr;
-    // Asked for in lower case: AD does not mind, and a directory stand-in that compares names as
-    // written still answers.
-    const [entry] = await search(client, c.searchBase, '(' + attr + '=' + escapeFilter(login) + ')', ['displayname', 'memberof', attr.toLowerCase()]);
-    if (!entry) return null;
+    // The account bound with, and no other: by its login, or by its UPN when it signed in with
+    // one. Two hits (one account's UPN is another's login) is refused, not guessed.
+    const upn = /^[^=,]+@[^=,]+$/.test(bound) ? '(userPrincipalName=' + escapeFilter(bound) + ')' : '';
+    const filter = upn ? '(|(' + attr + '=' + escapeFilter(login) + ')' + upn + ')' : '(' + attr + '=' + escapeFilter(login) + ')';
+    const found = await search(client, c.searchBase, filter, ['displayname', 'memberof', attr.toLowerCase()]);
+    if (found.length !== 1) return null;
+    const [entry] = found;
+    // The login as the directory writes it: jdoe and JDoe are one person (four eyes).
+    const canonical = String((entry.attrs[attr.toLowerCase()] || [])[0] || login);
     // In the group, directly or through nested groups (found by name, when a name is set).
     const group = await groupDn(client, c);
     let allowed = false;
-    if (group) allowed = (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(login) + ')' + chain(group) + ')', ['cn'])).length > 0;
+    if (group) allowed = (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(canonical) + ')' + chain(group) + ')', ['cn'])).length > 0;
     else allowed = (entry.attrs.memberof || []).some((g) => cnOf(g).toLowerCase() === c.group.toLowerCase());
-    return { login, name: (entry.attrs.displayname || [])[0] || login, allowed };
+    return { login: canonical, name: (entry.attrs.displayname || [])[0] || canonical, allowed };
   } catch (e) {
     if (e instanceof ldap.InvalidCredentialsError) return null;
     throw e;

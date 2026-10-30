@@ -90,15 +90,21 @@ label.check.small { font-size: 12px; margin: 0; }
 
 /* top bar */
 .top { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; margin-right: 12px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; margin-right: 12px; white-space: nowrap; flex: none; }
 .brand img { width: 24px; height: 24px; }
 /* The top bar's own buttons: quiet until pointed at, the primary one stands out. */
 .top button.ghost { border-color: transparent; color: var(--muted); font-weight: 500; }
 .top button.ghost:hover { background: var(--panel-2); border-color: var(--line); color: var(--text); }
 .top .who { color: var(--muted); font-size: 13px; padding-left: 12px; margin-left: 4px; border-left: 1px solid var(--line); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status { font-size: 12.5px; color: var(--muted); padding: 2px 10px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--line); }
+.status { white-space: nowrap; flex: none; font-size: 12.5px; color: var(--muted); padding: 2px 10px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--line); }
 .status.dirty, .status.clean { color: var(--text); }
 /* The state as a small dot, not a coloured label. */
+.status-wrap { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+button.status.pub { height: auto; font: inherit; font-size: 12.5px; line-height: inherit; cursor: pointer; }
+button.status.pub:disabled { cursor: default; opacity: 1; }
+button.status.pub.dirty:hover { border-color: var(--warn); filter: none; }
+.status.busy { color: var(--muted); }
+.status.bad { color: var(--danger); border-color: var(--danger); }
 .status.dirty::before, .status.clean::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .status.dirty::before { background: var(--warn); }
 .status.clean::before { background: var(--ok); }
@@ -465,7 +471,6 @@ dialog.settings { width: min(880px, 94vw); height: min(720px, 92vh); }
 dialog.settings.maxed { height: 100vh; }
 .dtabs .tab { display: inline-flex; align-items: center; gap: 7px; }
 .dtabs .tab .i { width: 15px; height: 15px; flex: none; }
-#dlgSettings .dtabs { position: sticky; top: 42px; z-index: 2; background: var(--panel); }
 dialog.settings > .dlg { display: flex; flex-direction: column; }
 #dlgSettings .dpane { min-height: 0; padding-bottom: 4px; flex: 1 0 auto; }
 #dlgSettings .dpane > label { display: block; margin: 12px 0; }
@@ -479,7 +484,9 @@ dialog.settings > .dlg { display: flex; flex-direction: column; }
 .setrow-text small.warn { color: var(--warn); }
 .setrow-text label.check { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 13px; }
 .setrow-text .where { margin: 2px 0 0; font-size: 12px; }
-.setrow > button, .setrow > select { flex: none; min-width: 180px; }
+.setrow { flex-wrap: wrap; }
+.setrow-text { flex-basis: 260px; }
+.setrow > button, .setrow > select { flex: none; width: auto; min-width: 180px; max-width: 100%; margin: 0; }
 .lead.info { border: 1px solid var(--line-2); border-left: 3px solid var(--accent); border-radius: var(--r-m); background: var(--accent-soft); color: var(--text); padding: 8px 12px; }
 
 /* The audit log: a toolbar, the table scrolling under its head, each action as a badge. */
@@ -515,3 +522,31 @@ table.audit .st.removed { background: color-mix(in srgb, var(--danger) 8%, trans
 dialog:has(.wiz)[open] { height: min(640px, 86vh); }
 dialog:has(.wiz).maxed { height: 100vh; }
 .wiz-head { padding-top: 12px; }
+
+/* The same everywhere: a dialog's tabs stay under its title bar; a picked file's name next to its
+   button. */
+.dlg .dtabs { position: sticky; top: 42px; z-index: 2; background: var(--panel); overflow-y: hidden; flex: none; }
+.filepick.small { display: inline-flex; align-items: center; position: relative; white-space: nowrap; }
+.fname { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* A narrow window: the top bar's buttons go on a second row instead of off the edge. */
+@media (max-width: 1100px) {
+  .top { flex-wrap: wrap; row-gap: 6px; justify-content: flex-end; }
+  .top .spacer { flex-basis: 0; }
+  .top button, .top .who { white-space: nowrap; }
+}
+
+/* Status: a dot per part (works, to look at, not working, not set up), and the sum above. */
+.hdot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--line); align-self: flex-start; margin-top: 4px; }
+.hdot.good { background: var(--ok); }
+.hdot.warn { background: var(--warn); }
+.hdot.bad { background: var(--danger); }
+.hdot.off { background: transparent; border: 2px solid var(--line); box-sizing: border-box; }
+.hdot.run { background: var(--accent); animation: hpulse 1s ease-in-out infinite alternate; }
+@keyframes hpulse { from { opacity: .25; } to { opacity: 1; } }
+.health-sum { font-weight: 600; font-size: 13px; }
+.health-sum.good { color: var(--ok); }
+.health-sum.warn { color: var(--warn); }
+.health-sum.bad { color: var(--danger); }
+#healthRows .setrow { gap: 12px; }
+#healthRows .setrow > button { min-width: 0; }
+.dlg-toolbar .health-sum + button { margin-left: auto; }
