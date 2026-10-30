@@ -262,12 +262,16 @@ too (step 7).
 ## 7. Deploy the add-in
 
 1. Microsoft 365 admin center → **Settings → Integrated apps → Upload custom apps**.
-2. App type *Office Add-in*, link to the manifest: `https://<address of the add-in>/manifest.xml`.
+2. App type *Office Add-in*, link to the manifest: `https://<address of the add-in>/manifest.xml`; or
+   **Upload manifest file (.xml)** with the `manifest.xml` the setup assistant's last step offers
+   (the editor serves it at `/addin/manifest.xml`).
 3. Assign it to everyone, or to a group to start with.
 
 It can take a few hours to reach every Outlook. To try it yourself first, sideload it: in Outlook on
-the web: open <https://aka.ms/olksideload>, then **My add-ins → Custom add-ins → Add a custom add-in →
-Add from URL**.
+the web open <https://aka.ms/olksideload>, then **My add-ins → Custom add-ins → Add a custom add-in →
+Add from file…** with that `manifest.xml` (*Add from URL* is greyed out in many tenants). If both are
+greyed out, your account may not add custom add-ins (Exchange: the role *My Custom Apps* in its role
+assignment policy): use the admin center, assigned to *Just me*.
 
 **Outlook for iOS and Android** (preview): tick *Also in Outlook for iOS and Android* in the
 settings, make the add-in's files again and upload the new `manifest.xml`. Phones then put the

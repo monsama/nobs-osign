@@ -127,6 +127,12 @@ test('the files as a ZIP, for an upload by hand', async () => {
   assert.ok(got['assets/icon-16.png']);
   assert.equal(z.readUInt32LE(z.length - 22), 0x06054b50);
   assert.equal((await fetch(base + '/addin.zip')).status, 401);
+  // The manifest alone, for "Add from file" / "Upload manifest file".
+  const mf = await fetch(base + '/addin/manifest.xml', { headers: { Cookie: cookie } });
+  assert.equal(mf.status, 200);
+  assert.match(mf.headers.get('content-disposition'), /filename="manifest\.xml"/);
+  assert.match(await mf.text(), /<OfficeApp/);
+  assert.equal((await fetch(base + '/addin/manifest.xml')).status, 401);
 });
 
 test('upload to Cloudflare Pages: the project made, only missing files sent, _headers with the deployment', async () => {

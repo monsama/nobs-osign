@@ -756,11 +756,14 @@
         <li data-th="wizDeploy1">Open <code>https://admin.microsoft.com</code> → <b>Settings</b> → <b>Integrated apps</b> → <b>Upload custom
           apps</b>.</li>
         <li><span data-th="wizDeploy2">Choose <i>Office Add-in</i> and <b>Provide link to the manifest file</b>:</span>
-          <span class="copyline"><code id="wizManifest"></code><button type="button" class="copy" data-copy="wizManifest">Copy</button></span></li>
+          <span class="copyline"><code id="wizManifest"></code><button type="button" class="copy" data-copy="wizManifest">Copy</button></span>
+          <span data-th="wizDeploy2b">Or <b>Upload manifest file (.xml)</b> with</span> <a class="btnlike" href="/addin/manifest.xml" download>manifest.xml</a></li>
         <li data-th="wizDeploy3"><b>Assign users:</b> for testing <i>Just me</i> or a pilot group, later the entire organization.</li>
-        <li data-th="wizDeploy4">Allow up to 24 hours for the deployment. To test right away, for yourself only: open
-          <a href="https://aka.ms/olksideload" target="_blank" rel="noopener noreferrer">aka.ms/olksideload</a> (Outlook on the web opens its add-ins),
-          <b>My add-ins</b> → at the bottom <b>Custom add-ins</b> → <b>Add a custom add-in</b> → <b>Add from URL</b>, with the same link.</li>
+        <li data-th="wizDeploy4">Allow up to 24 hours for the deployment. To test right away, for yourself only: in Outlook on the web open
+          <a href="https://aka.ms/olksideload" target="_blank" rel="noopener noreferrer">aka.ms/olksideload</a> → <b>My add-ins</b> → at the bottom
+          <b>Custom add-ins</b> → <b>Add a custom add-in</b> → <b>Add from file…</b> with the <b>manifest.xml</b> above (<i>Add from URL</i> is
+          greyed out in many tenants). If that is greyed out too, your account may not add custom add-ins: use the admin center, assigned to
+          <i>Just me</i>.</li>
       </ol>
     </section>
 
