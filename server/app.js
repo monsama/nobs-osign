@@ -23,6 +23,7 @@ const { createAudit } = require('./audit');
 const { exportBackup, openBackup, restoreFiles } = require('./backup');
 const { createUpdates } = require('./updates');
 const { diffConfigs } = require('./diff');
+const tlsInfo = require('./tls');
 const { writeAtomic, readText } = require('./store');
 const core = require('../shared/signature-core.js');
 const addin = require('./addin');
@@ -465,6 +466,8 @@ function createApp(opts) {
       log.info('backup: brought back the backup of ' + b.at + ' (version ' + b.version + ', ' + r.files + ' files) by ' + s.user.login);
       return { at: b.at, version: b.version, files: r.files };
     },
+    // The web certificate the proxy serves for the editor's address (as the browser asked for it).
+    'server/tls': (d) => tlsInfo.inspect({ addr: env.OSIGN_PROXY_ADDR || 'nobs-proxy:443', host: String(d.host || ''), caFile: ldapCfg.caFile }),
     // The audit log, for the local account admin.
     'audit/list': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin can read the audit log.' } : { entries: audit.list({ limit: d.limit, what: String(d.what || ''), failed: !!d.failed }) }),
     // The versions published, and one of them back into the draft (with its images).
@@ -481,7 +484,10 @@ function createApp(opts) {
     },
     // The add-in's files: made into the data volume, then uploaded or downloaded.
     'addin/build': async () => {
-      const r = await addin.build(env, settings.get(), addinDir);
+      // With Cloudflare Pages and no web server chosen: Cloudflare's caching file goes with them.
+      const st = settings.get();
+      if (!st.addinHost && addin.pagesEnabled(pages)) st.addinHost = 'cloudflare';
+      const r = await addin.build(env, st, addinDir);
       return r.error ? r : Object.assign({ folder: '' }, r);
     },
     'addin/check': async () => {

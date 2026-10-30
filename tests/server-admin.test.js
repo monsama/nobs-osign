@@ -244,3 +244,34 @@ test('the server\'s certificate is valid DER whatever its random serial starts w
     assert.equal(x.verify(x.publicKey), true);
   }
 });
+
+test('the web certificate the proxy serves: names, issuer, end, and whether it is trusted', async () => {
+  const https = require('node:https');
+  const { makeCert } = require('../server/cert');
+  const c = makeCert('osign.example.ch');
+  const pem = '-----BEGIN CERTIFICATE-----\n' + c.certDer.match(/.{1,64}/g).join('\n') + '\n-----END CERTIFICATE-----\n';
+  const proxy = https.createServer({ key: c.keyPem, cert: pem }, (req, res) => res.end('ok'));
+  await new Promise((r) => proxy.listen(0, '127.0.0.1', r));
+  const addr = '127.0.0.1:' + proxy.address().port;
+  const caFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'osign-tls-')), 'ca.pem');
+  fs.writeFileSync(caFile, pem);
+  const plain = await server({ OSIGN_PROXY_ADDR: addr });
+  const withCa = await server({ OSIGN_PROXY_ADDR: addr, OSIGN_LDAP_CA: caFile });
+  try {
+    const a = plain.as(await plain.signIn('admin', 'admin-pw'));
+    let r = await a('server/tls', { host: 'osign.example.ch' });
+    assert.equal(r.ok, true, r.error);
+    assert.deepEqual([r.subject, r.issuer, r.selfSigned, r.nameOk, r.trusted], ['osign.example.ch', 'osign.example.ch', true, true, false]);
+    assert.ok(r.daysLeft > 700);
+    assert.match(r.fingerprint, /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+    // Asked for another name: not for it.
+    r = await a('server/tls', { host: 'other.example.ch' });
+    assert.equal(r.nameOk, false);
+    assert.match((await a('server/tls', { host: 'bad host;' })).error, /not a host name/);
+    // With the CA known (as for the domain controller): trusted.
+    const b = withCa.as(await withCa.signIn('admin', 'admin-pw'));
+    assert.equal((await b('server/tls', { host: 'osign.example.ch' })).trusted, true);
+    proxy.close();
+    assert.match((await a('server/tls', { host: 'osign.example.ch' })).error, /could not be asked|did not answer/);
+  } finally { plain.srv.close(); withCa.srv.close(); proxy.close(); }
+});

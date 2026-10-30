@@ -49,9 +49,9 @@ async function makeScript(groups, users) {
   fs.writeFileSync(file, Buffer.from(await r.arrayBuffer()));
   return file;
 }
-function run(file) {
+function run(file, extraEnv) {
   return new Promise((resolve) => execFile(PS, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', file], {
-    env: Object.assign({}, process.env, { OSIGN_SETUP_LOGIN_URL: msUrl, OSIGN_SETUP_GRAPH_URL: msUrl + '/v1.0', OSIGN_SETUP_TEST_FETCH: '1' }), timeout: 120000
+    env: Object.assign({}, process.env, { OSIGN_SETUP_LOGIN_URL: msUrl, OSIGN_SETUP_GRAPH_URL: msUrl + '/v1.0', OSIGN_SETUP_TEST_FETCH: '1' }, extraEnv || {}), timeout: 120000
   }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: stdout + stderr })));
 }
 
@@ -165,6 +165,22 @@ test('the setup script: no access to the site stops it before anything is made; 
     const g = st.grants.filter((x) => x.clientId === 'sp-cli');
     assert.deepEqual(g.map((x) => x.scope), ['openid profile User.Read'], 'only what was there before stays');
   } finally { st.refuseGrantPatch = false; }
+});
+
+test('the server out of reach of the PC (its certificate not trusted there): the result as a file, handed over by the browser', { skip }, async () => {
+  const file = await makeScript(false);
+  const r = await run(file, { OSIGN_SETUP_TEST_SERVER: 'http://127.0.0.1:9' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /nobs-osign-setup-result\.json/);
+  const saved = path.join(path.dirname(file), 'nobs-osign-setup-result.json');
+  const body = JSON.parse(fs.readFileSync(saved, 'utf8').replace(/^\uFEFF/, ''));
+  assert.match(body.server.certThumbprint, /^[0-9A-F]{40}$/);
+  assert.equal((await api('setup/status')).state, 'waiting');
+  // What the editor does with the file: the same request, from the browser.
+  const done = await api('setup/finish', body);
+  assert.equal(done.ok, true, done.error);
+  assert.equal((await api('setup/status')).state, 'done');
+  assert.equal((await api('info')).features.graphCredential, 'certificate');
 });
 
 test('the one-time code: only with it, only once, and the script only for the admin', async () => {

@@ -1032,6 +1032,7 @@
   }
   let lastSettings = {};
   const ADDIN_FIELDS = [['setAddinUrl', 'addinUrl'], ['setAddinFolder', 'addinFolder'], ['setAddinHost', 'addinHost'], ['setClientId', 'clientId'], ['setTenantId', 'tenantId'], ['setSpSite', 'spSite'], ['setSpFolder', 'spFolder']];
+  const f0 = () => (S.info && S.info.features) || {};
   function settingsFromDialog() {
     const s = { folder: $('setFolder').value, photosFolder: $('setPhotos').value };
     for (const [id, k] of ADDIN_FIELDS) s[k] = $(id).value;
@@ -1043,6 +1044,18 @@
     $('setPhotos').value = S.settings.photosFolder || '';
     for (const [id, k] of ADDIN_FIELDS) $(id).value = S.settings[k] || '';
     $('setAddinMobile').checked = S.settings.addinMobile === 'on';
+    $('setAddinBuild').textContent = onServer() && f0().pagesUpload ? t('Create and upload the add-in files') : t('Create the add-in files');
+    $('setAddinHost').options[0].textContent = onServer() ? t('Automatic (Cloudflare Pages when set up)') : t('Choose…');
+    // The server: what follows from the connections and the setup script, said in one line; the
+    // fields by hand folded away, and the SharePoint folder only in Server connections.
+    const st = S.settings, f = S.info.features || {};
+    $('setAddinInfo').hidden = !onServer();
+    $('setAddinInfo').textContent = t('Served at {0}', st.addinUrl || t('(no address yet: set up Cloudflare Pages in Server connections)')) + ' · ' +
+      (st.clientId ? t('app registration {0} (from the setup script)', st.clientId) : t('no app registration yet: run the setup script (Server connections → SharePoint)')) +
+      (f.pagesProject ? ' · ' + t('Cloudflare Pages project {0}', f.pagesProject) : '');
+    $('setAddinMore').open = !onServer();
+    document.querySelector('#dlgSettings [data-th=addinMoreHint]').hidden = !onServer();
+    for (const id of ['setSpSite', 'setSpFolder']) $(id).closest('label').hidden = onServer();
     $('setAddinBuild').disabled = !(S.info.features && S.info.features.addinFiles);
     // The server version: where publishing goes is the site and folder below; no folders on a PC.
     $('setServerWhere').hidden = !onServer();
@@ -1054,6 +1067,8 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = !(onServer() && S.info.user && S.info.user.local);
     $('setApproval').checked = S.settings.requireApproval === 'on';
+    $('setTls').textContent = t('Web certificate: …');
+    loadTls().then((c) => { $('setTls').textContent = tlsText(c); $('setTls').className = 'lead' + (c && !c.error && c.trusted && c.daysLeft > 30 ? '' : ' warn'); });
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
@@ -1087,9 +1102,13 @@
       const saved = await api('settings/save', { settings: settingsFromDialog() });
       S.settings = saved.settings; lastSettings = saved;
       const r = await api('addin/build');
-      if (onServer()) {
-        // On the server: uploaded from there, or downloaded to upload by hand.
-        $('setAddinUpload').hidden = !S.info.features.pagesUpload; $('setAddinZip').hidden = false;
+      if (onServer() && S.info.features.pagesUpload) {
+        // Made and uploaded in one go; the ZIP stays there for another web server.
+        $('setAddinZip').hidden = false;
+        await pagesUpload($('setAddinOk'), $('setAddinBuild'));
+        $('setAddinOk').textContent += ' ' + t('Once: upload {0} in the Microsoft 365 admin center (Settings → Integrated apps).', r.manifestUrl);
+      } else if (onServer()) {
+        $('setAddinZip').hidden = false;
         $('setAddinOk').textContent = t('{0} files (version {1}) made. Upload them, add the redirect URI {2} to the app registration, and upload {3} in the admin center.', r.files, r.version, r.redirectUri, r.manifestUrl);
       } else $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
     } catch (err) { $('setErr').textContent = t(err.message); }
@@ -1193,6 +1212,27 @@
       connSpRender(); renderStatusBar();
       out.className = 'where good'; out.textContent = '✓ ' + t('Saved: {0}. The setup script gives the server write access to this site.', $('connSpWhere').textContent);
     } catch (err) { out.className = 'where warn'; out.textContent = connText(err.message); }
+  });
+  // The script's result as a file (nobs-osign-setup-result.json), where the PC could not reach the
+  // server (its certificate not trusted there): the browser hands it over.
+  async function setupResultUpload(input, out) {
+    const f = input.files[0]; input.value = '';
+    if (!f) return false;
+    out.className = 'where'; out.textContent = t('Handing over the result…');
+    try {
+      let body;
+      try { body = JSON.parse(await f.text()); } catch (e) { throw new Error(t('This is not the setup script\'s result (nobs-osign-setup-result.json).')); }
+      await api('setup/finish', body);
+      const r = await api('setup/status');
+      if (r.state !== 'done') throw new Error(r.problem || t('The server did not take the result.'));
+      const [info, st] = await Promise.all([api('info'), api('settings/get')]);
+      S.info = info; S.settings = st.settings; lastSettings = st; renderStatusBar();
+      out.className = 'where good'; out.textContent = '✓ ' + setupDoneText(r.result) + ' ' + t('Delete the file now.');
+      return true;
+    } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); return false; }
+  }
+  $('connScriptResult').addEventListener('change', async () => {
+    if (await setupResultUpload($('connScriptResult'), $('connScriptNote'))) { const keep = $('connScriptNote').textContent; renderConnections(await api('connections/get')); $('connScriptNote').className = 'where good'; $('connScriptNote').textContent = keep; }
   });
   $('connScriptGet').addEventListener('click', async () => {
     const out = $('connScriptNote');
@@ -1799,6 +1839,12 @@
       wizScriptPoll();
     }, 3000);
   }
+  $('wizScriptResult').addEventListener('change', async () => {
+    if (await setupResultUpload($('wizScriptResult'), $('wizScriptNote'))) {
+      wiz.scriptWaiting = false; wizScriptPoll(true);
+      $('wizClientId').value = S.settings.clientId || ''; $('wizTenantId').value = S.settings.tenantId || '';
+    }
+  });
   $('wizScriptGet').addEventListener('click', async () => {
     const out = $('wizScriptNote');
     out.className = 'where'; $('wizErr').textContent = '';
@@ -2014,6 +2060,25 @@
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
     finally { $('pubGo').disabled = false; }
   });
+
+  // The web certificate the proxy serves for this address: what it is, and whether PCs trust it.
+  let tlsLast = null;
+  async function loadTls() {
+    if (!onServer() || location.protocol !== 'https:') return null;
+    try { tlsLast = await api('server/tls', { host: location.hostname }); } catch (e) { tlsLast = { error: e.message }; }
+    const c = tlsLast, warn = c.error ? '' : !c.trusted ? t('The web certificate is not trusted by PCs: issue one from your CA (Settings).') : c.daysLeft <= 30 ? t('The web certificate runs out on {0}.', day(c.validTo)) : '';
+    $('stTls').hidden = !warn; $('stTls').textContent = warn;
+    return c;
+  }
+  function tlsText(c) {
+    if (!c) return t('Web certificate: only shown over https.');
+    if (c.error) return t('Web certificate: {0}', t(c.error));
+    const base = t('Web certificate: {0}, issued by {1}, valid until {2} ({3}).', c.names.length ? c.names.join(', ') : c.subject, c.issuer, day(c.validTo), t('{0} days', c.daysLeft));
+    if (!c.nameOk) return base + ' ' + t('It is not for {0}.', c.host);
+    if (c.trusted) return base + ' ' + t('Trusted.');
+    return base + ' ' + (c.selfSigned || /caddy|local authority/i.test(c.issuer) ? t('It is the proxy\'s own: PCs do not trust it (the browser warns, the setup script cannot send its result).') : t('Not trusted here: PCs that know your CA may trust it.')) +
+      ' ' + t('Issue a web server certificate from your CA for {0} and install it in the proxy (docs/SETUP.md).', c.host);
+  }
 
   // Four eyes: turned on and off by the local account admin, at once.
   $('setApproval').addEventListener('change', async () => {
@@ -2239,6 +2304,7 @@
       applyDraft(draft);
       loadSnapshot();
       loadApproval();
+      loadTls();
       document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
       if (onServer()) serverTexts();
       document.querySelector('#pvSource option[value=entra]').hidden = !(onServer() && info.features.publishTarget === 'sharepoint');

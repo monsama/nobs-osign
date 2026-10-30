@@ -351,9 +351,9 @@ test('help: a ? opens a short explanation, above dialogs too, and closes again',
   await page.waitForFunction(() => !document.querySelector('#helpPop').matches(':popover-open'));
   // In a dialog: shown over it, Esc closes the help, not the dialog.
   await page.click('#btnSettings');
-  await page.click('#dlgSettings button.help[data-help=hSpSite]');
+  await page.click('#dlgSettings button.help[data-help=hMobile]');
   await page.waitForSelector('#helpPop:popover-open');
-  assert.match(await page.textContent('#helpPop'), /sharing link/);
+  assert.match(await page.textContent('#helpPop'), /iPhone/);
   assert.equal(await page.evaluate(() => document.elementFromPoint(...(() => { const r = document.querySelector('#helpPop').getBoundingClientRect(); return [r.left + 5, r.top + 5]; })()).closest('#helpPop') !== null), true);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('#helpPop').matches(':popover-open'));
@@ -505,6 +505,11 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   const st = (await api('settings/get')).settings;
   assert.deepEqual([st.spSite, st.spFolder], ['contoso.sharepoint.com:/sites/Signaturen:', 'OSign']);
   await api('settings/save', { settings: { spSite: 'root', spFolder: 'OSign' } });
+  // A result file: handed over by the browser; one that is not valid (any more) is said so.
+  await page.setInputFiles('#connScriptResult', { name: 'nobs-osign-setup-result.json', mimeType: 'application/json', buffer: Buffer.from('{"token":"old"}') });
+  await page.waitForFunction(() => /not valid/.test(document.querySelector('#connScriptNote').textContent));
+  await page.setInputFiles('#connScriptResult', { name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('not json') });
+  await page.waitForFunction(() => /not the setup script's result/.test(document.querySelector('#connScriptNote').textContent));
   // Without the folder and the add-in's address the script cannot be made: the assistant asks.
   await api('settings/save', { settings: { addinUrl: '' } });
   await page.click('#connScriptGet');
