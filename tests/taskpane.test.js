@@ -19,6 +19,7 @@ const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000
 
 const doc = new JSDOM('').window.document;
 const cfg = core.defaultConfig();
+cfg.updated = '2026-10-30T13:02:00Z';
 cfg.signatures = [
   Object.assign(core.newSignature('std', 'Standard'), { defaultNew: true, defaultReply: true, html: '<p><b>@@givenName @@sn</b></p><p>Mobile @@mobile</p><p><img src="assets/logo.png"></p>' }),
   Object.assign(core.newSignature('short', 'Short'), { html: '<p>@@givenName</p>' }),
@@ -81,6 +82,8 @@ test('the pane speaks German in a German Outlook', { skip }, async () => {
     assert.deepEqual(await page.$$eval('.card button', (b) => b.map((x) => x.textContent)), ['Einfügen', 'Einfügen']);
     assert.equal((await page.$$eval('#prefNew option', (o) => o.map((x) => x.textContent)))[0], 'Firmenstandard (Standard)');
     assert.equal(await page.textContent('#refresh'), 'Meine Angaben neu lesen');
+    // Which add-in, and since when the signatures are as they are.
+    assert.match(await page.textContent('#ver'), /^NOBS OSign 9\.9\.9 · Signaturen veröffentlicht 30\.10\.(20)?26/);
   } finally { await browser.close(); }
 });
 

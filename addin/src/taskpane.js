@@ -4,7 +4,7 @@
  */
 import { core, loadConfig, loadUserValues, getPrefs, setPrefs, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
 
-/* global Office */
+/* global Office, OSIGN_VERSION */
 const $ = (id) => document.getElementById(id);
 
 // In Outlook's own display language: German, or English.
@@ -28,7 +28,8 @@ const DE = {
   'Showing your details as last read; reading them now failed: {0}': 'Angezeigt werden Ihre zuletzt gelesenen Angaben; sie jetzt zu lesen ist fehlgeschlagen: {0}',
   'Your groups could not be read, so signatures meant for groups are not shown.': 'Ihre Gruppen konnten nicht gelesen werden, darum fehlen die Signaturen für Gruppen.',
   'Your groups could not be read, so signatures meant for groups are not shown: {0}': 'Ihre Gruppen konnten nicht gelesen werden, darum fehlen die Signaturen für Gruppen: {0}',
-  'details not available, fields stay empty': 'Angaben nicht verfügbar, Felder bleiben leer'
+  'details not available, fields stay empty': 'Angaben nicht verfügbar, Felder bleiben leer',
+  'signatures published {0}': 'Signaturen veröffentlicht {0}'
 };
 let german = false;
 function t(s, ...args) {
@@ -102,7 +103,8 @@ function renderList(list) {
 
 async function load(refresh) {
   message('');
-  try { cfg = await loadConfig({ interactive: true }); } catch (e) { message(e.message, true); return; }
+  try { cfg = await loadConfig({ interactive: true }); } catch (e) { message(e.message, true); showVersion(); return; }
+  showVersion();
   const item = Office.context.mailbox.item;
   if (item) { info = await composeInfo(item); from = await fromAddress(item); }
   user = await loadUserValues(cfg, { interactive: true, refresh });
@@ -120,8 +122,16 @@ async function load(refresh) {
   renderList(list);
 }
 
+// NOBS OSign 0.9.14 · signatures published 30.10.2026, 14:02
+function showVersion() {
+  const at = cfg && cfg.updated ? new Date(cfg.updated) : null;
+  const when = at && !isNaN(at) ? at.toLocaleString(german ? 'de-CH' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '';
+  $('ver').textContent = 'NOBS OSign ' + OSIGN_VERSION + (when ? ' · ' + t('signatures published {0}', when) : '');
+}
+
 Office.onReady(() => {
   translatePage();
+  showVersion();
   $('refresh').addEventListener('click', (e) => { e.preventDefault(); load(true); });
   load(false);
 });

@@ -11,7 +11,9 @@
     3. write access for "NOBS OSign server" on the one SharePoint site of the signatures;
     4. sends the client IDs (and the secret, if one was made) to your NOBS OSign server (with the one-time code
        below, valid for an hour), so nothing has to be copied;
-    5. takes back the rights it was given for this (the consent for "Microsoft Graph Command Line
+    5. names apps of yours by these names left over from earlier runs (whose result never reached
+       the server; the newest is used again), and removes them if you say so;
+    6. takes back the rights it was given for this (the consent for "Microsoft Graph Command Line
        Tools", the sign-in it uses), and deletes itself.
 
   Run it on a Windows PC as the SharePoint or Global administrator:
@@ -161,8 +163,26 @@ function Known-App([string]$AppId, [string]$Name) {
     if (-not $a) { return $null }
     $owners = @((Graph GET "/applications/$($a.id)/owners?`$select=id").value)
     if ($owners | Where-Object { $_.id -eq $script:MyId }) { return $a }
-    Say "The app ""$($a.displayName)"" ($AppId) is not yours: a new ""$Name"" is made." "Die App ""$($a.displayName)"" ($AppId) gehört nicht Ihnen: eine neue ""$Name"" wird angelegt." 'Yellow'
+    Say "The app ""$($a.displayName)"" ($AppId) is not yours: it is not used." "Die App ""$($a.displayName)"" ($AppId) gehört nicht Ihnen: sie wird nicht verwendet." 'Yellow'
     return $null
+}
+# Yours by this name, the newest first: apps of an earlier run whose result never reached the
+# server (it does not know them). Another's app of the same name is never used.
+function Mine-By-Name([string]$Name) {
+    $all = @((Graph GET ('/applications' + (Filter "displayName eq '$Name'") + '&$select=id,appId,displayName,spa,requiredResourceAccess,createdDateTime')).value)
+    @($all | Where-Object { $_ -and (@((Graph GET "/applications/$($_.id)/owners?`$select=id").value) | Where-Object { $_.id -eq $script:MyId }) } |
+        Sort-Object { [string]$_.createdDateTime } -Descending)
+}
+# The app to use: the one the server knows, else your newest of that name. The rest of yours by that
+# name are left over: named at the end, and removed if you say so.
+$script:Leftovers = @()
+function Find-App([string]$AppId, [string]$Name) {
+    $known = Known-App $AppId $Name
+    $mine = @(Mine-By-Name $Name)
+    $use = if ($known) { $known } else { $mine | Select-Object -First 1 }
+    if (-not $known -and $use) { Step "App registration ""$Name"" of an earlier run found ($($use.appId)): used again" "App-Registrierung ""$Name"" eines früheren Laufs gefunden ($($use.appId)): wird wieder verwendet" }
+    $script:Leftovers += @($mine | Where-Object { $_ -and (-not $use -or $_.appId -ne $use.appId) })
+    return $use
 }
 function Service-Principal([string]$AppId) {
     $sp = Graph-OrNull "/servicePrincipals(appId='$AppId')?`$select=id,appId"
@@ -215,7 +235,7 @@ try {
     # 1. The add-in's app.
     $want = @('User.Read', 'Sites.Read.All'); if ($WantGroups) { $want += 'GroupMember.Read.All' }
     $redirect = "brk-multihub://$AddinHost"
-    $app = Known-App $KnownAddin $AddinName
+    $app = Find-App $KnownAddin $AddinName
     $access = @($want | ForEach-Object { @{ id = $scopeId[$_]; type = 'Scope' } })
     if ($app) {
         $uris = @($app.spa.redirectUris) + $redirect | Where-Object { $_ } | Select-Object -Unique
@@ -236,7 +256,7 @@ try {
     Step ("Admin consent for " + ($want -join ', ')) ("Administratorzustimmung für " + ($want -join ', '))
 
     # 2. The server's app.
-    $srv = Known-App $KnownServer $ServerName
+    $srv = Find-App $KnownServer $ServerName
     $role = @{ id = $roleId; type = 'Role' }
     if ($srv) {
         Graph PATCH "/applications/$($srv.id)" @{ requiredResourceAccess = @(With-Graph-Access $srv @($role)) } | Out-Null
@@ -318,7 +338,24 @@ if ($result) {
     }
 }
 
-# 5. The rights used for this go again: the consent given at the sign-in, for your account.
+# 5. Apps left over from earlier runs: named, and removed if you say so (Entra keeps them 30 days
+#    under Deleted applications).
+if ($result -and $script:Leftovers.Count) {
+    Say '' ''
+    Say 'Left over from earlier runs, not used:' 'Übrig von früheren Läufen, nicht verwendet:' 'Yellow'
+    foreach ($a in $script:Leftovers) { Say "  $($a.displayName)  $($a.appId)  $($a.createdDateTime)" "  $($a.displayName)  $($a.appId)  $($a.createdDateTime)" 'Yellow' }
+    $answer = if ($env:OSIGN_SETUP_TEST_FETCH) { [string]$env:OSIGN_SETUP_TEST_REMOVE } else { Read-Host $(if ($German) { 'Jetzt entfernen? (j/N)' } else { 'Remove them now? (y/N)' }) }
+    if ($answer -match '^\s*(y|yes|j|ja)\s*$') {
+        foreach ($a in $script:Leftovers) {
+            try { Graph DELETE "/applications/$($a.id)" | Out-Null; Step "Removed: $($a.displayName) ($($a.appId))" "Entfernt: $($a.displayName) ($($a.appId))" }
+            catch { Say ("Not removed: $($a.appId): " + $_.Exception.Message) ("Nicht entfernt: $($a.appId): " + $_.Exception.Message) 'Yellow' }
+        }
+    } else {
+        Say '  Kept. Remove them in Entra ID → App registrations when they are not needed.' '  Behalten. In Entra ID → App-Registrierungen entfernen, wenn sie nicht gebraucht werden.' 'Yellow'
+    }
+}
+
+# 6. The rights used for this go again: the consent given at the sign-in, for your account.
 if ($script:AccessToken -and $script:MyId) {
     try {
         $cli = Graph-OrNull "/servicePrincipals(appId='$CliApp')?`$select=id"

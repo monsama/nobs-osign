@@ -240,3 +240,22 @@ test('the setup script needs the folder and the add-in\'s address first', async 
   }
   other.close();
 });
+
+test('apps of an earlier run the server never heard of: yours used again, not made anew; the ones left over named and removed when you say so', { skip }, async () => {
+  const first = ms.state.apps.filter((a) => a.displayName === 'NOBS OSign' && a.owners.includes(ME));
+  assert.ok(first.length >= 1);
+  const newest = first[first.length - 1];
+  // Two older ones of yours (runs whose result did not arrive), and the server forgot the add-in's.
+  ms.state.apps.push({ id: 'obj-old1', appId: 'old11111-0000-0000-0000-000000000001', displayName: 'NOBS OSign', owners: [ME], spa: { redirectUris: [] }, requiredResourceAccess: [], createdDateTime: '2026-01-01T00:00:00Z' });
+  ms.state.apps.push({ id: 'obj-old2', appId: 'old22222-0000-0000-0000-000000000002', displayName: 'NOBS OSign', owners: [ME], spa: { redirectUris: [] }, requiredResourceAccess: [], createdDateTime: '2026-02-01T00:00:00Z' });
+  await api('settings/save', { settings: { clientId: '' } });
+  const before = ms.state.apps.length;
+  const r = await run(await makeScript(false), { OSIGN_SETUP_TEST_REMOVE: 'j' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /of an earlier run found|eines früheren Laufs gefunden/);
+  assert.match(r.out, /old11111/);
+  assert.equal((await api('settings/get')).settings.clientId, newest.appId, 'the newest of yours, used again');
+  assert.ok(!ms.state.apps.some((a) => a.id === 'obj-old1' || a.id === 'obj-old2'), 'the left over ones removed');
+  assert.ok(ms.state.apps.some((a) => a.id === 'obj-planted2'), 'another\'s app of that name is never touched');
+  assert.equal(ms.state.apps.length, before - 2 - (first.length - 1), 'nothing made anew');
+});
