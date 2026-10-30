@@ -41,7 +41,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, site, byIds } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, site, byIds, lang } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -78,6 +78,7 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
     actions: { associate: (name, fn) => { handlers[name] = fn; } },
     context: {
       requirements: { isSetSupported: () => true },
+      displayLanguage: lang || 'en-US',
       roamingSettings: { get: (k) => settings[k], set: (k, v) => { settings[k] = v; }, saveAsync: (cb) => cb && cb({ status: 'succeeded' }) },
       mailbox: { item, userProfile: { displayName: 'Anna Muster', emailAddress: 'anna@example.com' } }
     }
@@ -305,4 +306,12 @@ test('the folder not readable for the user (the consent is there): said as that,
   await r.fire('onNewMessageComposeHandler');
   assert.ok(!setCall(r));
   assert.ok(r.calls.some((c) => c[0] === 'log' && /does not let you read the folder OSign.*Everyone except external users/.test(c[1])), r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+});
+
+test('in a German Outlook, what went wrong is said in German', async () => {
+  const r = runtime({ byIds: true, deny: ['/drives/'], notices: {}, lang: 'de-CH' });
+  await r.fire('onNewMessageComposeHandler');
+  const n = r.calls.find((c) => c[0] === 'notice');
+  assert.ok(n, 'a notice');
+  assert.match(n[2], /^NOBS OSign hat keine Signatur eingefügt; mehr unter Signaturen\. Signaturen suchen: SharePoint lässt Sie den Ordner OSign nicht lesen/);
 });
