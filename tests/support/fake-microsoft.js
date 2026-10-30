@@ -80,6 +80,8 @@ function fakeMicrosoft() {
     if (p === '/v1.0/oauth2PermissionGrants' && req.method === 'POST') { const g = Object.assign({ id: 'grant-' + id() }, j); state.grants.push(g); return json(201, g); }
     if ((m = /^\/v1\.0\/oauth2PermissionGrants\/([^/]+)$/.exec(p))) {
       const i = state.grants.findIndex((g) => g.id === m[1]);
+      // As some tenants: shortening a grant is refused; it has to go and come back.
+      if (req.method === 'PATCH' && state.refuseGrantPatch) return json(400, { error: { message: 'Bad request' } });
       if (req.method === 'DELETE') state.grants.splice(i, 1); else Object.assign(state.grants[i], j);
       return json(204);
     }
@@ -87,6 +89,7 @@ function fakeMicrosoft() {
       if (req.method === 'GET') return json(200, { value: state.roleAssignments.filter((r) => r.principalId === m[1]) });
       state.roleAssignments.push(j); return json(201, j);
     }
+    if (p === '/v1.0/sites/contoso.sharepoint.com:/sites/osign:' && state.denySite) return json(403, { error: { code: 'accessDenied', message: 'Access denied' } });
     if (p === '/v1.0/sites/contoso.sharepoint.com:/sites/osign:') return json(200, { id: 'contoso.sharepoint.com,1,2', webUrl: 'https://contoso.sharepoint.com/sites/osign' });
     if (p === '/v1.0/sites/contoso.sharepoint.com,1,2/permissions') {
       if (req.method === 'GET') return json(200, { value: state.sitePerms });

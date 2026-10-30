@@ -110,9 +110,10 @@ user's own sign-in.
    too once Microsoft 365 is set up (the server asks Graph where it leads); otherwise the assistant
    opens it for you to copy the address from there. **Test** checks the folder again.
 
-**For testing, your own OneDrive works too:** paste the OneDrive folder's address
-(`https://<tenant>-my.sharepoint.com/personal/<you>/…`). Nobody else can read it, so only you get
-signatures. For the rollout, move to a site everyone can read.
+**A personal OneDrive is not the place for it.** Only its owner can give the server access (the
+setup script, run by any other account, even a Global administrator, gets *403* and stops), nobody
+else reads it, and it goes with that person. For a test it works only when the script runs as the
+OneDrive's owner; for the rollout use a SharePoint site everyone can read.
 
 ## 4. Microsoft 365: the setup script
 
@@ -330,6 +331,8 @@ for testing only: Outlook reads from SharePoint.
 | No photo | No `OSign/photos/<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
 | Publishing says the server could not sign in | The certificate or client secret ran out (the status bar says so 30 days before), or the certificate was taken off the app in Entra: run the setup script again. |
+| Setup script: *403* on the site | Your account is not an owner of that site (for a personal OneDrive: not its owner). The script stops before it makes anything. Make your account an owner of the site, or choose a SharePoint site, and run it again. |
+| Setup script: the rights could not be taken back | It tells which; take them back in Entra → Enterprise applications → *Microsoft Graph Command Line Tools* → Permissions → User consent. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |
 
 ## Security software (EDR / XDR)
