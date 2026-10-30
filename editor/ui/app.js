@@ -92,19 +92,29 @@
     const json = JSON.stringify(prepared()), seq = changeSeq;
     saving = saving.then(() => api('draft/save', { configJson: json }, opts))
       // The answer to an older save says nothing about changes made since: those are still coming.
-      .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; renderStatus(); } })
+      .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; S.savedAt = Date.now(); renderStatus(); } })
       .catch((e) => { renderStatus(t('Not saved')); toast(t(e.message), true); });
     return saving;
   }
   window.addEventListener('beforeunload', () => { if (saveTimer) save({ keepalive: true }); });
   setInterval(() => { api('ping').catch(() => {}); }, 60000);
 
+  // Two states, side by side: the draft (saved by itself on the server) and what Outlook gets
+  // (only what was published). A change not published yet: one click to Publish….
   function renderStatus(text) {
-    const el = $('status');
-    if (text) { el.textContent = text; el.className = 'status'; return; }
-    if (S.dirty) { el.textContent = t('Unpublished changes'); el.className = 'status dirty'; }
-    else { el.textContent = S.publishedAt ? t('Published') : t('Saved'); el.className = 'status clean'; }
-    el.title = S.publishedAt ? t('Last published {0}', new Date(S.publishedAt).toLocaleString(I18N.lang)) : '';
+    const d = $('stDraft'), p = $('stPub');
+    const time = (at) => new Date(at).toLocaleTimeString(I18N.lang === 'de' ? 'de-CH' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (text) { d.textContent = text; d.className = 'status' + (text === t('Not saved') ? ' bad' : ' busy'); }
+    else { d.textContent = S.savedAt ? t('Draft saved {0}', time(S.savedAt)) : t('Draft saved'); d.className = 'status clean'; }
+    d.title = t('Every change is saved on the server by itself (Ctrl+S: at once). Outlook gets it only when you publish.');
+    const when = S.publishedAt ? new Date(S.publishedAt).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '';
+    if (S.dirty) {
+      p.textContent = S.publishedAt ? t('Unpublished changes') : t('Not published yet'); p.className = 'status pub dirty'; p.disabled = false;
+      p.title = (S.publishedAt ? t('Outlook still uses what was published {0}.', when) : t('Outlook gets no signatures from here yet.')) + ' ' + t('Click to publish.');
+    } else {
+      p.textContent = S.publishedAt ? t('Published') : t('Not published yet'); p.className = 'status pub' + (S.publishedAt ? ' clean' : ''); p.disabled = true;
+      p.title = S.publishedAt ? t('Last published {0}: Outlook uses the draft as it is.', when) : '';
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -2116,6 +2126,7 @@
   }
   document.addEventListener('keydown', onKeys);
   $('keysBtn').addEventListener('click', () => $('dlgKeys').showModal());
+  $('stPub').addEventListener('click', () => $('btnPublish').click());
   $('btnPublish').addEventListener('click', async () => {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }

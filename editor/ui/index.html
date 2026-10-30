@@ -15,7 +15,10 @@
 <body>
 <header class="top">
   <div class="brand"><img src="/ui/icon.svg" alt=""><span>NOBS OSign</span></div>
-  <div id="status" class="status" title=""></div>
+  <div id="status" class="status-wrap">
+    <span id="stDraft" class="status"></span>
+    <button type="button" id="stPub" class="status pub"></button>
+  </div>
   <div class="spacer"></div>
   <button id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button>
   <button id="btnWizard" class="ghost" title="Step by step through the SharePoint folder, the app registration and the add-in">Setup assistant</button>
