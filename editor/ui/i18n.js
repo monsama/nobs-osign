@@ -268,6 +268,7 @@
     // import
     'Choose files…': 'Dateien wählen…',
     'Choose file…': 'Datei wählen…',
+    'Download manifest.xml': 'manifest.xml herunterladen',
     'Choose a folder…': 'Ordner wählen…',
     'Import': 'Importieren',
     'CI-Sign text blocks ({##…}), not a signature. ': 'CI-Sign-Textbausteine ({##…}), keine Signatur. ',

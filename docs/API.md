@@ -76,8 +76,10 @@ asked.
   `publish` answers `ok: false`; **approval/request** `{ configJson, message }` saves the draft and
   asks for approval; **approval/get** → `{ ok, required, pending: { by, at, message, current, mine,
   mayApprove, changes } | null }` (`changes` against what is published; `current: false` once the
-  draft changed since); **approval/approve** publishes it, by someone other than who asked, and only
-  while the draft is as it was; **approval/cancel** withdraws or rejects it.
+  draft changed since); **approval/approve** publishes it, by someone other than who asked (logins
+  compared as AD writes them, whatever their case), and only while the draft is as it was, then
+  writes the users from AD as the approved signatures ask (`users` or `usersError` in its answer);
+  **approval/cancel** withdraws it (who asked) or rejects it (the local `admin`).
 - **audit/list** `{ limit?, what?, failed? }` → `{ ok, entries: [{ at, who, ip, what, detail, ok }] }`,
   newest first, for the local `admin`: sign-ins (and failed ones), publishing, approvals, restores,
   connections, settings, the setup script, the add-in's upload, backups. Never a password, a token
@@ -257,7 +259,8 @@ Writes exactly the last read into `users\<mail>.json`: `{ "values": { <key>: str
 [<the named groups the user is in, nested ones included, lower case>] }`, and removes the files of
 users no longer found. Refused when nothing was read, when it was read for other fields or groups,
 and when it was written already (or a scheduled `-ExportUsers` ran since): an old read never goes
-over newer values. The file name is the mail address in lower case, characters other than
+over newer values. With four eyes on, refused: the users are written when the publish is
+approved. The file name is the mail address in lower case, characters other than
 `a-z 0-9 @ . _ -` as `_` (`userFileName()` in the shared engine).
 
 ## quit

@@ -1077,6 +1077,8 @@
     for (const [id] of ADDIN_FIELDS) $(id).disabled = locked;
     $('setAddinMobile').disabled = locked;
     $('setAddinUpload').hidden = true; $('setAddinZip').hidden = true;
+    // For "Add from file" in Outlook, or "Upload manifest file" in the admin center.
+    $('setAddinManifest').hidden = !(onServer() && S.info.features.addinBuilt);
     $('setAddinOk').textContent = $('setAddinBuild').disabled && !onServer() ? t('The add-in files are not next to OSign.ps1: use the release zip.') : '';
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
@@ -1111,6 +1113,7 @@
       const saved = await api('settings/save', { settings: settingsFromDialog() });
       S.settings = saved.settings; lastSettings = saved;
       const r = await api('addin/build');
+      if (onServer()) { $('setAddinManifest').hidden = false; S.info.features.addinBuilt = true; }
       if (onServer() && S.info.features.pagesUpload) {
         // Made and uploaded in one go; the ZIP stays there for another web server.
         $('setAddinZip').hidden = false;
@@ -2062,7 +2065,8 @@
       // The users as read and checked under Users (never a fresh read nobody has seen), first, so a
       // signature never asks for a file that is not there yet.
       let exported = '';
-      if (core.usesAdExport(c) && S.snap && S.snapMatches && !S.snap.written) {
+      // With four eyes, the server writes them when the publish is approved.
+      if (core.usesAdExport(c) && S.snap && S.snapMatches && !S.snap.written && !S.info.features.requireApproval) {
         try {
           const x = await api('ad/export', adRequest(c));
           exported = ' ' + t('{0} users written ({1} changed, {2} removed).', x.users, x.written, x.removed);
