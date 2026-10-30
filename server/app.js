@@ -379,6 +379,15 @@ function createApp(opts) {
         return { error: 'unknown' };
       } catch (e) { return { error: e.message }; }
     },
+    // The server's certificate for entering by hand: the one in use, or a new one (in use from
+    // now), to upload to its app in Entra. Only the public half.
+    'connections/cert': (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
+      if (!connections.keyOk()) return { error: 'The server has no key to keep the certificate\'s key with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
+      let c = certs.active();
+      if (!c) { const p = certs.pending(); certs.activate(p.thumbprint); configure(); c = certs.active(); }
+      return { der: c.certDer, thumbprint: c.thumbprint, expires: c.expires };
+    },
     // The domain, read from the domain controller (its RootDSE): "Detect" in Server connections.
     'connections/detect': async (d, s) => {
       if (adminOnly(s)) return { error: adminOnly(s) };
@@ -540,6 +549,7 @@ function createApp(opts) {
     'connections/save': (d) => 'saved' + Object.keys(d.secrets || {}).map((k) => (d.secrets[k] === null ? ', ' + k + ' removed' : ', ' + k + ' set')).join('') + (d.removeCert ? ', certificate removed' : '') + (d.ca !== undefined ? ', CA certificate ' + (d.ca === null ? 'removed' : 'set') : ''),
     'settings/save': (d) => Object.keys(d.settings || {}).join(', '),
     'setup/start': () => 'setup script made',
+    'connections/cert': (d, r) => 'certificate downloaded (' + (r.thumbprint || '') + ')',
     'addin/build': () => 'add-in files made',
     'addin/upload': (d, r) => 'uploaded to Cloudflare Pages' + (r.url ? ' ' + r.url : ''),
     'ad/export': () => 'users exported',

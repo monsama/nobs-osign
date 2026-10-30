@@ -761,6 +761,14 @@
     '(as Entra shows it. The editor warns 30 days before)': '(wie Entra es anzeigt. Der Editor warnt 30 Tage vorher)',
     'Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1} with its certificate, write access to {2}.': 'Microsoft 365 ist eingerichtet: die App des Add-ins {0}, die App des Servers {1} mit ihrem Zertifikat, Schreibzugriff auf {2}.',
     'Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1}, write access to {2}. The client secret is valid until {3}.': 'Microsoft 365 ist eingerichtet: die App des Add-ins {0}, die App des Servers {1}, Schreibzugriff auf {2}. Der geheime Clientschlüssel ist gültig bis {3}.',
+    'The server cannot sign in to Microsoft 365 yet: run the setup script, which gives it its own certificate.': 'Der Server kann sich noch nicht bei Microsoft 365 anmelden: Führen Sie das Setup-Skript aus, es gibt ihm sein eigenes Zertifikat.',
+    'Server\'s certificate': 'Zertifikat des Servers',
+    'Download the certificate (.cer)': 'Zertifikat herunterladen (.cer)',
+    '(in Entra: App registrations → the server\'s app → Certificates & secrets → Certificates → Upload certificate. Its key stays on the server)': '(in Entra: App-Registrierungen → die App des Servers → Zertifikate & Geheimnisse → Zertifikate → Zertifikat hochladen. Sein Schlüssel bleibt auf dem Server)',
+    'Thumbprint {0}, valid until {1}.': 'Fingerabdruck {0}, gültig bis {1}.',
+    'None yet: the setup script makes it, or Download makes one now.': 'Noch keines: Das Setup-Skript erstellt es, oder «Herunterladen» erstellt jetzt eines.',
+    'Downloaded. Upload it to the server\'s app in Entra, then Save and test the connection.': 'Heruntergeladen. Laden Sie es in Entra bei der App des Servers hoch, dann «Speichern und Verbindung testen».',
+    'The server has no key to keep the certificate\'s key with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.': 'Der Server hat keinen Schlüssel, um den Schlüssel des Zertifikats aufzubewahren (secrets/app_key): Führen Sie sudo ./deploy-nobs-osign.sh erneut aus.',
   };
 
   DE.html = {

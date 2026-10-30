@@ -431,13 +431,10 @@
           <label for="cn_graphClientId">Application (client) ID</label>
           <div><input id="cn_graphClientId" data-ph="from the setup script" autocomplete="off">
             <small>(the server's app registration, not the add-in's)</small></div>
-          <label>Sign-in</label>
-          <div><span id="connCert"></span> <button type="button" class="small" id="connCertRemove" hidden>Use a client secret instead</button></div>
-          <label for="cs_graphClientSecret" data-nocert>Client secret</label>
-          <div data-nocert><span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span><small id="cx_graphClientSecret"></small></div>
-          <label for="cn_graphSecretExpires" data-nocert>Client secret valid until</label>
-          <div data-nocert><input id="cn_graphSecretExpires" type="date" data-ph="">
-            <small>(as Entra shows it. The editor warns 30 days before)</small></div>
+          <label>Server's certificate</label>
+          <div><span id="connCert"></span>
+            <p class="btn-row"><button type="button" class="small" id="connCertGet">Download the certificate (.cer)</button></p>
+            <small>(in Entra: App registrations → the server's app → Certificates &amp; secrets → Certificates → Upload certificate. Its key stays on the server)</small></div>
         </div>
       </details>
       <p class="ctest"><button type="button" class="small" data-ctest="graph">Save and test the connection</button> <span class="where" data-ctestout="graph"></span></p>

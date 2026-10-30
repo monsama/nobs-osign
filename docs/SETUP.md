@@ -74,8 +74,9 @@ Each tab has **Save and test**.
   place to read users and groups. Empty fields there follow from the domain (shown in grey).
 - **SharePoint:** **Download the setup script** right there (step 4 describes it); its result comes
   back by itself. *Enter by hand* is for the rare case without it: the tenant ID, the server's
-  client ID and secret, and when the secret runs out (the editor warns 30 days before). An ID of
-  all zeros (an example value left in `.env`) counts as not set.
+  client ID, and the server's certificate to upload to its app (see *By hand* in step 4). An ID
+  of all zeros (an example value left in `.env`) counts as not set. A client secret in
+  `secrets/graph_client_secret` still works, for installs that have one.
 - **Cloudflare Pages:** in Cloudflare, **My Profile → API Tokens → Create Token** with *Account →
   Cloudflare Pages → Edit* for your account; the account ID (on the account's overview page) and a
   project name. The project is made on the first upload.
@@ -162,8 +163,10 @@ somebody else registered under these names are never used.
 **The server's app** (*NOBS OSign server*):
 
 1. **New registration**: name *NOBS OSign server*, no redirect URI.
-2. **Certificates & secrets → New client secret**. Note when it expires (at most 24 months), and
-   enter that date in Server connections → SharePoint: the editor warns 30 days before.
+2. **The server's certificate**: in Server connections → SharePoint → *Enter by hand*, **Download
+   the certificate (.cer)** (the server makes it; its key stays on the server), then in Entra
+   **Certificates & secrets → Certificates → Upload certificate**. It holds for two years; the
+   editor warns 30 days before. No client secret.
 3. **API permissions → Microsoft Graph → Application permissions → Sites.Selected → Grant admin
    consent**. This alone reaches no site yet.
 4. **Give it the one site** (once, as a SharePoint or Global administrator). The setup assistant
@@ -180,8 +183,8 @@ somebody else registered under these names are never used.
    permission `Sites.FullControl.All`, no client secret. Keep it narrow: no admin consent (the
    consent holds for your account only), *Assignment required?* = Yes with only you assigned, and
    *Enabled for users to sign-in?* = No (or delete it) once the site is granted.
-5. Enter the tenant ID, the client ID, the secret and its end date in Server connections →
-   SharePoint, and **Save and test the connection**.
+5. Enter the tenant ID and the client ID in Server connections → SharePoint → *Enter by hand*, and
+   **Save and test the connection**.
 
 `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every site
 of the tenant.
