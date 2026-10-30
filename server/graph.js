@@ -154,6 +154,13 @@ function createGraph(c, opts) {
     const made = new Set();
     return {
       describe: () => where,
+      // The folder by its ids (its library's, its own): what the add-in reads with, so a user who
+      // may read the folder needs nothing of the site around it.
+      async locate() {
+        const r = await call('GET', (await itemUrl('')) + '?$select=id,parentReference', { what: 'Finding the folder ' + folder });
+        const j = await r.json();
+        return { driveId: String((j.parentReference || {}).driveId || ''), itemId: String(j.id || '') };
+      },
       async exists(rel) { const m = await meta(rel || '', 'Finding ' + (rel || 'the folder')); return !!(m && m.folder); },
       // The names of the files in a folder ([] when it is not there).
       async list(rel) { return (await this.listInfo(rel)).map((f) => f.name); },
@@ -199,6 +206,21 @@ function createGraph(c, opts) {
   // A user from Entra ID, for the preview ("Person from Entra ID"): by UPN or mail, the properties
   // asked for, and the groups (nested ones too). Needs User.Read.All and GroupMember.Read.All
   // (application), which the setup script gives the server's app when asked to.
+  // People to pick from, for the preview: name, mail or login starting with what is typed.
+  async function users(query) {
+    const q = String(query || '').trim();
+    if (q.length < 2) return [];
+    const v = q.replace(/'/g, "''");
+    const f = ['displayName', 'givenName', 'surname', 'mail', 'userPrincipalName'].map((p) => "startswith(" + p + ",'" + v + "')").join(' or ');
+    try {
+      const r = await call('GET', c.graphUrl + '/users?$filter=' + encodeURIComponent(f) + '&$select=displayName,mail,userPrincipalName,department&$top=15', { what: 'Finding users' });
+      return ((await r.json()).value || []).map((u) => ({ login: u.userPrincipalName || '', name: u.displayName || '', mail: u.mail || '', department: u.department || '' }))
+        .sort((a, b) => (a.name || a.login).localeCompare(b.name || b.login));
+    } catch (e) {
+      if (e.status === 403 || e.status === 401) throw new Error("The server's app may not read users from Entra ID (User.Read.All, GroupMember.Read.All): run the setup script again with that box ticked.");
+      throw e;
+    }
+  }
   async function user(query, select) {
     const q = String(query || '').trim();
     if (!q) throw new Error('Enter a user name or mail address.');
@@ -227,7 +249,7 @@ function createGraph(c, opts) {
       throw e;
     }
   }
-  return { target, token, share, user };
+  return { target, token, share, user, users };
 }
 
 // The same, in a folder on the disk: for a server without Graph (development, tests).

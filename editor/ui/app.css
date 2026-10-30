@@ -550,3 +550,24 @@ dialog:has(.wiz).maxed { height: 100vh; }
 #healthRows .setrow { gap: 12px; }
 #healthRows .setrow > button { min-width: 0; }
 .dlg-toolbar .health-sum + button { margin-left: auto; }
+
+/* No browser file control anywhere: every file is picked through its button-like label. */
+.filepick input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+/* A note in the images' grid ("No images yet.") goes across it, not into one narrow cell. */
+.img-list > p { grid-column: 1 / -1; margin: 0; }
+/* Labels with a ? and a hint: the three on one line, centred. */
+label > button.help + small, label > button.help { vertical-align: middle; }
+
+/* Suggestions under a field while typing (AD groups, departments, people). */
+.suggest { position: fixed; z-index: 70; max-height: 300px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: 0 10px 28px rgba(0, 0, 0, .18); padding: 4px 0; max-width: min(520px, 94vw); }
+.suggest[hidden] { display: none; }
+.sg-item { display: flex; flex-direction: column; gap: 1px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+.sg-item small { color: var(--muted); font-size: 11.5px; }
+.sg-item:hover, .sg-item.on { background: var(--hover); }
+.sg-item.on { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Settings → Info. */
+.about-logo { width: 36px; height: 36px; flex: none; }
+.setrow > a.btnlike { flex: none; }
+.btnlike.primary-soft { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.btnlike .i { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; }

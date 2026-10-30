@@ -89,8 +89,37 @@ async function groupsStartingWith(c, query) {
   if (q.length < 2) return [];
   return withService(c, async (client) => {
     const v = escapeFilter(q);
-    const list = await search(client, c.base, '(&(objectClass=group)(|(sAMAccountName=' + v + '*)(name=' + v + '*)))', ['samaccountname'], 30);
-    return [...new Set(list.map((g) => first(g.attrs, 'samaccountname')).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    // Anywhere in the name ("verkauf" finds SG-Signatur-Verkauf); those that start with it first.
+    const list = await search(client, c.base, '(&(objectClass=group)(|(sAMAccountName=*' + v + '*)(name=*' + v + '*)))', ['samaccountname'], 50);
+    return rank([...new Set(list.map((g) => first(g.attrs, 'samaccountname')).filter(Boolean))], q).slice(0, 30);
+  });
+}
+// Starts with it first, then by name.
+function rank(names, q) {
+  const l = q.toLowerCase();
+  return names.sort((a, b) => (b.toLowerCase().startsWith(l) - a.toLowerCase().startsWith(l)) || a.localeCompare(b));
+}
+
+// People to pick from, for the preview: by login, mail, first or last name or anywhere in the
+// display name; active accounts only. [{ login, name, mail, department }]
+async function usersMatching(c, query) {
+  const q = String(query || '').trim();
+  if (q.length < 2) return [];
+  return withService(c, async (client) => {
+    const v = escapeFilter(q);
+    const list = await search(client, c.base, '(&(objectCategory=person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2))' +
+      '(|(sAMAccountName=' + v + '*)(mail=' + v + '*)(givenName=' + v + '*)(sn=' + v + '*)(displayName=*' + v + '*)))', ['samaccountname', 'displayname', 'mail', 'department'], 20);
+    return list.map((u) => ({ login: first(u.attrs, 'samaccountname'), name: first(u.attrs, 'displayname'), mail: first(u.attrs, 'mail'), department: first(u.attrs, 'department') }))
+      .filter((u) => u.login).sort((a, b) => (a.name || a.login).localeCompare(b.name || b.login)).slice(0, 15);
+  });
+}
+
+// The departments people are in (as AD writes them), for the audience: those with the text in them.
+async function departmentsMatching(c, query) {
+  const q = String(query || '').trim();
+  return withService(c, async (client) => {
+    const list = await search(client, c.base, '(&' + ACTIVE_USERS.slice(2, -1) + '(department=' + (q ? '*' + escapeFilter(q) + '*' : '*') + '))', ['department'], 1000);
+    return rank([...new Set(list.map((u) => first(u.attrs, 'department')).filter(Boolean))], q).slice(0, 30);
   });
 }
 
@@ -127,4 +156,4 @@ async function testService(c) {
   return withService(c, async (client) => ({ users: (await search(client, c.base, ACTIVE_USERS, ['samaccountname'], 5)).length }));
 }
 
-module.exports = { testService, attrOk, directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, userRecords, sha256 };
+module.exports = { testService, attrOk, directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, usersMatching, departmentsMatching, userRecords, sha256 };

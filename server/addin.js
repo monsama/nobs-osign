@@ -46,7 +46,7 @@ async function build(env, settings, outDir) {
   fs.rmSync(outDir, { recursive: true, force: true });
   let s;
   try {
-    s = fill.fillTemplate(from, outDir, { base: settings.addinUrl, clientId: settings.clientId, tenantId: settings.tenantId, site: settings.spSite, folder: settings.spFolder, host: settings.addinHost, mobile: settings.addinMobile === 'on' });
+    s = fill.fillTemplate(from, outDir, { base: settings.addinUrl, clientId: settings.clientId, tenantId: settings.tenantId, site: settings.spSite, folder: settings.spFolder, drive: settings.spDrive, item: settings.spItem, host: settings.addinHost, mobile: settings.addinMobile === 'on' });
   } catch (e) { return { error: e.message }; }
   const version = JSON.parse(fs.readFileSync(path.join(from, 'osign-addin.json'), 'utf8')).version;
   return { files: walk(outDir).length, version, manifestUrl: s.base + 'manifest.xml', redirectUri: 'brk-multihub://' + new URL(s.base).host };

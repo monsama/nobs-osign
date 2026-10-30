@@ -7,8 +7,11 @@ const GRAPH = 'https://graph.microsoft.com/v1.0';
 const SITE_PATH = GRAPH + '/sites/contoso.sharepoint.com:/sites/Signatures:';
 const SITE_ID = 'contoso.sharepoint.com,1111,2222';
 
-module.exports = function fakeGraph({ files = {}, me = {}, groups = [], deny = [], site = 'root' } = {}) {
-  const ROOT = GRAPH + '/sites/' + (site === 'root' ? 'root' : encodeURIComponent(SITE_ID)) + '/drive/root:/OSign';
+// Or the folder by its ids (drive, item), as the server puts them into the add-in's files.
+const BY_IDS = GRAPH + '/drives/' + encodeURIComponent('b!drive-1') + '/items/OSIGN-ITEM:';
+
+module.exports = function fakeGraph({ files = {}, me = {}, groups = [], deny = [], site = 'root', byIds = false } = {}) {
+  const ROOT = byIds ? BY_IDS : GRAPH + '/sites/' + (site === 'root' ? 'root' : encodeURIComponent(SITE_ID)) + '/drive/root:/OSign';
   const requests = [];
   const etag = (k) => '"' + k + ':' + String(files[k] && files[k].length) + '"';
   const resp = (status, body, bytes) => {
