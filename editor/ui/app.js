@@ -1555,6 +1555,15 @@
     $('wizLater').hidden = name === 'done';
     $('wizErr').textContent = '';
     $('wizScript').hidden = !(name === 'app' && wizHasScript());
+    // Done already (here or in Server connections): said so; the script only to run again, by hand folded away.
+    if (name === 'app') {
+      const f = (S.info && S.info.features) || {}, done = wizHasScript() && !!S.settings.clientId && f.graphCredential === 'certificate';
+      $('wizAppDone').hidden = !done;
+      $('wizAppDone').textContent = done ? t('✓ Set up already: the add-in\'s app {0}, the server\'s app {1} with its certificate. Nothing to do here; run the script again only to change something.', S.settings.clientId, f.graphClientId) : '';
+      $('wizScriptGet').textContent = done ? t('Download the setup script again') : t('Download the setup script');
+      $('wizScriptGet').className = done ? '' : 'primary';
+      $('wizAppManual').open = !wizHasScript();
+    }
     // Back on the step while the script is out: ask again (the answer may be there already).
     if (name === 'app' && wiz.scriptWaiting && !wizScriptTimer) wizScriptPoll();
     const host = radio('whost');

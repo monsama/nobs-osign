@@ -42,7 +42,7 @@ attest_verify() {
         return 0
     fi
     [ "$must" = 1 ] && fail "OSIGN_REQUIRE_ATTESTATION=1, but the GitHub CLI (gh) is not there or not signed in (gh auth login): the release cannot be checked."
-    warn "The release's attestation is not checked (no signed-in GitHub CLI, gh): only its checksum. See docs/SETUP.md, Updates."
+    info "Checked by its checksum. (Its attestation too, where the GitHub CLI is signed in: docs/SETUP.md, Updates.)"
 }
 
 # The network the shared proxy reaches the app on (made by NOBS Inventory; made here if it is not there yet).

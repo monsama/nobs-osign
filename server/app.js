@@ -668,6 +668,12 @@ function createApp(opts) {
         return send(res, 200, 'text/plain; charset=utf-8', text, { 'Content-Disposition': 'attachment; filename="nobs-osign-setup.ps1"' });
       }
       // The add-in's files as last made, to upload by hand.
+      // Its manifest alone, for "Add from file" in Outlook or "Upload manifest file" in the admin center.
+      if (pathname === '/addin/manifest.xml') {
+        const m = path.join(addinDir, 'manifest.xml');
+        if (!fs.existsSync(m)) return send(res, 404, 'text/plain; charset=utf-8', 'Create the add-in files first.');
+        return send(res, 200, 'application/xml; charset=utf-8', fs.readFileSync(m), { 'Content-Disposition': 'attachment; filename="manifest.xml"' });
+      }
       if (pathname === '/addin.zip') {
         if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return send(res, 404, 'text/plain; charset=utf-8', 'Create the add-in files first.');
         return send(res, 200, 'application/zip', addin.zip(addinDir), { 'Content-Disposition': 'attachment; filename="osign-addin.zip"' });

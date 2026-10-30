@@ -146,10 +146,13 @@ async function pagesDeploy(c, dir, fetchFn) {
   }
   const proj = c.api + '/accounts/' + c.account + '/pages/projects/' + c.project;
   // The project, made the first time.
-  try { await cf('GET', proj); } catch (e) {
+  let info;
+  try { info = await cf('GET', proj); } catch (e) {
     if (e.status !== 404) throw e;
-    await cf('POST', c.api + '/accounts/' + c.account + '/pages/projects', { json: { name: c.project, production_branch: 'main' } });
+    info = await cf('POST', c.api + '/accounts/' + c.account + '/pages/projects', { json: { name: c.project, production_branch: 'main' } });
   }
+  // Its own address: <name>.pages.dev, or what Cloudflare gave it when that name was taken.
+  const home = 'https://' + ((info && info.subdomain) || c.project + '.pages.dev');
   const files = walk(dir).filter((rel) => !SPECIAL.has(rel)).map((rel) => {
     const data = fs.readFileSync(path.join(dir, rel));
     return { rel, data, hash: pagesHash(data, rel), type: TYPES[path.extname(rel).toLowerCase()] || 'application/octet-stream' };
@@ -170,7 +173,9 @@ async function pagesDeploy(c, dir, fetchFn) {
     if (fs.existsSync(p)) form.append(name, new Blob([fs.readFileSync(p)]), name);
   }
   const d = await cf('POST', proj + '/deployments', { form });
-  return { id: d.id, url: d.url, uploaded: todo.length, files: files.length };
+  // The address people use (the project's own, production); d.url is this one deployment's, with
+  // its id in front, kept only to look at it.
+  return { id: d.id, url: home, deployment: d.url, uploaded: todo.length, files: files.length };
 }
 
 // Whether the token may work with this account's Pages ("Test" in Server connections), and whether

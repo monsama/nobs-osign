@@ -308,6 +308,9 @@ test('setup assistant: opens by itself until NOBS OSign is set up, and walks thr
   await next('Register the app in Entra ID');
   // The setup script, for the local account admin; and the way by hand.
   assert.equal(await page.isVisible('#wizScriptGet'), true);
+  // By hand: folded away under the script.
+  assert.equal(await page.isVisible('#wizClientId'), false);
+  await page.click('#wizAppManual summary');
   assert.equal(await page.textContent('#wizRedirect'), 'brk-multihub://osign.example.com');
   assert.equal(await page.textContent('#wizPerms'), 'User.Read, Sites.Read.All, GroupMember.Read.All');
   await page.fill('#wizClientId', 'nope');
