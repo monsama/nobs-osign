@@ -410,3 +410,5 @@ details.advanced[open] > summary { margin-bottom: 6px; }
 .scriptbox { border: 1px solid var(--line); border-radius: var(--r-m); padding: 10px 12px; margin: 4px 0 10px; background: var(--panel-2); }
 .scriptbox p { margin: 0 0 8px; }
 .scriptbox .where { margin: 6px 0 0; }
+ol.guide { margin: 0 0 4px; padding-left: 20px; }
+ol.guide li { margin: 0 0 6px; line-height: 1.5; }

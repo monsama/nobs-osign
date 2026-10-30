@@ -38,7 +38,7 @@ function createSetup({ now = Date.now } = {}) {
     for (const k of ['knownAddin', 'knownServer']) if (spec[k] && !GUID.test(spec[k])) spec[k] = '';
     if (!/^https:\/\/[A-Za-z0-9.-]+(:\d+)?$|^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(String(spec.origin || ''))) return { error: 'The editor\'s address is not one the script can send to (https://…).' };
     if (!SITE.test(String(spec.site || ''))) return { error: 'Choose the SharePoint folder first (the step "Where the signatures are kept").' };
-    if (!/^https:\/\/[^\s"<>'&]+$/.test(String(spec.addinUrl || ''))) return { error: 'Enter the add-in\'s address first (the step "Where the add-in is served").' };
+    if (!/^https:\/\/[^\s"<>'&]+$/.test(String(spec.addinUrl || ''))) return { error: 'Set up Cloudflare Pages first (its tab, before SharePoint), or enter the add-in\'s address in the setup assistant (the step "Where the add-in is served").' };
     pending = { id: crypto.randomBytes(12).toString('base64url'), token: crypto.randomBytes(32).toString('base64url'), until: now() + VALID_MS, spec: Object.assign({}, spec), error: '' };
     return { id: pending.id, until: new Date(pending.until).toISOString() };
   }

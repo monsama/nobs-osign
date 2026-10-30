@@ -77,9 +77,11 @@ Each tab has **Save and test**.
   client ID, and the server's certificate to upload to its app (see *By hand* in step 4). An ID
   of all zeros (an example value left in `.env`) counts as not set. A client secret in
   `secrets/graph_client_secret` still works, for installs that have one.
-- **Cloudflare Pages:** in Cloudflare, **My Profile → API Tokens → Create Token** with *Account →
-  Cloudflare Pages → Edit* for your account; the account ID (on the account's overview page) and a
-  project name. The project is made on the first upload.
+- **Cloudflare Pages** (before SharePoint: its address is the add-in's), with the three steps
+  shown in the tab: the **account ID** (dashboard, *Account home*, at the right), an **API token**
+  (*My Profile → API Tokens → Create Token → Create Custom Token*, *Account → Cloudflare Pages →
+  Edit* for your account), and a **project name** (`firma-osign`; made on the first upload). The
+  add-in's address then is `https://<project>.pages.dev/`, set by itself unless one is set already.
 
 What is saved there wins over `.env`; a field left empty takes the value from `.env` (the variables
 at the end of this page, the secrets as files in `secrets/`). The passwords and the token set there

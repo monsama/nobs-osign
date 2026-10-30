@@ -362,8 +362,8 @@
 
     <nav class="dtabs" role="tablist" aria-label="Server connections">
       <button type="button" class="tab active" data-ctab="ad" role="tab"><span class="dot" data-cdot="ad"></span>Active Directory</button>
-      <button type="button" class="tab" data-ctab="graph" role="tab"><span class="dot" data-cdot="graph"></span>SharePoint</button>
       <button type="button" class="tab" data-ctab="pages" role="tab"><span class="dot" data-cdot="pages"></span>Cloudflare Pages</button>
+      <button type="button" class="tab" data-ctab="graph" role="tab"><span class="dot" data-cdot="graph"></span>SharePoint</button>
     </nav>
 
     <section class="dpane" role="tabpanel" data-cpane="ad">
@@ -412,6 +412,33 @@
       <p class="ctest"><button type="button" class="small" data-ctest="ad">Save and test</button> <span class="where" data-ctestout="ad"></span></p>
     </section>
 
+    <section class="dpane" role="tabpanel" data-cpane="pages" hidden>
+      <p id="connPages" class="lead"></p>
+      <div class="scriptbox" data-th="pagesGuide">
+        <p><b>Where the add-in's files are served.</b> They are only code (no signatures, no data); the server uploads them, nothing
+          reaches the server from outside. In Cloudflare (a free account is enough):</p>
+        <ol class="guide">
+          <li><b>Account ID:</b> on the dashboard, <i>Account home</i> (or <i>Workers &amp; Pages</i>): <i>Account ID</i> at the right, 32
+            letters and digits. Copy it.</li>
+          <li><b>API token:</b> <i>My Profile → API Tokens → Create Token → Create Custom Token</i>. Permissions: <i>Account → Cloudflare
+            Pages → Edit</i>. Account resources: <i>Include → your account</i>. <i>Continue → Create Token</i>, and copy it (it is shown
+            once).</li>
+          <li><b>Pages project:</b> a name of your choice, lower-case letters, digits and -, like <code>firma-osign</code>. It is made on
+            the first upload; the add-in is then served at <code>https://&lt;name&gt;.pages.dev/</code>.</li>
+        </ol>
+      </div>
+      <div class="form">
+        <label for="cn_cfAccountId">Account ID</label>
+        <div><input id="cn_cfAccountId" data-ph="32 letters and digits" autocomplete="off"></div>
+        <label for="cs_cfApiToken">API token</label>
+        <div><span class="pick"><input id="cs_cfApiToken" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="cfApiToken" hidden>Remove</button></span><small id="cx_cfApiToken"></small></div>
+        <label for="cn_cfProject">Pages project</label>
+        <div><input id="cn_cfProject" data-ph="firma-osign" autocomplete="off">
+          <small id="cfAddress">(the add-in: https://&lt;name&gt;.pages.dev/)</small></div>
+      </div>
+      <p class="ctest"><button type="button" class="small" data-ctest="pages">Save and test the connection</button> <span class="where" data-ctestout="pages"></span></p>
+    </section>
+
     <section class="dpane" role="tabpanel" data-cpane="graph" hidden>
       <p id="connGraph" class="lead"></p>
       <div class="scriptbox">
@@ -438,19 +465,6 @@
         </div>
       </details>
       <p class="ctest"><button type="button" class="small" data-ctest="graph">Save and test the connection</button> <span class="where" data-ctestout="graph"></span></p>
-    </section>
-
-    <section class="dpane" role="tabpanel" data-cpane="pages" hidden>
-      <p id="connPages" class="lead"></p>
-      <div class="form">
-        <label for="cn_cfAccountId">Account ID</label>
-        <div><input id="cn_cfAccountId" data-ph="0123456789abcdef0123456789abcdef" autocomplete="off"></div>
-        <label for="cn_cfProject">Pages project</label>
-        <div><input id="cn_cfProject" data-ph="company-osign" autocomplete="off"></div>
-        <label for="cs_cfApiToken">API token</label>
-        <div><span class="pick"><input id="cs_cfApiToken" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="cfApiToken" hidden>Remove</button></span><small id="cx_cfApiToken"></small><small>(Cloudflare Pages: Edit)</small></div>
-      </div>
-      <p class="ctest"><button type="button" class="small" data-ctest="pages">Save and test the connection</button> <span class="where" data-ctestout="pages"></span></p>
     </section>
 
     <p id="connErr" class="err"></p>
