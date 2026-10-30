@@ -1067,10 +1067,11 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = true;
     $('setTabServer').hidden = !(onServer() && S.info.user && S.info.user.local);
+    $('setTabStatus').hidden = $('setTabServer').hidden;
     $('setApproval').checked = S.settings.requireApproval === 'on';
     $('setTls').textContent = '…';
     // Under its own heading: without the "Web certificate:" in front.
-    loadTls().then((c) => { const x = tlsText(c).replace(/^[^:]*:\s*/, ''); $('setTls').textContent = x.charAt(0).toUpperCase() + x.slice(1); $('setTls').className = c && !c.error && c.trusted && c.daysLeft > 30 ? '' : 'warn'; });
+    loadTls().then((c) => { const x = tlsText(c).replace(/^[^:]*:\s*/, ''); $('setTls').textContent = x.charAt(0).toUpperCase() + x.slice(1); $('setTls').className = !c || (!c.error && c.trusted && c.daysLeft > 30) ? '' : 'warn'; });
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
@@ -1090,8 +1091,79 @@
   function setTab(name) {
     document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
+    document.querySelector('#dlgSettings .dlg').scrollTop = 0;
   }
-  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.stab)));
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'status') runHealth(); }));
+
+  // Status: every part the server depends on, tried now, in one list; a part to set up opens
+  // its tab in Server connections.
+  let healthRunning = null;
+  function runHealth() {
+    if (!healthRunning) healthRunning = health().finally(() => { healthRunning = null; });
+    return healthRunning;
+  }
+  async function health() {
+    $('healthRun').disabled = true;
+    try { S.info = await api('info'); } catch (e) { /* the last one known */ }
+    const f = S.info.features || {};
+    const test = (what) => async () => {
+      try { return { state: 'good', text: connText((await api('connections/test', { what })).message) }; } catch (e) {
+        return { state: /^(Not set up yet|Noch nicht eingerichtet)/.test(e.message) ? 'off' : 'bad', text: connText(e.message) };
+      }
+    };
+    const checks = [
+      { name: 'Active Directory', tab: 'ad', run: test('ad') },
+      { name: 'SharePoint (Microsoft 365)', tab: 'graph', run: test('graph') },
+      { name: 'Cloudflare Pages', tab: 'pages', run: test('pages') },
+      { name: 'Web certificate', run: async () => {
+        const c = await loadTls();
+        const x = tlsText(c).replace(/^[^:]*:\s*/, '');
+        return { state: !c ? 'off' : !c.error && c.trusted && c.nameOk !== false && c.daysLeft > 30 ? 'good' : c.error || c.daysLeft < 0 ? 'bad' : 'warn', text: x.charAt(0).toUpperCase() + x.slice(1) };
+      } },
+      { name: 'Sign-in to Microsoft 365', run: async () => {
+        if (f.publishTarget !== 'sharepoint') return { state: 'off', text: t('Not set up yet: the setup script does it (Server connections → SharePoint).') };
+        const left = f.secretDaysLeft, how = f.graphCredential === 'certificate' ? t('With the server\'s certificate') : t('With a client secret');
+        if (left === null) return { state: 'good', text: how + '.' };
+        return { state: left < 0 ? 'bad' : left <= 30 ? 'warn' : 'good', text: how + ', ' + (left < 0 ? t('ran out on {0}: run the setup script again.', day(f.secretExpires)) : t('valid until {0} ({1}).', day(f.secretExpires), t('{0} days', left))) };
+      } },
+      { name: 'Key for passwords', run: async () => (f.keyOk ? { state: 'good', text: t('There (secrets/app_key): passwords and the certificate\'s key are kept encrypted.') }
+        : { state: 'bad', text: t('Missing (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.') }) },
+      { name: 'Users from AD, daily', run: async () => {
+        const x = f.adExport;
+        if (!x) return { state: 'off', text: t('Not scheduled: the users are written when publishing.') };
+        if (!x.last) return { state: 'good', text: t('Every day at {0}; not run yet since the server started.', x.at) };
+        return x.last.ok ? { state: 'good', text: t('Every day at {0}; last run {1}.', x.at, new Date(x.last.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) }
+          : { state: 'bad', text: t('Every day at {0}; the last run failed: {1}', x.at, t(x.last.error)) };
+      } },
+      { name: 'Last publish', run: async () => {
+        const v = (await api('history/list')).versions[0];
+        if (!v) return { state: 'off', text: t('Nothing published yet.') };
+        return { state: 'good', text: new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' · ' + v.by + (f.requireApproval ? ' · ' + t('four eyes on') : '') };
+      } },
+      { name: 'Version', run: async () => (f.update ? { state: 'warn', text: t('{0} runs here; {1} is out: sudo ./scripts/update.sh {1}', S.info.version, f.update.version) }
+        : { state: 'good', text: S.info.version }) }
+    ];
+    const rows = checks.map((c) => {
+      const dot = el('span', { class: 'hdot run' }), text = el('small', null, t('Checking…'));
+      const row = el('div', { class: 'setrow' }, dot, el('div', { class: 'setrow-text' }, el('b', null, t(c.name)), text),
+        c.tab ? el('button', { type: 'button', class: 'ghost', onclick: () => openConn(c.tab) }, t('Open…')) : null);
+      return { c, row, dot, text };
+    });
+    $('healthRows').replaceChildren(...rows.map((r) => r.row));
+    $('healthSum').textContent = t('Checking…'); $('healthSum').className = 'health-sum';
+    await Promise.all(rows.map(async (r) => {
+      let x;
+      try { x = await r.c.run(); } catch (e) { x = { state: 'bad', text: t(e.message) }; }
+      r.dot.className = 'hdot ' + x.state; r.dot.title = t({ good: 'All right', warn: 'Needs attention', bad: 'Not working', off: 'Not set up' }[x.state]);
+      r.text.textContent = x.text; r.row.dataset.state = x.state;
+    }));
+    const n = (s) => rows.filter((r) => r.row.dataset.state === s).length;
+    const bad = n('bad'), warn = n('warn');
+    $('healthSum').textContent = bad && warn ? t('{0} not working, {1} to look at.', bad, warn) : bad ? t('{0} not working.', bad) : warn ? t('{0} to look at.', warn) : t('Everything set up works.');
+    $('healthSum').className = 'health-sum ' + (bad ? 'bad' : warn ? 'warn' : 'good');
+    $('healthRun').disabled = false;
+  }
+  $('healthRun').addEventListener('click', runHealth);
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
     try {
@@ -1278,10 +1350,14 @@
     document.querySelectorAll('#dlgConn [data-cpane]').forEach((p) => { p.hidden = p.dataset.cpane !== name; });
   }
   document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
-  $('setConn').addEventListener('click', async () => {
+  async function openConn(tab) {
     $('setErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab('ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
-  });
+    try { renderConnections(await api('connections/get')); connTab(tab || 'ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+  }
+  $('setConn').addEventListener('click', () => openConn('ad'));
+  document.querySelectorAll('#dlgSettings [data-conn]').forEach((b) => b.addEventListener('click', () => openConn(b.dataset.conn)));
+  // Back from Server connections to Status: checked again, with what was just changed.
+  $('dlgConn').addEventListener('close', () => { if ($('dlgSettings').open && !document.querySelector('#dlgSettings [data-spane=status]').hidden) runHealth(); });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
     if (!b) return;

@@ -308,7 +308,9 @@ function createApp(opts) {
         // Four eyes: publishing waits for a second person.
         requireApproval: needsApproval(),
         // Others than the local admin can sign in (Active Directory).
-        adSignIn: !!ldapCfg.url && !ldapProblem(ldapCfg)
+        adSignIn: !!ldapCfg.url && !ldapProblem(ldapCfg),
+        // The key the passwords and the certificate's key are kept with (secrets/app_key).
+        keyOk: connections.keyOk()
       },
       user: { login: s.user.login, name: s.user.name, local: !!s.user.local }
     }),

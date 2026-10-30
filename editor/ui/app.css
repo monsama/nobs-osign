@@ -519,7 +519,7 @@ dialog:has(.wiz).maxed { height: 100vh; }
 
 /* The same everywhere: a dialog's tabs stay under its title bar; a picked file's name next to its
    button. */
-.dlg .dtabs { position: sticky; top: 42px; z-index: 2; background: var(--panel); }
+.dlg .dtabs { position: sticky; top: 42px; z-index: 2; background: var(--panel); overflow-y: hidden; flex: none; }
 .filepick.small { display: inline-flex; align-items: center; position: relative; white-space: nowrap; }
 .fname { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 /* A narrow window: the top bar's buttons go on a second row instead of off the edge. */
@@ -528,3 +528,19 @@ dialog:has(.wiz).maxed { height: 100vh; }
   .top .spacer { flex-basis: 0; }
   .top button, .top .who { white-space: nowrap; }
 }
+
+/* Status: a dot per part (works, to look at, not working, not set up), and the sum above. */
+.hdot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--line); align-self: flex-start; margin-top: 4px; }
+.hdot.good { background: var(--ok); }
+.hdot.warn { background: var(--warn); }
+.hdot.bad { background: var(--danger); }
+.hdot.off { background: transparent; border: 2px solid var(--line); box-sizing: border-box; }
+.hdot.run { background: var(--accent); animation: hpulse 1s ease-in-out infinite alternate; }
+@keyframes hpulse { from { opacity: .25; } to { opacity: 1; } }
+.health-sum { font-weight: 600; font-size: 13px; }
+.health-sum.good { color: var(--ok); }
+.health-sum.warn { color: var(--warn); }
+.health-sum.bad { color: var(--danger); }
+#healthRows .setrow { gap: 12px; }
+#healthRows .setrow > button { min-width: 0; }
+.dlg-toolbar .health-sum + button { margin-left: auto; }
