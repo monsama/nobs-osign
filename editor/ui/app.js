@@ -1108,7 +1108,7 @@
       const el = $('cn_' + k), f = r.fields[k];
       el.value = f.value;
       if (el.tagName === 'SELECT') el.options[0].textContent = f.env ? t('As in .env ({0})', t(f.env === 'on' ? 'On' : 'Off')) : t('As in .env');
-      else el.placeholder = f.env || (r.derived && r.derived[k]) || el.dataset.ph;
+      else el.placeholder = f.env || (r.derived && r.derived[k]) || t(el.dataset.ph);
     }
     for (const k of CONN_SECRETS) {
       const x = r.secrets[k];
@@ -1122,6 +1122,7 @@
     // The server's own certificate, when the setup script put it on the app: no secret then.
     $('connCert').textContent = r.cert ? t('Thumbprint {0}, valid until {1}.', r.cert.thumbprint, day(r.cert.expires)) : t('None yet: the setup script makes it, or Download makes one now.');
     $('connCaRemove').hidden = !r.ca.saved;
+    cfAddress();
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
     $('connCaFile').value = '';
@@ -1185,6 +1186,13 @@
     }
   });
   $('connScriptWizard').addEventListener('click', () => { $('dlgConn').close(); wizOpen(Math.max(0, wizSteps().indexOf('folder'))); });
+
+  // The add-in's address that follows from the Pages project.
+  function cfAddress() {
+    const v = $('cn_cfProject').value.trim() || $('cn_cfProject').placeholder;
+    $('cfAddress').textContent = /^[a-z0-9][a-z0-9-]{0,57}$/.test(v) ? t('(the add-in: https://{0}.pages.dev/)', v) : t('(the add-in: https://<name>.pages.dev/)');
+  }
+  $('cn_cfProject').addEventListener('input', cfAddress);
 
   // Server connections in tabs: one part at a time.
   function connTestsClear() { document.querySelectorAll('#dlgConn [data-ctestout]').forEach((o) => { o.textContent = ''; o.className = 'where'; }); }

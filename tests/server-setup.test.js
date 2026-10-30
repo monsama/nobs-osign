@@ -185,7 +185,16 @@ test('the setup script needs the folder and the add-in\'s address first', async 
   await call('settings/save', { settings: { spFolder: '' } });
   assert.match((await call('setup/start', { origin: at })).error, /SharePoint folder first/);
   await call('settings/save', { settings: { spSite: SITE, spFolder: 'OSign' } });
-  assert.match((await call('setup/start', { origin: at })).error, /add-in's address first/);
+  assert.match((await call('setup/start', { origin: at })).error, /Set up Cloudflare Pages first/);
+  // With a Pages project, its address is the add-in's: the script no longer waits for it.
+  await call('connections/save', { values: { cfProject: 'firma-osign' } });
+  assert.equal((await call('settings/get')).settings.addinUrl, 'https://firma-osign.pages.dev');
+  assert.equal((await call('setup/start', { origin: at })).ok, true);
+  // One set by hand stays.
+  await call('settings/save', { settings: { addinUrl: 'https://signatures.example.com/' } });
+  await call('connections/save', { values: { cfProject: 'other-osign' } });
+  assert.equal((await call('settings/get')).settings.addinUrl, 'https://signatures.example.com');
+  await call('settings/save', { settings: { addinUrl: '' } });
   assert.match((await call('setup/start', { origin: 'javascript:alert(1)' })).error, /editor's address/);
   // Nothing that could end a string in PowerShell gets into the settings or a script.
   for (const site of ["contoso.sharepoint.com:/sites/IT\u2019;New-Item(\u2019x\u2019);\u2019:", "contoso.sharepoint.com:/sites/IT';x;':"]) {

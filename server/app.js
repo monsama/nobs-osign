@@ -219,6 +219,14 @@ function createApp(opts) {
     log.info('setup: the setup script set up Microsoft 365 (add-in ' + r.addinClientId + ', server ' + r.serverClientId + ', ' + (r.certThumbprint ? 'certificate ' + r.certThumbprint : 'client secret') + ')');
     return {};
   }
+  // With Cloudflare Pages set up and no add-in address yet: the project's own (<name>.pages.dev),
+  // so the setup script does not wait for it. An address set by hand is never replaced.
+  async function addinUrlFromPages() {
+    const st = settings.get();
+    if (st.addinUrl || !/^[a-z0-9][a-z0-9-]{0,57}$/.test(pages.project || '')) return;
+    await settings.save({ addinUrl: 'https://' + pages.project + '.pages.dev/' });
+    log.info('settings: the add-in\'s address set to https://' + pages.project + '.pages.dev/ (Cloudflare Pages)');
+  }
   // The connections are the local account admin's alone: whoever sets the directory's address
   // gets the passwords people sign in with.
   const adminOnly = (s) => (s.user.local ? '' : 'Only the local account admin can change the server\'s connections.');
@@ -262,7 +270,7 @@ function createApp(opts) {
       problems: {
         signIn: ldapProblem(ldapCfg) || (ldapCfg.url ? '' : 'Not set up yet: enter the domain controller, then Detect.'),
         directory: directoryProblem(dir), graph: graphProblem(graphCfg) || (graphEnabled(graphCfg) ? '' : 'Not set up yet: the setup script below does it.'),
-        pages: addin.pagesProblem(pages)
+        pages: addin.pagesEnabled(pages) ? addin.pagesProblem(pages) : 'Not set up yet: the three steps below.'
       }
     });
   }
@@ -315,9 +323,10 @@ function createApp(opts) {
     },
     // The setup script: made for this setup (the site and the add-in's address as saved), and
     // whether it has sent its result yet.
-    'setup/start': (d, s) => {
+    'setup/start': async (d, s) => {
       if (adminOnly(s)) return { error: adminOnly(s) };
       if (!connections.answer().keyOk) return { error: 'The server has no key to keep the client secret with (secrets/app_key): run sudo ./deploy-nobs-osign.sh again.' };
+      await addinUrlFromPages();
       const st = settings.get();
       // A new certificate for this run: only its public half goes into the script.
       const cert = certs.pending();
@@ -373,6 +382,7 @@ function createApp(opts) {
           return { message: 'The server signs in to Microsoft 365 and reaches the site of the signatures.' };
         }
         if (d.what === 'pages') {
+          if (!addin.pagesEnabled(pages)) return { error: connectionsAnswer().problems.pages };
           const r = await addin.pagesTest(pages, fetchFn);
           return { message: r.project ? 'The token works; the Pages project is there: ' + r.url : 'The token works; the Pages project is made on the first upload.' };
         }
@@ -395,13 +405,14 @@ function createApp(opts) {
     },
     // The server's connections (Settings → Server connections), for the local account admin.
     'connections/get': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : connectionsAnswer()),
-    'connections/save': (d, s) => {
+    'connections/save': async (d, s) => {
       if (adminOnly(s)) return { error: adminOnly(s) };
       const r = connections.save({ values: d.values, secrets: d.secrets && typeof d.secrets === 'object' ? d.secrets : {}, ca: d.ca });
       if (r.error) return r;
       // Back to a client secret: the certificate goes (it stays on the app until removed there).
       if (d.removeCert === true) certs.remove();
       configure();
+      await addinUrlFromPages();
       log.info('connections: changed by ' + s.user.login);
       return connectionsAnswer();
     },
