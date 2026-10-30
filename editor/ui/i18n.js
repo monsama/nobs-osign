@@ -817,6 +817,8 @@
     'Create and upload the add-in files': 'Add-in-Dateien erstellen und hochladen',
     'Automatic (Cloudflare Pages when set up)': 'Automatisch (Cloudflare Pages, wenn eingerichtet)',
     'Once: upload {0} in the Microsoft 365 admin center (Settings → Integrated apps).': 'Einmalig: {0} im Microsoft 365 Admin Center hochladen (Einstellungen → Integrierte Apps).',
+    'Chosen: SharePoint {0} › {1}. For another folder, paste its address below.': 'Gewählt: SharePoint {0} › {1}. Für einen anderen Ordner dessen Adresse unten einfügen.',
+    'Only for another folder': 'Nur für einen anderen Ordner',
   };
 
   DE.html = {
