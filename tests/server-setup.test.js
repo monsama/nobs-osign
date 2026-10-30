@@ -14,7 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, execFile } = require('node:child_process');
 const { createApp } = require('../server/app');
-const { fakeMicrosoft, TENANT } = require('./support/fake-microsoft');
+const { fakeMicrosoft, TENANT, ME } = require('./support/fake-microsoft');
 
 const PS = process.env.OSIGN_TEST_SHELL || 'pwsh';
 let psOk = true;
@@ -143,6 +143,28 @@ test('the setup script: both apps, the site, the result to the server, the right
   assert.equal((await api('info')).features.graphCredential, 'certificate');
   assert.equal(st.passwords.filter((x) => !x.removed).length, 0, 'the old secret is removed');
   assert.equal((await api('connections/get')).secrets.graphClientSecret.saved, '');
+});
+
+test('the setup script: no access to the site stops it before anything is made; a grant that cannot be shortened is made anew', { skip }, async () => {
+  const st = ms.state;
+  const apps = st.apps.length;
+  st.denySite = true;
+  try {
+    const r = await run(await makeScript(false));
+    assert.notEqual(r.code, 0);
+    assert.match(r.out, /owner of the site|Besitzer der Website/);
+    assert.equal(st.apps.length, apps, 'no app made in vain');
+    assert.match((await api('setup/status')).problem, /owner of the site|Besitzer der Website/);
+  } finally { st.denySite = false; }
+  // The sign-in's consent with one more right of its own (User.Read), and PATCH refused.
+  st.grants.push({ id: 'grant-cli-more', clientId: 'sp-cli', consentType: 'Principal', principalId: ME, resourceId: 'sp-graph', scope: 'openid profile User.Read Sites.FullControl.All' });
+  st.refuseGrantPatch = true;
+  try {
+    const r = await run(await makeScript(false));
+    assert.equal(r.code, 0, r.out);
+    const g = st.grants.filter((x) => x.clientId === 'sp-cli');
+    assert.deepEqual(g.map((x) => x.scope), ['openid profile User.Read'], 'only what was there before stays');
+  } finally { st.refuseGrantPatch = false; }
 });
 
 test('the one-time code: only with it, only once, and the script only for the admin', async () => {

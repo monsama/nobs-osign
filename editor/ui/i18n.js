@@ -776,6 +776,8 @@
     'Set up Cloudflare Pages first (its tab, before SharePoint), or enter the add-in\'s address in the setup assistant (the step "Where the add-in is served").': 'Richten Sie zuerst Cloudflare Pages ein (sein Tab, vor SharePoint), oder tragen Sie die Adresse des Add-ins im Einrichtungsassistenten ein (Schritt «Wo das Add-in bereitgestellt wird»).',
     'Not set up yet: the three steps below.': 'Noch nicht eingerichtet: die drei Schritte unten.',
     'The Cloudflare API token is missing.': 'Der Cloudflare-API-Token fehlt.',
+    'But this is a personal OneDrive: only its owner can give the server access (no administrator can), and it goes with that person. A SharePoint site is better.': 'Aber das ist ein persönliches OneDrive: Nur dessen Besitzer kann dem Server Zugriff geben (kein Administrator), und es verschwindet mit dieser Person. Eine SharePoint-Website ist besser.',
+    'A personal OneDrive goes with its owner: a SharePoint site is better for signatures.': 'Ein persönliches OneDrive verschwindet mit seinem Besitzer: Für Signaturen ist eine SharePoint-Website besser.',
   };
 
   DE.html = {

@@ -190,6 +190,22 @@ try {
     if ($me.id) { $script:MyId = $me.id }
     Step "Signed in as $($me.userPrincipalName) (tenant $tenant)" "Angemeldet als $($me.userPrincipalName) (Mandant $tenant)"
 
+    # The site first: without access to it nothing else is worth doing (no apps made in vain).
+    $m = [regex]::Match($Site, '^([A-Za-z0-9.-]+):/(sites|teams|personal)/([^:/]+):$')
+    $sitePath = if ($m.Success) { '/sites/' + $m.Groups[1].Value + ':/' + $m.Groups[2].Value + '/' + [Uri]::EscapeDataString($m.Groups[3].Value) + ':' } else { '/sites/root' }
+    $personal = $m.Success -and $m.Groups[2].Value -eq 'personal'
+    try { $siteInfo = Graph GET ($sitePath + '?$select=id,webUrl') }
+    catch {
+        if ($_.Exception.Data['status'] -eq 403 -and $personal) {
+            throw $(if ($German) { "Kein Zugriff auf das OneDrive $Site mit $($me.userPrincipalName): Auf ein persönliches OneDrive kommt nur dessen Besitzer, auch kein Administrator. Legen Sie die Signaturen besser in eine SharePoint-Website (empfohlen) und wählen Sie diese im Einrichtungsassistenten." } else { "No access to the OneDrive $Site as $($me.userPrincipalName): only its owner reaches a personal OneDrive, no administrator does. Better keep the signatures in a SharePoint site (recommended) and choose it in the setup assistant." })
+        }
+        if ($_.Exception.Data['status'] -eq 403) {
+            throw $(if ($German) { "Kein Zugriff auf die Website $Site mit $($me.userPrincipalName): Ihr Konto muss Besitzer der Website sein (in SharePoint: Website-Einstellungen → Websiteberechtigungen), dann das Skript nochmals ausführen." } else { "No access to the site $Site as $($me.userPrincipalName): your account has to be an owner of the site (in SharePoint: Site settings → Site permissions); then run the script again." })
+        }
+        throw
+    }
+    Step "Site found: $($siteInfo.webUrl)" "Website gefunden: $($siteInfo.webUrl)"
+
     $graphSp = Graph GET "/servicePrincipals(appId='$GraphApp')?`$select=id,appRoles,oauth2PermissionScopes"
     $scopeId = @{}; foreach ($s in $graphSp.oauth2PermissionScopes) { $scopeId[$s.value] = $s.id }
     $roleId = ($graphSp.appRoles | Where-Object { $_.value -eq 'Sites.Selected' } | Select-Object -First 1).id
@@ -259,10 +275,8 @@ try {
         Step ("Client secret made, valid until " + ([datetime]$secret.endDateTime).ToString('yyyy-MM-dd')) ("Geheimer Clientschlüssel erstellt, gültig bis " + ([datetime]$secret.endDateTime).ToString('yyyy-MM-dd'))
     }
 
-    # 3. The site.
-    $m = [regex]::Match($Site, '^([A-Za-z0-9.-]+):/(sites|teams|personal)/([^:/]+):$')
-    $sitePath = if ($m.Success) { '/sites/' + $m.Groups[1].Value + ':/' + $m.Groups[2].Value + '/' + [Uri]::EscapeDataString($m.Groups[3].Value) + ':' } else { '/sites/root' }
-    $s = Graph GET ($sitePath + '?$select=id,webUrl')
+    # 3. The site (found at the start).
+    $s = $siteInfo
     $perms = @((Graph GET "/sites/$($s.id)/permissions").value)
     $has = $perms | Where-Object {
         $p = $_
@@ -312,11 +326,22 @@ if ($script:AccessToken -and $script:MyId) {
                     continue
                 }
                 # Nothing but the sign-in's own (openid, profile) left: the grant goes as a whole.
-                if (@($left | Where-Object { @('openid', 'profile', 'offline_access', 'email') -notcontains $_ }).Count) { Graph PATCH "/oauth2PermissionGrants/$($g.id)" @{ scope = ($left -join ' ') } | Out-Null } else { Graph DELETE "/oauth2PermissionGrants/$($g.id)" | Out-Null }
+                if (@($left | Where-Object { @('openid', 'profile', 'offline_access', 'email') -notcontains $_ }).Count) {
+                    # Where Graph refuses to shorten the grant (400), it goes and comes back with the rest.
+                    try { Graph PATCH "/oauth2PermissionGrants/$($g.id)" @{ scope = ($left -join ' ') } | Out-Null }
+                    catch {
+                        Graph DELETE "/oauth2PermissionGrants/$($g.id)" | Out-Null
+                        Graph POST '/oauth2PermissionGrants' @{ clientId = $g.clientId; consentType = 'Principal'; principalId = $g.principalId; resourceId = $g.resourceId; scope = ($left -join ' ') } | Out-Null
+                    }
+                } else { Graph DELETE "/oauth2PermissionGrants/$($g.id)" | Out-Null }
             }
             Step 'The rights used for this are taken back' 'Die dafür verwendeten Rechte sind wieder entfernt'
         }
-    } catch { Say ("The rights used for this could not be taken back: " + $_.Exception.Message) ("Die verwendeten Rechte konnten nicht entfernt werden: " + $_.Exception.Message) 'Yellow' }
+    } catch {
+        Say ("The rights used for this could not be taken back: " + $_.Exception.Message) ("Die verwendeten Rechte konnten nicht entfernt werden: " + $_.Exception.Message) 'Yellow'
+        Say ('Take them back by hand: Entra admin center → Enterprise applications → "Microsoft Graph Command Line Tools" → Permissions → User consent: ' + ($Scopes -join ', ') + '.') `
+            ('Von Hand entfernen: Entra Admin Center → Unternehmensanwendungen → "Microsoft Graph Command Line Tools" → Berechtigungen → Benutzereinwilligung: ' + ($Scopes -join ', ') + '.') 'Yellow'
+    }
 }
 $script:AccessToken = $null
 

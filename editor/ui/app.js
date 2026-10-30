@@ -1597,6 +1597,7 @@
       $('wizGrant').hidden = true;
       out.textContent = c.found ? t('✓ Found in SharePoint: {0}', c.where) : t('The server reaches the site; the folder is not there yet and is made on the first publish: {0}', c.where);
       out.classList.add('good');
+      if (/:\/personal\//.test(site)) { out.textContent += ' ' + t('A personal OneDrive goes with its owner: a SharePoint site is better for signatures.'); }
     } catch (e) {
       if (my !== wiz.checkSeq) return;
       // Microsoft 365 not set up yet: the setup script does it (step "Register the app"), and the
@@ -1604,6 +1605,7 @@
       if (!toSharePoint() && wizHasScript() && given) {
         wiz.spOk = true;
         out.textContent = t('Noted. The server checks this folder once Microsoft 365 is set up, with the setup script a few steps on.');
+        if (/:\/personal\//.test(site)) { out.textContent += ' ' + t('But this is a personal OneDrive: only its owner can give the server access (no administrator can), and it goes with that person. A SharePoint site is better.'); out.classList.add('warn'); }
       } else {
         $('wizGrant').hidden = !toSharePoint();
         out.textContent = t(e.message); out.classList.add('warn');
