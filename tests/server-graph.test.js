@@ -204,7 +204,7 @@ test('the server\'s certificate: made for the setup script, put on the app, and 
   const at = 'http://127.0.0.1:' + s.address().port;
   try {
     const c = await signIn(at);
-    assert.match((await call(at, c, 'info')).features.graphProblem, /client secret is missing/);
+    assert.match((await call(at, c, 'info')).features.graphProblem, /cannot sign in to Microsoft 365 yet: run the setup script/);
     await call(at, c, 'settings/save', { settings: { spSite: SITE, spFolder: 'OSign', addinUrl: 'https://osign.contoso.com/' } });
     const st = await call(at, c, 'setup/start', { origin: at });
     const text = await (await fetch(at + '/setup/nobs-osign-setup.ps1?id=' + st.id, { headers: { Cookie: c } })).text();
@@ -234,5 +234,27 @@ test('the server\'s certificate: made for the setup script, put on the app, and 
       const c2 = await signIn(at2);
       assert.match((await call(at2, c2, 'connections/test', { what: 'graph' })).error, /AADSTS700027.*certificate is on the app registration/);
     } finally { s2.close(); }
+  } finally { s.close(); }
+});
+
+test('by hand: the server\'s certificate to upload in Entra, made once and then in use; no secret', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-cert-hand-'));
+  const env = envFor(dir, { OSIGN_APP_KEY: 'a-key-for-the-hand-test' });
+  delete env.OSIGN_GRAPH_CLIENT_SECRET_FILE;
+  const s = await start(env);
+  const at = 'http://127.0.0.1:' + s.address().port;
+  try {
+    const c = await signIn(at);
+    const r = await call(at, c, 'connections/cert');
+    assert.equal(r.ok, true, r.error);
+    const cert = new crypto.X509Certificate(Buffer.from(r.der, 'base64'));
+    assert.equal(cert.fingerprint.replace(/:/g, ''), r.thumbprint);
+    assert.equal((await call(at, c, 'connections/cert')).thumbprint, r.thumbprint, 'the same one again');
+    assert.equal((await call(at, c, 'info')).features.graphCredential, 'certificate');
+    sp.certs.push(cert);
+    await call(at, c, 'settings/save', { settings: { spSite: SITE, spFolder: 'OSign' } });
+    const p = await call(at, c, 'publish', { configJson: cfg([{ id: 's', name: 'S', html: '<p>by hand</p>' }]) });
+    assert.equal(p.ok, true, p.error);
+    sp.certs.length = 0;
   } finally { s.close(); }
 });

@@ -1098,9 +1098,9 @@
   // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
   // saved wins over .env, an empty field takes .env's value (its placeholder). Secrets are only
   // ever sent, never shown: the server says where each comes from.
-  const CONN_FIELDS = ['ldapUrl', 'adDomain', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'graphSecretExpires', 'cfAccountId', 'cfProject'];
-  const CONN_SECRETS = ['ldapServicePassword', 'graphClientSecret', 'cfApiToken'];
-  let connDrop = {}, connCa, connCertDrop = false;
+  const CONN_FIELDS = ['ldapUrl', 'adDomain', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
+  const CONN_SECRETS = ['ldapServicePassword', 'cfApiToken'];
+  let connDrop = {}, connCa;
   function day(iso) { return iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : ''; }
   function renderConnections(r) {
     $('connKey').hidden = r.keyOk;
@@ -1120,10 +1120,7 @@
       $('cx_' + k).className = x.saved && !x.readable ? 'err' : '';
     }
     // The server's own certificate, when the setup script put it on the app: no secret then.
-    connCertDrop = false;
-    $('connCert').textContent = r.cert ? t('With the server\'s own certificate (thumbprint {0}, valid until {1}). Its key never leaves the server.', r.cert.thumbprint, day(r.cert.expires)) : t('With a client secret (the setup script puts a certificate on the app instead).');
-    $('connCertRemove').hidden = !r.cert;
-    document.querySelectorAll('#dlgConn [data-nocert]').forEach((x) => { x.hidden = !!r.cert; });
+    $('connCert').textContent = r.cert ? t('Thumbprint {0}, valid until {1}.', r.cert.thumbprint, day(r.cert.expires)) : t('None yet: the setup script makes it, or Download makes one now.');
     $('connCaRemove').hidden = !r.ca.saved;
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
@@ -1144,7 +1141,7 @@
   }
   // In this dialog, "(Settings → Server connections)" would point to itself; the line at the top of
   // a tab and the answer of its test say a problem in the same words.
-  function connText(p) { return t(String(p).replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')').replace(/ \(secrets\/[a-z_]+, or Server connections\)/, '')); }
+  function connText(p) { return t(String(p).replace(/ \(secrets\/[a-z_]+, or Server connections\)/, '').replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')')); }
 
   // The setup script, from the SharePoint tab: as in the setup assistant, its result comes back
   // here by itself.
@@ -1206,10 +1203,18 @@
     connDrop[b.dataset.drop] = true; b.hidden = true;
     $('cx_' + b.dataset.drop).textContent = t('Removed when you save.');
   });
-  $('connCertRemove').addEventListener('click', () => {
-    connCertDrop = true; $('connCertRemove').hidden = true;
-    $('connCert').textContent = t('The certificate is no longer used when you save: enter the client secret.');
-    document.querySelectorAll('#dlgConn [data-nocert]').forEach((x) => { x.hidden = false; });
+  // By hand: the server's certificate (made now if there is none) to upload to the app in Entra.
+  $('connCertGet').addEventListener('click', async () => {
+    const out = document.querySelector('#dlgConn [data-ctestout="graph"]');
+    out.className = 'where'; out.textContent = '';
+    try {
+      const r = await api('connections/cert');
+      const bytes = Uint8Array.from(atob(r.der), (c) => c.charCodeAt(0));
+      const a = el('a', { href: URL.createObjectURL(new Blob([bytes], { type: 'application/pkix-cert' })), download: 'nobs-osign-server.cer' });
+      document.body.append(a); a.click(); a.remove();
+      $('connCert').textContent = t('Thumbprint {0}, valid until {1}.', r.thumbprint, day(r.expires));
+      out.textContent = t('Downloaded. Upload it to the server\'s app in Entra, then Save and test the connection.');
+    } catch (err) { out.className = 'where warn'; out.textContent = connText(err.message); }
   });
   $('connCaRemove').addEventListener('click', () => { connCa = null; connCaReading = null; $('connCaRemove').hidden = true; $('connCa').textContent = t('Removed when you save.'); });
   let connCaReading = null;
@@ -1224,7 +1229,6 @@
     for (const k of CONN_FIELDS) values[k] = $('cn_' + k).value;
     for (const k of CONN_SECRETS) { if ($('cs_' + k).value) secrets[k] = $('cs_' + k).value; else if (connDrop[k]) secrets[k] = null; }
     const body = { values, secrets };
-    if (connCertDrop) body.removeCert = true;
     // A CA file chosen just now may still be being read.
     if (connCaReading) { connCa = await connCaReading; connCaReading = null; }
     if (connCa !== undefined) body.ca = connCa;

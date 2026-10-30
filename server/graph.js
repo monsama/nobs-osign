@@ -45,7 +45,7 @@ function graphProblem(c) {
   if (!graphEnabled(c)) return '';
   if (!GUID.test(c.tenantId)) return 'The tenant ID is the Directory (tenant) ID, a GUID.';
   if (!GUID.test(c.clientId)) return "The client ID is the server's app registration's Application (client) ID, a GUID.";
-  if (!c.secret && !c.cert) return "The server's client secret is missing (secrets/graph_client_secret, or Server connections).";
+  if (!c.secret && !c.cert) return 'The server cannot sign in to Microsoft 365 yet: run the setup script, which gives it its own certificate.';
   return '';
 }
 

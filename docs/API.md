@@ -90,7 +90,7 @@ asked.
   twice a day one request to GitHub), else `null`. `features.graphCredential` is `certificate` (the
   server's own, server/cert.js, put on the app by the setup script) or `secret`; `features.secretExpires`
   and `features.secretDaysLeft` are for whichever it is. `connections/get` answers `cert: { thumbprint,
-  expires } | null`; `connections/save` with `removeCert: true` goes back to a client secret.
+  expires } | null`; `connections/save` with `removeCert: true` goes back to a client secret. **connections/cert** → `{ ok, der, thumbprint, expires }`: the server's certificate (base64 DER, made and put in use when there is none), to upload to its app in Entra by hand.
 - **connections/detect** → `{ ok, domain, base, host }`: the domain the saved domain controller
   serves, from its RootDSE (no sign-in needed), for the local account `admin`.
   `connections/get` and `connections/save` also answer `derived`: what the empty fields follow from
