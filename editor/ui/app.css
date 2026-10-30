@@ -429,3 +429,89 @@ p.btn-row { margin: 8px 0; }
 .pv-ad { align-items: center; }
 /* Two or three fields side by side: their inputs on one line, however long a label is. */
 .grid2, .grid3 { align-items: end; }
+
+/* Dialogs as windows (as in NOBS Inventory): the title bar and the foot stay while the middle
+   scrolls; the window controls at the top right; moved, maximised or minimised to the tray. */
+dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+dialog > .dlg { flex: 1; min-height: 0; overflow: auto; }
+.dlg > h2:first-child { position: sticky; top: 0; z-index: 3; background: var(--panel); padding-right: 104px; }
+.dlg-foot { position: sticky; bottom: 0; z-index: 3; background: var(--panel); }
+.wiz-head { padding-right: 96px; }
+.movable { cursor: move; user-select: none; -webkit-user-select: none; touch-action: none; }
+dialog.moving { box-shadow: 0 24px 60px rgba(0, 0, 0, .4); }
+dialog.maxed { width: 100vw !important; max-width: none; height: 100vh; max-height: none; margin: 0; border-radius: 0; translate: none !important; }
+dialog.maxed .movable { cursor: default; }
+.wctl { position: absolute; top: 8px; right: 10px; z-index: 4; display: inline-flex; gap: 2px; align-items: center; }
+.wctl > button { width: 26px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-s); background: transparent; color: var(--muted); cursor: pointer; }
+.wctl > button:hover, .wctl > button:focus-visible { background: var(--panel-2); color: var(--text); filter: none; }
+.wctl > button.wc-close:hover, .wctl > button.wc-close:focus-visible { background: var(--danger); color: #fff; }
+#dlgTray { position: fixed; right: 12px; bottom: 34px; z-index: 60; display: flex; gap: 8px; }
+#dlgTray[hidden] { display: none; }
+#dlgTray .tray-chip { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); box-shadow: 0 6px 20px rgba(0, 0, 0, .18); font-size: 12px; overflow: hidden; }
+#dlgTray button { height: auto; border: 0; border-radius: 0; background: transparent; color: var(--text); cursor: pointer; padding: 6px 10px; }
+#dlgTray .tray-open { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#dlgTray .tray-open::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 2px; background: var(--accent); vertical-align: 0; }
+#dlgTray .tray-open:hover { background: var(--hover); }
+#dlgTray .tray-x { padding: 6px 9px; color: var(--muted); border-left: 1px solid var(--line-2); }
+#dlgTray .tray-x:hover { color: #fff; background: var(--danger); }
+@media (max-width: 760px) {
+  dialog[open] { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+  .wctl .wc-max { display: none; }
+}
+
+/* Settings: tabs, the same size on each, and cards of rows (what it is on the left, its button on
+   the right). */
+dialog.settings { width: min(880px, 94vw); height: min(720px, 92vh); }
+dialog.settings.maxed { height: 100vh; }
+.dtabs .tab { display: inline-flex; align-items: center; gap: 7px; }
+.dtabs .tab .i { width: 15px; height: 15px; flex: none; }
+#dlgSettings .dtabs { position: sticky; top: 42px; z-index: 2; background: var(--panel); }
+dialog.settings > .dlg { display: flex; flex-direction: column; }
+#dlgSettings .dpane { min-height: 0; padding-bottom: 4px; flex: 1 0 auto; }
+#dlgSettings .dpane > label { display: block; margin: 12px 0; }
+.setcard { border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); margin: 0 0 14px; overflow: hidden; }
+.setcard-head { padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.setrow { display: flex; align-items: center; gap: 16px; padding: 11px 14px; min-height: 52px; box-sizing: border-box; }
+.setrow + .setrow { border-top: 1px solid var(--line-2); }
+.setrow-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.setrow-text > b { font-size: 13px; }
+.setrow-text > small, .setrow-text small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.setrow-text small.warn { color: var(--warn); }
+.setrow-text label.check { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 13px; }
+.setrow-text .where { margin: 2px 0 0; font-size: 12px; }
+.setrow > button, .setrow > select { flex: none; min-width: 180px; }
+.lead.info { border: 1px solid var(--line-2); border-left: 3px solid var(--accent); border-radius: var(--r-m); background: var(--accent-soft); color: var(--text); padding: 8px 12px; }
+
+/* The audit log: a toolbar, the table scrolling under its head, each action as a badge. */
+dialog.audit { width: min(1080px, 96vw); height: min(760px, 92vh); }
+dialog.audit.maxed { height: 100vh; }
+dialog.audit > .dlg { display: flex; flex-direction: column; }
+dialog.audit .lead { margin-bottom: 10px; }
+.dlg-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.dlg-toolbar select { width: auto; min-width: 190px; }
+.dlg-toolbar input[type=search] { flex: 1; min-width: 180px; max-width: 360px; }
+.dlg-toolbar .muted { font-size: 12px; margin-left: auto; }
+.dlg-toolbar button { display: inline-flex; align-items: center; }
+.dlg-toolbar button .i { width: 14px; height: 14px; margin-right: 6px; }
+.audit-wrap { flex: 1; min-height: 200px; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-m); }
+table.fields.audit { min-width: 760px; }
+table.audit thead th { position: sticky; top: 0; z-index: 1; padding: 8px 10px; }
+table.audit td { padding: 7px 10px; font-size: 12.5px; vertical-align: top; border-bottom: 1px solid var(--line-2); }
+table.audit tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--panel-2) 45%, transparent); }
+table.audit tbody tr:hover td { background: var(--hover); }
+table.audit tr.refused td { background: color-mix(in srgb, var(--danger) 7%, transparent); }
+table.audit td.when { white-space: nowrap; width: 1%; }
+table.audit td.when small { display: block; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+table.audit td.who { font-weight: 600; white-space: nowrap; }
+table.audit td.ip { font: 11.5px/19px var(--mono); color: var(--muted); white-space: nowrap; }
+table.audit td.what { white-space: nowrap; width: 1%; }
+table.audit td.what small { display: block; margin-top: 3px; font-size: 11px; }
+table.audit td.detail { word-break: break-word; color: var(--text); }
+table.audit td:last-child { width: auto; text-align: left; }
+table.audit td.empty { text-align: center; padding: 28px; }
+.st.ok { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+table.audit .st.removed { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+/* The assistant keeps its height from step to step: nothing moves under the pointer. */
+dialog:has(.wiz)[open] { height: min(640px, 86vh); }
+dialog:has(.wiz).maxed { height: 100vh; }
+.wiz-head { padding-top: 12px; }

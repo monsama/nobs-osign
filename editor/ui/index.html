@@ -231,15 +231,20 @@
   </form>
 </dialog>
 
-<dialog id="dlgAudit">
+<dialog id="dlgAudit" class="audit">
   <form method="dialog" class="dlg wide">
     <h2>Audit log</h2>
     <p class="lead">Who signed in, published, brought back a version, changed the server's connections or settings, ran the setup script
       or made a backup: the last few thousand entries. Never a password or a signature's content.</p>
-    <p><select id="auditWhat" aria-label="Show">
-      <option value="">Everything</option><option value="signin">Sign-ins</option><option value="publish">Publishing</option>
-      <option value="connections/save">Server connections</option><option value="failed">Refused only</option></select></p>
-    <div class="table-wrap"><table class="fields audit"><thead><tr><th>When</th><th>Who</th><th>From</th><th>What</th><th>Details</th></tr></thead>
+    <div class="dlg-toolbar">
+      <select id="auditWhat" aria-label="Show">
+        <option value="">Everything</option><option value="signin">Sign-ins</option><option value="publish">Publishing</option>
+        <option value="connections/save">Server connections</option><option value="failed">Refused only</option></select>
+      <input id="auditFind" type="search" placeholder="Search who, from where, what…" aria-label="Search">
+      <span id="auditCount" class="muted"></span>
+      <button type="button" id="auditReload" class="ghost" title="Load again"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Refresh</button>
+    </div>
+    <div class="table-wrap audit-wrap"><table class="fields audit"><thead><tr><th>When</th><th>Who</th><th>From</th><th>What</th><th>Details</th></tr></thead>
       <tbody id="auditRows"></tbody></table></div>
     <p id="auditErr" class="err"></p>
     <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
@@ -290,36 +295,72 @@
   </form>
 </dialog>
 
-<dialog id="dlgSettings">
+<dialog id="dlgSettings" class="settings">
   <form method="dialog" class="dlg wide">
     <h2>Settings</h2>
-    <label>Language<select id="setLang"></select></label>
-    <p id="setServerWhere" class="lead" hidden></p>
-    <section id="setConnRow" hidden>
-      <h3>Server</h3>
+    <nav class="dtabs" role="tablist" aria-label="Settings">
+      <button type="button" class="tab active" data-stab="general" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>General</button>
+      <button type="button" class="tab" data-stab="server" id="setTabServer" role="tab" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Server</button>
+      <button type="button" class="tab" data-stab="addin" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Outlook add-in</button>
+    </nav>
+
+    <section class="dpane" role="tabpanel" data-spane="general">
+      <div class="setcard">
+        <div class="setrow">
+          <div class="setrow-text"><b>Language</b><small>Of this editor; the signatures keep their own.</small></div>
+          <select id="setLang" aria-label="Language"></select>
+        </div>
+      </div>
+      <p id="setServerWhere" class="lead" hidden></p>
+      <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
+        <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
+        <small id="setFolderNote"></small> <small id="setWhere" class="where"></small>
+      </label>
+      <label>Photos for the preview <small>(one &lt;username&gt;.jpg per person; empty: the photos folder in the folder above)</small>
+        <input id="setPhotos" placeholder="\\server\share\photos">
+        <small id="setPhotosNote"></small>
+      </label>
+      <p class="lead" data-th="settingsLead">In SharePoint, open the document library of your home site (https://&lt;tenant&gt;.sharepoint.com), make
+        a folder <b>OSign</b>, and choose <b>Sync</b> (or <b>Add shortcut to My files</b>). It then appears in File Explorer;
+        its path goes in the first field. Publishing writes <code>signatures.json</code> and <code>assets\</code> there; the
+        photos go in <code>photos\</code>, by hand.</p>
+    </section>
+
+    <section class="dpane" role="tabpanel" data-spane="server" id="setConnRow" hidden>
       <p class="lead">Active Directory, SharePoint and Cloudflare: the server's own connections. Only the local account admin can
         change them.</p>
-      <p id="setTls" class="lead"></p>
-      <p class="btn-row"><button type="button" id="setConn">Server connections…</button>
-        <button type="button" id="setAudit">Audit log…</button>
-        <button type="button" id="setBackup">Backup…</button></p>
-      <label class="check"><input type="checkbox" id="setApproval"> Publishing needs a second person's approval (four eyes)
-        <button type="button" class="help" data-help="hApproval" aria-label="Help">?</button></label>
-      <small id="setApprovalNote" class="where"></small>
+      <div class="setcard">
+        <div class="setcard-head">Connections</div>
+        <div class="setrow">
+          <div class="setrow-text"><b>Server connections</b><small>Sign-in with Active Directory, SharePoint for the signatures, Cloudflare Pages for the add-in.</small></div>
+          <button type="button" id="setConn">Server connections…</button>
+        </div>
+        <div class="setrow">
+          <div class="setrow-text"><b>Web certificate</b><small id="setTls"></small></div>
+        </div>
+      </div>
+      <div class="setcard">
+        <div class="setcard-head">Publishing</div>
+        <div class="setrow">
+          <div class="setrow-text"><label class="check"><input type="checkbox" id="setApproval"> <b>Four eyes</b>
+            <button type="button" class="help" data-help="hApproval" aria-label="Help">?</button></label>
+            <small>Publishing needs a second person's approval.</small> <small id="setApprovalNote" class="where"></small></div>
+        </div>
+      </div>
+      <div class="setcard">
+        <div class="setcard-head">Logs and data</div>
+        <div class="setrow">
+          <div class="setrow-text"><b>Audit log</b><small>Who signed in, published or changed something, and from where.</small></div>
+          <button type="button" id="setAudit">Audit log…</button>
+        </div>
+        <div class="setrow">
+          <div class="setrow-text"><b>Backup</b><small>Everything in one file locked with a passphrase, or brought back from one.</small></div>
+          <button type="button" id="setBackup">Backup…</button>
+        </div>
+      </div>
     </section>
-    <label>Publish to <small>(the OSign folder in SharePoint, synced to this PC with OneDrive)</small>
-      <span class="pick"><input id="setFolder" placeholder="C:\Users\me\Contoso\Contoso - Documents\OSign"><button type="button" class="pick-btn" data-for="setFolder">Choose folder…</button></span>
-      <small id="setFolderNote"></small> <small id="setWhere" class="where"></small>
-    </label>
-    <label>Photos for the preview <small>(one &lt;username&gt;.jpg per person; empty: the photos folder in the folder above)</small>
-      <input id="setPhotos" placeholder="\\server\share\photos">
-      <small id="setPhotosNote"></small>
-    </label>
-    <p class="lead" data-th="settingsLead">In SharePoint, open the document library of your home site (https://&lt;tenant&gt;.sharepoint.com), make
-      a folder <b>OSign</b>, and choose <b>Sync</b> (or <b>Add shortcut to My files</b>). It then appears in File Explorer;
-      its path goes in the first field. Publishing writes <code>signatures.json</code> and <code>assets\</code> there; the
-      photos go in <code>photos\</code>, by hand.</p>
-    <h3>Outlook add-in</h3>
+
+    <section class="dpane" role="tabpanel" data-spane="addin" hidden>
     <p id="setLocked" class="lead" hidden>Where the server publishes and what the add-in is made with can only be changed by the local
       account admin.</p>
     <p class="lead" data-th="addinLead">The add-in's files go on an HTTPS web server of your own (your web server, Azure Static Web Apps, …):
@@ -328,7 +369,7 @@
     <p class="lead" data-th="addinLeadServer" hidden>The add-in's files are made here and uploaded to Cloudflare Pages (or downloaded as a
       ZIP for another HTTPS web server). They are only code; the signatures stay in SharePoint. Then upload <code>manifest.xml</code>
       in the Microsoft 365 admin center, once.</p>
-    <p id="setAddinInfo" class="lead" hidden></p>
+    <p id="setAddinInfo" class="lead info" hidden></p>
     <details class="advanced" id="setAddinMore">
     <summary>Advanced: address, web server, app IDs</summary>
     <p class="hint" data-th="addinMoreHint" hidden>Set by themselves: the address from the Cloudflare Pages project, the IDs by the setup script. Change them only for
@@ -351,6 +392,8 @@
       <button id="setAddinUpload" type="button" hidden>Upload to Cloudflare Pages</button>
       <a id="setAddinZip" href="/addin.zip" download hidden>Download as ZIP</a></p>
     <p id="setAddinOk" class="ok"></p>
+    </section>
+
     <p id="setErr" class="err"></p>
     <div class="dlg-foot">
       <a class="btnlike foot-left" href="https://buymeacoffee.com/monsama" target="_blank" rel="noopener noreferrer" title="If NOBS OSign saves you some time"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/></svg>Buy me a coffee</a>
