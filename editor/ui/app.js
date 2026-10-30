@@ -1783,7 +1783,12 @@
     document.querySelector('#dlgWizard input[name=wlib][value=own]').closest('label').hidden = onServer();
     document.querySelector('#dlgWizard input[name=wlib][value=link]').closest('label').hidden = onServer();
     wizGrantFill(null);
-    // What is set already: checked right away, so the step says whether it works.
+    // What is set already: shown, and checked right away, so the step says whether it works; the
+    // field is then only for another folder.
+    const saved = onServer() && S.settings.spFolder && S.settings.spSite && S.settings.spSite !== 'root';
+    $('wizSpSaved').hidden = !saved;
+    $('wizSpSaved').textContent = saved ? t('Chosen: SharePoint {0} › {1}. For another folder, paste its address below.', S.settings.spSite.replace(/:\//, '/').replace(/:$/, ''), S.settings.spFolder) : '';
+    $('wizLink').placeholder = saved ? t('Only for another folder') : 'https://contoso.sharepoint.com/sites/IT/Shared Documents/Forms/AllItems.aspx?id=…';
     if (onServer() && S.settings.spFolder) wiz.checking = wizServerCheck(S.settings.spSite || 'root', S.settings.spFolder);
     if ($('wizFolder').value) detectWhere($('wizFolder').value, 'wizSpSite', 'wizSpFolder', $('wizWhereFound'), null);
     wizLibChanged();
@@ -1867,7 +1872,8 @@
     async folder() {
       await wiz.checking;
       if (onServer()) {
-        if (!$('wizSpFolder').value || (!wiz.spOk && !toSharePoint() && !$('wizLink').value.trim())) throw new Error(t('Paste the address of the folder in SharePoint.'));
+        const chosen = S.settings.spSite && S.settings.spSite !== 'root' && S.settings.spFolder;
+        if (!$('wizSpFolder').value || (!wiz.spOk && !toSharePoint() && !$('wizLink').value.trim() && !chosen)) throw new Error(t('Paste the address of the folder in SharePoint.'));
         if (!wiz.spOk && wiz.warned !== 'folder') {
           wiz.warned = 'folder';
           throw new Error(t('The server cannot reach this folder yet. Give it access as described below, then paste the link again. Click Next again to continue anyway.'));
