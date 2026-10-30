@@ -8,11 +8,11 @@ const esbuild = require('esbuild');
 const root = path.join(__dirname, '..', '..');
 const stub = { name: 'auth-stub', setup(b) { b.onResolve({ filter: /[\\/]auth\.js$|^\.\/auth\.js$/ }, () => ({ path: path.join(__dirname, 'auth-stub.js') })); } };
 
-module.exports = async function buildTestAddin() {
+module.exports = async function buildTestAddin(site) {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-addin-'));
   const common = {
     bundle: true, format: 'iife', target: 'es2016', logLevel: 'error', plugins: [stub],
-    banner: { js: 'var OSIGN_SETUP={clientId:"11111111-2222-3333-4444-555555555555",tenantId:"",site:"root",folder:"OSign"};' }
+    banner: { js: 'var OSIGN_SETUP={clientId:"11111111-2222-3333-4444-555555555555",tenantId:"",site:' + JSON.stringify(site || 'root') + ',folder:"OSign"};' }
   };
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'addin/src/launchevent.js')], outfile: path.join(out, 'launchevent.js') });
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'addin/src/taskpane.js')], outfile: path.join(out, 'taskpane.js') });

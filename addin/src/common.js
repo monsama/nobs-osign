@@ -94,16 +94,42 @@ async function token(scopes, interactive) {
   return tokens[key].p;
 }
 
+// The site, by its id: Graph does not take a path into a library after a site's own path
+// (/sites/host:/sites/x:/drive/root:/… answers 400), so a site named by its address is looked up
+// once, and its id kept.
+const SITE_KEY = 'osign.site.' + SITE;
+let siteId = null;
+function siteUrl() {
+  const m = /^([A-Za-z0-9.-]+):\/(sites|teams|personal)\/([^:/]+):$/.exec(SITE);
+  if (!m) throw new Error('The add-in was made for the SharePoint site "' + SITE + '": make its files again in NOBS OSign.');
+  return GRAPH + '/sites/' + m[1] + ':/' + m[2] + '/' + encodeURIComponent(m[3]) + ':';
+}
+async function siteBase(tok) {
+  if (!SITE || SITE === 'root') return GRAPH + '/sites/root';
+  if (!siteId) {
+    siteId = (async () => {
+      const kept = await store.get(SITE_KEY);
+      if (kept) return kept;
+      const j = await graphGet(tok, siteUrl() + '?$select=id', 'Finding the site');
+      if (!j || !j.id) throw new Error('Finding the site: Microsoft Graph did not name its id.');
+      await store.set(SITE_KEY, j.id);
+      return j.id;
+    })();
+    siteId.catch(() => { siteId = null; });
+  }
+  return GRAPH + '/sites/' + encodeURIComponent(await siteId);
+}
+
 // A file in the OSign folder, by its path in there ("signatures.json", "assets/logo.png").
-function itemUrl(rel) {
+async function itemUrl(tok, rel) {
   const parts = (FOLDER + '/' + rel).split('/').filter(Boolean).map(encodeURIComponent);
-  return GRAPH + '/sites/' + SITE + '/drive/root:/' + parts.join('/');
+  return (await siteBase(tok)) + '/drive/root:/' + parts.join('/');
 }
 
 async function download(meta, tok, what, asText) {
   // The address Graph hands out is signed for a short while: no token is sent there.
   const url = meta['@microsoft.graph.downloadUrl'];
-  const r = await withTimeout(url ? fetch(url) : fetch(itemUrl(meta.__rel) + ':/content', { headers: { Authorization: 'Bearer ' + tok } }), 10000, what);
+  const r = await withTimeout(url ? fetch(url) : fetch((await itemUrl(tok, meta.__rel)) + ':/content', { headers: { Authorization: 'Bearer ' + tok } }), 10000, what);
   if (!r.ok) throw new Error(what + ': SharePoint answered ' + r.status + '.');
   return asText ? r.text() : new Uint8Array(await r.arrayBuffer());
 }
@@ -117,7 +143,7 @@ export async function loadConfig(opts) {
   const cached = await readJson(CONFIG_KEY);
   try {
     const tok = await token(BASE_SCOPES, !!opts.interactive);
-    const meta = await graphGet(tok, itemUrl('signatures.json'), 'Finding the signatures', true);
+    const meta = await graphGet(tok, await itemUrl(tok, 'signatures.json'), 'Finding the signatures', true);
     if (!meta) throw new Error('No signatures are published yet: ' + FOLDER + '/signatures.json is not in SharePoint.');
     meta.__rel = 'signatures.json';
     // Unchanged since the last message: no need to fetch it again.
@@ -173,7 +199,7 @@ async function readGroups(tok, wanted) {
 async function readAdFile(tok, mail) {
   const name = core.userFileName(mail);
   if (!name) return null;
-  const meta = await graphGet(tok, itemUrl('users/' + name), 'Finding your entry', true);
+  const meta = await graphGet(tok, await itemUrl(tok, 'users/' + name), 'Finding your entry', true);
   if (!meta) return null;
   meta.__rel = 'users/' + name;
   const j = JSON.parse(await download(meta, tok, 'Loading your entry', true));
@@ -270,13 +296,13 @@ async function loadImages(refs, interactive) {
   // The logos and icons: one listing tells which are there and whether they changed.
   let assets = null;
   if (wanted.some((w) => w.dir === 'assets')) {
-    const j = await graphGet(tok, itemUrl('assets') + ':/children?$top=999', 'Listing the images', true);
+    const j = await graphGet(tok, (await itemUrl(tok, 'assets')) + ':/children?$top=999', 'Listing the images', true);
     assets = {};
     ((j && j.value) || []).forEach((it) => { assets[String(it.name).toLowerCase()] = it; });
   }
   for (const w of wanted) {
     try {
-      const meta = w.dir === 'assets' ? assets[w.name.toLowerCase()] : await graphGet(tok, itemUrl('photos/' + w.name), 'Finding the photo', true);
+      const meta = w.dir === 'assets' ? assets[w.name.toLowerCase()] : await graphGet(tok, await itemUrl(tok, 'photos/' + w.name), 'Finding the photo', true);
       if (!meta) continue;
       meta.__rel = w.key;
       const ck = 'osign.img.' + w.key.toLowerCase();
