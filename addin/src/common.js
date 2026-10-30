@@ -72,12 +72,54 @@ async function readJson(key) { try { const v = await store.get(key); return v ? 
 // ---------------------------------------------------------------------------------------------
 // Microsoft Graph
 // ---------------------------------------------------------------------------------------------
+// What went wrong, in German for a German Outlook: the messages the pane and the notice show.
+const WHAT_DE = {
+  'Finding the signatures': 'Signaturen suchen', 'Loading the signatures': 'Signaturen laden', 'Finding the site': 'Website suchen',
+  'Reading your details': 'Ihre Angaben lesen', 'Reading your groups': 'Ihre Gruppen lesen', 'Finding your entry': 'Ihren Eintrag suchen',
+  'Loading your entry': 'Ihren Eintrag laden', 'Listing the images': 'Bilder auflisten', 'Finding the photo': 'Foto suchen'
+};
+const MSG_DE = [
+  [/SharePoint does not let you read the folder (.+?) \((\d+)\)\. It has to be shared with everyone who gets a signature: .*$/, 'SharePoint lässt Sie den Ordner $1 nicht lesen ($2). Er muss für alle freigegeben sein, die eine Signatur bekommen: in SharePoint beim Ordner → Zugriff verwalten → Zugriff gewähren: «Jeder außer externen Benutzern», Anzeigen.'],
+  [/not allowed \((\d+)\)\. The app registration needs admin consent for (.+?) \(.*$/, 'nicht erlaubt ($1). Der App-Registrierung fehlt die Administratorzustimmung für $2 (Entra ID → Unternehmensanwendungen → die App des Add-ins → Berechtigungen; das Setup-Skript erteilt sie).'],
+  [/You are not in the AD export, so your groups are not known\.$/, 'Sie sind nicht im AD-Export, darum sind Ihre Gruppen nicht bekannt.'],
+  [/You are not in the AD export \((.+?)\)\. Ask IT to export the users again\.$/, 'Sie sind nicht im AD-Export ($1). Bitten Sie die IT, die Benutzer neu zu exportieren.'],
+  [/No signatures are published yet: (.+) is not in SharePoint\.$/, 'Noch keine Signaturen veröffentlicht: $1 fehlt in SharePoint.'],
+  [/ took too long\.$/, ' dauerte zu lange.'],
+  [/: not found in SharePoint \(404\)\.$/, ': in SharePoint nicht gefunden (404).'],
+  [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.']
+];
+export function localize(message, german) {
+  let m = String(message || '');
+  if (!german) return m;
+  for (const [en, de] of Object.entries(WHAT_DE)) m = m.split(en + ':').join(de + ':').split(en + ' took').join(de + ' took');
+  for (const [rx, de] of MSG_DE) m = m.replace(rx, de);
+  return m;
+}
+
+// The permissions a token carries (its scp claim). Decoded by hand: classic Outlook's runtime has
+// no atob.
+const B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function scopesOf(token) {
+  try {
+    const part = String(token).split('.')[1].replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    let bits = 0, n = 0, bytes = [];
+    for (const ch of part) { n = (n << 6) | B64URL.indexOf(ch); bits += 6; if (bits >= 8) { bits -= 8; bytes.push((n >> bits) & 255); } }
+    const json = decodeURIComponent(bytes.map((b) => '%' + ('0' + b.toString(16)).slice(-2)).join(''));
+    return String(JSON.parse(json).scp || '').split(' ').filter(Boolean);
+  } catch (e) { return null; }
+}
+
 async function graphGet(token, url, what, allowNotFound) {
   const r = await withTimeout(fetch(url, { headers: { Authorization: 'Bearer ' + token } }), 8000, what);
   if (r.status === 404 && allowNotFound) return null;
   if (r.status === 401 || r.status === 403) {
-    const need = /memberOf/i.test(url) ? GROUP_SCOPE : /\/(sites|drives)\//.test(url) ? 'Sites.Read.All (or the folder is not readable for you)' : 'User.Read';
-    throw new Error(what + ': not allowed (' + r.status + '). The app registration needs admin consent for ' + need + '.');
+    const need = /memberOf/i.test(url) ? GROUP_SCOPE : /\/(sites|drives)\//.test(url) ? 'Sites.Read.All' : 'User.Read';
+    // The consent is there (the token carries it): then SharePoint refused you, not the app.
+    const scp = scopesOf(token);
+    if (need === 'Sites.Read.All' && scp && scp.indexOf(need) >= 0) {
+      throw new Error(what + ': SharePoint does not let you read the folder ' + FOLDER + ' (' + r.status + '). It has to be shared with everyone who gets a signature: in SharePoint, the folder → Manage access → Grant access: Everyone except external users, Can view.');
+    }
+    throw new Error(what + ': not allowed (' + r.status + '). The app registration needs admin consent for ' + need + ' (Entra ID → Enterprise applications → the add-in\'s app → Permissions; the setup script gives it).');
   }
   if (r.status === 404) throw new Error(what + ': not found in SharePoint (404).');
   if (!r.ok) throw new Error(what + ': Microsoft Graph answered ' + r.status + '.');

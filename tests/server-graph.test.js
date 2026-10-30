@@ -268,3 +268,13 @@ test('the add-in\'s files carry the folder by its ids: the add-in reads it witho
   assert.match(js, /drive:"b!drive-site",item:"OSign"/);
   assert.ok(!js.includes('@@OSIGN_'), 'every placeholder filled');
 });
+
+test('the add-in\'s files before anything is published: the folder is made, not refused', async () => {
+  await api('settings/save', { settings: { spFolder: 'OSign-new' } });
+  try {
+    const r = await api('addin/build');
+    assert.equal(r.ok, true, r.error);
+    assert.match(fs.readFileSync(path.join(dataDir, 'addin', 'taskpane.js'), 'utf8'), /item:"OSign-new"/);
+    assert.ok(sp.sites[SITE].folders.has('OSign-new'));
+  } finally { await api('settings/save', { settings: { spFolder: 'OSign' } }); }
+});

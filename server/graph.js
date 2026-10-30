@@ -157,6 +157,8 @@ function createGraph(c, opts) {
       // The folder by its ids (its library's, its own): what the add-in reads with, so a user who
       // may read the folder needs nothing of the site around it.
       async locate() {
+        // Made where it is not there yet (a new setup, before the first publish).
+        await ensureFolder('');
         const r = await call('GET', (await itemUrl('')) + '?$select=id,parentReference', { what: 'Finding the folder ' + folder });
         const j = await r.json();
         return { driveId: String((j.parentReference || {}).driveId || ''), itemId: String(j.id || '') };

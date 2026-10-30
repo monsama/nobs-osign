@@ -2,7 +2,7 @@
  * The task pane: the signatures open to this user, each with a preview to insert, and - when the
  * editor allows it - which one is used for new mail and which for replies.
  */
-import { core, loadConfig, loadUserValues, getPrefs, setPrefs, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
+import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
 
 /* global Office, OSIGN_VERSION */
 const $ = (id) => document.getElementById(id);
@@ -47,7 +47,7 @@ let cfg = null, user = null, from = '', info = { kind: 'new', html: true };
 
 function message(text, isError) {
   const m = $('msg');
-  m.hidden = !text; m.textContent = text || ''; m.className = 'msg' + (isError ? ' error' : '');
+  m.hidden = !text; m.textContent = localize(text || '', german); m.className = 'msg' + (isError ? ' error' : '');
 }
 
 function option(value, text, selected) {
