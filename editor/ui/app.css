@@ -412,3 +412,4 @@ details.advanced[open] > summary { margin-bottom: 6px; }
 .scriptbox .where { margin: 6px 0 0; }
 ol.guide { margin: 0 0 4px; padding-left: 20px; }
 ol.guide li { margin: 0 0 6px; line-height: 1.5; }
+.form > div > small.warn, small.warn { color: var(--warn); }

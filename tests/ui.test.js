@@ -490,6 +490,21 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   await page.click('#dlgConn [data-ctest=graph]');
   await page.waitForFunction(() => document.querySelector('#dlgConn [data-ctestout=graph]').textContent && !/Testing/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
   assert.equal(await page.textContent('#dlgConn [data-ctestout=graph]'), await page.textContent('#connGraph'));
+  // The folder the script gives access to: shown, and changed by pasting its address.
+  assert.match(await page.textContent('#connSpWhere'), /OSign/);
+  await page.fill('#connSpUrl', 'https://contoso.sharepoint.com/sites/Signaturen/Shared%20Documents/Forms/AllItems.aspx');
+  await page.click('#connSpSet');
+  await page.waitForFunction(() => /names no folder/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
+  await page.fill('#connSpUrl', 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/OSign');
+  await page.click('#connSpSet');
+  await page.waitForFunction(() => /personal OneDrive/.test(document.querySelector('#connSpWarn').textContent));
+  await page.fill('#connSpUrl', 'https://contoso.sharepoint.com/sites/Signaturen/Shared%20Documents/OSign');
+  await page.click('#connSpSet');
+  await page.waitForFunction(() => /Saved/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
+  assert.equal(await page.textContent('#connSpWarn'), '');
+  const st = (await api('settings/get')).settings;
+  assert.deepEqual([st.spSite, st.spFolder], ['contoso.sharepoint.com:/sites/Signaturen:', 'OSign']);
+  await api('settings/save', { settings: { spSite: 'root', spFolder: 'OSign' } });
   // Without the folder and the add-in's address the script cannot be made: the assistant asks.
   await api('settings/save', { settings: { addinUrl: '' } });
   await page.click('#connScriptGet');
