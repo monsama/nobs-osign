@@ -47,7 +47,7 @@ const common = {
   // Classic Outlook's JavaScript-only runtime: syntax newer than this is turned into older syntax.
   target: 'es2016',
   // The settings, outside the bundle so the minifier leaves them as they are; filled in later.
-  banner: { js: 'var OSIGN_SETUP={clientId:"@@OSIGN_CLIENT_ID@@",tenantId:"@@OSIGN_TENANT_ID@@",site:"@@OSIGN_SP_SITE@@",folder:"@@OSIGN_SP_FOLDER@@"};' },
+  banner: { js: 'var OSIGN_SETUP={clientId:"@@OSIGN_CLIENT_ID@@",tenantId:"@@OSIGN_TENANT_ID@@",site:"@@OSIGN_SP_SITE@@",folder:"@@OSIGN_SP_FOLDER@@",drive:"@@OSIGN_SP_DRIVE@@",item:"@@OSIGN_SP_ITEM@@"};' },
   // Its version, shown at the foot of the task pane.
   define: { OSIGN_VERSION: JSON.stringify(pkg.version) },
   legalComments: 'none',

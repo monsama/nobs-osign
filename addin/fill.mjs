@@ -21,7 +21,10 @@ export function checkSetup(s) {
   if (!/^root$|^[A-Za-z0-9.-]+\.sharepoint\.com:\/(?:sites|teams|personal)\/[^:/"\\\s]+:$/i.test(site)) throw new Error('The SharePoint site is root, <host>.sharepoint.com:/sites/<name>: or, for a OneDrive, <host>-my.sharepoint.com:/personal/<name>:');
   const folder = String(s.folder || 'OSign').trim().replace(/^\/+|\/+$/g, '');
   if (!folder || /["\\\u0000-\u001f]/.test(folder) || folder.split('/').some((p) => !p || p === '.' || p === '..')) throw new Error('The SharePoint folder is a folder like "OSign".');
-  return { base, clientId, tenantId, site, folder };
+  // The folder by its ids (what the server found), or nothing: the add-in then finds it by the site.
+  const drive = String(s.drive || '').trim(), item = String(s.item || '').trim();
+  if (!/^[A-Za-z0-9!_.-]{0,200}$/.test(drive) || !/^[A-Za-z0-9!_.-]{0,200}$/.test(item)) throw new Error('The SharePoint folder\'s ids are not as Graph gives them.');
+  return { base, clientId, tenantId, site, folder, drive: drive && item ? drive : '', item: drive && item ? item : '' };
 }
 
 export const HOSTS = ['cloudflare', 'azure', 'iis', 'apache', 'other'];
@@ -45,7 +48,7 @@ export function fillTemplate(from, outDir, setup) {
   const s = checkSetup(setup);
   const host = String(setup.host || '');
   if (host && !HOSTS.includes(host)) throw new Error('The web server is one of ' + HOSTS.join(', ') + '.');
-  const js = { '@@OSIGN_CLIENT_ID@@': s.clientId, '@@OSIGN_TENANT_ID@@': s.tenantId, '@@OSIGN_SP_SITE@@': s.site, '@@OSIGN_SP_FOLDER@@': s.folder };
+  const js = { '@@OSIGN_CLIENT_ID@@': s.clientId, '@@OSIGN_TENANT_ID@@': s.tenantId, '@@OSIGN_SP_SITE@@': s.site, '@@OSIGN_SP_FOLDER@@': s.folder, '@@OSIGN_SP_DRIVE@@': s.drive, '@@OSIGN_SP_ITEM@@': s.item };
   const xml = { '{{BASE}}': xmlEscape(s.base), '{{ORIGIN}}': xmlEscape(new URL(s.base).origin), '{{SUPPORT}}': xmlEscape(s.base),
     '{{MIN_VERSION}}': setup.mobile ? '1.5' : '1.10', '{{MOBILE}}': setup.mobile ? MOBILE : '' };
   fs.mkdirSync(outDir, { recursive: true });

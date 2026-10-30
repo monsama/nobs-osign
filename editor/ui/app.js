@@ -654,10 +654,68 @@
         ? await api('entra/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, graph: f.graph })) })
         : await api('ad/lookup', { query: $('pvUser').value, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
       S.adValues = r.values; S.adName = r.displayName; S.adGroups = r.groups || []; S.adFrom = from; renderPreview();
-    } catch (e) { toast(t(e.message), true); }
+    } catch (e) {
+      // Several match: the choice instead of the error.
+      if (/More than one/.test(e.message) || /Mehr als ein/.test(e.message)) { $('pvUser').focus(); pvSuggest.open(); return; }
+      toast(t(e.message), true);
+    }
   }
   $('pvLookup').addEventListener('click', adLookup);
-  $('pvUser').addEventListener('keydown', (e) => { if (e.key === 'Enter') adLookup(); });
+  // Enter: the suggestion picked (↓), or else what is typed.
+  $('pvUser').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !pvSuggest.picking()) adLookup(); });
+
+  // Suggestions under a field while typing (from AD or Entra ID): ↑/↓ to move, Enter or a click to
+  // take one, Esc to close. multi: a list with commas, the suggestion takes the part being typed.
+  function suggest(input, { fetch: get, pick, multi, min = 2 }) {
+    const box = el('div', { class: 'suggest', role: 'listbox', id: input.id + 'Suggest', hidden: true });
+    document.body.append(box);
+    input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-controls', box.id); input.setAttribute('aria-expanded', 'false');
+    let items = [], at = -1, timer = null, seq = 0;
+    const term = () => (multi ? input.value.split(/[,;]/).pop() : input.value).trim();
+    const close = () => { box.hidden = true; items = []; at = -1; input.setAttribute('aria-expanded', 'false'); };
+    function place() { const r = input.getBoundingClientRect(); box.style.left = r.left + 'px'; box.style.top = (r.bottom + 2) + 'px'; box.style.minWidth = r.width + 'px'; }
+    function render() {
+      box.replaceChildren(...items.map((it, i) => el('div', { class: 'sg-item' + (i === at ? ' on' : ''), role: 'option', 'aria-selected': i === at ? 'true' : 'false',
+        onmousedown: (e) => { e.preventDefault(); take(i); } }, el('span', { class: 'sg-main' }, it.label), it.sub ? el('small', null, it.sub) : null)));
+      box.hidden = !items.length; input.setAttribute('aria-expanded', String(!box.hidden));
+      if (!box.hidden) place();
+    }
+    function take(i) {
+      const it = items[i]; if (!it) return;
+      if (multi) {
+        const before = input.value.replace(/[^,;]*$/, '');
+        input.value = (before ? before.trim() + ' ' : '') + it.value + ', ';
+      } else input.value = it.value;
+      close();
+      input.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      close();
+      if (pick) pick(it);
+    }
+    async function load() {
+      const q = term(), mine = ++seq;
+      if (q.length < min) { close(); return; }
+      try { const list = await get(q); if (mine !== seq || document.activeElement !== input) return; items = list.slice(0, 15); at = -1; render(); } catch (e) { close(); }
+    }
+    input.addEventListener('input', (e) => { if (!e.isTrusted) return; clearTimeout(timer); timer = setTimeout(load, 200); });
+    input.addEventListener('focus', () => { if (min === 0 && !input.value.trim()) load(); });
+    input.addEventListener('keydown', (e) => {
+      if (box.hidden) { if (e.key === 'ArrowDown') { e.preventDefault(); load(); } return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); at = (at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; render(); }
+      else if (e.key === 'Enter' && at >= 0) { e.preventDefault(); take(at); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    });
+    input.addEventListener('blur', () => setTimeout(close, 120));
+    window.addEventListener('resize', () => { if (!box.hidden) place(); });
+    document.addEventListener('scroll', () => { if (!box.hidden) place(); }, true);
+    return { open: load, close, picking: () => !box.hidden && at >= 0 };
+  }
+  const adOn = () => !!(S.info && S.info.features && S.info.features.adLookup);
+  const person = (u) => ({ value: u.login, label: u.name || u.login, sub: [u.login, u.mail, u.department].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ') });
+  const pvSuggest = suggest($('pvUser'), {
+    fetch: async (q) => ($('pvSource').value === 'entra' ? (await api('entra/users', { query: q })).users : adOn() ? (await api('ad/users', { query: q })).users : []).map(person),
+    pick: () => adLookup()
+  });
 
   // ---------------------------------------------------------------------------------------------
   // Signature properties
@@ -683,21 +741,9 @@
   }));
   $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
   $('sigGroups').addEventListener('input', () => { const s = sig(); if (s) { s.audience.groups = splitList($('sigGroups').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
-  // Group names from AD to pick from, for what is typed after the last comma.
-  let grpTimer = null;
-  $('sigGroups').addEventListener('input', () => {
-    clearTimeout(grpTimer);
-    if (!(S.info && S.info.features && S.info.features.adLookup)) return;
-    const q = $('sigGroups').value.split(/[,;]/).pop().trim();
-    if (q.length < 2) return;
-    grpTimer = setTimeout(async () => {
-      try {
-        const r = await api('ad/groups', { query: q });
-        const before = $('sigGroups').value.replace(/[^,;]*$/, '');
-        $('adGroups').replaceChildren(...r.groups.map((g) => el('option', { value: (before ? before.trim() + ' ' : '') + g })));
-      } catch (e) { /* the list stays as it was */ }
-    }, 250);
-  });
+  // Group names and departments from AD to pick from, for what is typed after the last comma.
+  suggest($('sigGroups'), { multi: true, fetch: async (q) => (adOn() ? (await api('ad/groups', { query: q })).groups : []).map((g) => ({ value: g, label: g })) });
+  suggest($('sigDeps'), { multi: true, min: 0, fetch: async (q) => (adOn() ? (await api('ad/departments', { query: q })).departments : []).map((g) => ({ value: g, label: g })) });
   $('sigDeps').addEventListener('input', () => { const s = sig(); if (s) { s.audience.departments = splitList($('sigDeps').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
   $('sigDoms').addEventListener('input', () => { const s = sig(); if (s) { s.audience.domains = splitList($('sigDoms').value).map((d) => d.replace(/^@/, '').toLowerCase()); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
   $('btnNew').addEventListener('click', () => addSig());
@@ -1094,6 +1140,7 @@
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
     $('setWhere').textContent = '';
+    $('aboutVersion').textContent = S.info.version || '';
     setTab('general');
     $('dlgSettings').showModal();
   });

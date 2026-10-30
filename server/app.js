@@ -13,7 +13,7 @@ const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
 const { ldapConfig, ldapProblem, testSignIn, detect } = require('./ldap');
-const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, testService } = require('./directory');
+const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, usersMatching, departmentsMatching, testService } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
@@ -504,6 +504,12 @@ function createApp(opts) {
       // With Cloudflare Pages and no web server chosen: Cloudflare's caching file goes with them.
       const st = settings.get();
       if (!st.addinHost && addin.pagesEnabled(pages)) st.addinHost = 'cloudflare';
+      // The folder by its ids, when the server publishes to SharePoint: the add-in then reads it
+      // without looking up the site (which a user who may only read the folder cannot).
+      if (graph) {
+        try { const at = await settings.target().locate(); st.spDrive = at.driveId; st.spItem = at.itemId; }
+        catch (e) { return { error: 'The add-in\'s files need the SharePoint folder: ' + e.message }; }
+      }
       const r = await addin.build(env, st, addinDir);
       return r.error ? r : Object.assign({ folder: '' }, r);
     },
@@ -536,6 +542,19 @@ function createApp(opts) {
     'ad/groups': async (d) => {
       if (!adOn) return { error: directoryProblem(dir) };
       try { return { groups: await groupsStartingWith(dir, d.query) }; } catch (e) { return { error: e.message }; }
+    },
+    // Suggestions while typing: people (for the preview) and departments (for the audience).
+    'ad/users': async (d) => {
+      if (!adOn) return { error: directoryProblem(dir) };
+      try { return { users: await usersMatching(dir, d.query) }; } catch (e) { return { error: e.message }; }
+    },
+    'ad/departments': async (d) => {
+      if (!adOn) return { error: directoryProblem(dir) };
+      try { return { departments: await departmentsMatching(dir, d.query) }; } catch (e) { return { error: e.message }; }
+    },
+    'entra/users': async (d) => {
+      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
+      try { return { users: await graph.users(d.query) }; } catch (e) { return { error: e.message }; }
     },
     'ad/read': async (d) => {
       if (!adOn) return { error: directoryProblem(dir) };

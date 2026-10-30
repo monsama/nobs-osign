@@ -581,3 +581,37 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
   await page.click('#dlgSettings button[value=cancel]');
   assert.deepEqual(errors, []);
 });
+
+test('suggestions while typing: AD groups anywhere in their name, people for the preview; Enter takes one', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('#sigList a');
+  await page.click('#sigList a');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  // A group by a part of its name; ↓ and Enter take it, with a comma for the next one.
+  await page.click('.audience:not(.campaign) summary');
+  await page.fill('#sigGroups', 'osign');
+  await page.waitForSelector('#sigGroupsSuggest:not([hidden]) .sg-item');
+  assert.match(await page.textContent('#sigGroupsSuggest'), /NOBS-OSign-Admins/);
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+  assert.equal(await page.inputValue('#sigGroups'), 'NOBS-OSign-Admins, ');
+  assert.equal(await page.isVisible('#sigGroupsSuggest'), false);
+  await page.fill('#sigGroups', '');
+  // A person by a part of the name: picked, looked up, in the preview.
+  await page.selectOption('#pvSource', 'ad');
+  await page.fill('#pvUser', 'Mus');
+  await page.waitForSelector('#pvUserSuggest:not([hidden]) .sg-item');
+  assert.match(await page.textContent('#pvUserSuggest'), /Anna Muster.*anna/);
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+  assert.equal(await page.inputValue('#pvUser'), 'anna');
+  // Anna's own values (her description from AD), and no error for the part typed.
+  await page.waitForFunction(() => /Dipl\. Ing\.<\/p>/.test(document.querySelector('#preview').srcdoc));
+  assert.doesNotMatch(await page.textContent('#toast'), /No user/);
+  await page.selectOption('#pvSource', 'sample');
+  // Settings → Info: the version, the licence, and the coffee.
+  await page.click('#btnSettings');
+  await page.click('#dlgSettings [data-stab=about]');
+  assert.match(await page.textContent('#dlgSettings [data-spane=about]'), /NOBS OSign \d+\.\d+\.\d+.*GNU General Public License.*Buy me a coffee/s);
+  assert.equal(await page.isVisible('#coffeeBtn'), true, 'the coffee at the top right stays');
+  await page.click('#dlgSettings button[value=cancel]');
+  assert.deepEqual(errors, []);
+});

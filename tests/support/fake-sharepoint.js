@@ -88,7 +88,7 @@ function fakeSharePoint({ tenantId, clientId, secret, granted }) {
 
     if (req.method === 'GET' && !suffix) {
       if (site.files.has(rel)) return json(200, { id: rel, name: rel.split('/').pop(), file: {}, size: site.files.get(rel).length });
-      if (rel && site.folders.has(rel)) return json(200, { id: rel, name: rel.split('/').pop(), folder: { childCount: 0 } });
+      if (rel && site.folders.has(rel)) return json(200, { id: rel.replace(/\//g, '-'), name: rel.split('/').pop(), folder: { childCount: 0 }, parentReference: { driveId: 'b!drive-' + (m[1] === 'root' ? 'root' : 'site') } });
       if (!rel) return json(200, { id: 'root', name: 'root', folder: {} });
       return json(404, { error: { code: 'itemNotFound', message: 'The resource could not be found.' } });
     }

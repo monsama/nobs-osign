@@ -21,6 +21,11 @@ export { core };
 // OSIGN_SETUP is the first line of the bundle, filled in by the editor (see addin/build.mjs).
 const SITE = OSIGN_SETUP.site;
 const FOLDER = OSIGN_SETUP.folder;
+// The folder by its ids, as the server found it when it made these files: read through them, a
+// user needs to be able to read the folder only, nothing of the site around it. Older files have
+// none: the folder is then found through its site.
+const DRIVE = /^[A-Za-z0-9!_.-]+$/.test(OSIGN_SETUP.drive || '') ? OSIGN_SETUP.drive : '';
+const ITEM = /^[A-Za-z0-9!_.-]+$/.test(OSIGN_SETUP.item || '') ? OSIGN_SETUP.item : '';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 // Reading the folder needs Sites.Read.All; groups need GroupMember.Read.All. Both delegated, so the
 // add-in reads only what the user may read anyway, and both with admin consent, so nobody is asked.
@@ -71,7 +76,7 @@ async function graphGet(token, url, what, allowNotFound) {
   const r = await withTimeout(fetch(url, { headers: { Authorization: 'Bearer ' + token } }), 8000, what);
   if (r.status === 404 && allowNotFound) return null;
   if (r.status === 401 || r.status === 403) {
-    const need = /memberOf/i.test(url) ? GROUP_SCOPE : /\/sites\//.test(url) ? 'Sites.Read.All (or the folder is not readable for you)' : 'User.Read';
+    const need = /memberOf/i.test(url) ? GROUP_SCOPE : /\/(sites|drives)\//.test(url) ? 'Sites.Read.All (or the folder is not readable for you)' : 'User.Read';
     throw new Error(what + ': not allowed (' + r.status + '). The app registration needs admin consent for ' + need + '.');
   }
   if (r.status === 404) throw new Error(what + ': not found in SharePoint (404).');
@@ -122,6 +127,7 @@ async function siteBase(tok) {
 
 // A file in the OSign folder, by its path in there ("signatures.json", "assets/logo.png").
 async function itemUrl(tok, rel) {
+  if (DRIVE && ITEM) return GRAPH + '/drives/' + encodeURIComponent(DRIVE) + '/items/' + encodeURIComponent(ITEM) + ':/' + String(rel).split('/').filter(Boolean).map(encodeURIComponent).join('/');
   const parts = (FOLDER + '/' + rel).split('/').filter(Boolean).map(encodeURIComponent);
   return (await siteBase(tok)) + '/drive/root:/' + parts.join('/');
 }

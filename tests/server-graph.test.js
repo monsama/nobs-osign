@@ -258,3 +258,13 @@ test('by hand: the server\'s certificate to upload in Entra, made once and then 
     sp.certs.length = 0;
   } finally { s.close(); }
 });
+
+test('the add-in\'s files carry the folder by its ids: the add-in reads it without the site around it', async () => {
+  await api('publish', { configJson: cfg([]) });
+  await api('settings/save', { settings: { addinUrl: 'https://osign-addin.example.ch/', clientId: '11111111-2222-3333-4444-555555555555' } });
+  const r = await api('addin/build');
+  assert.equal(r.ok, true, r.error);
+  const js = fs.readFileSync(path.join(dataDir, 'addin', 'taskpane.js'), 'utf8');
+  assert.match(js, /drive:"b!drive-site",item:"OSign"/);
+  assert.ok(!js.includes('@@OSIGN_'), 'every placeholder filled');
+});
