@@ -1128,9 +1128,10 @@
     $('connCa').textContent = r.ca.saved ? t('Set here on {0}: {1}.', day(r.ca.saved.at), r.ca.saved.certs.map((c) => c.name + ' (' + t('until {0}', day(c.expires)) + ')').join(', '))
       : r.ca.env ? t('From {0}.', r.ca.env) : t('None: only the public CAs are trusted.');
     $('connCaFile').value = '';
-    // In this dialog, "(Settings → Server connections)" would point to itself.
-    const here = (p) => String(p).replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')');
-    const line = (id, problem, okText) => { $(id).textContent = problem ? t(here(problem)) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
+    const line = (id, problem, okText) => { $(id).textContent = problem ? connText(problem) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
+    // SharePoint: the setup script first; "again" once it is set up (a new certificate).
+    $('connScriptGet').textContent = r.problems.graph ? t('Download the setup script') : t('Download the setup script again');
+    $('connScriptGet').className = r.problems.graph ? 'primary' : '';
     // Active Directory: the sign-in first, then the service account.
     r.problems.ad = r.problems.signIn || r.problems.directory;
     line('connAd', r.problems.ad, 'Ready: members of the sign-in group can sign in, and the editor reads the users\' values from AD.');
@@ -1141,6 +1142,53 @@
     connDrop = {}; connCa = undefined; connCaReading = null;
     $('connErr').textContent = '';
   }
+  // In this dialog, "(Settings → Server connections)" would point to itself; the line at the top of
+  // a tab and the answer of its test say a problem in the same words.
+  function connText(p) { return t(String(p).replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')').replace(/ \(secrets\/[a-z_]+, or Server connections\)/, '')); }
+
+  // The setup script, from the SharePoint tab: as in the setup assistant, its result comes back
+  // here by itself.
+  let connScriptTimer = null;
+  function connScriptPoll() {
+    clearTimeout(connScriptTimer);
+    connScriptTimer = setTimeout(async () => {
+      if (!$('dlgConn').open) return;
+      let r;
+      try { r = await api('setup/status'); } catch (e) { return connScriptPoll(); }
+      const out = $('connScriptNote');
+      if (r.state === 'done') {
+        out.className = 'where good'; out.textContent = '✓ ' + setupDoneText(r.result);
+        try { const [c, info, st] = await Promise.all([api('connections/get'), api('info'), api('settings/get')]); S.info = info; S.settings = st.settings; lastSettings = st; renderConnections(c); renderStatusBar(); } catch (e) { /* shown on the next open */ }
+        out.className = 'where good'; out.textContent = '✓ ' + setupDoneText(r.result);
+        return;
+      }
+      if (r.state === 'failed') { out.className = 'where warn'; out.textContent = t('The setup script stopped: {0}', r.problem) + ' ' + t('Fix it, then run the script again (it is valid until {0}).', new Date(r.until).toLocaleTimeString()); }
+      if (r.state !== 'none') connScriptPoll();
+    }, 3000);
+  }
+  function setupDoneText(x) {
+    const until = x.secretExpires ? new Date(x.secretExpires).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '';
+    return x.credential === 'certificate'
+      ? t('Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1} with its certificate, write access to {2}.', x.addinClientId, x.serverClientId, x.siteUrl)
+      : t('Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1}, write access to {2}. The client secret is valid until {3}.', x.addinClientId, x.serverClientId, x.siteUrl, until || '?');
+  }
+  $('connScriptGet').addEventListener('click', async () => {
+    const out = $('connScriptNote');
+    out.className = 'where'; out.textContent = ''; $('connScriptWizard').hidden = true;
+    try {
+      const r = await api('setup/start', { origin: location.origin, groups: core.valueSource(S.config) === 'graph', users: $('connScriptUsers').checked });
+      const a = el('a', { href: '/setup/nobs-osign-setup.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-setup.ps1' });
+      document.body.append(a); a.click(); a.remove();
+      out.textContent = t('Downloaded. Run it now: this page goes on by itself when it is done (the script is valid until {0}).', new Date(r.until).toLocaleTimeString());
+      connScriptPoll();
+    } catch (err) {
+      out.className = 'where warn'; out.textContent = t(err.message);
+      // The folder or the add-in's address is missing: the assistant asks for them.
+      $('connScriptWizard').hidden = !/first/i.test(err.message);
+    }
+  });
+  $('connScriptWizard').addEventListener('click', () => { $('dlgConn').close(); wizOpen(Math.max(0, wizSteps().indexOf('folder'))); });
+
   // Server connections in tabs: one part at a time.
   function connTestsClear() { document.querySelectorAll('#dlgConn [data-ctestout]').forEach((o) => { o.textContent = ''; o.className = 'where'; }); }
   function connTab(name) {
@@ -1215,8 +1263,8 @@
     try {
       renderConnections(await connSaveNow());
       const r = await api('connections/test', { what: b.dataset.ctest });
-      out.className = 'where good'; out.textContent = '✓ ' + t(r.message);
-    } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); }
+      out.className = 'where good'; out.textContent = '✓ ' + connText(r.message);
+    } catch (err) { out.className = 'where warn'; out.textContent = connText(err.message); }
     finally { b.disabled = false; }
   }));
 
@@ -1705,8 +1753,7 @@
         S.info = info; S.settings = st.settings; lastSettings = st;
         $('wizClientId').value = S.settings.clientId || ''; $('wizTenantId').value = S.settings.tenantId || '';
         out.className = 'where good';
-        out.textContent = t('✓ Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1}, write access to {2}. The client secret is valid until {3}.',
-          r.result.addinClientId, r.result.serverClientId, r.result.siteUrl, r.result.secretExpires ? new Date(r.result.secretExpires).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '?');
+        out.textContent = '✓ ' + setupDoneText(r.result);
         return wizScriptPoll(true);
       }
       if (r.state === 'failed') { out.className = 'where warn'; out.textContent = t('The setup script stopped: {0}', r.problem) + ' ' + t('Fix it, then run the script again (it is valid until {0}).', new Date(r.until).toLocaleTimeString()); }

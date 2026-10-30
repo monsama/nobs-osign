@@ -407,3 +407,6 @@ td.nowrap { white-space: nowrap; }
 details.advanced { margin: 10px 0 4px; border-top: 1px solid var(--line-2); padding-top: 8px; }
 details.advanced > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 details.advanced[open] > summary { margin-bottom: 6px; }
+.scriptbox { border: 1px solid var(--line); border-radius: var(--r-m); padding: 10px 12px; margin: 4px 0 10px; background: var(--panel-2); }
+.scriptbox p { margin: 0 0 8px; }
+.scriptbox .where { margin: 6px 0 0; }

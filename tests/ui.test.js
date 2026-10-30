@@ -475,3 +475,26 @@ test('campaigns, dark mode, comparing versions, the audit log, the backup and fo
   await api('settings/save', { settings: { requireApproval: '' } });
   assert.deepEqual(errors, []);
 });
+
+test('Server connections: SharePoint offers the setup script, and says what is missing in the same words as its test', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnSettings');
+  await page.click('#setConn');
+  await page.waitForSelector('#dlgConn[open]');
+  await page.click('#dlgConn [data-ctab=graph]');
+  assert.equal(await page.isVisible('#connScriptGet'), true);
+  assert.equal(await page.isVisible('#cn_graphTenantId'), false, 'by hand only when opened');
+  const lead = await page.textContent('#connGraph');
+  assert.match(lead, /setup script below/);
+  await page.click('#dlgConn [data-ctest=graph]');
+  await page.waitForFunction(() => document.querySelector('#dlgConn [data-ctestout=graph]').textContent && !/Testing/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
+  assert.equal(await page.textContent('#dlgConn [data-ctestout=graph]'), await page.textContent('#connGraph'));
+  // Without the folder and the add-in's address the script cannot be made: the assistant asks.
+  await api('settings/save', { settings: { addinUrl: '' } });
+  await page.click('#connScriptGet');
+  await page.waitForSelector('#connScriptWizard:not([hidden])');
+  assert.match(await page.textContent('#connScriptNote'), /first/);
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  assert.deepEqual(errors, []);
+});

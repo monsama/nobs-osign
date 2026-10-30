@@ -414,20 +414,32 @@
 
     <section class="dpane" role="tabpanel" data-cpane="graph" hidden>
       <p id="connGraph" class="lead"></p>
-      <div class="form">
-        <label for="cn_graphTenantId">Directory (tenant) ID</label>
-        <div><input id="cn_graphTenantId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>
-        <label for="cn_graphClientId">Application (client) ID</label>
-        <div><input id="cn_graphClientId" data-ph="00000000-0000-0000-0000-000000000000" autocomplete="off">
-          <small>(the server's app registration, not the add-in's)</small></div>
-        <label>Sign-in</label>
-        <div><span id="connCert"></span> <button type="button" class="small" id="connCertRemove" hidden>Use a client secret instead</button></div>
-        <label for="cs_graphClientSecret" data-nocert>Client secret</label>
-        <div data-nocert><span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span><small id="cx_graphClientSecret"></small></div>
-        <label for="cn_graphSecretExpires" data-nocert>Client secret valid until</label>
-        <div data-nocert><input id="cn_graphSecretExpires" type="date" data-ph="">
-          <small>(as Entra shows it; set by the setup script by itself. The editor warns 30 days before)</small></div>
+      <div class="scriptbox">
+        <p data-th="connScriptLead"><b>The setup script does this.</b> Run once on a Windows PC as SharePoint or Global administrator, it makes both app
+          registrations, puts the server's certificate on its app and gives it write access to the one site of the signatures. Its
+          result comes back here by itself: nothing to copy.</p>
+        <label class="check"><input type="checkbox" id="connScriptUsers"> Also read people from Entra ID for the preview (User.Read.All, GroupMember.Read.All)</label>
+        <p class="btn-row"><button type="button" id="connScriptGet" class="primary">Download the setup script</button>
+          <button type="button" id="connScriptWizard" class="ghost" hidden>Open the setup assistant</button></p>
+        <p id="connScriptNote" class="where"></p>
       </div>
+      <details class="advanced" id="connGraphManual">
+        <summary>Enter by hand</summary>
+        <div class="form">
+          <label for="cn_graphTenantId">Directory (tenant) ID</label>
+          <div><input id="cn_graphTenantId" data-ph="from the setup script" autocomplete="off"></div>
+          <label for="cn_graphClientId">Application (client) ID</label>
+          <div><input id="cn_graphClientId" data-ph="from the setup script" autocomplete="off">
+            <small>(the server's app registration, not the add-in's)</small></div>
+          <label>Sign-in</label>
+          <div><span id="connCert"></span> <button type="button" class="small" id="connCertRemove" hidden>Use a client secret instead</button></div>
+          <label for="cs_graphClientSecret" data-nocert>Client secret</label>
+          <div data-nocert><span class="pick"><input id="cs_graphClientSecret" type="password" autocomplete="new-password"><button type="button" class="small" data-drop="graphClientSecret" hidden>Remove</button></span><small id="cx_graphClientSecret"></small></div>
+          <label for="cn_graphSecretExpires" data-nocert>Client secret valid until</label>
+          <div data-nocert><input id="cn_graphSecretExpires" type="date" data-ph="">
+            <small>(as Entra shows it. The editor warns 30 days before)</small></div>
+        </div>
+      </details>
       <p class="ctest"><button type="button" class="small" data-ctest="graph">Save and test the connection</button> <span class="where" data-ctestout="graph"></span></p>
     </section>
 

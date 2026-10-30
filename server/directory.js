@@ -40,7 +40,7 @@ function directoryConfig(env, ldapCfg) {
 const directoryEnabled = (c) => !!(c.url && c.serviceDn);
 function directoryProblem(c) {
   if (!c.url) return 'Active Directory is not set up on the server (Settings → Server connections).';
-  if (!c.serviceDn) return 'The server has no service account for Active Directory (Settings → Server connections).';
+  if (!c.serviceDn) return 'Enter the service account and its password (Settings → Server connections).';
   // An empty password is an anonymous sign-in to AD, which reads nothing or the wrong things.
   if (!c.servicePassword && c.pinnedTo) return "The service account's password in secrets/ldap_service_password is for " + c.pinnedTo + ', not for this domain controller. Enter it in Server connections.';
   if (!c.servicePassword) return "The service account's password is missing (secrets/ldap_service_password, or Server connections).";
