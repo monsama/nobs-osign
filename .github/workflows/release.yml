@@ -111,7 +111,7 @@ jobs:
           echo "ghcr.io/monsama/nobs-osign:$V@${{ steps.push.outputs.digest }}" > out/IMAGE
           git archive --format=tar.gz --prefix="nobs-osign-server-$V/" --add-file=out/IMAGE -o "out/nobs-osign-server-$V.tar.gz" HEAD \
             deploy-nobs-osign.sh docker-compose.yml .env.example certificates/README.md \
-            scripts/osign-lib.sh scripts/update.sh scripts/backup.sh scripts/restore.sh README.md LICENSE
+            scripts/osign-lib.sh scripts/update.sh scripts/backup.sh scripts/restore.sh scripts/install-cert.sh README.md LICENSE
           (cd out && sha256sum "nobs-osign-server-$V.tar.gz" > "nobs-osign-server-$V.tar.gz.sha256")
           (cd out && sha256sum "nobs-osign-server-$V.tar.gz" > SHA256SUMS.txt)
       # Signs that the image and the server's files were built here, from this commit, by this workflow:

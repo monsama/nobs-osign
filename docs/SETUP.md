@@ -321,6 +321,50 @@ In Settings → Server connections, or as environment variables in `.env` with t
 Without Microsoft Graph set up the server publishes into a folder of its own (`/data/publish`),
 for testing only: Outlook reads from SharePoint.
 
+## The web certificate
+
+Out of the box the proxy serves a certificate of its own for the editor's address: the browser
+warns, and the setup script cannot send its result (it then saves it as a file to upload). With a
+certificate from your own CA, which the domain's PCs trust already, neither happens. Settings →
+Server shows which one is served, and whether PCs trust it.
+
+1. **Issue it** on a domain PC (as administrator), from the template *Web Server*, for the editor's
+   address and its short name. `osign.inf`:
+
+   ```
+   [NewRequest]
+   Subject = "CN=osign.example.ch"
+   KeyLength = 2048
+   Exportable = TRUE
+   MachineKeySet = TRUE
+   [Extensions]
+   2.5.29.17 = "{text}"
+   _continue_ = "dns=osign.example.ch&"
+   _continue_ = "dns=osign"
+   [RequestAttributes]
+   CertificateTemplate = WebServer
+   ```
+
+   ```powershell
+   certreq -new osign.inf osign.req
+   certreq -submit -config "<CA server>\<CA name>" osign.req osign.cer
+   certreq -accept osign.cer
+   $c = Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -eq 'CN=osign.example.ch' | Select-Object -First 1
+   Export-PfxCertificate -Cert $c -FilePath osign.pfx -Password (Read-Host -AsSecureString 'PFX password') -ChainOption BuildChain
+   ```
+
+2. **Install it** on the server, in the install folder:
+
+   ```
+   sudo ./scripts/install-cert.sh osign.pfx
+   ```
+
+   It asks for the PFX's password, checks that the key belongs to the certificate, that it holds
+   now and that it is for `OSIGN_HOST`, puts it in the proxy (with its CA after it) and reloads the
+   proxy; a PEM file with the key and the certificate works as well. Then delete `osign.pfx`.
+   `sudo ./scripts/install-cert.sh --remove` goes back to the proxy's own. Updates keep it; before
+   it runs out (the status bar warns 30 days before), issue and install the next one the same way.
+
 ## When something is off
 
 | What | Why, and what to do |
