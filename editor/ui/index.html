@@ -651,15 +651,16 @@
     <section class="wiz-step" data-step="app" data-title="Register the app in Entra ID">
       <p class="wiz-intro" data-th="wizAppLead">The add-in signs in through Outlook with single sign-on; users are never asked for a password.
         For this it needs an app registration in your tenant.</p>
+      <p id="wizAppDone" class="lead ok" hidden></p>
       <!-- The server version, for the local account admin: a script does all of Entra ID. -->
       <div id="wizScript" class="wiz-ms" hidden>
         <p data-th="wizScriptLead"><b>The easy way: the setup script.</b> It does all of this step for you, signed in once with your
           administrator account (SharePoint or Global administrator) in the browser:</p>
         <ul class="wiz-list ticks" data-th="wizScriptWhat">
           <li>the add-in's app registration <b>NOBS OSign</b>, with its redirect URI and permissions, and admin consent;</li>
-          <li>the server's app registration <b>NOBS OSign server</b> (Sites.Selected) with a client secret, and write access to the
-            SharePoint site of the signatures, and no other;</li>
-          <li>it sends the IDs and the secret straight to this server: nothing to copy;</li>
+          <li>the server's app registration <b>NOBS OSign server</b> (Sites.Selected) with the server's own certificate, and write
+            access to the SharePoint site of the signatures, and no other;</li>
+          <li>it sends the IDs straight to this server: nothing to copy;</li>
           <li>then it takes back the rights it used for this, and deletes itself.</li>
         </ul>
         <label class="check block"><input type="checkbox" id="wizScriptUsers"> Let the server also read users and their groups from Entra ID,
@@ -669,8 +670,10 @@
         <p data-th="wizScriptRun">Run it on a Windows PC, in PowerShell:</p>
         <span class="copyline"><code id="wizScriptCmd">powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"</code><button type="button" class="copy" data-copy="wizScriptCmd">Copy</button></span>
         <p id="wizScriptNote" class="where"></p>
-        <p data-th="wizScriptManual">Or by hand, as follows:</p>
+        <p class="hint">The same script is in Settings → Server connections → SharePoint: run it once, from either place.</p>
       </div>
+      <details class="advanced" id="wizAppManual">
+      <summary>Or by hand</summary>
       <h3 class="wiz-h">What to do</h3>
       <ol class="wiz-list">
         <li data-th="wizApp1"><b>Register the app.</b> Open <code>https://entra.microsoft.com</code> → <b>App registrations</b> → <b>New
@@ -691,6 +694,7 @@
       </div>
       <p class="wiz-note" data-th="wizAppNote">No client secret or certificate is needed. If the add-in's address changes later, add the new
         redirect URI as well.</p>
+      </details>
     </section>
 
     <section class="wiz-step" data-step="files" data-title="Create the add-in files">
@@ -754,8 +758,9 @@
         <li><span data-th="wizDeploy2">Choose <i>Office Add-in</i> and <b>Provide link to the manifest file</b>:</span>
           <span class="copyline"><code id="wizManifest"></code><button type="button" class="copy" data-copy="wizManifest">Copy</button></span></li>
         <li data-th="wizDeploy3"><b>Assign users:</b> for testing <i>Just me</i> or a pilot group, later the entire organization.</li>
-        <li data-th="wizDeploy4">Allow up to 24 hours for the deployment. To test right away, add it in Outlook on the web: <b>Get Add-ins</b> →
-          <b>My add-ins</b> → <b>Add a custom add-in</b> → <b>Add from URL</b>, with the same link.</li>
+        <li data-th="wizDeploy4">Allow up to 24 hours for the deployment. To test right away, for yourself only: open
+          <a href="https://aka.ms/olksideload" target="_blank" rel="noopener noreferrer">aka.ms/olksideload</a> (Outlook on the web opens its add-ins),
+          <b>My add-ins</b> → at the bottom <b>Custom add-ins</b> → <b>Add a custom add-in</b> → <b>Add from URL</b>, with the same link.</li>
       </ol>
     </section>
 

@@ -266,7 +266,8 @@ too (step 7).
 3. Assign it to everyone, or to a group to start with.
 
 It can take a few hours to reach every Outlook. To try it yourself first, sideload it: in Outlook on
-the web, **Get Add-ins → My add-ins → Add a custom add-in → Add from URL**.
+the web: open <https://aka.ms/olksideload>, then **My add-ins → Custom add-ins → Add a custom add-in →
+Add from URL**.
 
 **Outlook for iOS and Android** (preview): tick *Also in Outlook for iOS and Android* in the
 settings, make the add-in's files again and upload the new `manifest.xml`. Phones then put the

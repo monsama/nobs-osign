@@ -132,7 +132,8 @@ test('the files as a ZIP, for an upload by hand', async () => {
 test('upload to Cloudflare Pages: the project made, only missing files sent, _headers with the deployment', async () => {
   const r = await api('addin/upload');
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.equal(r.url, 'https://abc1.company-osign.pages.dev');
+  assert.equal(r.url, 'https://company-osign.pages.dev', 'the address people use, not the one deployment\'s');
+  assert.equal(r.deployment, 'https://abc1.company-osign.pages.dev');
   assert.ok(cf.projects.has('company-osign'));
   const d = cf.deployments[0];
   assert.match(d.headers, /Cache-Control: no-cache/);
