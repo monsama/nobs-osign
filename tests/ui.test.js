@@ -270,7 +270,11 @@ test('setup assistant: opens by itself until NOBS OSign is set up, and walks thr
   const next = async (title) => { await page.click('#wizNext'); await page.waitForFunction((x) => document.querySelector('#wizTitle').textContent === x, title); };
   const nextFails = async (rx) => { await page.click('#wizNext'); await page.waitForFunction((x) => new RegExp(x).test(document.querySelector('#wizErr').textContent), rx.source); };
   // Never finished: it opens by itself; Later closes it.
-  await api('settings/save', { settings: { setupDone: '', clientId: '' } });
+  // Never finished, but set up by hand (app registration and address there): it stays closed.
+  await api('settings/save', { settings: { setupDone: '', clientId: '11111111-2222-3333-4444-555555555555', addinUrl: 'https://osign-addin.pages.dev/' } });
+  await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
+  assert.equal(await page.isVisible('#dlgWizard'), false);
+  await api('settings/save', { settings: { setupDone: '', clientId: '', addinUrl: '' } });
   await page.goto(url); await page.reload();
   await page.waitForSelector('#dlgWizard[open]');
   assert.equal(await page.textContent('#wizTitle'), 'Welcome to NOBS OSign');
@@ -354,6 +358,7 @@ test('help: a ? opens a short explanation, above dialogs too, and closes again',
   await page.waitForFunction(() => !document.querySelector('#helpPop').matches(':popover-open'));
   // In a dialog: shown over it, Esc closes the help, not the dialog.
   await page.click('#btnSettings');
+  await page.click('#dlgSettings [data-stab=addin]');
   await page.click('#dlgSettings button.help[data-help=hMobile]');
   await page.waitForSelector('#helpPop:popover-open');
   assert.match(await page.textContent('#helpPop'), /iPhone/);
@@ -436,11 +441,41 @@ test('campaigns, dark mode, comparing versions, the audit log, the backup and fo
 
   // The audit log and the backup, for the local admin.
   await page.click('#btnSettings');
+  assert.equal(await page.isVisible('#setAudit'), false, 'on the Server tab');
+  await page.click('#dlgSettings [data-stab=server]');
   await page.click('#setAudit');
-  await page.waitForFunction(() => /signin/.test(document.querySelector('#auditRows').textContent));
+  await page.waitForFunction(() => /Sign-in/.test(document.querySelector('#auditRows').textContent));
   await page.selectOption('#auditWhat', 'publish');
   await page.waitForFunction(() => /First signatures/.test(document.querySelector('#auditRows').textContent));
-  await page.keyboard.press('Escape');
+  // Searched in what is loaded.
+  await page.fill('#auditFind', 'no such thing');
+  await page.waitForFunction(() => /Nothing matches/.test(document.querySelector('#auditRows').textContent));
+  await page.fill('#auditFind', 'first');
+  await page.waitForFunction(() => /First signatures/.test(document.querySelector('#auditRows').textContent));
+  assert.match(await page.textContent('#auditCount'), /^1 of \d+$/);
+  // A window: minimised to the tray, brought back from it, moved by its title bar, maximised.
+  await page.click('#dlgAudit .wc-min');
+  await page.waitForSelector('#dlgTray .tray-chip');
+  assert.equal(await page.isVisible('#dlgAudit'), false);
+  assert.equal(await page.isVisible('#dlgSettings'), false, 'with the settings it was opened from');
+  assert.match(await page.textContent('#dlgTray'), /Audit log/);
+  await page.click('#dlgTray .tray-open');
+  await page.waitForSelector('#dlgAudit[open]');
+  assert.equal(await page.isVisible('#dlgSettings'), true);
+  assert.equal(await page.isVisible('#dlgTray'), false);
+  const before = await page.evaluate(() => document.querySelector('#dlgAudit').getBoundingClientRect().left);
+  const bar = await page.$('#dlgAudit h2');
+  const bb = await bar.boundingBox();
+  await page.mouse.move(bb.x + 40, bb.y + 10); await page.mouse.down();
+  await page.mouse.move(bb.x - 60, bb.y + 40, { steps: 4 }); await page.mouse.up();
+  const after = await page.evaluate(() => document.querySelector('#dlgAudit').getBoundingClientRect().left);
+  assert.ok(Math.abs(after - before + 100) < 3, 'moved 100px left: ' + before + ' → ' + after);
+  assert.ok(await page.evaluate(() => JSON.parse(localStorage.getItem('osign-dlg-pos')).dlgAudit.x === -100));
+  await page.click('#dlgAudit .wc-max');
+  assert.equal(await page.evaluate(() => Math.round(document.querySelector('#dlgAudit').getBoundingClientRect().width)), 1400);
+  await page.click('#dlgAudit .wc-max');
+  await page.click('#dlgAudit .wc-close');
+  assert.equal(await page.isVisible('#dlgAudit'), false);
   await page.click('#setBackup');
   await page.fill('#bakPass', 'a long passphrase'); await page.fill('#bakPass2', 'a long passphrase');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bakExport')]);
@@ -483,6 +518,7 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
   await page.click('#btnSettings');
+  await page.click('#dlgSettings [data-stab=server]');
   await page.click('#setConn');
   await page.waitForSelector('#dlgConn[open]');
   await page.click('#dlgConn [data-ctab=graph]');

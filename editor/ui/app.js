@@ -1065,10 +1065,12 @@
     document.querySelector('#dlgSettings [data-th=addinLeadServer]').hidden = !onServer();
     $('setAddinBuild').closest('p').hidden = onServer() && $('setAddinBuild').disabled;
     // The server's connections, and where it publishes: the local account admin's alone.
-    $('setConnRow').hidden = !(onServer() && S.info.user && S.info.user.local);
+    $('setConnRow').hidden = true;
+    $('setTabServer').hidden = !(onServer() && S.info.user && S.info.user.local);
     $('setApproval').checked = S.settings.requireApproval === 'on';
-    $('setTls').textContent = t('Web certificate: …');
-    loadTls().then((c) => { $('setTls').textContent = tlsText(c); $('setTls').className = 'lead' + (c && !c.error && c.trusted && c.daysLeft > 30 ? '' : ' warn'); });
+    $('setTls').textContent = '…';
+    // Under its own heading: without the "Web certificate:" in front.
+    loadTls().then((c) => { const x = tlsText(c).replace(/^[^:]*:\s*/, ''); $('setTls').textContent = x.charAt(0).toUpperCase() + x.slice(1); $('setTls').className = c && !c.error && c.trusted && c.daysLeft > 30 ? '' : 'warn'; });
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
@@ -1079,8 +1081,15 @@
     $('setErr').textContent = '';
     renderSettingsNotes(lastSettings);
     $('setWhere').textContent = '';
+    setTab('general');
     $('dlgSettings').showModal();
   });
+  // Settings in tabs: general, the server (the local admin's), the Outlook add-in.
+  function setTab(name) {
+    document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
+    document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
+  }
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.stab)));
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
     try {
@@ -1936,9 +1945,9 @@
   });
   $('wizBack').addEventListener('click', () => { if (wiz.step) { wiz.step--; wizRender(); } });
   $('wizLater').addEventListener('click', () => $('dlgWizard').close());
-  // Closed in any way (Later, Esc, finished): it opens by itself again at the next start only if
-  // NOBS OSign is still not set up.
-  $('dlgWizard').addEventListener('close', () => stored(WIZ_KEY, null));
+  // Closed in any way (Later, Esc, finished; not minimised): it opens by itself again at the next
+  // start only if NOBS OSign is still not set up.
+  $('dlgWizard').addEventListener('close', () => { if (!$('dlgWizard').dataset.min) stored(WIZ_KEY, null); });
   document.querySelectorAll('input[name=whost], input[name=wvsrc]').forEach((r) => r.addEventListener('change', wizRender));
   $('wizUrl').addEventListener('input', wizRender);
   $('wizFolder').addEventListener('input', () => { $('wizFolderNote').textContent = ''; wiz.warned = ''; });
@@ -2120,21 +2129,47 @@
       c.lines && c.lines.length ? el('pre', { class: 'diff' }, ...c.lines.map((l) => el('span', { class: l.op === '+' ? 'add' : 'del' }, l.op + ' ' + l.text + '\n'))) : null)));
   }
 
-  // The audit log, for the local account admin.
+  // The audit log, for the local account admin: each entry with its action in words, whether it
+  // went through, and a search over what is loaded.
+  const AUDIT_WHAT = {
+    signin: 'Sign-in', signout: 'Sign-out', publish: 'Published', 'history/restore': 'Version brought back',
+    'connections/save': 'Server connections', 'connections/cert': 'Certificate', 'settings/save': 'Settings',
+    'setup/start': 'Setup script', 'setup/finish': 'Setup script result', 'addin/build': 'Add-in files', 'addin/upload': 'Add-in upload',
+    'ad/export': 'Users exported', 'backup/export': 'Backup', 'backup/restore': 'Backup restored',
+    'approval/request': 'Approval asked', 'approval/approve': 'Approved', 'approval/cancel': 'Approval withdrawn'
+  };
+  let auditEntries = [];
+  function auditShow() {
+    const q = $('auditFind').value.trim().toLowerCase();
+    const loc = I18N.lang === 'de' ? 'de-CH' : 'en-GB';
+    const rows = auditEntries.filter((e) => !q || [e.who, e.ip, e.what, t(AUDIT_WHAT[e.what] || e.what), e.detail ? t(e.detail) : ''].join(' ').toLowerCase().includes(q));
+    $('auditCount').textContent = auditEntries.length ? t('{0} of {1}', rows.length, auditEntries.length) : '';
+    const tb = $('auditRows');
+    if (!rows.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted empty' }, auditEntries.length ? t('Nothing matches.') : t('Nothing yet.')))); return; }
+    tb.replaceChildren(...rows.map((e) => {
+      const at = new Date(e.at);
+      return el('tr', { class: e.ok ? '' : 'refused' },
+        el('td', { class: 'when' }, el('span', null, at.toLocaleDateString(loc)), el('small', null, at.toLocaleTimeString(loc))),
+        el('td', { class: 'who' }, e.who || '–'),
+        el('td', { class: 'ip' }, e.ip || ''),
+        el('td', { class: 'what' }, el('span', { class: 'st ' + (e.ok ? 'ok' : 'removed'), title: e.what }, t(AUDIT_WHAT[e.what] || e.what)), e.ok ? null : el('small', { class: 'warn' }, t('refused'))),
+        el('td', { class: 'detail' }, e.detail ? t(e.detail) : ''));
+    }));
+  }
   async function renderAudit() {
     $('auditErr').textContent = '';
     const v = $('auditWhat').value;
-    const tb = $('auditRows'); tb.replaceChildren(el('tr', null, el('td', { colspan: 5 }, t('Loading…'))));
+    $('auditRows').replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted empty' }, t('Loading…'))));
     try {
       const r = await api('audit/list', v === 'failed' ? { failed: true } : { what: v });
-      if (!r.entries.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted' }, t('Nothing yet.')))); return; }
-      tb.replaceChildren(...r.entries.map((e) => el('tr', { class: e.ok ? '' : 'refused' },
-        el('td', null, new Date(e.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')), el('td', null, e.who), el('td', null, e.ip),
-        el('td', null, e.ok ? e.what : el('span', { class: 'warn' }, e.what + ' · ' + t('refused'))), el('td', null, e.detail ? t(e.detail) : ''))));
-    } catch (err) { tb.replaceChildren(); $('auditErr').textContent = t(err.message); }
+      auditEntries = r.entries;
+      auditShow();
+    } catch (err) { auditEntries = []; $('auditRows').replaceChildren(); $('auditCount').textContent = ''; $('auditErr').textContent = t(err.message); }
   }
-  $('setAudit').addEventListener('click', () => { $('dlgAudit').showModal(); renderAudit(); });
+  $('setAudit').addEventListener('click', () => { $('auditFind').value = ''; $('dlgAudit').showModal(); renderAudit(); });
   $('auditWhat').addEventListener('change', renderAudit);
+  $('auditReload').addEventListener('click', renderAudit);
+  $('auditFind').addEventListener('input', auditShow);
 
   // A backup: downloaded locked with a passphrase, or brought back.
   $('setBackup').addEventListener('click', () => {
@@ -2304,9 +2339,110 @@
     }));
   }
 
+  // Dialogs as windows, as in NOBS Inventory: moved by the title bar (where each was left is kept),
+  // maximised (or a double-click on the title), minimised to a chip at the bottom right, closed.
+  // On a phone they stay where they are. A window opened from another (Settings → Audit log) is
+  // minimised with it, as one chip: the page under an open dialog cannot be used.
+  const POS_KEY = 'osign-dlg-pos';
+  const WIN_ICON = {
+    min: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2 9.5h8" stroke="currentColor" stroke-width="1.4"/></svg>',
+    max: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    unmax: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 2h6v6M2 4h6v6H2z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
+    close: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.4"/></svg>'
+  };
+  function windows() {
+    let pos = {};
+    try { pos = JSON.parse(localStorage.getItem(POS_KEY)) || {}; } catch (e) { pos = {}; }
+    const keep = () => { try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch (e) { /* not kept */ } };
+    const narrow = () => window.matchMedia('(max-width: 760px)').matches;
+    const tray = el('div', { id: 'dlgTray', role: 'toolbar', 'aria-label': t('Minimised windows') });
+    document.body.append(tray);
+    const title = (d) => (d.querySelector('.dlg > h2:first-child, .wiz-head h2') || {}).textContent || '';
+    const opened = []; // the open dialogs, the one on top last
+    let groups = []; // minimised: each the dialogs that were open, the top one last
+    function renderTray() {
+      groups = groups.filter((g) => g.length);
+      tray.replaceChildren(...groups.map((g) => el('span', { class: 'tray-chip' },
+        el('button', { type: 'button', class: 'tray-open', title: t('Restore'), onclick: () => restore(g) }, title(g[g.length - 1])),
+        el('button', { type: 'button', class: 'tray-x', title: t('Close'), 'aria-label': t('Close'), onclick: () => drop(g) }, '×'))));
+      tray.hidden = !tray.children.length;
+    }
+    function minimize() {
+      const g = opened.slice();
+      g.forEach((d) => { d.dataset.min = '1'; });
+      g.slice().reverse().forEach((d) => d.close());
+      groups.push(g); renderTray();
+    }
+    function restore(g) {
+      groups = groups.filter((x) => x !== g);
+      g.forEach((d) => { delete d.dataset.min; if (!d.open) d.showModal(); });
+      renderTray();
+    }
+    // Closed from the tray: as if closed (the assistant, for one, starts again next time).
+    function drop(g) {
+      groups = groups.filter((x) => x !== g);
+      g.forEach((d) => { delete d.dataset.min; d.dispatchEvent(new Event('close')); });
+      renderTray();
+    }
+    function place(d) {
+      const p = pos[d.id];
+      d.style.translate = p && !narrow() && !d.classList.contains('maxed') ? p.x + 'px ' + p.y + 'px' : '';
+    }
+    function maximize(d, on) {
+      d.classList.toggle('maxed', on);
+      const b = d.querySelector('.wc-max');
+      b.innerHTML = on ? WIN_ICON.unmax : WIN_ICON.max;
+      b.title = on ? t('Restore') : t('Maximise'); b.setAttribute('aria-label', b.title);
+      place(d);
+    }
+    document.querySelectorAll('dialog').forEach((d) => {
+      const bar = d.querySelector('.dlg > h2:first-child, .wiz-head');
+      if (!bar) return;
+      const btn = (cls, icon, label, fn) => { const b = el('button', { type: 'button', class: cls, title: label, 'aria-label': label, onclick: fn }); b.innerHTML = icon; return b; };
+      d.append(el('div', { class: 'wctl' },
+        btn('wc-min', WIN_ICON.min, t('Minimise'), minimize),
+        btn('wc-max', WIN_ICON.max, t('Maximise'), () => maximize(d, !d.classList.contains('maxed'))),
+        btn('wc-close', WIN_ICON.close, t('Close'), () => d.close())));
+      bar.classList.add('movable');
+      bar.addEventListener('dblclick', (e) => { if (!narrow() && !e.target.closest('button, input, select, a')) maximize(d, !d.classList.contains('maxed')); });
+      bar.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || narrow() || d.classList.contains('maxed') || e.target.closest('button, input, select, a, label')) return;
+        const start = pos[d.id] || { x: 0, y: 0 };
+        const r = d.getBoundingClientRect();
+        // Where it stands without the move: the title bar stays in reach, 120px of it at least.
+        const left = r.left - start.x, top = r.top - start.y;
+        const sx = e.clientX, sy = e.clientY;
+        let moved = false;
+        const move = (ev) => {
+          const x = Math.min(window.innerWidth - 120 - left, Math.max(120 - left - r.width, start.x + ev.clientX - sx));
+          const y = Math.min(window.innerHeight - 40 - top, Math.max(-top, start.y + ev.clientY - sy));
+          pos[d.id] = { x: Math.round(x), y: Math.round(y) }; moved = true;
+          d.classList.add('moving'); place(d);
+        };
+        const up = () => { bar.removeEventListener('pointermove', move); d.classList.remove('moving'); if (moved) keep(); };
+        bar.setPointerCapture(e.pointerId);
+        bar.addEventListener('pointermove', move);
+        bar.addEventListener('pointerup', up, { once: true });
+        bar.addEventListener('pointercancel', up, { once: true });
+      });
+      // Opened again by its button while minimised: no chip for it any more; in its place.
+      new MutationObserver(() => {
+        const i = opened.indexOf(d);
+        if (i >= 0) opened.splice(i, 1);
+        if (!d.open) return;
+        opened.push(d);
+        if (d.dataset.min) { delete d.dataset.min; groups.forEach((g) => { const j = g.indexOf(d); if (j >= 0) g.splice(j, 1); }); renderTray(); }
+        place(d);
+      }).observe(d, { attributes: true, attributeFilter: ['open'] });
+    });
+    window.addEventListener('resize', () => document.querySelectorAll('dialog[open]').forEach(place));
+    renderTray();
+  }
+
   async function start() {
     I18N.apply(document.body);
     a11y();
+    windows();
     const langSel = $('setLang');
     Object.entries(I18N.langs).forEach(([k, v]) => langSel.append(el('option', { value: k }, v)));
     langSel.value = I18N.lang;
@@ -2341,11 +2477,13 @@
       wl.value = I18N.lang;
       // A step stored: the assistant was open when the page started again (another language).
       const resume = stored(WIZ_KEY);
-      // The server version always has a target: the assistant opens until it was finished once.
+      // The server version always has a target: the assistant opens until it was finished once, or
+      // until what it sets up is there anyway (the app registration and the add-in's address).
       // On the server the setup is the local account admin's: the others neither get nor see it.
       const mayWizard = !onServer() || !!(info.user && info.user.local);
       $('btnWizard').hidden = !mayWizard;
-      if (mayWizard && (resume !== null || (S.settings.setupDone !== '1' && (onServer() || !S.settings.folder || !S.settings.clientId)))) wizOpen(+resume || 0);
+      const setUp = S.settings.setupDone === '1' || (onServer() ? !!(S.settings.clientId && S.settings.addinUrl) : !!(S.settings.folder && S.settings.clientId));
+      if (mayWizard && (resume !== null || !setUp)) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
       // Loaded: what waits for the editor (the tests) can go on.
       document.documentElement.dataset.ready = '1';
