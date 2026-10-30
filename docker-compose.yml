@@ -7,7 +7,7 @@ services:
   app:
     container_name: nobs-osign
     # Pinned release image (set OSIGN_IMAGE in .env). Built locally only if the pull is not possible.
-    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.9.8}
+    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.9.9}
     build: .
     restart: unless-stopped
     # No extra rights, and no writing outside its data: it needs neither.
