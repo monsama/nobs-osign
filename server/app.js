@@ -484,7 +484,10 @@ function createApp(opts) {
     },
     // The add-in's files: made into the data volume, then uploaded or downloaded.
     'addin/build': async () => {
-      const r = await addin.build(env, settings.get(), addinDir);
+      // With Cloudflare Pages and no web server chosen: Cloudflare's caching file goes with them.
+      const st = settings.get();
+      if (!st.addinHost && addin.pagesEnabled(pages)) st.addinHost = 'cloudflare';
+      const r = await addin.build(env, st, addinDir);
       return r.error ? r : Object.assign({ folder: '' }, r);
     },
     'addin/check': async () => {

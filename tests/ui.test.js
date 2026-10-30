@@ -351,9 +351,9 @@ test('help: a ? opens a short explanation, above dialogs too, and closes again',
   await page.waitForFunction(() => !document.querySelector('#helpPop').matches(':popover-open'));
   // In a dialog: shown over it, Esc closes the help, not the dialog.
   await page.click('#btnSettings');
-  await page.click('#dlgSettings button.help[data-help=hSpSite]');
+  await page.click('#dlgSettings button.help[data-help=hMobile]');
   await page.waitForSelector('#helpPop:popover-open');
-  assert.match(await page.textContent('#helpPop'), /sharing link/);
+  assert.match(await page.textContent('#helpPop'), /iPhone/);
   assert.equal(await page.evaluate(() => document.elementFromPoint(...(() => { const r = document.querySelector('#helpPop').getBoundingClientRect(); return [r.left + 5, r.top + 5]; })()).closest('#helpPop') !== null), true);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('#helpPop').matches(':popover-open'));

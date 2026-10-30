@@ -1032,6 +1032,7 @@
   }
   let lastSettings = {};
   const ADDIN_FIELDS = [['setAddinUrl', 'addinUrl'], ['setAddinFolder', 'addinFolder'], ['setAddinHost', 'addinHost'], ['setClientId', 'clientId'], ['setTenantId', 'tenantId'], ['setSpSite', 'spSite'], ['setSpFolder', 'spFolder']];
+  const f0 = () => (S.info && S.info.features) || {};
   function settingsFromDialog() {
     const s = { folder: $('setFolder').value, photosFolder: $('setPhotos').value };
     for (const [id, k] of ADDIN_FIELDS) s[k] = $(id).value;
@@ -1043,6 +1044,18 @@
     $('setPhotos').value = S.settings.photosFolder || '';
     for (const [id, k] of ADDIN_FIELDS) $(id).value = S.settings[k] || '';
     $('setAddinMobile').checked = S.settings.addinMobile === 'on';
+    $('setAddinBuild').textContent = onServer() && f0().pagesUpload ? t('Create and upload the add-in files') : t('Create the add-in files');
+    $('setAddinHost').options[0].textContent = onServer() ? t('Automatic (Cloudflare Pages when set up)') : t('Choose…');
+    // The server: what follows from the connections and the setup script, said in one line; the
+    // fields by hand folded away, and the SharePoint folder only in Server connections.
+    const st = S.settings, f = S.info.features || {};
+    $('setAddinInfo').hidden = !onServer();
+    $('setAddinInfo').textContent = t('Served at {0}', st.addinUrl || t('(no address yet: set up Cloudflare Pages in Server connections)')) + ' · ' +
+      (st.clientId ? t('app registration {0} (from the setup script)', st.clientId) : t('no app registration yet: run the setup script (Server connections → SharePoint)')) +
+      (f.pagesProject ? ' · ' + t('Cloudflare Pages project {0}', f.pagesProject) : '');
+    $('setAddinMore').open = !onServer();
+    document.querySelector('#dlgSettings [data-th=addinMoreHint]').hidden = !onServer();
+    for (const id of ['setSpSite', 'setSpFolder']) $(id).closest('label').hidden = onServer();
     $('setAddinBuild').disabled = !(S.info.features && S.info.features.addinFiles);
     // The server version: where publishing goes is the site and folder below; no folders on a PC.
     $('setServerWhere').hidden = !onServer();
@@ -1089,9 +1102,13 @@
       const saved = await api('settings/save', { settings: settingsFromDialog() });
       S.settings = saved.settings; lastSettings = saved;
       const r = await api('addin/build');
-      if (onServer()) {
-        // On the server: uploaded from there, or downloaded to upload by hand.
-        $('setAddinUpload').hidden = !S.info.features.pagesUpload; $('setAddinZip').hidden = false;
+      if (onServer() && S.info.features.pagesUpload) {
+        // Made and uploaded in one go; the ZIP stays there for another web server.
+        $('setAddinZip').hidden = false;
+        await pagesUpload($('setAddinOk'), $('setAddinBuild'));
+        $('setAddinOk').textContent += ' ' + t('Once: upload {0} in the Microsoft 365 admin center (Settings → Integrated apps).', r.manifestUrl);
+      } else if (onServer()) {
+        $('setAddinZip').hidden = false;
         $('setAddinOk').textContent = t('{0} files (version {1}) made. Upload them, add the redirect URI {2} to the app registration, and upload {3} in the admin center.', r.files, r.version, r.redirectUri, r.manifestUrl);
       } else $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
     } catch (err) { $('setErr').textContent = t(err.message); }

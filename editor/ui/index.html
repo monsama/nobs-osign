@@ -325,9 +325,14 @@
     <p class="lead" data-th="addinLead">The add-in's files go on an HTTPS web server of your own (your web server, Azure Static Web Apps, …):
       they are only code, the signatures stay in SharePoint. This makes them for your server; copy the folder there and upload
       its <code>manifest.xml</code> in the Microsoft 365 admin center.</p>
-    <p class="lead" data-th="addinLeadServer" hidden>The add-in's files are made here, from the settings below: uploaded to Cloudflare Pages
-      (Server connections), or downloaded as a ZIP for another HTTPS web server. They are only code; the signatures stay in
-      SharePoint. Then upload <code>manifest.xml</code> in the Microsoft 365 admin center.</p>
+    <p class="lead" data-th="addinLeadServer" hidden>The add-in's files are made here and uploaded to Cloudflare Pages (or downloaded as a
+      ZIP for another HTTPS web server). They are only code; the signatures stay in SharePoint. Then upload <code>manifest.xml</code>
+      in the Microsoft 365 admin center, once.</p>
+    <p id="setAddinInfo" class="lead" hidden></p>
+    <details class="advanced" id="setAddinMore">
+    <summary>Advanced: address, web server, app IDs</summary>
+    <p class="hint" data-th="addinMoreHint" hidden>Set by themselves: the address from the Cloudflare Pages project, the IDs by the setup script. Change them only for
+      a domain of your own, another web server, or apps registered by hand.</p>
     <div class="grid2">
       <label>Address of the add-in <small>(where the files are served)</small><input id="setAddinUrl" placeholder="https://osign.contoso.com/"></label>
       <label>Write the files to<span class="pick"><input id="setAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="setAddinFolder">Choose folder…</button></span></label>
@@ -339,6 +344,7 @@
       <label>SharePoint site <button type="button" class="help" data-help="hSpSite" aria-label="Help">?</button> <small>(root: the home site; or paste the address of a site or OneDrive)</small><input id="setSpSite" placeholder="root"></label>
       <label>Folder in its library<input id="setSpFolder" placeholder="OSign"></label>
     </div>
+    </details>
     <label class="check"><input type="checkbox" id="setAddinMobile"> Also in Outlook for iOS and Android (preview)
       <button type="button" class="help" data-help="hMobile" aria-label="Help">?</button></label>
     <p><button id="setAddinBuild" type="button">Create the add-in files</button>
