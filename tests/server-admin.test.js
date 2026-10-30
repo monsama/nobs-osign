@@ -233,3 +233,14 @@ test('Active Directory made simple: the domain detected, the group by its name (
     assert.equal(conn.derived.ldapBase, 'OU=Users,' + BASE);
   } finally { s.srv.close(); nested.close(); }
 });
+
+test('the server\'s certificate is valid DER whatever its random serial starts with', () => {
+  const crypto = require('node:crypto');
+  const { makeCert } = require('../server/cert');
+  for (const first of [0x00, 0x01, 0x7f, 0x80, 0xff]) {
+    const c = makeCert('NOBS OSign server', new Date(), Buffer.concat([Buffer.from([first]), crypto.randomBytes(15)]));
+    const x = new crypto.X509Certificate(Buffer.from(c.certDer, 'base64'));
+    assert.match(x.subject, /NOBS OSign server/);
+    assert.equal(x.verify(x.publicKey), true);
+  }
+});
