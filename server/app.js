@@ -260,8 +260,8 @@ function createApp(opts) {
       // The certificate in use, if any: it wins over a client secret.
       cert: cert ? { thumbprint: cert.thumbprint, expires: cert.expires } : null,
       problems: {
-        signIn: ldapProblem(ldapCfg) || (ldapCfg.url ? '' : 'Signing in with Active Directory is not set up.'),
-        directory: directoryProblem(dir), graph: graphProblem(graphCfg) || (graphEnabled(graphCfg) ? '' : 'Publishing to SharePoint is not set up.'),
+        signIn: ldapProblem(ldapCfg) || (ldapCfg.url ? '' : 'Not set up yet: enter the domain controller, then Detect.'),
+        directory: directoryProblem(dir), graph: graphProblem(graphCfg) || (graphEnabled(graphCfg) ? '' : 'Not set up yet: the setup script below does it.'),
         pages: addin.pagesProblem(pages)
       }
     });
@@ -337,16 +337,21 @@ function createApp(opts) {
           return { message: r.group ? 'The domain controller answers, and the sign-in group is there.' : 'The domain controller answers (TLS as set). With the service account set, the group is checked too.' };
         }
         // Active Directory as a whole: the domain controller, the sign-in group, the service account.
+        // What is missing is said in the same words as at the top of the tab.
         if (d.what === 'ad') {
-          if (!ldapCfg.url) return { error: 'Enter the domain controller.' };
-          const look = dir.serviceDn && dir.servicePassword ? { dn: dir.serviceDn, password: dir.servicePassword } : null;
+          const problems = connectionsAnswer().problems;
+          if (problems.signIn) return { error: problems.signIn };
+          if (problems.directory) {
+            await testSignIn(ldapCfg, null);
+            return { error: problems.directory };
+          }
+          const look = { dn: dir.serviceDn, password: dir.servicePassword };
           let r;
           try { r = await testSignIn(ldapCfg, look); }
           catch (e) {
             if (look && e instanceof Error && /InvalidCredentials|invalid credentials|52e/i.test(e.name + ' ' + e.message)) return { error: 'The domain controller answers, but the service account cannot sign in: check its login and password.' };
             throw e;
           }
-          if (!look) return { message: 'The domain controller answers (TLS as set). Enter the service account to check the group and read users.' };
           if (r.group === false) return { error: 'The domain controller answers and the service account signs in, but there is no sign-in group by that name: check it.' };
           const u = await testService(dir);
           return u.users ? { message: 'All set: the domain controller answers, the service account signs in and reads users, and the sign-in group is there.' }
@@ -357,7 +362,7 @@ function createApp(opts) {
           return r.users ? { message: 'The service account signs in and reads users.' } : { error: 'The service account signs in, but sees no users with a mail address there: check where users and groups are read.' };
         }
         if (d.what === 'graph') {
-          if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
+          if (!graph) return { error: connectionsAnswer().problems.graph };
           await graph.token();
           const st = settings.get();
           if (!st.spFolder) return { message: 'The server signs in to Microsoft 365. Choose the SharePoint folder in the setup assistant to check the site too.' };

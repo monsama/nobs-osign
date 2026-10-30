@@ -72,8 +72,10 @@ Each tab has **Save and test**.
   **Advanced** is only for a directory that differs from the usual: another sign-in name format
   (`DOMAIN\{login}`), an OU to let in only the users below it, another login attribute, another
   place to read users and groups. Empty fields there follow from the domain (shown in grey).
-- **SharePoint:** set by the setup script (step 4); by hand: the tenant ID, the server's client ID
-  and secret, and when the secret runs out (the editor warns 30 days before).
+- **SharePoint:** **Download the setup script** right there (step 4 describes it); its result comes
+  back by itself. *Enter by hand* is for the rare case without it: the tenant ID, the server's
+  client ID and secret, and when the secret runs out (the editor warns 30 days before). An ID of
+  all zeros (an example value left in `.env`) counts as not set.
 - **Cloudflare Pages:** in Cloudflare, **My Profile → API Tokens → Create Token** with *Account →
   Cloudflare Pages → Edit* for your account; the account ID (on the account's overview page) and a
   project name. The project is made on the first upload.

@@ -27,9 +27,11 @@ function graphConfig(env, cert) {
   let secret = '';
   if (env.OSIGN_GRAPH_CLIENT_SECRET_FILE) { try { secret = fs.readFileSync(env.OSIGN_GRAPH_CLIENT_SECRET_FILE, 'utf8').trim(); } catch (e) { secret = ''; } }
   else secret = String(env.OSIGN_GRAPH_CLIENT_SECRET || '').trim();
+  // A placeholder of all zeros (as in examples) counts as not set.
+  const id = (v) => { const x = String(v || '').trim(); return /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(x) ? '' : x; };
   return {
-    tenantId: String(env.OSIGN_GRAPH_TENANT_ID || '').trim(),
-    clientId: String(env.OSIGN_GRAPH_CLIENT_ID || '').trim(),
+    tenantId: id(env.OSIGN_GRAPH_TENANT_ID),
+    clientId: id(env.OSIGN_GRAPH_CLIENT_ID),
     secret,
     // The certificate in use (server/cert.js): it wins over a secret.
     cert: cert || null,

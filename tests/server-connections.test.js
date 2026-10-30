@@ -63,7 +63,7 @@ test('set in the editor: AD sign-in and the service account work at once, withou
   let r = await api(admin, 'connections/get');
   assert.equal(r.ok, true);
   assert.equal(r.keyOk, true);
-  assert.match(r.problems.signIn, /not set up/);
+  assert.match(r.problems.signIn, /not set up/i);
   assert.equal((await api(admin, 'info')).user.local, true);
   // Nobody from AD yet.
   assert.equal((await signIn('anna', 'anna-pw')).status, 401);
@@ -93,7 +93,7 @@ test('set in the editor: AD sign-in and the service account work at once, withou
   tst = await api(admin, 'connections/test', { what: 'directory' });
   assert.equal(tst.ok, true, tst.error);
   assert.match(tst.message, /reads users/);
-  assert.match((await api(admin, 'connections/test', { what: 'graph' })).error, /not set up/);
+  assert.match((await api(admin, 'connections/test', { what: 'graph' })).error, /not set up/i);
   assert.match((await api(anna.cookie, 'connections/test', { what: 'signIn' })).error, /Only the local account admin/);
   // A group that is not there is said as that.
   await api(admin, 'connections/save', { values: { ldapGroup: 'CN=Nobody,OU=Groups,' + BASE } });
