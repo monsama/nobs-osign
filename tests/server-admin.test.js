@@ -191,3 +191,45 @@ test('a newer version: said in info when the server may look, never otherwise', 
     assert.deepEqual((await b('info')).features.update, { version: '99.0.0', url: 'https://github.com/monsama/nobs-osign/releases/tag/v99.0.0', at: '2030-01-01T00:00:00Z' });
   } finally { off.srv.close(); on.srv.close(); }
 });
+
+test('Active Directory made simple: the domain detected, the group by its name (nested too), the rest from the domain', async () => {
+  const { ldapConfig } = require('../server/ldap');
+  const { directoryConfig } = require('../server/directory');
+  // What follows from the domain alone.
+  const c = ldapConfig({ OSIGN_LDAP_URL: 'ldaps://dc.argo.intern', OSIGN_AD_DOMAIN: 'Argo.Intern' });
+  assert.equal(c.bindTemplate, '{login}@argo.intern');
+  assert.equal(c.searchBase, 'DC=argo,DC=intern');
+  assert.equal(directoryConfig({ OSIGN_LDAP_SERVICE_DN: 'osign' }, c).serviceDn, 'osign@argo.intern');
+  assert.equal(directoryConfig({ OSIGN_LDAP_SERVICE_DN: 'CN=osign,OU=x,DC=argo,DC=intern' }, c).serviceDn, 'CN=osign,OU=x,DC=argo,DC=intern');
+  assert.equal(directoryConfig({}, c).base, 'DC=argo,DC=intern');
+  // Set by hand, they win; an OU still finds groups in the whole domain.
+  const d = ldapConfig({ OSIGN_AD_DOMAIN: 'argo.intern', OSIGN_LDAP_BIND: 'ARGO\\{login}', OSIGN_LDAP_BASE: 'OU=Users,DC=argo,DC=intern' });
+  assert.deepEqual([d.bindTemplate, d.searchBase, d.domainBase], ['ARGO\\{login}', 'OU=Users,DC=argo,DC=intern', 'DC=argo,DC=intern']);
+
+  // The group by name, against the stand-in AD: Carla is in it through a nested group.
+  const nested = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [], 'Marketing': ['NOBS-OSign-Admins'] }, people: {
+    carla: { pw: 'carla-pw', name: 'Carla Nested', mail: 'carla@example.ch', groups: ['Marketing'] },
+    dani: { pw: 'dani-pw', name: 'Dani Outside', mail: 'dani@example.ch', groups: [] }
+  } });
+  const url = await nested.listen();
+  const s = await server({ OSIGN_LDAP_URL: url, OSIGN_LDAP_GROUP: 'NOBS-OSign-Admins' });
+  try {
+    assert.ok(await s.signIn('carla', 'carla-pw'), 'nested membership counts');
+    assert.equal(await s.signIn('dani', 'dani-pw'), '', 'not in the group');
+    const admin = s.as(await s.signIn('admin', 'admin-pw'));
+    // Detect: the domain from the domain controller's RootDSE.
+    const r = await admin('connections/detect');
+    assert.equal(r.ok, true, r.error);
+    assert.deepEqual([r.domain, r.base, r.host], ['example.ch', BASE, 'dc01.example.ch']);
+    // The test as one: the group found by name, the service account reading users.
+    await admin('connections/save', { values: { ldapServiceDn: SERVICE.dn }, secrets: { ldapServicePassword: SERVICE.pw } });
+    const t = await admin('connections/test', { what: 'ad' });
+    assert.equal(t.ok, true, t.error);
+    assert.match(t.message, /All set.*sign-in group is there/);
+    await admin('connections/save', { values: { ldapGroup: 'No-Such-Group' } });
+    assert.match((await admin('connections/test', { what: 'ad' })).error, /no sign-in group by that name/);
+    assert.match((await admin('connections/save', { values: { adDomain: 'not a domain' } })).error, /DNS name/);
+    const conn = await admin('connections/get');
+    assert.equal(conn.derived.ldapBase, 'OU=Users,' + BASE);
+  } finally { s.srv.close(); nested.close(); }
+});

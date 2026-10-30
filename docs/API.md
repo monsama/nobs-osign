@@ -91,7 +91,11 @@ asked.
   server's own, server/cert.js, put on the app by the setup script) or `secret`; `features.secretExpires`
   and `features.secretDaysLeft` are for whichever it is. `connections/get` answers `cert: { thumbprint,
   expires } | null`; `connections/save` with `removeCert: true` goes back to a client secret.
-- **connections/test** `{ what: signIn | directory | graph | pages }` → `{ ok, message }`: that part
+- **connections/detect** → `{ ok, domain, base, host }`: the domain the saved domain controller
+  serves, from its RootDSE (no sign-in needed), for the local account `admin`.
+  `connections/get` and `connections/save` also answer `derived`: what the empty fields follow from
+  the domain (`ldapBind`, `ldapBase`, `ldapDirectoryBase`, `ldapServiceDn`).
+- **connections/test** `{ what: ad | signIn | directory | graph | pages }` → `{ ok, message }`: that part
   of the server's connections tried for real, with what is saved (for the local account `admin`).
 - **sp/share** `{ url }` → `{ ok, webUrl, name }`: where a sharing link of SharePoint or OneDrive
   (`https://…/:f:/…`) leads, through Graph (`/shares`), as the folder's own address; a link to a

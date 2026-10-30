@@ -38,13 +38,15 @@ const FIELDS = {
     if (![...LDAP_PORTS, ...extra].includes(port)) return 'Port ' + port + ' is not a directory port. Use 389 or 636 (3268 or 3269 for the global catalog), or allow it on the server with OSIGN_LDAP_PORTS=' + port + '.';
     return '';
   } },
+  // The domain's DNS name: the sign-in format and where users are follow from it.
+  adDomain: { env: 'OSIGN_AD_DOMAIN', check: (v) => (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(v) ? '' : 'The domain is its DNS name, like example.ch.') },
   // ldap://: StartTLS or not; ldaps:// is encrypted anyway.
   ldapStartTls: { env: 'OSIGN_LDAP_STARTTLS', check: (v) => (['on', 'off'].includes(v) ? '' : 'StartTLS is on or off.'), toEnv: (v) => (v === 'on' ? '1' : '0') },
   ldapBind: { env: 'OSIGN_LDAP_BIND', check: (v) => (v.includes('{login}') && DN.test(v) ? '' : 'The sign-in name names where the login goes, like {login}@example.ch.') },
   ldapBase: { env: 'OSIGN_LDAP_BASE', check: (v) => (DN.test(v) ? '' : 'Where the users are is a DN, like OU=Users,DC=example,DC=ch.') },
-  ldapGroup: { env: 'OSIGN_LDAP_GROUP', check: (v) => (DN.test(v) ? '' : 'The sign-in group is a DN, like CN=NOBS-OSign-Admins,OU=Groups,DC=example,DC=ch.') },
+  ldapGroup: { env: 'OSIGN_LDAP_GROUP', check: (v) => (DN.test(v) ? '' : 'The sign-in group is its name, like NOBS-OSign-Admins.') },
   ldapLoginAttr: { env: 'OSIGN_LDAP_LOGIN_ATTR', check: (v) => (/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(v) ? '' : 'The login attribute is the name of one attribute, such as sAMAccountName.') },
-  ldapServiceDn: { env: 'OSIGN_LDAP_SERVICE_DN', check: (v) => (DN.test(v) ? '' : 'The service account is a DN, like CN=svc-osign,OU=Service,DC=example,DC=ch.') },
+  ldapServiceDn: { env: 'OSIGN_LDAP_SERVICE_DN', check: (v) => (DN.test(v) ? '' : 'The service account is its login, like svc-osign.') },
   ldapDirectoryBase: { env: 'OSIGN_LDAP_DIRECTORY_BASE', check: (v) => (DN.test(v) ? '' : 'Where users and groups are read is a DN, like DC=example,DC=ch.') },
   adExportAt: { env: 'OSIGN_AD_EXPORT_AT', check: (v) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(v) ? '' : 'The daily export is a time of day, like 06:00.') },
   graphTenantId: { env: 'OSIGN_GRAPH_TENANT_ID', check: (v) => (GUID.test(v) ? '' : 'The tenant ID is the Directory (tenant) ID, a GUID.') },

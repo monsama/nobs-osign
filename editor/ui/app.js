@@ -1098,7 +1098,7 @@
   // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
   // saved wins over .env, an empty field takes .env's value (its placeholder). Secrets are only
   // ever sent, never shown: the server says where each comes from.
-  const CONN_FIELDS = ['ldapUrl', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'graphSecretExpires', 'cfAccountId', 'cfProject'];
+  const CONN_FIELDS = ['ldapUrl', 'adDomain', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'graphSecretExpires', 'cfAccountId', 'cfProject'];
   const CONN_SECRETS = ['ldapServicePassword', 'graphClientSecret', 'cfApiToken'];
   let connDrop = {}, connCa, connCertDrop = false;
   function day(iso) { return iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : ''; }
@@ -1108,7 +1108,7 @@
       const el = $('cn_' + k), f = r.fields[k];
       el.value = f.value;
       if (el.tagName === 'SELECT') el.options[0].textContent = f.env ? t('As in .env ({0})', t(f.env === 'on' ? 'On' : 'Off')) : t('As in .env');
-      else el.placeholder = f.env || el.dataset.ph;
+      else el.placeholder = f.env || (r.derived && r.derived[k]) || el.dataset.ph;
     }
     for (const k of CONN_SECRETS) {
       const x = r.secrets[k];
@@ -1131,8 +1131,9 @@
     // In this dialog, "(Settings → Server connections)" would point to itself.
     const here = (p) => String(p).replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')');
     const line = (id, problem, okText) => { $(id).textContent = problem ? t(here(problem)) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
-    line('connSignIn', r.problems.signIn, 'Ready: members of the sign-in group can sign in.');
-    line('connDirectory', r.problems.directory, 'Ready: the editor reads the users\' values from AD.');
+    // Active Directory: the sign-in first, then the service account.
+    r.problems.ad = r.problems.signIn || r.problems.directory;
+    line('connAd', r.problems.ad, 'Ready: members of the sign-in group can sign in, and the editor reads the users\' values from AD.');
     line('connGraph', r.problems.graph, 'Ready: publishing goes into SharePoint.');
     line('connPages', r.problems.pages, 'Ready: the add-in\'s files can be uploaded from here.');
     // Each tab's dot: ready, or something to set.
@@ -1149,7 +1150,7 @@
   document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
   $('setConn').addEventListener('click', async () => {
     $('setErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab('signin'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
   });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
@@ -1193,6 +1194,19 @@
     $('connErr').textContent = '';
     try { await connSaveNow(); $('dlgConn').close(); toast(t('Server connections saved.')); }
     catch (err) { $('connErr').textContent = t(err.message); }
+  });
+  // Detect: the domain from the domain controller (saved first, with its CA), into the field.
+  $('connDetect').addEventListener('click', async () => {
+    const out = document.querySelector('#dlgConn [data-ctestout="ad"]');
+    out.className = 'where'; out.textContent = t('Asking the domain controller…'); $('connDetect').disabled = true; $('connErr').textContent = '';
+    try {
+      renderConnections(await connSaveNow());
+      const r = await api('connections/detect');
+      $('cn_adDomain').value = r.domain;
+      renderConnections(await connSaveNow());
+      out.className = 'where good'; out.textContent = '✓ ' + t('Domain {0} ({1}). Now the sign-in group and the service account.', r.domain, r.host || r.base);
+    } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); }
+    finally { $('connDetect').disabled = false; }
   });
   // Test: saved first, so what is tested is what the dialog shows; the answer next to the button.
   document.querySelectorAll('#dlgConn [data-ctest]').forEach((b) => b.addEventListener('click', async () => {
@@ -1671,7 +1685,7 @@
   }
   $('wizConnOpen').addEventListener('click', async () => {
     $('wizErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab('signin'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
+    try { renderConnections(await api('connections/get')); connTab('ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
   });
   // The setup script (server/setup.js): made for the folder and the add-in's address as saved,
   // downloaded, run on a Windows PC; its result comes back to the server, and here by asking.
