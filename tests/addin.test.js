@@ -299,3 +299,10 @@ test('the folder by its ids (as the server made the files): read without asking 
   assert.ok(!r.graph.requests.some((u) => u.includes('/sites/')), r.graph.requests.join('\n'));
   assert.ok(r.graph.requests.some((u) => u.endsWith('/drives/b!drive-1/items/OSIGN-ITEM:/signatures.json')));
 });
+
+test('the folder not readable for the user (the consent is there): said as that, with what to share', async () => {
+  const r = runtime({ byIds: true, deny: ['/drives/'] });
+  await r.fire('onNewMessageComposeHandler');
+  assert.ok(!setCall(r));
+  assert.ok(r.calls.some((c) => c[0] === 'log' && /does not let you read the folder OSign.*Everyone except external users/.test(c[1])), r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+});
