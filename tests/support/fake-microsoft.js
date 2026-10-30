@@ -58,9 +58,10 @@ function fakeMicrosoft() {
     if (p === '/v1.0/servicePrincipals' && req.method === 'POST') { const sp = { id: 'sp-' + id(), appId: j.appId }; state.sps.push(sp); return json(201, sp); }
     if (p === '/v1.0/applications' && req.method === 'GET') return json(200, { value: state.apps.filter((a) => a.displayName === eq('displayName')) });
     // As Entra: who makes an app owns it.
-    if (p === '/v1.0/applications' && req.method === 'POST') { const a = Object.assign({ id: 'obj-' + id(), appId: id(), spa: { redirectUris: [] }, owners: [ME] }, j); state.apps.push(a); return json(201, a); }
+    if (p === '/v1.0/applications' && req.method === 'POST') { const a = Object.assign({ id: 'obj-' + id(), appId: id(), spa: { redirectUris: [] }, owners: [ME], createdDateTime: new Date().toISOString() }, j); state.apps.push(a); return json(201, a); }
     if ((m = /^\/v1\.0\/applications\(appId='([^']+)'\)$/.exec(p))) { const a = state.apps.find((x) => x.appId === m[1]); return a ? json(200, a) : json(404, { error: { message: 'Resource not found' } }); }
     if ((m = /^\/v1\.0\/applications\/([^/]+)\/owners$/.exec(p))) return json(200, { value: (state.apps.find((x) => x.id === m[1]).owners || []).map((o) => ({ id: o })) });
+    if ((m = /^\/v1\.0\/applications\/([^/]+)$/.exec(p)) && req.method === 'DELETE') { state.apps = state.apps.filter((x) => x.id !== m[1]); return json(204); }
     if ((m = /^\/v1\.0\/applications\/([^/]+)$/.exec(p)) && req.method === 'PATCH') {
       // A tenant may refuse certificates on apps (a policy): then the script makes a secret.
       if (j.keyCredentials && state.refuseCerts) return json(400, { error: { message: 'Certificates are not allowed by policy.' } });
