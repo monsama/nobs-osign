@@ -454,7 +454,8 @@
           result comes back here by itself: nothing to copy.</p>
         <label class="check"><input type="checkbox" id="connScriptUsers"> Also read people from Entra ID for the preview (User.Read.All, GroupMember.Read.All)</label>
         <p class="btn-row"><button type="button" id="connScriptGet" class="primary">Download the setup script</button>
-          <button type="button" id="connScriptWizard" class="ghost" hidden>Open the setup assistant</button></p>
+          <button type="button" id="connScriptWizard" class="ghost" hidden>Open the setup assistant</button>
+          <label class="filepick small" title="When the script could not reach the server, it saved its result as a file">Upload the result… <input type="file" id="connScriptResult" accept=".json"></label></p>
         <p id="connScriptNote" class="where"></p>
       </div>
       <details class="advanced" id="connGraphManual">
@@ -654,7 +655,8 @@
         </ul>
         <label class="check block"><input type="checkbox" id="wizScriptUsers"> Let the server also read users and their groups from Entra ID,
           for the preview of a real person (User.Read.All and GroupMember.Read.All, read-only)</label>
-        <p><button type="button" id="wizScriptGet" class="primary">Download the setup script</button></p>
+        <p class="btn-row"><button type="button" id="wizScriptGet" class="primary">Download the setup script</button>
+          <label class="filepick small" title="When the script could not reach the server, it saved its result as a file">Upload the result… <input type="file" id="wizScriptResult" accept=".json"></label></p>
         <p data-th="wizScriptRun">Run it on a Windows PC, in PowerShell:</p>
         <span class="copyline"><code id="wizScriptCmd">powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"</code><button type="button" class="copy" data-copy="wizScriptCmd">Copy</button></span>
         <p id="wizScriptNote" class="where"></p>

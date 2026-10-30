@@ -505,6 +505,11 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   const st = (await api('settings/get')).settings;
   assert.deepEqual([st.spSite, st.spFolder], ['contoso.sharepoint.com:/sites/Signaturen:', 'OSign']);
   await api('settings/save', { settings: { spSite: 'root', spFolder: 'OSign' } });
+  // A result file: handed over by the browser; one that is not valid (any more) is said so.
+  await page.setInputFiles('#connScriptResult', { name: 'nobs-osign-setup-result.json', mimeType: 'application/json', buffer: Buffer.from('{"token":"old"}') });
+  await page.waitForFunction(() => /not valid/.test(document.querySelector('#connScriptNote').textContent));
+  await page.setInputFiles('#connScriptResult', { name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('not json') });
+  await page.waitForFunction(() => /not the setup script's result/.test(document.querySelector('#connScriptNote').textContent));
   // Without the folder and the add-in's address the script cannot be made: the assistant asks.
   await api('settings/save', { settings: { addinUrl: '' } });
   await page.click('#connScriptGet');

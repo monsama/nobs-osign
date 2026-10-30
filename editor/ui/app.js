@@ -1194,6 +1194,27 @@
       out.className = 'where good'; out.textContent = '✓ ' + t('Saved: {0}. The setup script gives the server write access to this site.', $('connSpWhere').textContent);
     } catch (err) { out.className = 'where warn'; out.textContent = connText(err.message); }
   });
+  // The script's result as a file (nobs-osign-setup-result.json), where the PC could not reach the
+  // server (its certificate not trusted there): the browser hands it over.
+  async function setupResultUpload(input, out) {
+    const f = input.files[0]; input.value = '';
+    if (!f) return false;
+    out.className = 'where'; out.textContent = t('Handing over the result…');
+    try {
+      let body;
+      try { body = JSON.parse(await f.text()); } catch (e) { throw new Error(t('This is not the setup script\'s result (nobs-osign-setup-result.json).')); }
+      await api('setup/finish', body);
+      const r = await api('setup/status');
+      if (r.state !== 'done') throw new Error(r.problem || t('The server did not take the result.'));
+      const [info, st] = await Promise.all([api('info'), api('settings/get')]);
+      S.info = info; S.settings = st.settings; lastSettings = st; renderStatusBar();
+      out.className = 'where good'; out.textContent = '✓ ' + setupDoneText(r.result) + ' ' + t('Delete the file now.');
+      return true;
+    } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); return false; }
+  }
+  $('connScriptResult').addEventListener('change', async () => {
+    if (await setupResultUpload($('connScriptResult'), $('connScriptNote'))) { const keep = $('connScriptNote').textContent; renderConnections(await api('connections/get')); $('connScriptNote').className = 'where good'; $('connScriptNote').textContent = keep; }
+  });
   $('connScriptGet').addEventListener('click', async () => {
     const out = $('connScriptNote');
     out.className = 'where'; out.textContent = ''; $('connScriptWizard').hidden = true;
@@ -1799,6 +1820,12 @@
       wizScriptPoll();
     }, 3000);
   }
+  $('wizScriptResult').addEventListener('change', async () => {
+    if (await setupResultUpload($('wizScriptResult'), $('wizScriptNote'))) {
+      wiz.scriptWaiting = false; wizScriptPoll(true);
+      $('wizClientId').value = S.settings.clientId || ''; $('wizTenantId').value = S.settings.tenantId || '';
+    }
+  });
   $('wizScriptGet').addEventListener('click', async () => {
     const out = $('wizScriptNote');
     out.className = 'where'; $('wizErr').textContent = '';

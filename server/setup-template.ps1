@@ -39,6 +39,8 @@ $Cert = __OSIGN_CERT__
 $CertThumbprint = __OSIGN_CERT_THUMBPRINT__
 
 # Microsoft's endpoints; only the tests point them elsewhere.
+# Only the tests send the result elsewhere (to a server that is not there).
+if ($env:OSIGN_SETUP_TEST_SERVER) { $Server = $env:OSIGN_SETUP_TEST_SERVER }
 $LoginUrl = if ($env:OSIGN_SETUP_LOGIN_URL) { $env:OSIGN_SETUP_LOGIN_URL } else { 'https://login.microsoftonline.com' }
 $GraphUrl = if ($env:OSIGN_SETUP_GRAPH_URL) { $env:OSIGN_SETUP_GRAPH_URL } else { 'https://graph.microsoft.com/v1.0' }
 # The sign-in: Microsoft's own public client for Graph scripts ("Microsoft Graph Command Line
@@ -301,13 +303,18 @@ if ($result) {
         Invoke-RestMethod -Method Post -Uri "$Server/api/setup/finish" -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($result | ConvertTo-Json -Depth 5 -Compress))) | Out-Null
         Step "Sent to NOBS OSign ($Server): the setup assistant goes on by itself" "An NOBS OSign übermittelt ($Server): der Einrichtungsassistent geht von selbst weiter"
     } catch {
-        Say ("The server could not be reached: " + (Error-Text $_)) ("Der Server war nicht erreichbar: " + (Error-Text $_)) 'Red'
-        Say 'Enter these in NOBS OSign by hand (Settings → Server connections, and the assistant''s step Microsoft 365):' 'Diese Werte von Hand in NOBS OSign eintragen (Einstellungen → Server-Verbindungen, und im Assistenten den Schritt Microsoft 365):' 'Yellow'
-        Write-Host "  Tenant ID:                   $($result.tenantId)"
-        Write-Host "  Add-in client ID:            $($result.addin.clientId)"
-        Write-Host "  Server client ID:            $($result.server.clientId)"
-        if ($result.server.secret) { Write-Host "  Server client secret:        $($result.server.secret)" }
-        else { Say '  (The server signs in with its certificate: run this script again once the server can be reached.)' '  (Der Server meldet sich mit seinem Zertifikat an: dieses Skript nochmals ausführen, sobald der Server erreichbar ist.)' 'Yellow' }
+        $why = Error-Text $_
+        Say ("The server could not be reached: " + $why) ("Der Server war nicht erreichbar: " + $why) 'Red'
+        if ($why -match 'SSL|TLS|trust|Vertrauens') {
+            Say "  This PC does not trust the certificate of $Server (it comes from your own CA, or the proxy's). The file below does not need that." `
+                "  Dieser PC vertraut dem Zertifikat von $Server nicht (es stammt von Ihrer eigenen CA oder vom Proxy). Die Datei unten braucht das nicht." 'Yellow'
+        }
+        # The result as a file, for the browser to hand over: it reaches the server where this PC cannot.
+        $file = Join-Path $(if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }) 'nobs-osign-setup-result.json'
+        [IO.File]::WriteAllText($file, ($result | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
+        Say "Saved the result: $file" "Ergebnis gespeichert: $file" 'Yellow'
+        Say '  In NOBS OSign: Settings → Server connections → SharePoint (or the setup assistant), "Upload the result" and choose this file. Valid for an hour; delete it afterwards.' `
+            '  In NOBS OSign: Einstellungen → Server-Verbindungen → SharePoint (oder der Einrichtungsassistent), «Ergebnis hochladen» und diese Datei wählen. Eine Stunde gültig; danach löschen.' 'Yellow'
     }
 }
 

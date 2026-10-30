@@ -331,6 +331,7 @@ for testing only: Outlook reads from SharePoint.
 | No photo | No `OSign/photos/<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
 | Publishing says the server could not sign in | The certificate or client secret ran out (the status bar says so 30 days before), or the certificate was taken off the app in Entra: run the setup script again. |
+| Setup script: *the server could not be reached* (SSL/TLS trust) | The PC does not trust the certificate of the editor's address (your own CA, or the proxy's). The script saves its result as `nobs-osign-setup-result.json` next to itself: **Upload the result** in Server connections → SharePoint (or the setup assistant), then delete the file. Or have the PC trust that CA. |
 | Setup script: *403* on the site | Your account is not an owner of that site (for a personal OneDrive: not its owner). The script stops before it makes anything. Make your account an owner of the site, or choose a SharePoint site, and run it again. |
 | Setup script: the rights could not be taken back | It tells which; take them back in Entra → Enterprise applications → *Microsoft Graph Command Line Tools* → Permissions → User consent. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |

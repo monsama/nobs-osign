@@ -788,6 +788,12 @@
     'Saved: {0}. The setup script gives the server write access to this site.': 'Gespeichert: {0}. Das Setup-Skript gibt dem Server Schreibzugriff auf diese Website.',
     'The folder is in a personal OneDrive: the script only works when run by its owner. Download it anyway?': 'Der Ordner liegt in einem persönlichen OneDrive: Das Skript funktioniert nur, wenn dessen Besitzer es ausführt. Trotzdem herunterladen?',
     'the root site': 'die Stammwebsite',
+    'Upload the result…': 'Ergebnis hochladen…',
+    'When the script could not reach the server, it saved its result as a file': 'Wenn das Skript den Server nicht erreichte, hat es sein Ergebnis als Datei gespeichert',
+    'Handing over the result…': 'Ergebnis wird übergeben…',
+    'This is not the setup script\'s result (nobs-osign-setup-result.json).': 'Das ist nicht das Ergebnis des Setup-Skripts (nobs-osign-setup-result.json).',
+    'The server did not take the result.': 'Der Server hat das Ergebnis nicht übernommen.',
+    'Delete the file now.': 'Löschen Sie die Datei jetzt.',
   };
 
   DE.html = {
