@@ -1054,6 +1054,8 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = !(onServer() && S.info.user && S.info.user.local);
     $('setApproval').checked = S.settings.requireApproval === 'on';
+    $('setTls').textContent = t('Web certificate: …');
+    loadTls().then((c) => { $('setTls').textContent = tlsText(c); $('setTls').className = 'lead' + (c && !c.error && c.trusted && c.daysLeft > 30 ? '' : ' warn'); });
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
@@ -2042,6 +2044,25 @@
     finally { $('pubGo').disabled = false; }
   });
 
+  // The web certificate the proxy serves for this address: what it is, and whether PCs trust it.
+  let tlsLast = null;
+  async function loadTls() {
+    if (!onServer() || location.protocol !== 'https:') return null;
+    try { tlsLast = await api('server/tls', { host: location.hostname }); } catch (e) { tlsLast = { error: e.message }; }
+    const c = tlsLast, warn = c.error ? '' : !c.trusted ? t('The web certificate is not trusted by PCs: issue one from your CA (Settings).') : c.daysLeft <= 30 ? t('The web certificate runs out on {0}.', day(c.validTo)) : '';
+    $('stTls').hidden = !warn; $('stTls').textContent = warn;
+    return c;
+  }
+  function tlsText(c) {
+    if (!c) return t('Web certificate: only shown over https.');
+    if (c.error) return t('Web certificate: {0}', t(c.error));
+    const base = t('Web certificate: {0}, issued by {1}, valid until {2} ({3}).', c.names.length ? c.names.join(', ') : c.subject, c.issuer, day(c.validTo), t('{0} days', c.daysLeft));
+    if (!c.nameOk) return base + ' ' + t('It is not for {0}.', c.host);
+    if (c.trusted) return base + ' ' + t('Trusted.');
+    return base + ' ' + (c.selfSigned || /caddy|local authority/i.test(c.issuer) ? t('It is the proxy\'s own: PCs do not trust it (the browser warns, the setup script cannot send its result).') : t('Not trusted here: PCs that know your CA may trust it.')) +
+      ' ' + t('Issue a web server certificate from your CA for {0} and install it in the proxy (docs/SETUP.md).', c.host);
+  }
+
   // Four eyes: turned on and off by the local account admin, at once.
   $('setApproval').addEventListener('change', async () => {
     const on = $('setApproval').checked;
@@ -2266,6 +2287,7 @@
       applyDraft(draft);
       loadSnapshot();
       loadApproval();
+      loadTls();
       document.querySelectorAll('button.pick-btn').forEach((b) => { b.hidden = !info.features.pickFolder; });
       if (onServer()) serverTexts();
       document.querySelector('#pvSource option[value=entra]').hidden = !(onServer() && info.features.publishTarget === 'sharepoint');

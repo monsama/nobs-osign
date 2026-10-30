@@ -418,3 +418,14 @@ ol.guide li { margin: 0 0 6px; line-height: 1.5; }
 .filepick.small:hover { border-color: var(--muted); }
 .filepick.small:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
 .filepick.small input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+/* Everything in a row centred on one line: inputs with their buttons, a test's button and its answer,
+   the status bar. */
+.pick { align-items: center; }
+.form > div > .pick { margin-top: 0; }
+.ctest .where, .btn-row .where { margin: 0; }
+.statusbar { align-items: center; }
+.btn-row > * { margin: 0; }
+p.btn-row { margin: 8px 0; }
+.pv-ad { align-items: center; }
+/* Two or three fields side by side: their inputs on one line, however long a label is. */
+.grid2, .grid3 { align-items: end; }

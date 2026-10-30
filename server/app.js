@@ -23,6 +23,7 @@ const { createAudit } = require('./audit');
 const { exportBackup, openBackup, restoreFiles } = require('./backup');
 const { createUpdates } = require('./updates');
 const { diffConfigs } = require('./diff');
+const tlsInfo = require('./tls');
 const { writeAtomic, readText } = require('./store');
 const core = require('../shared/signature-core.js');
 const addin = require('./addin');
@@ -465,6 +466,8 @@ function createApp(opts) {
       log.info('backup: brought back the backup of ' + b.at + ' (version ' + b.version + ', ' + r.files + ' files) by ' + s.user.login);
       return { at: b.at, version: b.version, files: r.files };
     },
+    // The web certificate the proxy serves for the editor's address (as the browser asked for it).
+    'server/tls': (d) => tlsInfo.inspect({ addr: env.OSIGN_PROXY_ADDR || 'nobs-proxy:443', host: String(d.host || ''), caFile: ldapCfg.caFile }),
     // The audit log, for the local account admin.
     'audit/list': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin can read the audit log.' } : { entries: audit.list({ limit: d.limit, what: String(d.what || ''), failed: !!d.failed }) }),
     // The versions published, and one of them back into the draft (with its images).

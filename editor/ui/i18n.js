@@ -794,6 +794,20 @@
     'This is not the setup script\'s result (nobs-osign-setup-result.json).': 'Das ist nicht das Ergebnis des Setup-Skripts (nobs-osign-setup-result.json).',
     'The server did not take the result.': 'Der Server hat das Ergebnis nicht übernommen.',
     'Delete the file now.': 'Löschen Sie die Datei jetzt.',
+    'Web certificate: only shown over https.': 'Webzertifikat: nur über https sichtbar.',
+    'Web certificate: …': 'Webzertifikat: …',
+    'Web certificate: {0}': 'Webzertifikat: {0}',
+    'Web certificate: {0}, issued by {1}, valid until {2} ({3}).': 'Webzertifikat: {0}, ausgestellt von {1}, gültig bis {2} ({3}).',
+    '{0} days': '{0} Tage',
+    'It is not for {0}.': 'Es gilt nicht für {0}.',
+    'Trusted.': 'Vertrauenswürdig.',
+    'It is the proxy\'s own: PCs do not trust it (the browser warns, the setup script cannot send its result).': 'Es ist das eigene des Proxys: PCs vertrauen ihm nicht (der Browser warnt, das Setup-Skript kann sein Ergebnis nicht senden).',
+    'Not trusted here: PCs that know your CA may trust it.': 'Hier nicht vertrauenswürdig: PCs, die Ihre CA kennen, vertrauen ihm vielleicht.',
+    'Issue a web server certificate from your CA for {0} and install it in the proxy (docs/SETUP.md).': 'Stellen Sie bei Ihrer CA ein Webserver-Zertifikat für {0} aus und installieren Sie es im Proxy (docs/SETUP.md).',
+    'The web certificate is not trusted by PCs: issue one from your CA (Settings).': 'Dem Webzertifikat vertrauen die PCs nicht: Stellen Sie eines von Ihrer CA aus (Einstellungen).',
+    'The web certificate runs out on {0}.': 'Das Webzertifikat läuft am {0} ab.',
+    'That is not a host name.': 'Das ist kein Hostname.',
+    'The proxy sent no certificate.': 'Der Proxy hat kein Zertifikat gesendet.',
   };
 
   DE.html = {
