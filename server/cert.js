@@ -34,12 +34,14 @@ function time(d) {
 }
 
 // A new key and a self-signed certificate for it, valid for YEARS. → { keyPem, certDer, ... }
-function makeCert(name, now = new Date()) {
+function makeCert(name, now = new Date(), serialBytes) {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
   const until = new Date(now.getTime()); until.setUTCFullYear(until.getUTCFullYear() + YEARS);
   const from = new Date(now.getTime() - 5 * 60 * 1000);
   const dn = seq(set(seq(oid(CN), der(0x0c, Buffer.from(name, 'utf8')))));
-  const serial = crypto.randomBytes(16); serial[0] &= 0x7f;
+  // Positive, and its first byte never 0: DER has no leading zero bytes, and a certificate with
+  // one is refused when read.
+  const serial = Buffer.from(serialBytes || crypto.randomBytes(16)); serial[0] = (serial[0] & 0x7f) | 0x40;
   const tbs = seq(der(0xa0, int(Buffer.from([2]))), int(serial), SHA256_RSA, dn, seq(time(from), time(until)), dn, publicKey.export({ type: 'spki', format: 'der' }));
   const sig = crypto.sign('sha256', tbs, privateKey);
   const certDer = seq(tbs, SHA256_RSA, der(0x03, Buffer.concat([Buffer.from([0]), sig])));

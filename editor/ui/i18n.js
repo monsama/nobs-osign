@@ -778,6 +778,16 @@
     'The Cloudflare API token is missing.': 'Der Cloudflare-API-Token fehlt.',
     'But this is a personal OneDrive: only its owner can give the server access (no administrator can), and it goes with that person. A SharePoint site is better.': 'Aber das ist ein persönliches OneDrive: Nur dessen Besitzer kann dem Server Zugriff geben (kein Administrator), und es verschwindet mit dieser Person. Eine SharePoint-Website ist besser.',
     'A personal OneDrive goes with its owner: a SharePoint site is better for signatures.': 'Ein persönliches OneDrive verschwindet mit seinem Besitzer: Für Signaturen ist eine SharePoint-Website besser.',
+    'Folder of the signatures': 'Ordner der Signaturen',
+    'Another folder': 'Anderer Ordner',
+    'Use this folder': 'Diesen Ordner verwenden',
+    '(open the folder in SharePoint, copy the address from the browser and paste it here. A SharePoint site everyone can read; not a personal OneDrive)': '(den Ordner in SharePoint öffnen, die Adresse aus dem Browser kopieren und hier einfügen. Eine SharePoint-Website, die alle lesen können; kein persönliches OneDrive)',
+    'Not chosen yet.': 'Noch nicht gewählt.',
+    'A personal OneDrive: only its owner can give the server access, and it goes with that person. Choose a folder in a SharePoint site.': 'Ein persönliches OneDrive: Nur dessen Besitzer kann dem Server Zugriff geben, und es verschwindet mit dieser Person. Wählen Sie einen Ordner in einer SharePoint-Website.',
+    'That address names no folder: open the folder in SharePoint and copy the address from the browser.': 'Diese Adresse nennt keinen Ordner: Öffnen Sie den Ordner in SharePoint und kopieren Sie die Adresse aus dem Browser.',
+    'Saved: {0}. The setup script gives the server write access to this site.': 'Gespeichert: {0}. Das Setup-Skript gibt dem Server Schreibzugriff auf diese Website.',
+    'The folder is in a personal OneDrive: the script only works when run by its owner. Download it anyway?': 'Der Ordner liegt in einem persönlichen OneDrive: Das Skript funktioniert nur, wenn dessen Besitzer es ausführt. Trotzdem herunterladen?',
+    'the root site': 'die Stammwebsite',
   };
 
   DE.html = {

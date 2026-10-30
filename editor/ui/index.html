@@ -441,6 +441,13 @@
 
     <section class="dpane" role="tabpanel" data-cpane="graph" hidden>
       <p id="connGraph" class="lead"></p>
+      <div class="form">
+        <label>Folder of the signatures</label>
+        <div><b id="connSpWhere"></b> <small id="connSpWarn" class="warn"></small></div>
+        <label for="connSpUrl">Another folder</label>
+        <div><span class="pick"><input id="connSpUrl" placeholder="https://contoso.sharepoint.com/sites/Signaturen/Shared Documents/OSign" autocomplete="off"><button type="button" class="small" id="connSpSet">Use this folder</button></span>
+          <small>(open the folder in SharePoint, copy the address from the browser and paste it here. A SharePoint site everyone can read; not a personal OneDrive)</small></div>
+      </div>
       <div class="scriptbox">
         <p data-th="connScriptLead"><b>The setup script does this.</b> Run once on a Windows PC as SharePoint or Global administrator, it makes both app
           registrations, puts the server's certificate on its app and gives it write access to the one site of the signatures. Its

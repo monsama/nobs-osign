@@ -1128,6 +1128,7 @@
     $('connCaFile').value = '';
     const line = (id, problem, okText) => { $(id).textContent = problem ? connText(problem) : t(okText); $(id).className = 'lead' + (problem ? ' warn' : ' ok'); };
     // SharePoint: the setup script first; "again" once it is set up (a new certificate).
+    connSpRender();
     $('connScriptGet').textContent = r.problems.graph ? t('Download the setup script') : t('Download the setup script again');
     $('connScriptGet').className = r.problems.graph ? 'primary' : '';
     // Active Directory: the sign-in first, then the service account.
@@ -1170,9 +1171,33 @@
       ? t('Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1} with its certificate, write access to {2}.', x.addinClientId, x.serverClientId, x.siteUrl)
       : t('Microsoft 365 is set up: the add-in\'s app {0}, the server\'s app {1}, write access to {2}. The client secret is valid until {3}.', x.addinClientId, x.serverClientId, x.siteUrl, until || '?');
   }
+  // The folder of the signatures: the site the setup script gives the server, shown and changed here.
+  const personalNow = () => isPersonal((S.settings && S.settings.spSite) || '');
+  function connSpRender() {
+    const st = S.settings || {};
+    const site = !st.spSite || st.spSite === 'root' ? t('the root site') : st.spSite.replace(/:\//, '/').replace(/:$/, '');
+    $('connSpWhere').textContent = st.spFolder ? 'SharePoint ' + site + ' › ' + st.spFolder : t('Not chosen yet.');
+    $('connSpWarn').textContent = personalNow() ? t('A personal OneDrive: only its owner can give the server access, and it goes with that person. Choose a folder in a SharePoint site.') : '';
+  }
+  $('connSpSet').addEventListener('click', async () => {
+    const out = document.querySelector('#dlgConn [data-ctestout="graph"]');
+    out.className = 'where'; out.textContent = '';
+    const p = parseSpAddress($('connSpUrl').value);
+    if (!$('connSpUrl').value.trim() || !p.folder || !/^[A-Za-z0-9.-]+:\/(sites|teams|personal)\/[^:/]+:$|^root$/.test(p.site)) {
+      out.className = 'where warn'; out.textContent = t('That address names no folder: open the folder in SharePoint and copy the address from the browser.'); return;
+    }
+    try {
+      const r = await api('settings/save', { settings: { spSite: p.site, spFolder: p.folder } });
+      S.settings = r.settings; lastSettings = r;
+      $('connSpUrl').value = '';
+      connSpRender(); renderStatusBar();
+      out.className = 'where good'; out.textContent = '✓ ' + t('Saved: {0}. The setup script gives the server write access to this site.', $('connSpWhere').textContent);
+    } catch (err) { out.className = 'where warn'; out.textContent = connText(err.message); }
+  });
   $('connScriptGet').addEventListener('click', async () => {
     const out = $('connScriptNote');
     out.className = 'where'; out.textContent = ''; $('connScriptWizard').hidden = true;
+    if (personalNow() && !confirm(t('The folder is in a personal OneDrive: the script only works when run by its owner. Download it anyway?'))) return;
     try {
       const r = await api('setup/start', { origin: location.origin, groups: core.valueSource(S.config) === 'graph', users: $('connScriptUsers').checked });
       const a = el('a', { href: '/setup/nobs-osign-setup.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-setup.ps1' });
