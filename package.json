@@ -11,11 +11,12 @@
   "dependencies": {
     "@azure/msal-browser": "4.26.1",
     "@noble/hashes": "1.8.0",
-    "ldapjs": "3.0.7"
+    "ldapts": "9.2.0"
   },
   "devDependencies": {
     "esbuild": "0.25.11",
     "jsdom": "26.1.0",
+    "ldapjs": "3.0.7",
     "playwright": "1.56.1"
   },
   "license": "GPL-3.0-or-later"

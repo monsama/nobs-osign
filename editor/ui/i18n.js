@@ -646,7 +646,7 @@
     'Free software: you may use it, change it and pass it on, under the same licence. It comes without any warranty.': 'Freie Software: Sie dürfen sie nutzen, ändern und weitergeben, unter derselben Lizenz. Ohne jede Gewährleistung.',
     'Licence…': 'Lizenz…',
     'Uses': 'Verwendet',
-    'ldapjs (MIT), Microsoft Authentication Library for JavaScript (MIT), noble-hashes (MIT); Office.js from Microsoft in the add-in.': 'ldapjs (MIT), Microsoft Authentication Library for JavaScript (MIT), noble-hashes (MIT); im Add-in Office.js von Microsoft.',
+    'ldapts (MIT), Microsoft Authentication Library for JavaScript (MIT), noble-hashes (MIT); Office.js from Microsoft in the add-in.': 'ldapts (MIT), Microsoft Authentication Library for JavaScript (MIT), noble-hashes (MIT); im Add-in Office.js von Microsoft.',
     'Support': 'Unterstützen',
     'NOBS OSign costs nothing. If it saves you some time, a coffee keeps it going.': 'NOBS OSign kostet nichts. Wenn es Ihnen Zeit spart, hält ein Kaffee es am Laufen.',
     'name, user name or mail': 'Name, Benutzername oder Mail',
