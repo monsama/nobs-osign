@@ -18,7 +18,7 @@
 const fs = require('node:fs');
 const tls = require('node:tls');
 const net = require('node:net');
-const ldap = require('ldapjs');
+const { Client, InvalidCredentialsError, NoSuchObjectError } = require('ldapts');
 
 const LOGIN_OK = /^[\w.@-]{1,64}$/;
 const escapeFilter = (v) => String(v).replace(/[\\*()\0]/g, (c) => '\\' + c.charCodeAt(0).toString(16).padStart(2, '0'));
@@ -72,40 +72,31 @@ async function connect(c) {
   // The CA named, on top of the public ones Node trusts; an empty file (no CA given) adds none.
   const extra = c.caFile ? fs.readFileSync(c.caFile, 'utf8').trim() : '';
   const ca = extra ? [...tls.rootCertificates, extra] : null;
-  const opts = { url: c.url, timeout: 8000, connectTimeout: 8000 };
   const plain = /^ldap:\/\//i.test(c.url);
-  if (!plain && ca) opts.tlsOptions = { ca };
-  const client = (c.createClient || ldap.createClient)(opts);
-  // Connection errors also reach the pending call; without a listener they would stop the server.
-  client.on('error', () => {});
+  // strictDN off: a bind name may be a UPN (anna@example.ch), not a DN.
+  const client = new Client(Object.assign({ url: c.url, timeout: 8000, connectTimeout: 8000, strictDN: false }, !plain && ca ? { tlsOptions: { ca } } : {}));
   if (plain && c.startTls) {
     const host = new URL(c.url).hostname.replace(/^\[|\]$/g, '');
-    try {
-      await new Promise((resolve, reject) => client.starttls(Object.assign(ca ? { ca } : {}, { host }, net.isIP(host) ? {} : { servername: host }), [], (e) => (e ? reject(e) : resolve())));
-    } catch (e) { close(client); throw e; }
+    try { await client.startTLS(Object.assign(ca ? { ca } : {}, { host }, net.isIP(host) ? {} : { servername: host })); }
+    catch (e) { close(client); throw e; }
   }
   return client;
 }
-function close(client) { try { client.unbind(() => {}); } catch (e) { /* closed */ } }
-const bind = (client, dn, password) => new Promise((resolve, reject) => client.bind(dn, password, (e) => (e ? reject(e) : resolve())));
-// sizeLimit: at most that many (a list to pick from); the directory then says it has more, which
-// is no error here.
-function search(client, base, filter, attributes, sizeLimit) {
-  return new Promise((resolve, reject) => {
-    const out = [];
-    const opts = sizeLimit ? { scope: 'sub', filter, attributes, sizeLimit } : { scope: 'sub', filter, attributes, paged: { pageSize: 500 } };
-    client.search(base, opts, (err, res) => {
-      if (err) return reject(err);
-      res.on('searchEntry', (e) => {
-        const attrs = {};
-        for (const a of (e.pojo && e.pojo.attributes) || []) attrs[a.type.toLowerCase()] = [].concat(a.values);
-        out.push({ dn: (e.pojo && e.pojo.objectName) || '', attrs });
-      });
-      res.on('pageError', () => {});
-      res.on('error', (e) => (sizeLimit && e instanceof ldap.SizeLimitExceededError ? resolve(out) : reject(e)));
-      res.on('end', () => resolve(out));
-    });
+function close(client) { try { client.unbind().catch(() => {}); } catch (e) { /* closed */ } }
+const bind = (client, dn, password) => client.bind(dn, password);
+// Entries as { dn, attrs: { <attribute, lower case>: [values] } }.
+function entries(result) {
+  return (result.searchEntries || []).map((e) => {
+    const attrs = {};
+    for (const [k, v] of Object.entries(e)) if (k !== 'dn') attrs[k.toLowerCase()] = [].concat(v).map(String);
+    return { dn: String(e.dn || ''), attrs };
   });
+}
+// sizeLimit: at most that many (a list to pick from); the directory then says it has more, which
+// is no error here. Without one, everything, page by page.
+async function search(client, base, filter, attributes, sizeLimit) {
+  const opts = sizeLimit ? { scope: 'sub', filter, attributes, sizeLimit, paged: false } : { scope: 'sub', filter, attributes, paged: { pageSize: 500 } };
+  return entries(await client.search(base, opts));
 }
 
 // The sign-in group's DN: as set, or found by its name (sAMAccountName or CN) in the domain. null
@@ -123,13 +114,8 @@ async function detect(c) {
   if (!/^ldaps?:\/\/[^\s/]+\/?$/i.test(c.url || '')) throw new Error('The address of the domain controller is like ldaps://dc01.example.ch.');
   const client = await connect(c);
   try {
-    const [root] = await new Promise((resolve, reject) => client.search('', { scope: 'base', filter: '(objectClass=*)', attributes: ['defaultNamingContext', 'dnsHostName'] }, (err, res) => {
-      if (err) return reject(err);
-      const out = [];
-      res.on('searchEntry', (e) => { const a = {}; for (const x of (e.pojo && e.pojo.attributes) || []) a[x.type.toLowerCase()] = [].concat(x.values); out.push(a); });
-      res.on('error', reject);
-      res.on('end', () => resolve(out));
-    }));
+    const [entry] = entries(await client.search('', { scope: 'base', filter: '(objectClass=*)', attributes: ['defaultNamingContext', 'dnsHostName'], paged: false }));
+    const root = entry && entry.attrs;
     const dn = root && (root.defaultnamingcontext || [])[0];
     if (!dn) throw new Error('The domain controller answers, but does not say its domain. Enter it by hand.');
     return { domain: domainOfDn(dn).toLowerCase(), base: dn, host: (root.dnshostname || [])[0] || '' };
@@ -161,7 +147,7 @@ async function ldapLogin(c, login, password) {
     else allowed = (entry.attrs.memberof || []).some((g) => cnOf(g).toLowerCase() === c.group.toLowerCase());
     return { login: canonical, name: (entry.attrs.displayname || [])[0] || canonical, allowed };
   } catch (e) {
-    if (e instanceof ldap.InvalidCredentialsError) return null;
+    if (e instanceof InvalidCredentialsError) return null;
     throw e;
   } finally { close(client); }
 }
@@ -176,13 +162,9 @@ async function testSignIn(c, lookWith) {
     if (!lookWith) return { reached: true };
     await bind(client, lookWith.dn, lookWith.password);
     if (!isDn(c.group)) return { reached: true, group: !!(await groupDn(client, c)) };
-    const found = await new Promise((resolve, reject) => client.search(c.group, { scope: 'base', filter: '(objectClass=*)', attributes: ['cn'] }, (err, res) => {
-      if (err) return reject(err);
-      let n = 0;
-      res.on('searchEntry', () => { n++; });
-      res.on('error', (e) => (e instanceof ldap.NoSuchObjectError ? resolve(0) : reject(e)));
-      res.on('end', () => resolve(n));
-    }));
+    let found = 0;
+    try { found = (await client.search(c.group, { scope: 'base', filter: '(objectClass=*)', attributes: ['cn'], paged: false })).searchEntries.length; }
+    catch (e) { if (!(e instanceof NoSuchObjectError)) throw e; }
     return { reached: true, group: found > 0 };
   } finally { close(client); }
 }

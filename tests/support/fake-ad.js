@@ -2,6 +2,7 @@
 // server/directory.js). It evaluates the filters it is sent, with AD's own two rules: IN_CHAIN
 // (1.2.840.113556.1.4.1941, membership through nested groups) and the bit test
 // (1.2.840.113556.1.4.803, a disabled account in userAccountControl).
+// ldapjs only here, for its LDAP server: the app itself talks to AD with ldapts.
 const ldap = require('ldapjs');
 
 const IN_CHAIN = '1.2.840.113556.1.4.1941';
@@ -67,7 +68,7 @@ function fakeAd({ base, people, groups, service }) {
   server.search('', (req, res, next) => {
     // The RootDSE, which AD lets anyone read: the domain it serves.
     if (req.dn.toString() === '') {
-      res.send(new ldap.SearchEntry({ objectName: '', attributes: [
+      res.send(new ldap.SearchEntry({ messageId: res.messageId, objectName: '', attributes: [
         new ldap.Attribute({ type: 'defaultNamingContext', values: [base] }), new ldap.Attribute({ type: 'dnsHostName', values: ['dc01.example.ch'] })] }));
       res.end(); return next();
     }
