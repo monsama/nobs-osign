@@ -1,6 +1,6 @@
 {
   "name": "nobs-osign",
-  "version": "0.9.28",
+  "version": "0.9.29",
   "private": true,
   "description": "Central email signatures for classic and new Outlook: an Outlook add-in, and the editor on a server that publishes the signatures it reads.",
   "scripts": {
@@ -9,12 +9,12 @@
     "server": "node server/index.js"
   },
   "dependencies": {
-    "@azure/msal-browser": "4.26.1",
+    "@azure/msal-browser": "5.27.0",
     "@noble/hashes": "1.8.0",
     "ldapts": "9.2.0"
   },
   "devDependencies": {
-    "esbuild": "0.25.11",
+    "esbuild": "0.28.2",
     "jsdom": "26.1.0",
     "ldapjs": "3.0.7",
     "playwright": "1.56.1"
