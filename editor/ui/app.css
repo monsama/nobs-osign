@@ -587,3 +587,7 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 .ctx-menu button .key { margin-left: auto; color: var(--muted); font-size: 12px; }
 .ctx-menu button.danger { color: var(--danger); }
 .ctx-menu hr { border: 0; border-top: 1px solid var(--line-2); margin: 4px 2px; }
+
+/* a thin line between groups of the top bar (as in NOBS SQL Editor) */
+.top .tbsep { display: block; flex: none; width: 1px; height: 20px; margin: 0 4px; background: var(--line); }
+.top .tbsep[hidden] { display: none; }
