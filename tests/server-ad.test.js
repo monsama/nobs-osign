@@ -92,6 +92,21 @@ test('lookup: one user\'s values and groups, nested ones included; nothing typed
   assert.deepEqual(laps.values, { pw: '' });
   assert.ok(!ad.searches.some((f) => /admpwd/i.test(f)));
   ad.set('beat', 'ms-Mcs-AdmPwd', null);
+  // Only contact details: anything else only once the local admin allows it.
+  ad.set('beat', 'employeeID', '4711');
+  assert.deepEqual((await api('ad/lookup', { query: 'beat', fields: [{ key: 'id', ad: 'employeeID' }] })).values, { id: '' });
+  assert.ok(!ad.searches.some((f) => /employeeid/i.test(f)));
+  assert.ok((await api('info')).features.adAttributes.includes('telephoneNumber'));
+  assert.equal((await api('info')).features.adAttributes.includes('employeeID'), false);
+  const adminCookie = (await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'admin-pw' }) })).headers.get('set-cookie').split(';')[0];
+  const asAdmin = (p, d) => fetch(base + '/api/' + p, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: adminCookie }, body: JSON.stringify(d) }).then((r) => r.json());
+  assert.match((await api('connections/save', { values: { adAttributes: 'employeeID' } })).error, /Only the local account admin/);
+  assert.match((await asAdmin('connections/save', { values: { adAttributes: 'employeeID, unicodePwd' } })).error, /unicodePwd/);
+  assert.equal((await asAdmin('connections/save', { values: { adAttributes: 'employeeID' } })).ok, true);
+  assert.ok((await api('info')).features.adAttributes.includes('employeeID'));
+  assert.deepEqual((await api('ad/lookup', { query: 'beat', fields: [{ key: 'id', ad: 'employeeID' }] })).values, { id: '4711' });
+  assert.equal((await asAdmin('connections/save', { values: { adAttributes: '' } })).ok, true);
+  ad.set('beat', 'employeeID', null);
   // A filter in what was typed is text: it matches nobody, not everybody.
   assert.match((await api('ad/lookup', { query: '*', fields: FIELDS })).error, /No user \*/);
 });

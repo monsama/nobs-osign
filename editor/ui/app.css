@@ -209,6 +209,9 @@ table.fields input { padding: 4px 6px !important; }
 table.fields .ph { display: flex; align-items: center; gap: 2px; font-family: ui-monospace, Consolas, monospace; }
 table.fields .ph span { color: var(--muted); }
 table.fields .nograph input { border-color: var(--warn) !important; }
+table.fields input.bad { border-color: var(--danger) !important; }
+.toast.act { pointer-events: auto; }
+.toast button { margin-left: 8px; background: transparent; color: inherit; border-color: rgba(255,255,255,.5); }
 table.fields .center { text-align: center; }
 table.fields td:last-child { width: 40px; text-align: center; }
 .callout { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: var(--radius); padding: 10px 14px; margin-top: 16px; max-width: 900px; color: var(--muted); }
@@ -608,4 +611,26 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 /* Small screens: every dialog fills the screen (after the sizes set for the larger ones above). */
 @media (max-width: 760px) {
   dialog.settings[open], dialog:has(.wiz)[open] { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+}
+
+/* A question before something that cannot be taken back. */
+dialog.ask { width: min(460px, 92vw); }
+.ask-text { margin: 4px 0 18px; line-height: 1.5; white-space: pre-line; }
+button.danger-btn { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+button.danger-btn:hover { filter: brightness(1.08); }
+
+/* Small screens: the sidebar is a menu behind the button at the left of the top bar; the
+   settings' tabs wrap instead of running off the screen. */
+.side-toggle { display: none; }
+@media (max-width: 760px) {
+  .side-toggle { display: inline-flex; order: -1; }
+  .layout > .side { display: none; max-height: none; }
+  body.side-open .layout > .side { display: block; }
+  body.side-open .layout > main { display: none; }
+  .dlg .dtabs { flex-wrap: wrap; overflow-x: visible; }
+  .top .tbsep, .top #whoSep { display: none; }
+  /* A question stays a small box, not the whole screen. */
+  dialog.ask[open] { width: 92vw; height: fit-content; max-height: 90dvh; margin: auto; border-radius: var(--r-l); }
+  dialog.ask .dlg { height: auto; }
+  .top .who { border-left: 0; padding-left: 0; }
 }

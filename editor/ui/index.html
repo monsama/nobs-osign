@@ -14,6 +14,7 @@
 </head>
 <body>
 <header class="top">
+  <button type="button" id="btnSide" class="ghost icon side-toggle" aria-label="Signatures and settings" aria-controls="side" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <div class="brand"><img src="/ui/icon.svg" alt=""><span>NOBS OSign</span></div>
   <div id="status" class="status-wrap">
     <span id="stDraft" class="status"></span>
@@ -36,7 +37,7 @@
 </header>
 
 <div class="layout">
-  <nav class="side">
+  <nav class="side" id="side">
     <section class="side-sect" aria-labelledby="sideSigs">
     <div class="side-head">
       <span id="sideSigs"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M6 15c2.5-6 4.5-9 6-9s1 4-1 7 1 3 3 1 3-3 4-2"/></svg>Signatures</span>
@@ -47,12 +48,17 @@
     </div>
     <ul id="sigList" class="sig-list"></ul>
     </section>
-    <section class="side-sect" aria-labelledby="sideSetup">
-    <div class="side-head"><span id="sideSetup"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Setup</span></div>
+    <section class="side-sect" aria-labelledby="sideManage">
+    <div class="side-head"><span id="sideManage"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Manage</span></div>
     <ul class="nav-list">
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
+    </ul>
+    </section>
+    <section class="side-sect" aria-labelledby="sidePub">
+    <div class="side-head"><span id="sidePub"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>Published</span></div>
+    <ul class="nav-list">
       <li><a href="#" id="navHistory" class="nav">History <small>published versions</small></a></li>
     </ul>
     </section>
@@ -152,6 +158,7 @@
         <button id="btnResetFields" class="ghost" title="The starter fields as they were at first: missing ones come back, changed ones are reset. Fields of your own stay.">Restore default fields</button>
       </div>
       <datalist id="graphProps"></datalist>
+      <datalist id="adAttrs"></datalist>
       <div class="callout" data-th="fieldsCallout">
         <b>Without a Graph source</b> a field stays empty in Outlook. Graph knows no <code>description</code>,
         <code>homePhone</code> or <code>info</code>. To use them, sync them from AD with Entra Connect,
@@ -487,6 +494,9 @@
         <label for="cn_adExportAt">Export the users' values daily at</label>
         <div><input id="cn_adExportAt" data-ph="06:00" autocomplete="off">
           <small>(empty: only when publishing)</small></div>
+        <label for="cn_adAttributes">More attributes fields may read</label>
+        <div><input id="cn_adAttributes" data-ph="e.g. extensionAttribute1, employeeID" autocomplete="off">
+          <small>(fields read only contact details from AD: names, title, department, company, office, phone numbers, mail, address, web page. What they read is shown in the preview and exported into SharePoint for everyone to read: allow more only what may be seen so)</small></div>
       </div>
       <details class="advanced">
         <summary>Advanced</summary>
@@ -872,6 +882,12 @@
   </form>
 </dialog>
 
+<dialog id="dlgAsk" class="ask" aria-labelledby="askText">
+  <form method="dialog" class="dlg">
+    <p id="askText" class="ask-text"></p>
+    <div class="dlg-foot"><span class="spacer"></span><button value="cancel" id="askCancel">Cancel</button><button value="ok" id="askOk" class="primary">OK</button></div>
+  </form>
+</dialog>
 <dialog id="dlgHelp">
   <form method="dialog" class="dlg wide">
     <h2>Register the add-in in Entra ID</h2>

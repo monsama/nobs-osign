@@ -7,7 +7,7 @@ services:
   app:
     container_name: nobs-osign
     # Pinned release image (set OSIGN_IMAGE in .env). Built locally only if the pull is not possible.
-    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.9.35}
+    image: ${OSIGN_IMAGE:-ghcr.io/monsama/nobs-osign:0.9.36}
     build: .
     restart: unless-stopped
     # No extra rights, and no writing outside its data: it needs neither.
@@ -40,6 +40,7 @@ services:
       OSIGN_LDAP_SERVICE_PASSWORD_FILE: /run/secrets/ldap_service_password
       OSIGN_LDAP_DIRECTORY_BASE: ${OSIGN_LDAP_DIRECTORY_BASE:-}
       OSIGN_AD_EXPORT_AT: ${OSIGN_AD_EXPORT_AT:-}
+      OSIGN_AD_ATTRIBUTES: ${OSIGN_AD_ATTRIBUTES:-}
       # Publishing into SharePoint (server/graph.js)
       OSIGN_GRAPH_TENANT_ID: ${OSIGN_GRAPH_TENANT_ID:-}
       OSIGN_GRAPH_CLIENT_ID: ${OSIGN_GRAPH_CLIENT_ID:-}

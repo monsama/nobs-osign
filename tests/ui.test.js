@@ -137,6 +137,10 @@ test('fields: renaming a placeholder renames it in the signatures', { skip }, as
   const key = page.locator('#fieldRows tr').filter({ has: page.locator('input[value="department"]') }).locator('.ph input');
   await key.fill('abteilung');
   await key.press('Tab');
+  // Asked in the editor's own dialog, its answer a button that says what it does.
+  await page.waitForSelector('#dlgAsk[open]');
+  assert.equal(await page.textContent('#askOk'), 'Change them too');
+  await page.click('#askOk');
   await page.click('#sigList a');
   await page.click('.tab[data-mode=html]');
   assert.match(await page.inputValue('#source'), /Abteilung @@abteilung/);
@@ -181,6 +185,12 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   assert.deepEqual([camp.validFrom, camp.validUntil], ['2099-01-01', '2099-01-31']);
   await page.click('#sigList a:has-text("Vertrieb – notice")');
   await page.click('#btnDel');
+  // Cancel keeps it; Delete deletes.
+  await page.click('#askCancel');
+  assert.ok(await page.isVisible('#sigList a:has-text("Vertrieb – notice")'));
+  await page.click('#btnDel');
+  assert.equal(await page.textContent('#askOk'), 'Delete');
+  await page.click('#askOk');
   await page.click('#sigList a:has-text("Vertrieb")');
 
   // The logo is now one of the signature's images; the photo comes from the photos folder.
@@ -224,7 +234,7 @@ test('German: in a German browser the editor speaks German, and offers no transl
   assert.equal(await de.getAttribute('meta[name=google]', 'content'), 'notranslate');
   assert.equal((await de.textContent('#btnPublish')).trim(), 'Veröffentlichen…');
   assert.equal((await de.textContent('#btnSettings')).trim(), 'Einstellungen');
-  assert.match(await de.textContent('.side'), /Signaturen.*Einrichtung.*Felder/s);
+  assert.match(await de.textContent('.side'), /Signaturen.*Verwaltung.*Felder.*Veröffentlicht.*Verlauf/s);
   assert.match(await de.textContent('#toolbar'), /\+ Feld einfügen/);
   await de.click('a[data-view=fields]');
   assert.match(await de.textContent('#viewFields'), /Ein Feld ist ein Platzhalter.*Ohne Graph-Quelle/s);
@@ -700,6 +710,7 @@ test('right-click on a signature: a menu with what its page offers, by mouse and
   const copyName = after[after.length - 1];
   await page.click(`#sigList li a:has-text("${copyName}") >> nth=-1`, { button: 'right' });
   await page.click('#ctxMenu button:has-text("Delete…")');
+  await page.click('#askOk');
   await page.waitForFunction((n) => document.querySelectorAll('#sigList li a').length === n, before.length);
 });
 
@@ -758,10 +769,18 @@ test('fields: the default fields restored, fields of your own kept', { skip }, a
   await page.click('#btnAddField');
   const before = await keys();
   const own = before[before.length - 1];
-  await page.click('#fieldRows tr:has(input[value="mobile"]) button[aria-label="Remove field"]');
+  await page.click('#fieldRows tr:has(input[value="mobile"]) button[aria-label="Remove field @@mobile"]');
+  if (await page.isVisible('#dlgAsk[open]')) await page.click('#askOk');
+  // Removed: it can come back at once.
+  await page.waitForFunction(() => /Field @@mobile removed/.test(document.querySelector('#toast').textContent));
+  await page.click('#toast button');
+  assert.ok((await keys()).includes('mobile'));
+  await page.click('#fieldRows tr:has(input[value="mobile"]) button[aria-label="Remove field @@mobile"]');
+  if (await page.isVisible('#dlgAsk[open]')) await page.click('#askOk');
   await page.fill('#fieldRows tr:first-child td:first-child input', 'Given name (changed)');
   assert.ok(!(await keys()).includes('mobile'));
   await page.click('#btnResetFields');
+  await page.click('#askOk');
   await page.waitForFunction(() => /Default fields restored/.test(document.querySelector('#toast').textContent));
   const after = await keys();
   assert.ok(after.includes('mobile'), 'the default field is back');

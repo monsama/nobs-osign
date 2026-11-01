@@ -146,6 +146,11 @@ Nothing else goes live before *Publish*.
   files (make, upload), backups, the audit log, four eyes, and the check where the add-in is
   deployed.
 
+Fields read only contact details from AD (names, title, department, company, office, phone numbers,
+mail, address, web page): what they read shows in the preview and is exported into SharePoint, where
+every employee can read it. Only the local `admin` allows more attributes (*Server connections →
+Active Directory*, `OSIGN_AD_ATTRIBUTES`); passwords and recovery keys never.
+
 ## Where the add-in is deployed
 
 Microsoft offers no way for the server to ask this. *Settings → Server → Add-in in Microsoft 365 →
