@@ -291,6 +291,7 @@
     ' · past text blocks left out: {0}': ' · abgelaufene Textbausteine weggelassen: {0}',
     'Photos per person: {0} into photos\\ in the OSign folder': 'Fotos pro Person: {0} nach photos\\ im OSign-Ordner',
     ' · used at once, without publishing; a photo already there of the same name is replaced': ' · gelten sofort, ohne Veröffentlichen; ein vorhandenes Foto gleichen Namens wird ersetzt',
+    'With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.': 'Mit dem Vier-Augen-Prinzip kommen Fotos von Hand nach photos/ im OSign-Ordner, oder der lokale Admin lädt sie hoch.',
     '{0} of {1} photo(s) uploaded.': '{0} von {1} Foto(s) hochgeladen.',
     'The signatures go live only when you publish.': 'Aktiv werden die Signaturen erst, wenn Sie veröffentlichen.',
     'CI-Sign text blocks ({##…}), not a signature. ': 'CI-Sign-Textbausteine ({##…}), keine Signatur. ',
