@@ -36,11 +36,22 @@ reachable from the internet.
 |---|---|---|
 | New Outlook for Windows | yes | yes |
 | Outlook on the web | yes | yes |
-| Classic Outlook for Windows (Microsoft 365, current channel) | yes | yes |
+| Classic Outlook for Windows (Microsoft 365, current channel) | yes, from a copy (below) | yes |
 | Outlook for Mac (new Outlook) | yes | yes |
 | Outlook for iOS / Android (4.2352 and later) | preview, when switched on | - |
 
 All of these need Exchange Online (Microsoft 365) mailboxes.
+
+Classic Outlook refuses its event handler the sign-in (`untrusted_origin`), and shares with the pane
+nothing but the add-in's settings in the mailbox, 32 KB in all. So the pane, opened once there,
+keeps in them the signatures that go in by themselves, with their images made as small as they are
+shown, as many as fit (the smallest first); the event handler takes them from there. An image that
+does not fit (a large banner) is left out there, and the pane says so; *Insert* always puts in
+everything. Until the pane was opened once, the notice says to open it.
+
+The editor makes images smaller when they are uploaded or imported: at most 1200 pixels wide (twice
+a wide signature, still sharp on high-resolution screens), photos at most 400; a JPEG saved again
+at good quality, a PNG stays a PNG, a GIF as it is.
 
 ## Fields
 

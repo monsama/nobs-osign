@@ -308,6 +308,7 @@
     'Downloaded. Run it in Windows PowerShell: powershell -ExecutionPolicy Bypass -File .\\nobs-osign-deployment.ps1 (valid until {0}). It only reads.': 'Heruntergeladen. In Windows PowerShell ausführen: powershell -ExecutionPolicy Bypass -File .\\nobs-osign-deployment.ps1 (gültig bis {0}). Es liest nur.',
     'This script is not valid (any more): download it again under Settings → Server.': 'Dieses Skript ist nicht (mehr) gültig: unter Einstellungen → Server neu herunterladen.',
     'The add-in has no ID.': 'Das Add-in hat keine ID.',
+    'Image made smaller: {0} → {1} ({2} → {3} pixels wide).': 'Bild verkleinert: {0} → {1} ({2} → {3} Pixel breit).',
     '{0} of {1} photo(s) uploaded.': '{0} von {1} Foto(s) hochgeladen.',
     'The signatures go live only when you publish.': 'Aktiv werden die Signaturen erst, wenn Sie veröffentlichen.',
     'CI-Sign text blocks ({##…}), not a signature. ': 'CI-Sign-Textbausteine ({##…}), keine Signatur. ',

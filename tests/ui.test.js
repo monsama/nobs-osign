@@ -701,3 +701,25 @@ test('back and forward (mouse side buttons, Alt+arrows): through the pages and s
   // The address (with its sign-in) stays the same throughout.
   assert.equal(page.url(), href);
 });
+
+test('an image uploaded is made as small as a signature needs, in its own type', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList li:first-child a');
+  await page.click('#toolbar button[title=Image]');
+  // A photo 2400 pixels wide, with detail (noise), as a JPEG.
+  const b64 = await page.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 2400; c.height = 1600;
+    const g = c.getContext('2d'), d = g.createImageData(2400, 1600);
+    for (let i = 0; i < d.data.length; i += 4) { d.data[i] = (i * 7) % 256; d.data[i + 1] = (i * 13) % 256; d.data[i + 2] = (i * 3) % 256; d.data[i + 3] = 255; }
+    g.putImageData(d, 0, 0);
+    return c.toDataURL('image/jpeg', 0.95).split(',')[1];
+  });
+  const big = Buffer.from(b64, 'base64');
+  await page.setInputFiles('#imgFile', { name: 'Banner.jpg', mimeType: 'image/jpeg', buffer: big });
+  await page.waitForFunction(() => /Image made smaller: .* \(2400 → 1200 pixels wide\)/.test(document.querySelector('#toast').textContent));
+  const r = await fetch(url.replace(/\/(#.*)?$/, '') + '/assets/Banner.jpg', { headers: { Cookie: (await page.context().cookies()).map((c) => c.name + '=' + c.value).join('; ') } });
+  const got = Buffer.from(await r.arrayBuffer());
+  assert.equal(got.subarray(0, 3).toString('hex'), 'ffd8ff', 'still a JPEG');
+  assert.ok(got.length < big.length, got.length + ' < ' + big.length);
+});

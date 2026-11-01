@@ -2,7 +2,7 @@
  * The task pane: the signatures open to this user, each with a preview to insert, and - when the
  * editor allows it - which one is used for new mail and which for replies.
  */
-import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
+import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, isClassicOutlook, keepForClassic, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
 
 /* global Office, OSIGN_VERSION */
 const $ = (id) => document.getElementById(id);
@@ -42,6 +42,8 @@ const DE = {
   'Give the variant a name.': 'Geben Sie der Variante einen Namen.',
   'Variant saved. Pick it above for new mail or replies, or insert it here.': 'Variante gespeichert. Wählen Sie sie oben für neue Mails oder Antworten, oder fügen Sie sie hier ein.',
   'Really delete?': 'Wirklich löschen?',
+  'Classic Outlook: these signatures are too large to be kept in your mailbox, so they are not put in by themselves there. Use Insert.': 'Klassisches Outlook: Diese Signaturen sind zu gross, um im Postfach abgelegt zu werden; sie werden dort darum nicht selbst eingefügt. Nutzen Sie Einfügen.',
+  'Classic Outlook: {0} image(s) did not fit into your mailbox settings and are left out when the signature goes in by itself there. Insert puts in everything.': 'Klassisches Outlook: {0} Bild(er) passen nicht in die Postfach-Einstellungen und fehlen, wenn die Signatur dort selbst eingefügt wird. Einfügen fügt alles ein.',
   'Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.': 'Outlook hat die Variante nicht gespeichert: Der Platz für Add-in-Einstellungen in Ihrem Postfach ist voll. Kürzen oder löschen Sie andere Varianten.',
   'You have {0} variants, the most there can be.': 'Sie haben {0} Varianten, mehr sind nicht möglich.',
   'Only the fields below are yours to change; the rest stays the company signature.': 'Nur die Felder unten können Sie ändern; der Rest bleibt die Firmensignatur.'
@@ -206,6 +208,35 @@ function render() {
   const list = core.available(full, user.values, from, user.groups);
   renderChoice(list);
   renderList(list);
+  if (isClassicOutlook()) keepClassic();
+}
+
+// An image as small as it is shown (twice that, for sharp screens, at most), in its own type:
+// a PNG stays a PNG (it may be transparent), a JPEG is saved again at good quality; a GIF as it is.
+async function shrink(img, shown) {
+  if (!/^image\/(png|jpeg)$/.test(img.type)) return img;
+  const el = new Image();
+  await new Promise((res, rej) => { el.onload = res; el.onerror = rej; el.src = 'data:' + img.type + ';base64,' + img.b64; });
+  const want = Math.min(el.naturalWidth, Math.max(1, (shown || el.naturalWidth) * 1.5));
+  const w = Math.round(want), h = Math.round(el.naturalHeight * want / el.naturalWidth);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(el, 0, 0, w, h);
+  const b64 = c.toDataURL(img.type, 0.82).split(',')[1] || '';
+  return b64 && b64.length < img.b64.length ? { b64 } : img;
+}
+// Classic Outlook: what would go in by itself, kept in the mailbox for its event handler.
+let classicBusy = false;
+async function keepClassic() {
+  if (classicBusy) return;
+  classicBusy = true;
+  try {
+    const prefs = getPrefs(), sigs = [];
+    ['new', 'reply'].forEach((kind) => { const x = core.pick(full, user.values, from, kind, prefs, user.groups); if (x && !sigs.some((y) => y.id === x.id)) sigs.push(x); });
+    if (!sigs.length) return;
+    const r = await keepForClassic(cfg, sigs, user.values, shrink);
+    if (!r.kept) message(t('Classic Outlook: these signatures are too large to be kept in your mailbox, so they are not put in by themselves there. Use Insert.'), true);
+    else if (r.left) message(t('Classic Outlook: {0} image(s) did not fit into your mailbox settings and are left out when the signature goes in by itself there. Insert puts in everything.', r.left));
+  } catch (e) { console.log('OSign: classic copy: ' + (e && e.message ? e.message : e)); } finally { classicBusy = false; }
 }
 
 async function load(refresh) {
