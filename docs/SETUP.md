@@ -127,7 +127,7 @@ and **NOBS OSign server** for the server (it writes into the one site with its o
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\nobs-osign-setup.ps1"
 ```
 
-Signed in once in the browser as a SharePoint or Global administrator (through *Microsoft Graph
+Signed in once in the browser as a Global administrator (the admin consent for the Graph permissions needs it) (through *Microsoft Graph
 Command Line Tools*, Microsoft's own app for Graph scripts; leave *Consent on behalf of your
 organization* unticked), it:
 

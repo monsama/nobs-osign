@@ -16,7 +16,7 @@
     6. takes back the rights it was given for this (the consent for "Microsoft Graph Command Line
        Tools", the sign-in it uses), and deletes itself.
 
-  Run it on a Windows PC as the SharePoint or Global administrator:
+  Run it on a Windows PC as a Global administrator (the admin consent needs it):
     powershell -ExecutionPolicy Bypass -File .\nobs-osign-setup.ps1
   It can run again: the apps it made before (as the server knows them, and owned by you) are used
   again; otherwise new ones are made.
@@ -159,19 +159,29 @@ function Filter([string]$F) { '?$filter=' + [Uri]::EscapeDataString($F) }
 # An app of an earlier run, by its client ID: only if you are one of its owners.
 function Known-App([string]$AppId, [string]$Name) {
     if (-not $AppId) { return $null }
-    $a = Graph-OrNull "/applications(appId='$AppId')?`$select=id,appId,displayName,spa,requiredResourceAccess"
+    $a = Graph-OrNull "/applications(appId='$AppId')?`$select=id,appId,displayName,spa,requiredResourceAccess,notes"
     if (-not $a) { return $null }
     $owners = @((Graph GET "/applications/$($a.id)/owners?`$select=id").value)
     if ($owners | Where-Object { $_.id -eq $script:MyId }) { return $a }
     Say "The app ""$($a.displayName)"" ($AppId) is not yours: it is not used." "Die App ""$($a.displayName)"" ($AppId) gehört nicht Ihnen: sie wird nicht verwendet." 'Yellow'
     return $null
 }
+# Which NOBS OSign server an app is for: noted on the app (its notes), so a second server in the
+# same tenant (a test one, say) never takes over or removes the apps of the first.
+$Marker = "NOBS OSign: $Server"
+function Marked-For-Other($App) { $n = [string]$App.notes; $n.Contains('NOBS OSign: ') -and -not $n.Contains($Marker) }
+function Mark-App($App) {
+    $n = [string]$App.notes
+    if ($n.Contains($Marker)) { return }
+    Graph PATCH "/applications/$($App.id)" @{ notes = $(if ($n) { $n + "`n" + $Marker } else { $Marker }) } | Out-Null
+}
 # Yours by this name, the newest first: apps of an earlier run whose result never reached the
-# server (it does not know them). Another's app of the same name is never used.
+# server (it does not know them). Another's app of the same name is never used, and neither is an
+# app noted for another NOBS OSign server.
 function Mine-By-Name([string]$Name) {
-    $all = @((Graph GET ('/applications' + (Filter "displayName eq '$Name'") + '&$select=id,appId,displayName,spa,requiredResourceAccess,createdDateTime')).value)
-    @($all | Where-Object { $_ -and (@((Graph GET "/applications/$($_.id)/owners?`$select=id").value) | Where-Object { $_.id -eq $script:MyId }) } |
-        Sort-Object { [string]$_.createdDateTime } -Descending)
+    $all = @((Graph GET ('/applications' + (Filter "displayName eq '$Name'") + '&$select=id,appId,displayName,spa,requiredResourceAccess,createdDateTime,notes')).value)
+    @($all | Where-Object { $_ -and -not (Marked-For-Other $_) -and (@((Graph GET "/applications/$($_.id)/owners?`$select=id").value) | Where-Object { $_.id -eq $script:MyId }) } |
+        Sort-Object { try { [datetime]$_.createdDateTime } catch { [datetime]::MinValue } } -Descending)
 }
 # The app to use: the one the server knows, else your newest of that name. The rest of yours by that
 # name are left over: named at the end, and removed if you say so.
@@ -180,6 +190,7 @@ function Find-App([string]$AppId, [string]$Name) {
     $known = Known-App $AppId $Name
     $mine = @(Mine-By-Name $Name)
     $use = if ($known) { $known } else { $mine | Select-Object -First 1 }
+    if ($use) { Mark-App $use }
     if (-not $known -and $use) { Step "App registration ""$Name"" of an earlier run found ($($use.appId)): used again" "App-Registrierung ""$Name"" eines früheren Laufs gefunden ($($use.appId)): wird wieder verwendet" }
     $script:Leftovers += @($mine | Where-Object { $_ -and (-not $use -or $_.appId -ne $use.appId) })
     return $use
@@ -242,7 +253,7 @@ try {
         Graph PATCH "/applications/$($app.id)" @{ spa = @{ redirectUris = @($uris) }; requiredResourceAccess = @(With-Graph-Access $app $access) } | Out-Null
         Step "App registration ""$AddinName"" is there: redirect URI and permissions checked" "App-Registrierung ""$AddinName"" ist da: Umleitungs-URI und Berechtigungen geprüft"
     } else {
-        $app = Graph POST '/applications' @{ displayName = $AddinName; signInAudience = 'AzureADMyOrg'; spa = @{ redirectUris = @($redirect) }; requiredResourceAccess = @(@{ resourceAppId = $GraphApp; resourceAccess = $access }) }
+        $app = Graph POST '/applications' @{ displayName = $AddinName; notes = $Marker; signInAudience = 'AzureADMyOrg'; spa = @{ redirectUris = @($redirect) }; requiredResourceAccess = @(@{ resourceAppId = $GraphApp; resourceAccess = $access }) }
         Step "App registration ""$AddinName"" made" "App-Registrierung ""$AddinName"" angelegt"
     }
     $appSp = Service-Principal $app.appId
@@ -262,7 +273,7 @@ try {
         Graph PATCH "/applications/$($srv.id)" @{ requiredResourceAccess = @(With-Graph-Access $srv @($role)) } | Out-Null
         Step "App registration ""$ServerName"" is there" "App-Registrierung ""$ServerName"" ist da"
     } else {
-        $srv = Graph POST '/applications' @{ displayName = $ServerName; signInAudience = 'AzureADMyOrg'; requiredResourceAccess = @(@{ resourceAppId = $GraphApp; resourceAccess = @($role) }) }
+        $srv = Graph POST '/applications' @{ displayName = $ServerName; notes = $Marker; signInAudience = 'AzureADMyOrg'; requiredResourceAccess = @(@{ resourceAppId = $GraphApp; resourceAccess = @($role) }) }
         Step "App registration ""$ServerName"" made" "App-Registrierung ""$ServerName"" angelegt"
     }
     $srvSp = Service-Principal $srv.appId

@@ -115,6 +115,8 @@
       p.textContent = S.publishedAt ? t('Published') : t('Not published yet'); p.className = 'status pub' + (S.publishedAt ? ' clean' : ''); p.disabled = true;
       p.title = S.publishedAt ? t('Last published {0}: Outlook uses the draft as it is.', when) : '';
     }
+    // Nothing published yet: nothing to load.
+    $('btnLoad').disabled = !S.publishedAt;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -258,7 +260,7 @@
   ].join('\n');
 
   function addSig(from) {
-    const name = from ? from.name + ' ' + t('(copy)') : (S.config.signatures.length ? t('New signature') : t('Standard'));
+    const name = from ? from.name + ' ' + t('(copy)') : (S.config.signatures.length ? t('New signature') : t('Main signature'));
     const s = from ? JSON.parse(JSON.stringify(from)) : core.newSignature('', name);
     s.id = newId(name); s.name = name;
     if (from) { s.defaultNew = false; s.defaultReply = false; } else { s.html = STARTER; s.defaultNew = !S.config.signatures.some((x) => x.defaultNew); s.defaultReply = !S.config.signatures.some((x) => x.defaultReply); }
@@ -1107,7 +1109,7 @@
     const st = S.settings, f = S.info.features || {};
     $('setAddinInfo').hidden = !onServer();
     $('setAddinInfo').textContent = t('Served at {0}', st.addinUrl || t('(no address yet: set up Cloudflare Pages in Server connections)')) + ' · ' +
-      (st.clientId ? t('app registration {0} (from the setup script)', st.clientId) : t('no app registration yet: run the setup script (Server connections → SharePoint)')) +
+      (st.clientId ? t('app registration {0} (from the setup script)', st.clientId) : S.info.user && S.info.user.local ? t('no app registration yet: run the setup script (Server connections → SharePoint)') : t('no app registration yet')) +
       (f.pagesProject ? ' · ' + t('Cloudflare Pages project {0}', f.pagesProject) : '');
     $('setAddinMore').open = !onServer();
     document.querySelector('#dlgSettings [data-th=addinMoreHint]').hidden = !onServer();
@@ -1133,6 +1135,8 @@
     $('setLocked').hidden = !locked;
     for (const [id] of ADDIN_FIELDS) $(id).disabled = locked;
     $('setAddinMobile').disabled = locked;
+    // Making and uploading the add-in's files is the local admin's too: not offered to others.
+    $('setAddinBuild').hidden = locked;
     $('setAddinUpload').hidden = true; $('setAddinZip').hidden = true;
     // For "Add from file" in Outlook, or "Upload manifest file" in the admin center.
     $('setAddinManifest').hidden = !(onServer() && S.info.features.addinBuilt);
@@ -1149,6 +1153,10 @@
     document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
     document.querySelector('#dlgSettings .dlg').scrollTop = 0;
+    // Status and Info save nothing: only Close there.
+    const view = name === 'status' || name === 'about';
+    $('setSave').hidden = view;
+    document.querySelector('#dlgSettings .dlg-foot button[value=cancel]').textContent = view ? t('Close') : t('Cancel');
   }
   document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'status') runHealth(); }));
 
@@ -1164,8 +1172,8 @@
     try { S.info = await api('info'); } catch (e) { /* the last one known */ }
     const f = S.info.features || {};
     const test = (what) => async () => {
-      try { return { state: 'good', text: connText((await api('connections/test', { what })).message) }; } catch (e) {
-        return { state: /^(Not set up yet|Noch nicht eingerichtet)/.test(e.message) ? 'off' : 'bad', text: connText(e.message) };
+      try { return { state: 'good', text: t((await api('connections/test', { what })).message) }; } catch (e) {
+        return { state: /^(Not set up yet|Noch nicht eingerichtet)/.test(e.message) ? 'off' : 'bad', text: e.message };
       }
     };
     const checks = [
@@ -1252,6 +1260,8 @@
         $('setAddinZip').hidden = false;
         $('setAddinOk').textContent = t('{0} files (version {1}) made. Upload them, add the redirect URI {2} to the app registration, and upload {3} in the admin center.', r.files, r.version, r.redirectUri, r.manifestUrl);
       } else $('setAddinOk').textContent = t('{0} files (version {1}) in {2}. Copy them to the web server, add the redirect URI {3} to the app registration, and upload {4} in the admin center.', r.files, r.version, r.folder, r.redirectUri, r.manifestUrl);
+      // Made, but without the folder's ids: said, so they are made again once SharePoint answers.
+      if (r.note) $('setErr').textContent = t(r.note);
     } catch (err) { $('setErr').textContent = t(err.message); }
   });
 
@@ -1303,7 +1313,8 @@
   }
   // In this dialog, "(Settings → Server connections)" would point to itself; the line at the top of
   // a tab and the answer of its test say a problem in the same words.
-  function connText(p) { return t(String(p).replace(/ \(secrets\/[a-z_]+, or Server connections\)/, '').replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')')); }
+  // Inside Server connections, a pointer to it (or to one of its tabs) says nothing: left out.
+  function connText(p) { return t(String(p).replace(/ \(secrets\/[a-z_]+, or Server connections\)/, '').replace(/ \(Settings → Server connections\)\./, '.').replace(/, or Server connections\)/, ')')).replace(/ \((?:Server connections|Server-Verbindungen) → [^)]+\)/, ''); }
 
   // The setup script, from the SharePoint tab: as in the setup assistant, its result comes back
   // here by itself.
@@ -1336,7 +1347,7 @@
   function connSpRender() {
     const st = S.settings || {};
     const site = !st.spSite || st.spSite === 'root' ? t('the root site') : st.spSite.replace(/:\//, '/').replace(/:$/, '');
-    $('connSpWhere').textContent = st.spFolder ? 'SharePoint ' + site + ' › ' + st.spFolder : t('Not chosen yet.');
+    $('connSpWhere').textContent = st.spFolder ? 'SharePoint: ' + site + ' › ' + st.spFolder : t('Not chosen yet.');
     $('connSpWarn').textContent = personalNow() ? t('A personal OneDrive: only its owner can give the server access, and it goes with that person. Choose a folder in a SharePoint site.') : '';
   }
   $('connSpSet').addEventListener('click', async () => {
@@ -2028,7 +2039,8 @@
       if (onServer()) {
         const chosen = S.settings.spSite && S.settings.spSite !== 'root' && S.settings.spFolder;
         if (!$('wizSpFolder').value || (!wiz.spOk && !toSharePoint() && !$('wizLink').value.trim() && !chosen)) throw new Error(t('Paste the address of the folder in SharePoint.'));
-        if (!wiz.spOk && wiz.warned !== 'folder') {
+        // Not checked when SharePoint is not set up yet (the setup script, a few steps on, does it).
+        if (!wiz.spOk && wiz.warned !== 'folder' && S.info.features.publishTarget === 'sharepoint') {
           wiz.warned = 'folder';
           throw new Error(t('The server cannot reach this folder yet. Give it access as described below, then paste the link again. Click Next again to continue anyway.'));
         }
@@ -2058,7 +2070,8 @@
       await wizSave({ addinHost: radio('whost'), addinUrl: $('wizUrl').value });
     },
     async app() {
-      if (!$('wizClientId').value.trim()) throw new Error(t('Enter the app registration\'s client ID: without it the add-in cannot sign in.'));
+      // Without the setup script's result, the field by hand is where the ID goes: opened.
+      if (!$('wizClientId').value.trim()) { $('wizAppManual').open = true; throw new Error(t('Run the setup script first, or enter the client ID under «Or by hand».')); }
       await wizSave({ clientId: $('wizClientId').value, tenantId: $('wizTenantId').value });
     },
     async files() {
@@ -2183,10 +2196,12 @@
     const checks = publishChecks();
     $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
     $('pubGo').disabled = checks.some((c) => c[0] === 'bad');
-    $('pubErr').textContent = ''; $('pubOk').textContent = ''; $('pubMsg').value = '';
+    $('pubErr').textContent = ''; $('pubOk').textContent = ''; $('pubMsg').value = ''; $('pubGo').hidden = false;
     await loadApproval(); renderApproval();
     $('dlgPublish').showModal();
   });
+  // The note for History: what was typed, or the placeholder's words.
+  const pubNote = () => $('pubMsg').value.trim() || $('pubMsg').placeholder;
   $('pubGo').addEventListener('click', async (e) => {
     e.preventDefault();
     $('pubGo').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
@@ -2203,22 +2218,26 @@
       if (core.usesAdExport(c) && S.snap && S.snapMatches && !S.snap.written && !S.info.features.requireApproval) {
         try {
           const x = await api('ad/export', adRequest(c));
-          exported = ' ' + t('{0} users written ({1} changed, {2} removed).', x.users, x.written, x.removed);
+          exported = ' ' + t('{0} users written ({1} new or changed, {2} removed).', x.users, x.written, x.removed);
           S.snap.written = true;
+          if (!$('viewUsers').hidden) renderUsers();
         } catch (err) { exported = ' ' + t('The users could not be written: {0}', t(err.message)); }
       }
       if (S.info.features.requireApproval) {
-        await api('approval/request', { configJson: JSON.stringify(c), message: $('pubMsg').value });
+        await api('approval/request', { configJson: JSON.stringify(c), message: pubNote() });
         S.config.updated = c.updated;
         await loadApproval(); renderApproval();
         $('pubOk').textContent = t('Asked for approval: someone else who signs in to the editor can now publish it.') + exported;
+        $('pubGo').hidden = true;
         return;
       }
-      const r = await api('publish', { configJson: JSON.stringify(c), message: $('pubMsg').value });
+      const r = await api('publish', { configJson: JSON.stringify(c), message: pubNote() });
       S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
       // The server version: whether the folder is there now (it is made on the first publish).
       if (onServer()) { try { lastSettings = await api('settings/get'); } catch (e2) { /* as it was */ } }
       $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
+      // Done: only Close is left.
+      $('pubGo').hidden = true;
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
     finally { $('pubGo').disabled = false; }
   });
