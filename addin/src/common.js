@@ -55,16 +55,21 @@ function withTimeout(promise, ms, what) {
 // JavaScript-only runtime, memory otherwise.
 // ---------------------------------------------------------------------------------------------
 const memory = {};
+// Written to both where both are there: classic Outlook runs the event handler in a runtime of its
+// own without localStorage, and reads there (through OfficeRuntime.storage) what the pane kept, for
+// when the sign-in is refused to it.
+const runtimeStore = () => { try { return typeof OfficeRuntime !== 'undefined' && OfficeRuntime.storage ? OfficeRuntime.storage : null; } catch (e) { return null; } };
+const local = () => { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } };
 const store = {
   async get(key) {
-    try { if (typeof localStorage !== 'undefined') return localStorage.getItem(key); } catch (e) { /* none */ }
-    try { if (typeof OfficeRuntime !== 'undefined' && OfficeRuntime.storage) return await OfficeRuntime.storage.getItem(key); } catch (e) { /* none */ }
+    try { const l = local(); const v = l && l.getItem(key); if (v) return v; } catch (e) { /* none */ }
+    try { const r = runtimeStore(); const v = r && await r.getItem(key); if (v) return v; } catch (e) { /* none */ }
     return memory[key] || null;
   },
   async set(key, value) {
     memory[key] = value;
-    try { if (typeof localStorage !== 'undefined') { localStorage.setItem(key, value); return; } } catch (e) { /* none */ }
-    try { if (typeof OfficeRuntime !== 'undefined' && OfficeRuntime.storage) await OfficeRuntime.storage.setItem(key, value); } catch (e) { /* none */ }
+    try { const l = local(); if (l) l.setItem(key, value); } catch (e) { /* full, or none */ }
+    try { const r = runtimeStore(); if (r) await r.setItem(key, value); } catch (e) { /* none */ }
   }
 };
 async function readJson(key) { try { const v = await store.get(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
@@ -206,7 +211,13 @@ export async function loadConfig(opts) {
     if (!cached || cached.etag !== meta.eTag) await store.set(CONFIG_KEY, JSON.stringify({ etag: meta.eTag || '', text }));
     return cfg;
   } catch (e) {
-    if (cached && cached.text) { try { return JSON.parse(cached.text); } catch (e2) { /* below */ } }
+    if (cached && cached.text) {
+      try {
+        const cfg = JSON.parse(cached.text);
+        console.log('OSign: signatures from the copy kept before (' + (e && e.message ? e.message : e) + ').');
+        return cfg;
+      } catch (e2) { /* below */ }
+    }
     throw e;
   }
 }
@@ -348,7 +359,17 @@ async function loadImages(refs, interactive) {
   const wanted = [];
   refs.forEach((r) => { const k = r.dir + '/' + r.name; if (typeOf(r.name) && !wanted.some((w) => w.key === k)) wanted.push({ key: k, dir: r.dir, name: r.name }); });
   if (!wanted.length) return out;
-  const tok = await token(BASE_SCOPES, interactive);
+  let tok;
+  try { tok = await token(BASE_SCOPES, interactive); } catch (e) {
+    // No sign-in (classic Outlook's event runtime may be refused it): the copies kept before.
+    for (const w of wanted) {
+      const cached = await readJson('osign.img.' + w.key.toLowerCase());
+      if (cached && cached.b64) out[w.key] = { b64: cached.b64, type: typeOf(w.name), file: w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-') };
+    }
+    if (!Object.keys(out).length) throw e;
+    console.log('OSign: images from the copy kept before (sign-in: ' + (e && e.message ? e.message : e) + ').');
+    return out;
+  }
   // The logos and icons: one listing tells which are there and whether they changed.
   let assets = null;
   if (wanted.some((w) => w.dir === 'assets')) {
