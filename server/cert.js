@@ -83,8 +83,10 @@ function createCerts({ dataDir, seal, open }) {
     pending() { const c = makeCert('NOBS OSign server'); const all = load(); all.pending = keep(c); writeAtomic(file, JSON.stringify(all)); return c; },
     // The script put it on the app (its thumbprint, to be sure it is this one): in use from now.
     activate(thumbprint) {
-      const all = load(); const p = unseal(all.pending);
-      if (!p || p.thumbprint !== String(thumbprint || '').toUpperCase()) return false;
+      const all = load(); const p = unseal(all.pending), want = String(thumbprint || '').toUpperCase();
+      // In use already (the server found it by itself before the script's answer came): fine.
+      if (!p) { const a = unseal(all.active); return !!a && a.thumbprint === want; }
+      if (p.thumbprint !== want) return false;
       writeAtomic(file, JSON.stringify({ active: all.pending }));
       return true;
     },

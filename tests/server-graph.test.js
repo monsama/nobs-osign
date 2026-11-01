@@ -262,6 +262,9 @@ test('the setup script\'s answer lost after it swapped the certificate: the serv
     const p = await call(at, c, 'publish', { configJson: cfg([{ id: 's', name: 'S', html: '<p>y</p>' }]) });
     assert.equal(p.ok, true, p.error);
     assert.ok(logs.some((m) => m.indexOf(two.thumb) >= 0 && /used from now on/.test(m)));
+    // Its answer, coming late after all, is taken, not refused as another certificate.
+    const late = await post({ token: two.token, tenantId: TENANT, addin: { clientId: '22222222-2222-2222-2222-222222222222' }, server: { clientId: CLIENT, certThumbprint: two.thumb } });
+    assert.equal(late.ok, true, late.error);
     // And it stays in use: a server started again signs in with it.
     const s2 = await start(env);
     try {

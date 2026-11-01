@@ -295,6 +295,7 @@
     'Add-in in Microsoft 365': 'Add-in in Microsoft 365',
     'Check…': 'Prüfen…',
     'Not checked yet: "Check…" downloads a script that only reads where the add-in is deployed (run it as a Global or Exchange administrator).': 'Noch nicht geprüft: «Prüfen…» lädt ein Skript, das nur liest, wo das Add-in verteilt ist (als Global- oder Exchange-Administrator ausführen).',
+    'Not checked yet: the local account admin can check it here.': 'Noch nicht geprüft: Der lokale Admin kann das hier prüfen.',
     'The check on {0} stopped: {1}': 'Die Prüfung vom {0} brach ab: {1}',
     'Not deployed (checked {0}): Microsoft 365 admin center → Settings → Integrated apps → Upload custom apps, with the manifest address.': 'Nicht verteilt (geprüft {0}): Microsoft 365 Admin Center → Einstellungen → Integrierte Apps → Benutzerdefinierte Apps hochladen, mit der Manifest-Adresse.',
     'everyone': 'alle',
