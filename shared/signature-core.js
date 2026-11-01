@@ -34,10 +34,10 @@
   // onPremisesExtensionAttributes.extensionAttributeN, and that path goes in here.
   var DEFAULT_FIELDS = [
     { key: 'givenName',   label: 'Vorname',            ad: 'givenName',   graph: 'givenName',   sample: 'Anna' },
-    { key: 'sn',          label: 'Name',               ad: 'sn',          graph: 'surname',     sample: 'Muster' },
+    { key: 'sn',          label: 'Nachname',           ad: 'sn',          graph: 'surname',     sample: 'Muster' },
     { key: 'description', label: 'Beschreibung 1',     ad: 'description', graph: '',            sample: 'Dipl. Ing. FH' },
-    { key: 'department',  label: 'Beschreibung 2',     ad: 'department',  graph: 'department',  sample: 'Informatik' },
-    { key: 'title',       label: 'Beschreibung 3',     ad: 'title',       graph: 'jobTitle',    sample: 'Projektleiterin' },
+    { key: 'department',  label: 'Abteilung',          ad: 'department',  graph: 'department',  sample: 'Informatik' },
+    { key: 'title',       label: 'Funktion',           ad: 'title',       graph: 'jobTitle',    sample: 'Projektleiterin' },
     { key: 'mobile',      label: 'Handy',              ad: 'mobile',      graph: 'mobilePhone', sample: '+41 79 123 45 67' },
     { key: 'homePhone',   label: 'Direkte Nr. ext.',   ad: 'homePhone',   graph: '',            sample: '+41 44 123 45 67' },
     { key: 'info',        label: 'Abwesenheit',        ad: 'info',        graph: '',            sample: '' },

@@ -272,8 +272,8 @@ function createApp(opts) {
       cert: cert ? { thumbprint: cert.thumbprint, expires: cert.expires } : null,
       problems: {
         signIn: ldapProblem(ldapCfg) || (ldapCfg.url ? '' : 'Not set up yet: enter the domain controller, then Detect.'),
-        directory: directoryProblem(dir), graph: graphProblem(graphCfg) || (graphEnabled(graphCfg) ? '' : 'Not set up yet: the setup script below does it.'),
-        pages: addin.pagesEnabled(pages) ? addin.pagesProblem(pages) : 'Not set up yet: the three steps below.'
+        directory: directoryProblem(dir), graph: graphProblem(graphCfg) || (graphEnabled(graphCfg) ? '' : 'Not set up yet: the setup script does it (Server connections → SharePoint).'),
+        pages: addin.pagesEnabled(pages) ? addin.pagesProblem(pages) : 'Not set up yet: three steps (Server connections → Cloudflare Pages).'
       }
     });
   }
@@ -500,17 +500,22 @@ function createApp(opts) {
       try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }
     },
     // The add-in's files: made into the data volume, then uploaded or downloaded.
-    'addin/build': async () => {
+    'addin/build': async (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
       // With Cloudflare Pages and no web server chosen: Cloudflare's caching file goes with them.
       const st = settings.get();
       if (!st.addinHost && addin.pagesEnabled(pages)) st.addinHost = 'cloudflare';
       // The folder by its ids, when the server publishes to SharePoint: the add-in then reads it
       // without looking up the site (which a user who may only read the folder cannot).
+      // Not reachable yet (before the site is granted, say): made without them; the add-in then
+      // finds the folder through its site, and making the files again later adds them.
+      let note = '';
       if (graph) {
         try { const at = await settings.target().locate(); st.spDrive = at.driveId; st.spItem = at.itemId; }
-        catch (e) { return { error: 'The add-in\'s files need the SharePoint folder: ' + e.message }; }
+        catch (e) { note = 'The SharePoint folder could not be reached (' + e.message + '): make the files again once it can, so the add-in reads it directly.'; log.warn('addin/build: ' + note); }
       }
       const r = await addin.build(env, st, addinDir);
+      if (!r.error && note) r.note = note;
       return r.error ? r : Object.assign({ folder: '' }, r);
     },
     'addin/check': async () => {
@@ -519,7 +524,8 @@ function createApp(opts) {
       if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
       return addin.check(s.addinUrl, addinDir, fetchFn);
     },
-    'addin/upload': async () => {
+    'addin/upload': async (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
       if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
       try { return await addin.pagesDeploy(pages, addinDir, fetchFn); } catch (e) { return { error: e.message }; }
     },
@@ -586,7 +592,7 @@ function createApp(opts) {
       const s = Object.assign(settings.get(), { spSite: String(d.spSite || 'root').trim(), spFolder: String(d.spFolder || '').trim() });
       if (!s.spFolder) return { error: 'Name the folder in the site, like OSign.' };
       const err = checkSettings(s); if (err) return { error: err };
-      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up on the server (Settings → Server connections).' };
+      if (!graph) return { error: graphProblem(graphCfg) || 'Not checked yet: the setup script sets up SharePoint (step «Register the app in Entra ID»). Paste the address now; it is checked then.' };
       const t = targetFor(s);
       try { return { found: await t.exists(''), photos: await t.exists('photos'), where: t.describe() }; }
       catch (e) {

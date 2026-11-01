@@ -248,6 +248,8 @@ test('apps of an earlier run the server never heard of: yours used again, not ma
   // Two older ones of yours (runs whose result did not arrive), and the server forgot the add-in's.
   ms.state.apps.push({ id: 'obj-old1', appId: 'old11111-0000-0000-0000-000000000001', displayName: 'NOBS OSign', owners: [ME], spa: { redirectUris: [] }, requiredResourceAccess: [], createdDateTime: '2026-01-01T00:00:00Z' });
   ms.state.apps.push({ id: 'obj-old2', appId: 'old22222-0000-0000-0000-000000000002', displayName: 'NOBS OSign', owners: [ME], spa: { redirectUris: [] }, requiredResourceAccess: [], createdDateTime: '2026-02-01T00:00:00Z' });
+  // And one of yours noted for another NOBS OSign server in the tenant (a test one): never used, never removed.
+  ms.state.apps.push({ id: 'obj-other-server', appId: 'other333-0000-0000-0000-000000000003', displayName: 'NOBS OSign', owners: [ME], notes: 'NOBS OSign: https://osign-test.example.ch', spa: { redirectUris: [] }, requiredResourceAccess: [], createdDateTime: '2026-12-01T00:00:00Z' });
   await api('settings/save', { settings: { clientId: '' } });
   const before = ms.state.apps.length;
   const r = await run(await makeScript(false), { OSIGN_SETUP_TEST_REMOVE: 'j' });
@@ -257,5 +259,8 @@ test('apps of an earlier run the server never heard of: yours used again, not ma
   assert.equal((await api('settings/get')).settings.clientId, newest.appId, 'the newest of yours, used again');
   assert.ok(!ms.state.apps.some((a) => a.id === 'obj-old1' || a.id === 'obj-old2'), 'the left over ones removed');
   assert.ok(ms.state.apps.some((a) => a.id === 'obj-planted2'), 'another\'s app of that name is never touched');
+  assert.ok(ms.state.apps.some((a) => a.id === 'obj-other-server'), 'an app of another NOBS OSign server is never touched');
+  assert.doesNotMatch(r.out, /other333/);
+  assert.match(ms.state.apps.find((a) => a.appId === newest.appId).notes, /^NOBS OSign: http/, 'the app used is noted for this server');
   assert.equal(ms.state.apps.length, before - 2 - (first.length - 1), 'nothing made anew');
 });

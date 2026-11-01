@@ -571,3 +571,8 @@ label > button.help + small, label > button.help { vertical-align: middle; }
 .setrow > a.btnlike { flex: none; }
 .btnlike.primary-soft { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .btnlike .i { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; }
+
+/* History: its table fits the dialog; the buttons in a row stay whole. */
+table.fields.history { min-width: 0; }
+table.history td:last-child { width: auto; white-space: nowrap; text-align: right; }
+table.history td[colspan] { text-align: center; white-space: normal; }

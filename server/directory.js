@@ -89,9 +89,12 @@ async function groupsStartingWith(c, query) {
   if (q.length < 2) return [];
   return withService(c, async (client) => {
     const v = escapeFilter(q);
-    // Anywhere in the name ("verkauf" finds SG-Signatur-Verkauf); those that start with it first.
-    const list = await search(client, c.base, '(&(objectClass=group)(|(sAMAccountName=*' + v + '*)(name=*' + v + '*)))', ['samaccountname'], 50);
-    return rank([...new Set(list.map((g) => first(g.attrs, 'samaccountname')).filter(Boolean))], q).slice(0, 30);
+    // Those that start with it first, then anywhere in the name ("verkauf" finds SG-Signatur-Verkauf):
+    // two searches, so a cut list never leaves out the ones starting with it.
+    const names = (list) => list.map((g) => first(g.attrs, 'samaccountname')).filter(Boolean);
+    const starting = names(await search(client, c.base, '(&(objectClass=group)(|(sAMAccountName=' + v + '*)(name=' + v + '*)))', ['samaccountname'], 30));
+    const anywhere = starting.length >= 30 ? [] : names(await search(client, c.base, '(&(objectClass=group)(|(sAMAccountName=*' + v + '*)(name=*' + v + '*)))', ['samaccountname'], 60));
+    return rank([...new Set([...starting, ...anywhere])], q).slice(0, 30);
   });
 }
 // Starts with it first, then by name.
@@ -115,12 +118,21 @@ async function usersMatching(c, query) {
 }
 
 // The departments people are in (as AD writes them), for the audience: those with the text in them.
+// Read from every active user (page by page), and kept for ten minutes: typing asks AD once.
+const DEPARTMENTS_FRESH_MS = 10 * 60 * 1000;
+const departmentLists = new WeakMap();
 async function departmentsMatching(c, query) {
-  const q = String(query || '').trim();
-  return withService(c, async (client) => {
-    const list = await search(client, c.base, '(&' + ACTIVE_USERS.slice(2, -1) + '(department=' + (q ? '*' + escapeFilter(q) + '*' : '*') + '))', ['department'], 1000);
-    return rank([...new Set(list.map((u) => first(u.attrs, 'department')).filter(Boolean))], q).slice(0, 30);
-  });
+  const q = String(query || '').trim().toLowerCase();
+  let kept = departmentLists.get(c);
+  if (!kept || Date.now() - kept.at > DEPARTMENTS_FRESH_MS) {
+    const all = await withService(c, async (client) => {
+      const list = await search(client, c.base, '(&' + ACTIVE_USERS.slice(2, -1) + '(department=*))', ['department']);
+      return [...new Set(list.map((u) => first(u.attrs, 'department')).filter(Boolean))];
+    });
+    kept = { at: Date.now(), all };
+    departmentLists.set(c, kept);
+  }
+  return rank(kept.all.filter((d) => !q || d.toLowerCase().includes(q)), q).slice(0, 30);
 }
 
 // Every active user with a mail address: { mail, attrs: { <attribute, lower case>: value },

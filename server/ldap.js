@@ -73,12 +73,28 @@ async function connect(c) {
   const extra = c.caFile ? fs.readFileSync(c.caFile, 'utf8').trim() : '';
   const ca = extra ? [...tls.rootCertificates, extra] : null;
   const plain = /^ldap:\/\//i.test(c.url);
+  const opts = { url: c.url, timeout: 8000, connectTimeout: 8000, strictDN: false };
   // strictDN off: a bind name may be a UPN (anna@example.ch), not a DN.
-  const client = new Client(Object.assign({ url: c.url, timeout: 8000, connectTimeout: 8000, strictDN: false }, !plain && ca ? { tlsOptions: { ca } } : {}));
+  if (!plain && ca) opts.tlsOptions = { ca };
+  // With StartTLS one connection only: were it lost, the client would open a new one without TLS
+  // (and without the bind) for what follows. Then it fails instead.
+  if (plain && c.startTls) {
+    let made = 0;
+    opts.createConnection = (...args) => {
+      if (made++) throw new Error('The connection to the domain controller was lost.');
+      return net.connect(...args);
+    };
+  }
+  const client = new Client(opts);
   if (plain && c.startTls) {
     const host = new URL(c.url).hostname.replace(/^\[|\]$/g, '');
-    try { await client.startTLS(Object.assign(ca ? { ca } : {}, { host }, net.isIP(host) ? {} : { servername: host })); }
-    catch (e) { close(client); throw e; }
+    let timer = null;
+    try {
+      await Promise.race([
+        client.startTLS(Object.assign(ca ? { ca } : {}, { host }, net.isIP(host) ? {} : { servername: host })),
+        new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('The domain controller did not complete StartTLS in time.')), 8000); })
+      ]);
+    } catch (e) { close(client); throw e; } finally { clearTimeout(timer); }
   }
   return client;
 }

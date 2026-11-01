@@ -78,7 +78,7 @@ test('make, preview and publish a signature', { skip }, async () => {
   await page.waitForSelector('#viewEmpty:not([hidden])');
   await page.click('#btnNew2');
   await page.waitForSelector('#viewSig:not([hidden])');
-  assert.equal(await page.inputValue('#sigName'), 'Standard');
+  assert.equal(await page.inputValue('#sigName'), 'Main signature');
 
   // The starter template, filled with the sample values.
   await page.waitForFunction(() => (((document.querySelector('#preview').contentDocument || {}).body || {}).textContent || '').includes('Anna Muster'));
@@ -525,7 +525,7 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   assert.equal(await page.isVisible('#connScriptGet'), true);
   assert.equal(await page.isVisible('#cn_graphTenantId'), false, 'by hand only when opened');
   const lead = await page.textContent('#connGraph');
-  assert.match(lead, /setup script below/);
+  assert.match(lead, /setup script does it/);
   await page.click('#dlgConn [data-ctest=graph]');
   await page.waitForFunction(() => document.querySelector('#dlgConn [data-ctestout=graph]').textContent && !/Testing/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
   assert.equal(await page.textContent('#dlgConn [data-ctestout=graph]'), await page.textContent('#connGraph'));

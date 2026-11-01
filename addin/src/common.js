@@ -79,7 +79,7 @@ const WHAT_DE = {
   'Loading your entry': 'Ihren Eintrag laden', 'Listing the images': 'Bilder auflisten', 'Finding the photo': 'Foto suchen'
 };
 const MSG_DE = [
-  [/SharePoint does not let you read the folder (.+?) \((\d+)\)\. It has to be shared with everyone who gets a signature: .*$/, 'SharePoint lässt Sie den Ordner $1 nicht lesen ($2). Er muss für alle freigegeben sein, die eine Signatur bekommen: in SharePoint beim Ordner → Zugriff verwalten → Zugriff gewähren: «Jeder außer externen Benutzern», Anzeigen.'],
+  [/SharePoint does not let you read the folder (.+?) \((\d+)\)\. It has to be shared with everyone who gets a signature: .*$/, 'SharePoint lässt Sie den Ordner $1 nicht lesen ($2). Er muss für alle freigegeben sein, die eine Signatur bekommen: in SharePoint beim Ordner → Zugriff verwalten → Zugriff gewähren: «Jeder ausser externen Benutzern», Anzeigen.'],
   [/not allowed \((\d+)\)\. The app registration needs admin consent for (.+?) \(.*$/, 'nicht erlaubt ($1). Der App-Registrierung fehlt die Administratorzustimmung für $2 (Entra ID → Unternehmensanwendungen → die App des Add-ins → Berechtigungen; das Setup-Skript erteilt sie).'],
   [/You are not in the AD export, so your groups are not known\.$/, 'Sie sind nicht im AD-Export, darum sind Ihre Gruppen nicht bekannt.'],
   [/You are not in the AD export \((.+?)\)\. Ask IT to export the users again\.$/, 'Sie sind nicht im AD-Export ($1). Bitten Sie die IT, die Benutzer neu zu exportieren.'],

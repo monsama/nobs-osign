@@ -304,8 +304,8 @@
       <button type="button" class="tab active" data-stab="general" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>General</button>
       <button type="button" class="tab" data-stab="server" id="setTabServer" role="tab" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Server</button>
       <button type="button" class="tab" data-stab="status" id="setTabStatus" role="tab" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Status</button>
-      <button type="button" class="tab" data-stab="about" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>Info</button>
       <button type="button" class="tab" data-stab="addin" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Outlook add-in</button>
+      <button type="button" class="tab" data-stab="about" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>Info</button>
     </nav>
 
     <section class="dpane" role="tabpanel" data-spane="general">
@@ -510,7 +510,7 @@
           <div><input id="cn_ldapDirectoryBase" data-ph="DC=example,DC=ch" autocomplete="off"></div>
         </div>
       </details>
-      <p class="ctest"><button type="button" class="small" data-ctest="ad">Save and test</button> <span class="where" data-ctestout="ad"></span></p>
+      <p class="ctest"><button type="button" class="small" data-ctest="ad">Save and test the connection</button> <span class="where" data-ctestout="ad"></span></p>
     </section>
 
     <section class="dpane" role="tabpanel" data-cpane="pages" hidden>
@@ -550,7 +550,7 @@
           <small>(open the folder in SharePoint, copy the address from the browser and paste it here. A SharePoint site everyone can read; not a personal OneDrive)</small></div>
       </div>
       <div class="scriptbox">
-        <p data-th="connScriptLead"><b>The setup script does this.</b> Run once on a Windows PC as SharePoint or Global administrator, it makes both app
+        <p data-th="connScriptLead"><b>The setup script does this.</b> Run once on a Windows PC as a Global administrator, it makes both app
           registrations, puts the server's certificate on its app and gives it write access to the one site of the signatures. Its
           result comes back here by itself: nothing to copy.</p>
         <label class="check"><input type="checkbox" id="connScriptUsers"> Also read people from Entra ID for the preview (User.Read.All, GroupMember.Read.All)</label>
@@ -595,7 +595,7 @@
       <p class="btn-row"><button type="button" id="pubApprove" class="primary">Approve and publish</button>
         <button type="button" id="pubWithdraw" class="ghost">Withdraw</button></p>
     </div>
-    <label id="pubMsgRow">What changed<input id="pubMsg" maxlength="200" placeholder="Update signatures"></label>
+    <label id="pubMsgRow">Note on the change <small>(optional, shown in History)</small><input id="pubMsg" maxlength="200" placeholder="Update signatures"></label>
     <p id="pubErr" class="err"></p>
     <p id="pubOk" class="ok"></p>
     <div class="dlg-foot">
@@ -646,9 +646,6 @@
         changed later under <b>Settings → Server connections</b>.</p>
       <ul id="wizConnList" class="checks"></ul>
       <p><button type="button" id="wizConnOpen" class="primary">Set up the connections…</button></p>
-      <p class="wiz-note" data-th="wizConnApp">For SharePoint the server needs <b>an app registration of its own</b> in Entra ID (not the
-        add-in's): <b>Application permissions</b> → <b>Sites.Selected</b> with admin consent, and a client secret. The next step
-        shows how to give it the one site.</p>
     </section>
 
     <section class="wiz-step" data-step="folder" data-title="Where the signatures are kept">
@@ -748,7 +745,7 @@
       <!-- The server version, for the local account admin: a script does all of Entra ID. -->
       <div id="wizScript" class="wiz-ms" hidden>
         <p data-th="wizScriptLead"><b>The easy way: the setup script.</b> It does all of this step for you, signed in once with your
-          administrator account (SharePoint or Global administrator) in the browser:</p>
+          administrator account (Global administrator: the admin consent needs it) in the browser:</p>
         <ul class="wiz-list ticks" data-th="wizScriptWhat">
           <li>the add-in's app registration <b>NOBS OSign</b>, with its redirect URI and permissions, and admin consent;</li>
           <li>the server's app registration <b>NOBS OSign server</b> (Sites.Selected) with the server's own certificate, and write
