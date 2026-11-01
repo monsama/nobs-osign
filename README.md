@@ -124,6 +124,23 @@ With a per-person photo in a template, the user photos in `images\` (named like 
 `mustera.jpg`) can go into `photos\` of the OSign folder in the same step; they count at once.
 Nothing else goes live before *Publish*.
 
+## Who may do what
+
+- **Editors** (members of the AD group set under *Server connections → Active Directory*, signed
+  in with their AD account): make, change, import and publish signatures, edit fields and the
+  add-in's behaviour, look at users from AD, and approve someone else's publish when four eyes is
+  on.
+- **The local account `admin`** besides: the server connections, the setup script, the add-in's
+  files (make, upload), backups, the audit log, four eyes, and the check where the add-in is
+  deployed.
+
+## Where the add-in is deployed
+
+Microsoft offers no way for the server to ask this. *Settings → Server → Add-in in Microsoft 365 →
+Check…* downloads a script that only reads (`Get-OrganizationAddIn`, signed in as a Global or
+Exchange administrator) and sends what it found back with a one-time code: deployed or not, on or
+off, its version, and who it is assigned to. The row shows that answer and when it came.
+
 ## Privacy
 
 - GitHub holds only code; nothing at run time comes from it. The add-in's files on the company's

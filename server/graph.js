@@ -59,7 +59,7 @@ function graphError(status, what, detail) {
 
 function createGraph(c, opts) {
   const fetchFn = (opts && opts.fetch) || fetch;
-  let tok = null;
+  let tok = null, lastNextTry = 0;
   async function token() {
     if (tok && tok.until > Date.now()) return tok.value;
     const url = c.loginUrl + '/' + encodeURIComponent(c.tenantId) + '/oauth2/v2.0/token';
@@ -72,6 +72,24 @@ function createGraph(c, opts) {
     try { r = await fetchFn(url, { method: 'POST', body, signal: AbortSignal.timeout(15000) }); }
     catch (e) { throw new Error('Microsoft Entra ID cannot be reached from the server: ' + e.message); }
     const j = await r.json().catch(() => ({}));
+    const next = (!r.ok || !j.access_token) && c.cert && opts && opts.nextCert && Date.now() - lastNextTry > 60000 ? opts.nextCert() : null;
+    if (next && next.thumbprint !== c.cert.thumbprint) {
+      // The setup script may have put its new certificate on the app (in place of this one)
+      // without its answer reaching the server: then that one signs in, and is used from now.
+      lastNextTry = Date.now();
+      const body2 = new URLSearchParams({ client_id: c.clientId, grant_type: 'client_credentials', scope: 'https://graph.microsoft.com/.default',
+        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        client_assertion: clientAssertion({ keyPem: next.keyPem, x5t: next.x5t, clientId: c.clientId, audience: url }) });
+      try {
+        const r2 = await fetchFn(url, { method: 'POST', body: body2, signal: AbortSignal.timeout(15000) });
+        const j2 = await r2.json().catch(() => ({}));
+        if (r2.ok && j2.access_token) {
+          if (opts.onNextCert) opts.onNextCert(next.thumbprint);
+          tok = { value: j2.access_token, until: Date.now() + Math.max(60, (Number(j2.expires_in) || 3600) - 300) * 1000 };
+          return tok.value;
+        }
+      } catch (e) { /* the first answer is the one said */ }
+    }
     if (!r.ok || !j.access_token) {
       const code = String(j.error_description || j.error || r.status).split(/\r?\n/)[0];
       throw new Error("The server's app registration could not sign in (" + code.slice(0, 200) + '). Check the tenant ID, the client ID and ' + (c.cert ? "that the server's certificate is on the app registration (run the setup script again)." : 'the client secret.'));

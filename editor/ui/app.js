@@ -1356,6 +1356,25 @@
         if (f.pagesUpload && (!up || up.version !== v)) return { state: 'warn', text: t('Made, but not uploaded to Cloudflare Pages yet.') };
         return { state: 'good', text: f.pagesUpload ? t('Version {0}, on Cloudflare Pages since {1}.', v, new Date(up.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) : t('Version {0}.', v) };
       } },
+      // Where the add-in is deployed in Microsoft 365: only a script with an admin's sign-in can
+      // ask Microsoft; its last answer is shown, with when it came.
+      { name: 'Add-in in Microsoft 365', act: () => (S.info.user && S.info.user.local ? { label: t('Check…'), fn: deployCheck } : null), run: async () => {
+        const st = await api('deploy/status'), x = st.last;
+        if (!x) return { state: 'off', text: t('Not checked yet: "Check…" downloads a script that only reads where the add-in is deployed (run it as a Global or Exchange administrator).') };
+        const when = new Date(x.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB');
+        if (x.error) return { state: 'bad', text: t('The check on {0} stopped: {1}', when, x.error) };
+        const m = x.summary;
+        if (!m.found) return { state: 'bad', text: t('Not deployed (checked {0}): Microsoft 365 admin center → Settings → Integrated apps → Upload custom apps, with the manifest address.', when) };
+        const who = m.everyone ? t('everyone') : m.assigned || t('nobody named');
+        const parts = [t('Deployed to: {0}', who)];
+        if (m.version) parts.push(t('version {0}', m.version));
+        parts.push(t('checked {0}', when));
+        // The manifest's version is the add-in files' (0.9.26 → 0.9.26.0).
+        const want = f.addinVersion ? f.addinVersion + '.0' : '';
+        if (m.enabled === false) return { state: 'warn', text: t('Switched off in Integrated apps.') + ' ' + parts.join(' · ') };
+        if (want && m.version && m.version !== want) return { state: 'warn', text: parts.join(' · ') + ' · ' + t('the current manifest is {0}: Microsoft takes it over from the manifest address by itself, within a day.', want) };
+        return { state: 'good', text: parts.join(' · ') };
+      } },
       { name: 'Version', run: async () => (f.update ? { state: 'warn', text: t('{0} runs here; {1} is out: sudo ./scripts/update.sh {1}', S.info.version, f.update.version) }
         : { state: 'good', text: S.info.version }) }
     ];
@@ -1382,6 +1401,25 @@
     $('healthRun').disabled = false;
   }
   $('healthRun').addEventListener('click', runHealth);
+  // The script that reads where the add-in is deployed; the row shows its answer when it comes.
+  async function deployCheck(btn) {
+    btn.disabled = true;
+    try {
+      const r = await api('deploy/start', { origin: location.origin });
+      const a = el('a', { href: '/setup/nobs-osign-deployment.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-deployment.ps1' });
+      document.body.append(a); a.click(); a.remove();
+      toast(t('Downloaded. Run it in Windows PowerShell: powershell -ExecutionPolicy Bypass -File .\\nobs-osign-deployment.ps1 (valid until {0}). It only reads.', new Date(r.until).toLocaleTimeString()));
+      // Its answer, when it comes: the status again.
+      const until = Date.parse(r.until);
+      const poll = async () => {
+        if (Date.now() > until || $('dlgSettings').open === false) return;
+        const st = await api('deploy/status').catch(() => null);
+        if (st && !st.waiting) { runHealth(); return; }
+        setTimeout(poll, 4000);
+      };
+      setTimeout(poll, 4000);
+    } catch (e) { toast(t(e.message), true); } finally { btn.disabled = false; }
+  }
   // The add-in's files made again for this version (and uploaded, with Cloudflare Pages).
   async function addinRemake(btn) {
     btn.disabled = true;

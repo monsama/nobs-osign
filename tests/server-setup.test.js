@@ -264,3 +264,33 @@ test('apps of an earlier run the server never heard of: yours used again, not ma
   assert.match(ms.state.apps.find((a) => a.appId === newest.appId).notes, /^NOBS OSign: http/, 'the app used is noted for this server');
   assert.equal(ms.state.apps.length, before - 2 - (first.length - 1), 'nothing made anew');
 });
+
+test('where the add-in is deployed: a script only for reading, its answer in the status; the code once only', { skip }, async () => {
+  assert.equal((await api('deploy/status')).last, null);
+  // Only the local admin makes it.
+  const st = await api('deploy/start', { origin: base });
+  assert.equal(st.ok, true, st.error);
+  const r = await fetch(base + '/setup/nobs-osign-deployment.ps1?id=' + st.id, { headers: { Cookie: admin } });
+  assert.equal(r.status, 200);
+  const text = Buffer.from(await r.arrayBuffer()).toString('utf8');
+  assert.match(text, /\$AddinId = '[0-9a-f-]{36}'/);
+  assert.doesNotMatch(text, /New-|Set-OrganizationAddIn|Remove-|PATCH|DELETE/, 'it only reads');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'osign-deploy-')), 'nobs-osign-deployment.ps1');
+  fs.writeFileSync(file, text);
+  // What Get-OrganizationAddIn answers, as the module gives it.
+  const found = { ProductId: 'ad8022f2-aaca-4afe-8487-ae1531f2a57a', DisplayName: 'NOBS OSign', Version: '0.9.26.0', Enabled: true, AssignedUsers: ['viktor.ljuca@contoso.com'] };
+  const out = await run(file, { OSIGN_SETUP_TEST_SERVER: base, OSIGN_DEPLOY_TEST_ADDIN: JSON.stringify(found) });
+  assert.equal(out.code, 0, out.out);
+  const last = (await api('deploy/status')).last;
+  assert.deepEqual(last.summary, { found: true, name: 'NOBS OSign', version: '0.9.26.0', enabled: true, assigned: 'viktor.ljuca@contoso.com', everyone: false });
+  // The code is used up.
+  const again = await run(file, { OSIGN_SETUP_TEST_SERVER: base, OSIGN_DEPLOY_TEST_ADDIN: JSON.stringify(found) });
+  assert.notEqual(again.code, 0);
+  assert.equal((await api('deploy/finish', { token: 'nope', found: true }, null)).ok, false);
+  // Not deployed: said as that.
+  const st2 = await api('deploy/start', { origin: base });
+  const text2 = Buffer.from(await (await fetch(base + '/setup/nobs-osign-deployment.ps1?id=' + st2.id, { headers: { Cookie: admin } })).arrayBuffer()).toString('utf8');
+  fs.writeFileSync(file, text2);
+  assert.equal((await run(file, { OSIGN_SETUP_TEST_SERVER: base, OSIGN_DEPLOY_TEST_ADDIN: 'null' })).code, 0);
+  assert.equal((await api('deploy/status')).last.summary.found, false);
+});
