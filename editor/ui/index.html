@@ -103,6 +103,8 @@
           <div class="tabs" role="tablist" aria-label="Edit as">
             <button class="tab active" data-mode="design" role="tab" aria-selected="true" aria-controls="design">Design</button>
             <button class="tab" data-mode="html" role="tab" aria-selected="false" aria-controls="source">HTML</button>
+            <span class="spacer"></span>
+            <span class="zoom" data-zoom="design" role="group" aria-label="Zoom"><button type="button" class="ghost" data-z="-1" aria-label="Zoom out" title="Zoom out (Ctrl + mouse wheel)">−</button><button type="button" class="ghost zpct" data-z="0" title="Back to 100 %">100 %</button><button type="button" class="ghost" data-z="1" aria-label="Zoom in" title="Zoom in (Ctrl + mouse wheel)">+</button></span>
           </div>
           <div id="toolbar" class="toolbar"></div>
           <div id="imgBar" class="imgbar" hidden>
@@ -130,6 +132,7 @@
               <button id="pvLookup" class="ghost small">Look up</button>
             </span>
             <div class="spacer"></div>
+            <span class="zoom" data-zoom="preview" role="group" aria-label="Zoom"><button type="button" class="ghost" data-z="-1" aria-label="Zoom out" title="Zoom out (Ctrl + mouse wheel)">−</button><button type="button" class="ghost zpct" data-z="0" title="Back to 100 %">100 %</button><button type="button" class="ghost" data-z="1" aria-label="Zoom in" title="Zoom in (Ctrl + mouse wheel)">+</button></span>
             <label class="check small"><input type="checkbox" id="pvText"> Plain text</label>
             <label class="check small" title="Roughly as Outlook's dark mode shows it to recipients who use it"><input type="checkbox" id="pvDark"> Dark mode</label>
           </div>

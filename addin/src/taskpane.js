@@ -90,7 +90,7 @@ function renderChoice(list) {
   $('choice').hidden = false;
 }
 
-const PAGE = (body) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}</style></head><body>' + body + '</body></html>';
+const PAGE = (body) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}a{pointer-events:none;cursor:default}</style></head><body>' + body + '</body></html>';
 function previewFrame(sig, title) {
   const frame = document.createElement('iframe');
   frame.setAttribute('sandbox', '');
