@@ -74,7 +74,7 @@ async function openPane(browser, dir, graph, displayLanguage) {
 test('the pane speaks German in a German Outlook', { skip }, async () => {
   const dir = await buildTestAddin();
   const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(cfg), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
   try {
     const page = await openPane(browser, dir, graph, 'de-CH');
     assert.equal(await page.textContent('h1'), 'Signaturen');
@@ -93,7 +93,7 @@ test('the pane lists what is open to the user, with images, inserts, and saves t
     files: { 'signatures.json': JSON.stringify(cfg), 'assets/logo.png': PNG },
     me: { givenName: 'Anna', surname: 'Muster', mobilePhone: '', department: 'Sales', mail: 'anna@example.com' }
   });
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
   try {
     const page = await browser.newPage();
     const errors = [];
@@ -146,7 +146,7 @@ test('own variants: made from a signature with editable fields, chosen, inserted
   c.signatures[1].compiled = core.compile(c.signatures[1].html, doc);
   const dir = await buildTestAddin();
   const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(c), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
   try {
     const page = await openPane(browser, dir, graph, 'en-US');
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));

@@ -123,9 +123,22 @@
   // HTML hygiene: what goes into a signature is markup Outlook shows, nothing that runs.
   // ---------------------------------------------------------------------------------------------
   const DROP = 'script,style,meta,link,title,iframe,object,embed,form,input,button,select,textarea,base,xml,o\\:p,svg,video,audio';
+  // Parsed in a document of its own (DOMParser), without a window: nothing in it runs or loads.
+  // Event handler attributes are taken out of the text first as well, so the browser never even
+  // weighs one against the page's Content-Security-Policy; the walk below takes out any left.
+  const HANDLER_ATTR = /(<[^>]*?\s)on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
+  function stripHandlers(html) {
+    let s = String(html || ''), before;
+    do { before = s; s = s.replace(HANDLER_ATTR, '$1'); } while (s !== before);
+    return s;
+  }
+  // A <template> in an inert document: what it holds is a fragment, as a signature is.
+  function inertTemplate(html) {
+    const doc = new DOMParser().parseFromString('<!doctype html><body><template>' + stripHandlers(html).replace(/<\/template/gi, '&lt;/template') + '</template></body>', 'text/html');
+    return doc.querySelector('template');
+  }
   function sanitize(html) {
-    const t = document.createElement('template');
-    t.innerHTML = String(html || '');
+    const t = inertTemplate(html);
     t.content.querySelectorAll(DROP).forEach((n) => {
       // Word's <o:p> holds the text of the paragraph's end: keep that, lose the tag.
       if (n.nodeName.toLowerCase() === 'o:p') n.replaceWith(...n.childNodes); else n.remove();
@@ -976,8 +989,7 @@
     const campaigns = [];
     try {
       for (const it of impItems.filter((x) => x.checked)) {
-        const t = document.createElement('template');
-        t.innerHTML = sanitize(it.body);
+        const t = inertTemplate(sanitize(it.body));
         for (const img of t.content.querySelectorAll('img[src]')) {
           const src = img.getAttribute('src');
           if (/^(https?:|cid:|data:)/i.test(src)) continue;
