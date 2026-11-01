@@ -138,3 +138,42 @@ test('the pane lists what is open to the user, with images, inserts, and saves t
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('own variants: made from a signature with editable fields, chosen, inserted, deleted', { skip }, async () => {
+  const c = JSON.parse(JSON.stringify(cfg));
+  c.fields.push({ key: 'greeting', label: 'Greeting', ad: '', graph: '', sample: '', userEditable: true });
+  c.signatures[1].html = '<p>@@greeting</p><p>@@givenName</p>';
+  c.signatures[1].compiled = core.compile(c.signatures[1].html, doc);
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(c), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch();
+  try {
+    const page = await openPane(browser, dir, graph, 'en-US');
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+    // Only "Short" uses an editable field.
+    assert.deepEqual(await page.$$eval('.card .actions', (a) => a.map((x) => x.textContent)), ['Insert', 'Own variantInsert']);
+    await page.click('.card:nth-child(2) button.secondary');
+    await page.fill('.variant label:nth-of-type(1) input', 'Warm');
+    await page.fill('.variant label:nth-of-type(2) input', 'Kind regards');
+    await page.click('.variant button:not(.secondary)');
+    await page.waitForFunction(() => document.querySelectorAll('.card').length === 3);
+    const saved = JSON.parse(await page.evaluate(() => window.__roaming['osign.variants']));
+    assert.equal(saved.length, 1);
+    assert.deepEqual([saved[0].name, saved[0].base, saved[0].values], ['Warm', 'short', { greeting: 'Kind regards' }]);
+    assert.ok((await page.$$eval('#prefNew option', (o) => o.map((x) => x.textContent))).includes('Warm'));
+    // Inserted with the user's text.
+    await page.click('.card:nth-child(3) button:not(.secondary)');
+    await page.waitForFunction(() => window.__calls.some((x) => x[0] === 'set'));
+    assert.equal((await page.evaluate(() => window.__calls)).find((x) => x[0] === 'set')[1], '<p>Kind regards</p><p>Anna</p>');
+    // Picked for new mail, then deleted (asked twice): the choice goes back to the company's.
+    await page.selectOption('#prefNew', saved[0].id);
+    await page.waitForFunction(() => /Saved/.test(document.querySelector('#msg').textContent));
+    const del = page.locator('.card:nth-child(3) button.secondary', { hasText: 'Delete' });
+    await del.click();
+    await page.locator('.card:nth-child(3) button', { hasText: 'Really delete?' }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.card').length === 2);
+    assert.deepEqual(JSON.parse(await page.evaluate(() => window.__roaming['osign.variants'])), []);
+    assert.equal(JSON.parse(await page.evaluate(() => window.__roaming['osign.prefs'])).new, '');
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

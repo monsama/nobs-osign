@@ -356,6 +356,50 @@
   }
 
   // ---------------------------------------------------------------------------------------------
+  // A user's own variants: a copy of a company signature under a name of their own, with their own
+  // text in the fields the editor marked "editable in the add-in" (a greeting, a line of their
+  // own). Layout, images and every other field stay the company's. Kept in the user's mailbox.
+  // ---------------------------------------------------------------------------------------------
+  var VARIANT_MAX = 20, VARIANT_VALUE_MAX = 300, VARIANT_NAME_MAX = 60;
+
+  function editableKeys(config) {
+    return ((config && config.fields) || []).filter(function (f) { return f && f.userEditable; }).map(function (f) { return f.key; });
+  }
+  // Variants are open when users may choose and at least one field may be changed.
+  function variantsAllowed(config) {
+    return !!config && !(config.options && config.options.allowUserChoice === false) && editableKeys(config).length > 0;
+  }
+  // The editable fields a signature uses: only for those can a variant say something.
+  function editableIn(config, sig) {
+    var used = placeholdersIn(sig && sig.html);
+    return editableKeys(config).filter(function (k) { return used.indexOf(k) >= 0; });
+  }
+  // The configuration with the user's variants among its signatures. A variant of a signature that
+  // is gone, or not open to the user, goes with it; its values only for fields still editable.
+  function withVariants(config, variants) {
+    if (!variantsAllowed(config) || !Array.isArray(variants) || !variants.length) return config;
+    var keys = editableKeys(config), extra = [];
+    variants.slice(0, VARIANT_MAX).forEach(function (v) {
+      if (!v || !/^my-[A-Za-z0-9_-]{1,40}$/.test(v.id || '')) return;
+      var base = null;
+      (config.signatures || []).forEach(function (s) { if (s.id === v.base) base = s; });
+      if (!base) return;
+      var vals = {};
+      keys.forEach(function (k) { if (v.values && typeof v.values[k] === 'string') vals[k] = v.values[k].slice(0, VARIANT_VALUE_MAX); });
+      extra.push(Object.assign({}, base, {
+        id: v.id, name: String(v.name || base.name).slice(0, VARIANT_NAME_MAX), variantOf: base.id,
+        defaultNew: false, defaultReply: false, userValues: vals
+      }));
+    });
+    return Object.assign({}, config, { signatures: (config.signatures || []).concat(extra) });
+  }
+  // The values a signature is filled with: a variant's own text over the user's details.
+  function valuesFor(sig, values) {
+    if (!sig || !sig.userValues) return values;
+    return Object.assign({}, values, sig.userValues);
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Values from a Microsoft Graph user (/me)
   // ---------------------------------------------------------------------------------------------
   // A path is a property name, with dots into objects and [n] into lists:
@@ -498,6 +542,14 @@
     today: today,
     available: available,
     pick: pick,
+    editableKeys: editableKeys,
+    editableIn: editableIn,
+    variantsAllowed: variantsAllowed,
+    withVariants: withVariants,
+    valuesFor: valuesFor,
+    VARIANT_MAX: VARIANT_MAX,
+    VARIANT_VALUE_MAX: VARIANT_VALUE_MAX,
+    VARIANT_NAME_MAX: VARIANT_NAME_MAX,
     groupsUsed: groupsUsed,
     valueSource: valueSource,
     fieldSource: fieldSource,

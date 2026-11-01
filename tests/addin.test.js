@@ -265,6 +265,23 @@ test('each step is logged, so the console shows where it stopped', async () => {
   }
 });
 
+test('a variant the user picked: their text in the editable field, the rest the company\'s', async () => {
+  const config = makeConfig((c) => {
+    c.fields.push({ key: 'greeting', label: 'Greeting', ad: '', graph: '', sample: '', userEditable: true });
+    c.signatures[0] = sig('std', 'Standard', '<p>@@greeting</p><p><b>@@givenName @@sn</b></p>', { defaultNew: true });
+  });
+  const roaming = {
+    'osign.variants': JSON.stringify([{ id: 'my-x', name: 'Warm', base: 'std', values: { greeting: 'Herzliche <Grüsse>', givenName: 'Not me' } }]),
+    'osign.prefs': JSON.stringify({ new: 'my-x', reply: '' })
+  };
+  const r = runtime({ config, roaming });
+  await r.fire('onNewMessageComposeHandler');
+  const html = setCall(r)[1];
+  assert.match(html, /Herzliche &lt;Grüsse&gt;/);
+  assert.match(html, /<b>Anna Muster<\/b>/);
+  assert.ok(r.calls.some((c) => c[0] === 'log' && /signature "Warm" put in/.test(c[1])));
+});
+
 test('values from AD: mixed takes the fields without a Graph source, and the groups, from the user file', async () => {
   const config = makeConfig((c) => {
     c.options.valueSource = 'mixed';

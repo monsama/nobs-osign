@@ -17,6 +17,13 @@ select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-
 .card-head small { color: var(--muted); }
 .card iframe { display: block; width: 100%; height: 150px; border: 0; border-top: 1px solid var(--line); background: #fff; }
 button { font: inherit; cursor: pointer; border-radius: 5px; padding: 4px 12px; border: 1px solid var(--accent); background: var(--accent); color: #fff; font-weight: 600; }
+button.secondary { background: transparent; color: var(--accent); font-weight: 500; }
+button.secondary.danger { color: #c0392b; }
+.actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.variant { display: grid; gap: 8px; padding: 10px; }
+.variant small { color: var(--muted); }
+.variant label { display: grid; gap: 3px; font-weight: 600; font-size: 12px; }
+.variant input { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text); }
 button:disabled { opacity: .5; cursor: default; }
 .foot { margin-top: 14px; font-size: 12px; }
 /* Which add-in this is, and which signatures: for whoever helps when something looks old. */
