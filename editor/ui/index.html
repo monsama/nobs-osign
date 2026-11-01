@@ -204,6 +204,7 @@
   <span id="stTarget"></span>
   <span id="stSecret" class="sb-warn" hidden></span>
   <span id="stTls" class="sb-warn" hidden></span>
+  <button type="button" id="stAddin" class="sb-link sb-warn" hidden></button>
   <button type="button" id="stApproval" class="sb-link sb-warn" hidden></button>
   <a id="stUpdate" class="sb-link" target="_blank" rel="noopener noreferrer" hidden></a>
   <span id="verFoot" class="sb-right"></span>
@@ -701,7 +702,7 @@
       <p class="wiz-intro" data-th="wizHostLead">The add-in consists of a few static files – code only, no data – that Outlook loads from a web
         address. They only change with a new version of NOBS OSign. Choose where they will be hosted:</p>
       <label class="wiz-opt"><input type="radio" name="whost" value="cloudflare"> <span data-th="wizHostCf"><b>Cloudflare Pages</b> <em>recommended</em><span class="sub">Free
-        of charge, no credit card required; upload by drag and drop.</span></span></label>
+        of charge, no credit card required; the server uploads the files itself.</span></span></label>
       <label class="wiz-opt"><input type="radio" name="whost" value="azure"> <span data-th="wizHostAz"><b>Azure Static Web Apps</b><span class="sub">Free plan;
         requires an Azure subscription.</span></span></label>
       <label class="wiz-opt"><input type="radio" name="whost" value="apache"> <span data-th="wizHostAp"><b>Your existing web host</b><span class="sub">A subdomain
