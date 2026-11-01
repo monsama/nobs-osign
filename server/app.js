@@ -38,6 +38,7 @@ const STATIC_TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascr
 // A person's photo by name (photos/<username>.jpg): one file name, an image.
 const PHOTO_NAME = /^[^/\\:*?"<>|\u0000-\u001f]{1,120}\.(png|jpe?g|gif)$/i;
 const PHOTO_CACHE_MS = 5 * 60 * 1000;
+const PHOTO_PLACEHOLDER = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80" preserveAspectRatio="xMidYMid slice"><rect width="100" height="80" fill="#e9ecef"/><circle cx="50" cy="31" r="14" fill="#b8bec6"/><ellipse cx="50" cy="82" rx="30" ry="26" fill="#b8bec6"/></svg>';
 // A request body larger than this is refused: a configuration is at most 1.5 MB, an image 1 MB
 // (as base64, 1.4 MB).
 const MAX_BODY = 4 * 1024 * 1024;
@@ -73,6 +74,18 @@ function sendFile(res, root, rel, types) {
   try { stat = fs.statSync(full); } catch (e) { /* none */ }
   if (!full.startsWith(base) || !type || !stat || !stat.isFile()) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
   send(res, 200, type, fs.readFileSync(full));
+}
+
+// The editor's script: one file for the browser, kept as parts by topic (editor/ui/app/01-base.js
+// … 11-start.js, in that order, one function scope across them); put together once, and again
+// when a part changed (while developing).
+const APP_PARTS = path.join(UI_DIR, 'app');
+let appJs = null;
+function editorScript() {
+  const files = fs.readdirSync(APP_PARTS).filter((f) => /^\d\d-[a-z-]+\.js$/.test(f)).sort();
+  const stamp = files.map((f) => f + ':' + fs.statSync(path.join(APP_PARTS, f)).mtimeMs).join('|');
+  if (!appJs || appJs.stamp !== stamp) appJs = { stamp, body: Buffer.from(files.map((f) => fs.readFileSync(path.join(APP_PARTS, f), 'utf8')).join(''), 'utf8') };
+  return appJs.body;
 }
 
 function readBody(req, max = MAX_BODY) {
@@ -791,6 +804,7 @@ function createApp(opts) {
       // Everything else is the editor's, and only for who is signed in.
       if (!s) return send(res, 401, 'text/plain; charset=utf-8', '401 Not signed in');
       if (pathname === '/shared/signature-core.js') return sendFile(res, path.dirname(CORE_FILE), path.basename(CORE_FILE), STATIC_TYPES);
+      if (pathname === '/ui/app.js') return send(res, 200, STATIC_TYPES['.js'], editorScript());
       if (pathname.startsWith('/ui/')) return sendFile(res, UI_DIR, pathname.slice(4), STATIC_TYPES);
       // The setup script, for the local account admin (made by setup/start).
       if (pathname === '/setup/nobs-osign-setup.ps1') {
@@ -818,6 +832,9 @@ function createApp(opts) {
       if (pathname.startsWith('/assets/')) return sendFile(res, store.assetDir, pathname.slice(8), ASSET_TYPES);
       if (pathname.startsWith('/photos/')) {
         const name = pathname.slice(8);
+        // The design view asks for photos/@@sAMAccountName.jpg: a grey figure where a person's photo
+        // goes (in every browser, not only where CSS can put a picture in place of an image).
+        if (/@@|%40%40/i.test(name)) return send(res, 200, 'image/svg+xml', PHOTO_PLACEHOLDER, { 'Cache-Control': 'private, max-age=3600' });
         if (!PHOTO_NAME.test(name) || name.startsWith('.')) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
         let bytes = null;
         try { bytes = await photo(name); } catch (e) { log.warn('photo ' + name + ': ' + e.message); }

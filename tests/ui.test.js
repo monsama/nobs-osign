@@ -218,8 +218,10 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   assert.match(checks, /Photos per person \(Vertrieb\) come from photos\\<username>\.jpg/);
   await page.click('#dlgPublish button[value=cancel]');
   assert.deepEqual(errors, []);
-  // Only the editor's own design view tried the photo with its placeholder (it shows as missing there).
-  assert.deepEqual([...new Set(notFound)], ['/photos/@@sAMAccountName.jpg']);
+  // The design view's photo with its placeholder gets the server's grey figure: nothing missing.
+  assert.deepEqual([...new Set(notFound)], []);
+  const ph = await page.evaluate(() => fetch('/photos/@@sAMAccountName.jpg').then((r) => r.status + ' ' + r.headers.get('content-type')));
+  assert.equal(ph, '200 image/svg+xml');
 });
 
 test('German: in a German browser the editor speaks German, and offers no translation', { skip }, async () => {
