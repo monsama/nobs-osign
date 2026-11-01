@@ -54,7 +54,7 @@ test.before(async () => {
   url = base + '/';
   const r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'admin-pw' }) });
   cookie = /osign_session=([^;]+)/.exec(r.headers.get('set-cookie'))[1];
-  browser = await chromium.launch();
+  browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
   context = await signedIn();
   page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));

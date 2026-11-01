@@ -184,6 +184,9 @@ npx playwright install chromium   # once, for the browser tests
 npm test                          # builds dist/template, then runs every test
 ```
 
+With a Chromium installed elsewhere (not the one Playwright downloads), point the browser tests at
+it: `OSIGN_TEST_CHROMIUM=/path/to/chrome npm test`.
+
 The setup script's test needs `pwsh` (PowerShell 7) and is skipped without it; CI also runs it under
 Windows PowerShell 5.1.
 
