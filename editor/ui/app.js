@@ -1360,7 +1360,7 @@
       // ask Microsoft; its last answer is shown, with when it came.
       { name: 'Add-in in Microsoft 365', act: () => (S.info.user && S.info.user.local ? { label: t('Check…'), fn: deployCheck } : null), run: async () => {
         const st = await api('deploy/status'), x = st.last;
-        if (!x) return { state: 'off', text: t('Not checked yet: "Check…" downloads a script that only reads where the add-in is deployed (run it as a Global or Exchange administrator).') };
+        if (!x) return { state: 'off', text: S.info.user && S.info.user.local ? t('Not checked yet: "Check…" downloads a script that only reads where the add-in is deployed (run it as a Global or Exchange administrator).') : t('Not checked yet: the local account admin can check it here.') };
         const when = new Date(x.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB');
         if (x.error) return { state: 'bad', text: t('The check on {0} stopped: {1}', when, x.error) };
         const m = x.summary;
