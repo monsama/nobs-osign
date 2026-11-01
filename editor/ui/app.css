@@ -736,3 +736,22 @@ table.fields input[list] { padding-right: 28px !important; }
 @media (max-width: 760px) { #dlgWizard[open] { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; } }
 #dlgWizard .wiz-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
 #dlgWizard .wiz-nav button { flex: none; }
+
+/* Review: fields inside a label's row keep the field's own look (not the label's bold, grey). */
+label input:not([type=checkbox]):not([type=radio]), label select, label textarea { font-weight: 400; font-size: 13px; color: var(--text); }
+/* The HTML tab's Format: a button with its frame, as the field list next to it. */
+.toolbar button.html-only { border-color: var(--line); background: var(--btn); padding: 0 10px; }
+/* The assistant's language: not the whole width. */
+.wiz-fields select { max-width: 320px; }
+/* The preview's bar: one line with the zoom (the source list narrower, the boxes not wrapped). */
+#pvSource { max-width: 200px; }
+.preview-head label.check { white-space: nowrap; margin-right: 8px; }
+/* Fields: the column names on one line each. */
+table.fields th { white-space: nowrap; }
+@media (max-width: 760px) {
+  /* The top bar: menu and name at the left, the rest after. */
+  .top { justify-content: flex-start; }
+  .top .brand { margin-right: auto; }
+  /* The status bar: the count and the shortcuts only. */
+  .statusbar #stTarget, .statusbar #verFoot { display: none; }
+}

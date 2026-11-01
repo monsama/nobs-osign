@@ -222,6 +222,10 @@ test('photos from the web: only https, only on the internet', async () => {
   await assert.rejects(fetchPhoto('http://example.com/a.jpg'), /Only https/);
   await assert.rejects(fetchPhoto('https://10.0.0.5/a.jpg'), /own network/);
   await assert.rejects(fetchPhoto('https://[::1]/a.jpg'), /own network/);
+  // An IPv4 of the network written as IPv6 (the address parser makes ::ffff:7f00:1 of it).
+  for (const u of ['https://[::ffff:127.0.0.1]/a.jpg', 'https://[::ffff:10.1.2.3]:445/', 'https://[0:0:0:0:0:ffff:7f00:1]/', 'https://[64:ff9b::a00:1]/', 'https://[2002:a00:1::]/', 'https://[fec0::1]/']) await assert.rejects(fetchPhoto(u), /own network/, u);
+  for (const ip of ['::ffff:7f00:1', '::ffff:0:7f00:1', '::7f00:1']) assert.equal(isPrivate(ip), true, ip);
+  assert.equal(isPrivate('::ffff:808:808'), false);
   await assert.rejects(fetchPhoto('https://localhost/a.jpg'), /own network/);
   await assert.rejects(fetchPhoto('https://user:pw@example.com/a.jpg'), /password/);
   // Through the server: what it says goes back as the error.

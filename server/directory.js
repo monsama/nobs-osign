@@ -27,7 +27,7 @@ const attrName = (a) => /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(a) && !SECRET_ATTR.t
 // what is read goes into the preview and, exported, into SharePoint for every employee to read.
 const CONTACT_ATTRS = ['givenName', 'sn', 'displayName', 'cn', 'initials', 'middleName', 'personalTitle', 'generationQualifier',
   'title', 'department', 'departmentNumber', 'company', 'division', 'description', 'physicalDeliveryOfficeName',
-  'telephoneNumber', 'otherTelephone', 'mobile', 'otherMobile', 'homePhone', 'ipPhone', 'facsimileTelephoneNumber', 'pager',
+  'telephoneNumber', 'otherTelephone', 'mobile', 'homePhone', 'ipPhone', 'facsimileTelephoneNumber', 'pager',
   'mail', 'userPrincipalName', 'sAMAccountName', 'wWWHomePage', 'url', 'streetAddress', 'postOfficeBox', 'l', 'st', 'postalCode',
   'c', 'co', 'info'];
 const extraAttrs = (text) => [...new Set(String(text || '').split(/[\s,;]+/).filter(Boolean))];

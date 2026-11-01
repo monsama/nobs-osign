@@ -259,3 +259,13 @@ test('a field for a placeholder from CI-Sign: as known (AD and Graph), whatever 
   assert.deepEqual([core.fieldFor('l').label, core.fieldFor('l').graph], ['Ort', 'city']);
   assert.deepEqual(core.fieldFor('extensionAttribute3'), { key: 'extensionAttribute3', label: 'extensionAttribute3', ad: 'extensionAttribute3', graph: '', sample: '' });
 });
+
+test('lines: a label row with several empty values goes whole; a label stays with its value; a field\'s line in a CI-Sign <font> goes, its banner stays', () => {
+  const r = (h, v) => core.render(core.compile(h, doc), v);
+  assert.equal(r('<table><tr><td>Phone</td><td>@@telephoneNumber<br>@@mobile</td></tr><tr><td>X</td></tr></table>', { telephoneNumber: '', mobile: '' }).replace(/<\/?tbody>/g, ''), '<table><tr><td>X</td></tr></table>');
+  assert.equal(r('<p>@@givenName<br><b>Tel</b> <span>@@telephoneNumber<br>Mobile @@mobile</span></p>', { givenName: 'A', telephoneNumber: '', mobile: '079' }), '<p>A<br><b>Tel</b> <span><br>Mobile 079</span></p>');
+  const banner = r('<table><tr><td><font>@@info<br><br><img src="assets/b.jpg"></font></td></tr></table>', { info: '' });
+  assert.doesNotMatch(banner, /@@info/);
+  assert.match(banner, /<td><font><br><img src="assets\/b\.jpg"><\/font><\/td>/);
+  assert.equal(r('<p><a href="mailto:@@mail">Mail<br>me</a></p>', { mail: '' }), '');
+});

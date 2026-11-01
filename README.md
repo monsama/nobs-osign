@@ -216,7 +216,7 @@ Windows PowerShell 5.1.
 | Path | What |
 |---|---|
 | `shared/signature-core.js` | Placeholders, empty lines, who gets which signature. The editor's preview and the add-in both run this one file. |
-| `editor/ui/` | The editor's web UI |
+| `editor/ui/` | The editor's web UI; its script in parts by topic (`editor/ui/app/01-base.js` … `11-start.js`), which the server serves as one `/ui/app.js` |
 | `server/` | The editor's backend: sign-in, draft, publishing through Graph, AD, the add-in's files, the setup script (Docker: `Dockerfile`, `docker-compose.yml`, `deploy-nobs-osign.sh`) |
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
 | `tests/` | Engine, add-in runtime, server API (with stand-ins for AD, SharePoint, Microsoft and Cloudflare), the setup script, editor and pane in a browser |
