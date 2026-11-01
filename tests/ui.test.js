@@ -966,3 +966,21 @@ test('placeholders no field has: added as fields from the preview\'s note; the H
   await page.click('#btnDel');
   await page.click('#askOk');
 });
+
+test('a link: asked in the editor\'s own dialog (no browser prompt), Enter takes it', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.frameLocator('#design').locator('body').click({ position: { x: 60, y: 20 } });
+  await page.keyboard.press('Shift+End');
+  await page.click('#toolbar button[aria-label="Link"]');
+  await page.waitForSelector('#dlgAsk[open] #askInput:not([hidden])');
+  await page.fill('#askInput', 'https://www.example.com');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !!document.querySelector('#design').contentDocument.querySelector('a[href="https://www.example.com"]'));
+  // The next question has no field.
+  await page.click('#btnDel');
+  assert.equal(await page.isVisible('#askInput'), false);
+  await page.click('#askOk');
+});

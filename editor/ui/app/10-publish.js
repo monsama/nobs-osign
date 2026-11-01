@@ -309,7 +309,8 @@
   // Small screens: the sidebar opens over the page, and closes once something in it is chosen.
   function sideOpen(on) { document.body.classList.toggle('side-open', on); $('btnSide').setAttribute('aria-expanded', on ? 'true' : 'false'); }
   $('btnSide').addEventListener('click', () => sideOpen(!document.body.classList.contains('side-open')));
-  $('side').addEventListener('click', (e) => { if (e.target.closest('a, .sig-list li')) sideOpen(false); });
+  // Something chosen in it (a page, a signature, a new one, the import): the menu closes.
+  $('side').addEventListener('click', (e) => { if (e.target.closest('a, .sig-list li, #btnNew, #btnImportOpen')) sideOpen(false); });
   $('navHistory').addEventListener('click', (e) => { e.preventDefault(); $('dlgHistory').showModal(); renderHistory(); });
   $('btnLoad').addEventListener('click', async () => {
     if (S.dirty && !(await ask(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'), t('Replace'), true))) return;

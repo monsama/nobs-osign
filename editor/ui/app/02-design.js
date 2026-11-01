@@ -234,10 +234,14 @@
     });
   }
 
-  function makeLink() {
-    const url = prompt(t('Link address (https://…, mailto:…, tel:…). Fields work here too: mailto:@@mail'), 'https://');
+  async function makeLink() {
+    // Where the link goes: the selection in the design view, kept while the question is open.
+    const sel = ddoc && ddoc.getSelection(), range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    const url = await askFor(t('Link address (https://…, mailto:…, tel:…). Fields work here too: mailto:@@mail'), 'https://', t('Link'));
     if (!url || url === 'https://') return;
     if (!/^(https?:|mailto:|tel:)/i.test(url.trim())) { toast(t('A link starts with https://, mailto: or tel:.'), true); return; }
+    design.contentWindow.focus();
+    if (range) { const s2 = ddoc.getSelection(); s2.removeAllRanges(); s2.addRange(range); }
     exec('createLink', url.trim());
   }
 

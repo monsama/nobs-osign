@@ -34,18 +34,28 @@
   let toastTimer = null;
   // A question with its answer as a button (Delete, Restore …), not the browser's OK: true when
   // that was chosen. danger: the button in red, and Cancel the one ready for Enter.
-  function ask(text, okLabel, danger, cancelLabel) {
+  // With a value (askFor): a field to answer in; the answer, or null when cancelled.
+  function askFor(text, value, okLabel) {
+    $('askInput').hidden = false; $('askInput').value = value || '';
+    const p = ask(text, okLabel || t('OK'), false, null, true).then((yes) => (yes ? $('askInput').value : null));
+    return p;
+  }
+  function ask(text, okLabel, danger, cancelLabel, withInput) {
     const d = $('dlgAsk');
+    if (!withInput) $('askInput').hidden = true;
     $('askText').textContent = text;
     $('askOk').textContent = okLabel || t('OK'); $('askOk').className = danger ? 'danger-btn' : 'primary';
     $('askCancel').textContent = cancelLabel || t('Cancel');
     d.returnValue = '';
     return new Promise((resolve) => {
-      d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true });
+      d.addEventListener('close', () => { $('askInput').hidden = true; resolve(d.returnValue === 'ok'); }, { once: true });
       d.showModal();
-      (danger ? $('askCancel') : $('askOk')).focus();
+      if (withInput) { $('askInput').focus(); $('askInput').select(); }
+      else (danger ? $('askCancel') : $('askOk')).focus();
     });
   }
+  // Enter in the answer field: as OK.
+  $('askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('dlgAsk').close('ok'); } });
   // action: { label, run }, a button in it (e.g. Undo), and it stays a little longer.
   function toast(msg, isError, action) {
     const box = $('toast'); box.replaceChildren(msg); box.className = 'toast show' + (isError ? ' error' : '') + (action ? ' act' : '');

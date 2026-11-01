@@ -27,9 +27,9 @@ button.secondary.danger { color: #c0392b; }
 button:disabled { opacity: .5; cursor: default; }
 .foot { margin-top: 14px; font-size: 12px; }
 /* Which add-in this is, and which signatures: for whoever helps when something looks old. */
-.ver { margin-top: 18px; font-size: 11px; color: #707070; }
+.ver { margin-top: 18px; font-size: 11px; color: var(--muted); }
 a { color: var(--accent); }
-h1 .sub { font-weight: 400; color: #616161; margin-left: 4px; }
+h1 .sub { font-weight: 400; color: var(--muted); margin-left: 4px; }
 
 /* One size for every control, as in the editor: 30 px high (a touch more for a pane used with the
    finger too), the text centred; a dropdown with the same chevron and room for it. */
@@ -38,3 +38,7 @@ button { display: inline-flex; align-items: center; justify-content: center; gap
 select, .variant input { padding: 0 8px; line-height: normal; }
 select { appearance: none; -webkit-appearance: none; padding-right: 28px; cursor: pointer; max-width: 100%;
   background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%23808080' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center / 12px 12px; }
+@media (prefers-color-scheme: dark) {
+  .msg { background: #3a2e17; color: #f3c27a; }
+  .msg.error { background: #3b1f1c; color: #f2a59c; }
+}
