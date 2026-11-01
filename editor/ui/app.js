@@ -607,10 +607,36 @@
     if (used.length && !confirm(t('{0} is used in: {1}. Remove it anyway?', name, used.join(', ')))) return;
     try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = t(e.message); }
   }
+  // An image as small as a signature needs, before it is uploaded: at most 1200 pixels wide
+  // (twice a wide signature, so it stays sharp on high-resolution screens), a JPEG saved again
+  // at good quality. A PNG stays a PNG (it may be transparent), a GIF as it is (it may move).
+  // Smaller files go faster into every mail, and fit into what classic Outlook keeps.
+  const IMG_MAX_W = 1200;
+  // A person's photo is shown small (about 100 pixels): 400 wide is plenty.
+  const PHOTO_MAX_W = 400;
+  async function shrinkUpload(f, maxW) {
+    if (!/^image\/(png|jpeg)$/.test(f.type) || typeof createImageBitmap !== 'function') return f;
+    let bmp;
+    try { bmp = await createImageBitmap(f); } catch (e) { return f; }
+    const scale = Math.min(1, (maxW || IMG_MAX_W) / bmp.width);
+    // A PNG of the right size stays as it is; a JPEG is saved again only when it is large.
+    if (scale === 1 && (f.type === 'image/png' || f.size <= 150 * 1024)) return f;
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, f.type, 0.86));
+    if (!blob || blob.size >= f.size) return f;
+    const out = new File([blob], f.name, { type: f.type });
+    out.shrunk = { from: f.size, to: blob.size, w: bmp.width, w2: c.width };
+    return out;
+  }
+  const kb = (n) => (n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
   $('imgFile').addEventListener('change', async () => {
-    const f = $('imgFile').files[0]; $('imgFile').value = '';
+    let f = $('imgFile').files[0]; $('imgFile').value = '';
     if (!f) return;
     $('imgErr').textContent = '';
+    f = await shrinkUpload(f);
+    if (f.shrunk) toast(t('Image made smaller: {0} → {1} ({2} → {3} pixels wide).', kb(f.shrunk.from), kb(f.shrunk.to), f.shrunk.w, f.shrunk.w2));
     if (f.size > 1024 * 1024) { $('imgErr').textContent = t('The image is larger than 1 MB.'); return; }
     const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
     try {
@@ -976,6 +1002,7 @@
   }
 
   async function uploadImage(file) {
+    file = await shrinkUpload(file);
     const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(file); });
     const r = await api('assets/upload', { name: file.name, data });
     S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]).sort((a, b) => a.name.localeCompare(b.name));
@@ -1040,7 +1067,8 @@
       if (first) openSig(first.id);
       let photosDone = 0;
       if (impPhotosOn) {
-        for (const f of impPhotos) {
+        for (let f of impPhotos) {
+          f = await shrinkUpload(f, PHOTO_MAX_W);
           const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
           const r = await api('photos/upload', { name: f.name, data }).catch((e) => ({ error: e.message }));
           if (!r.error) photosDone++;
@@ -1111,6 +1139,18 @@
         el('td', null, del)));
     });
   }
+  // The starter fields as they were at first: missing ones come back, changed ones are reset
+  // (label, AD attribute, Graph source, sample, editable in the add-in); fields of your own stay.
+  $('btnResetFields').addEventListener('click', () => {
+    const defs = core.DEFAULT_FIELDS;
+    const changedKeys = defs.filter((d) => { const f = S.config.fields.find((x) => x.key === d.key); return !f || ['label', 'ad', 'graph', 'sample'].some((k) => (f[k] || '') !== (d[k] || '')) || f.userEditable; }).map((d) => '@@' + d.key);
+    if (!changedKeys.length) { toast(t('The default fields are as they were at first.')); return; }
+    if (!confirm(t('Restore the default fields? This resets: {0}. Fields of your own stay.', changedKeys.join(', ')))) return;
+    const own = S.config.fields.filter((f) => !defs.some((d) => d.key === f.key));
+    S.config.fields = defs.map((d) => Object.assign({}, d)).concat(own);
+    changed({ list: false }); renderFields();
+    toast(t('Default fields restored.'));
+  });
   $('btnAddField').addEventListener('click', () => {
     let n = 1; while (S.config.fields.some((f) => f.key === 'field' + n)) n++;
     S.config.fields.push({ key: 'field' + n, label: t('New field'), ad: '', graph: '', sample: '' });

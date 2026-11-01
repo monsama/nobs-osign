@@ -3,7 +3,7 @@
  * when the From address changes. It puts the right signature in, or none. Only when it could not
  * (the signatures or the user's details could not be read) does it show a short notice on the message.
  */
-import { core, localize, loadConfig, loadUserValues, getPrefs, getVariants, composeInfo, fromAddress, insertSignature, isMessage } from './common.js';
+import { core, localize, loadConfig, loadUserValues, getPrefs, getVariants, isClassicOutlook, composeInfo, fromAddress, insertSignature, isMessage } from './common.js';
 
 /* global Office */
 
@@ -34,6 +34,8 @@ const VERSION = typeof OSIGN_VERSION !== 'undefined' ? OSIGN_VERSION : '';
 // Each step goes to the console (F12, filter "OSign"): when nothing is put in, it shows where it stopped.
 function log(m) { try { console.log('OSign ' + VERSION + ': ' + m); } catch (e) { /* none */ } }
 
+const CLASSIC_HINT = 'In classic Outlook, open NOBS OSign → Signatures once; from then on it goes in by itself.';
+
 async function sign(event, what) {
   let item = null;
   try {
@@ -59,8 +61,10 @@ async function sign(event, what) {
     await clearNotice(item);
     log(sig ? 'signature "' + sig.name + '" put in.' : 'signature taken out.');
   } catch (e) {
-    const why = e && e.message ? e.message : String(e);
+    let why = e && e.message ? e.message : String(e);
     log(why);
+    // Classic Outlook refuses the sign-in here, and no copy is kept yet: what to do, not the code.
+    if (isClassicOutlook() && /untrusted_origin|Nested App Auth|sign-in|Signing in/i.test(why)) why = CLASSIC_HINT;
     await showNotice(item, why);
   } finally {
     event.completed();

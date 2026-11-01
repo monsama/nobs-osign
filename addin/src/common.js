@@ -89,6 +89,7 @@ const MSG_DE = [
   [/You are not in the AD export, so your groups are not known\.$/, 'Sie sind nicht im AD-Export, darum sind Ihre Gruppen nicht bekannt.'],
   [/You are not in the AD export \((.+?)\)\. Ask IT to export the users again\.$/, 'Sie sind nicht im AD-Export ($1). Bitten Sie die IT, die Benutzer neu zu exportieren.'],
   [/No signatures are published yet: (.+) is not in SharePoint\.$/, 'Noch keine Signaturen veröffentlicht: $1 fehlt in SharePoint.'],
+  [/^In classic Outlook, open NOBS OSign → Signatures once; from then on it goes in by itself\.$/, 'Im klassischen Outlook einmal NOBS OSign → Signaturen öffnen; danach fügt es sie selbst ein.'],
   [/ took too long\.$/, ' dauerte zu lange.'],
   [/: not found in SharePoint \(404\)\.$/, ': in SharePoint nicht gefunden (404).'],
   [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.']
@@ -218,6 +219,8 @@ export async function loadConfig(opts) {
         return cfg;
       } catch (e2) { /* below */ }
     }
+    const classic = classicCopy();
+    if (classic) { console.log('OSign: signatures from the copy in the mailbox (' + (e && e.message ? e.message : e) + ').'); return classic.cfg; }
     throw e;
   }
 }
@@ -366,9 +369,11 @@ async function loadImages(refs, interactive) {
   let tok;
   try { tok = await token(BASE_SCOPES, interactive); } catch (e) {
     // No sign-in (classic Outlook's event runtime may be refused it): the copies kept before.
+    const classic = classicCopy();
     for (const w of wanted) {
       const cached = await readJson('osign.img.' + w.key.toLowerCase());
       if (cached && cached.b64) out[w.key] = { b64: cached.b64, type: typeOf(w.name), file: w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-') };
+      else if (classic && classic.images && classic.images[w.key]) out[w.key] = classic.images[w.key];
     }
     if (!Object.keys(out).length) throw e;
     console.log('OSign: images from the copy kept before (sign-in: ' + (e && e.message ? e.message : e) + ').');
@@ -424,6 +429,67 @@ export async function previewHtml(sig, values) {
   try { images = await loadImages(core.localImages(html), false); } catch (e) { /* shown without */ }
   return placeImages(html, images, 'data');
 }
+
+// ---------------------------------------------------------------------------------------------
+// Classic Outlook on Windows: its event runtime is refused the sign-in, and shares with the pane
+// nothing but the add-in's settings in the mailbox (roaming settings, 32 KB in all). So the pane
+// keeps there the signatures that would go in by themselves, with their images made as small as
+// they are shown, as many as fit; the event handler takes them from there.
+// ---------------------------------------------------------------------------------------------
+const CLASSIC_KEY = 'osign.classic';
+// What the mailbox holds for all of the add-in's settings, less some room to spare.
+const ROAMING_ROOM = 30 * 1024;
+export function isClassicOutlook() {
+  try { const d = Office.context.diagnostics; return !!d && d.platform === 'PC'; } catch (e) { return false; }
+}
+// shrink(image, shownWidth) → a smaller { b64, type } or the same; only the pane has the canvas for it.
+export async function keepForClassic(cfg, sigs, values, shrink) {
+  const used = [PREFS_KEY, VARIANTS_KEY, PROFILE_KEY].reduce((n, k) => { try { const v = roaming() && roaming().get(k); return n + (v ? String(v).length + k.length : 0); } catch (e) { return n; } }, 0);
+  const room = ROAMING_ROOM - used;
+  const keep = ['id', 'name', 'compiled', 'removeEmptyLines', 'defaultNew', 'defaultReply', 'audience', 'validFrom', 'validUntil', 'variantOf', 'userValues'];
+  const copy = {
+    at: cfg.updated || '',
+    cfg: { schemaVersion: cfg.schemaVersion, updated: cfg.updated, options: cfg.options, fields: [], signatures: sigs.map((x) => {
+      const o = {}; keep.forEach((k) => { if (x[k] !== undefined) o[k] = x[k]; }); if (!o.compiled) o.compiled = x.html; return o;
+    }) },
+    images: {}
+  };
+  if (JSON.stringify(copy).length > room) { console.log('OSign: the signatures do not fit into the mailbox settings for classic Outlook.'); return { kept: false, images: 0, left: 0 }; }
+  // The images, each as small as it is shown; the smallest first, as many as fit.
+  const wanted = [];
+  for (const sg of sigs) {
+    const html = renderHtml(sg, values);
+    for (const r of core.localImages(html)) {
+      const key = r.dir + '/' + r.name;
+      if (wanted.some((w) => w.key === key)) continue;
+      const wm = /\bwidth\s*=\s*["']?(\d+)/i.exec(r.tag);
+      wanted.push({ key, ref: r, width: wm ? Number(wm[1]) : 0 });
+    }
+  }
+  let images = {};
+  try { images = await loadImages(wanted.map((w) => w.ref), false); } catch (e) { /* the text alone */ }
+  const small = [];
+  for (const w of wanted) {
+    const img = images[w.key]; if (!img) continue;
+    let s2 = img;
+    try { if (shrink) s2 = Object.assign({}, img, await shrink(img, w.width)); } catch (e) { /* as it is */ }
+    small.push([w.key, s2]);
+  }
+  small.sort((a, b) => a[1].b64.length - b[1].b64.length);
+  let size = JSON.stringify(copy).length, left = 0;
+  for (const [key, img] of small) {
+    const add = key.length + img.b64.length + img.file.length + 40;
+    if (size + add > room) { left++; continue; }
+    copy.images[key] = { b64: img.b64, type: img.type, file: img.file };
+    size += add;
+  }
+  const text = JSON.stringify(copy);
+  let had = '';
+  try { had = roaming() ? String(roaming().get(CLASSIC_KEY) || '') : ''; } catch (e) { had = ''; }
+  if (had !== text) await writeRoaming(CLASSIC_KEY, copy);
+  return { kept: true, images: Object.keys(copy.images).length, left };
+}
+function classicCopy() { const c = readRoaming(CLASSIC_KEY); return c && c.cfg && Array.isArray(c.cfg.signatures) ? c : null; }
 
 // ---------------------------------------------------------------------------------------------
 // The item being written

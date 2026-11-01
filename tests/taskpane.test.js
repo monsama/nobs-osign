@@ -53,9 +53,9 @@ window.Office = {
   }
 };`;
 
-async function openPane(browser, dir, graph, displayLanguage) {
+async function openPane(browser, dir, graph, displayLanguage, platform) {
   const page = await browser.newPage();
-  await page.route('https://appsforoffice.microsoft.com/**', (r) => r.fulfill({ contentType: 'text/javascript', body: OFFICE_STUB.replace("context: {", "context: { displayLanguage: '" + displayLanguage + "',") }));
+  await page.route('https://appsforoffice.microsoft.com/**', (r) => r.fulfill({ contentType: 'text/javascript', body: OFFICE_STUB.replace("context: {", "context: { displayLanguage: '" + displayLanguage + "', diagnostics: { platform: '" + (platform || 'OfficeOnline') + "' },") }));
   const viaFake = async (r) => {
     const res = await graph.fetch(r.request().url(), { headers: { Authorization: r.request().headers().authorization } });
     await r.fulfill({ status: res.status, body: Buffer.from(await res.arrayBuffer()), headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization', 'Content-Type': 'application/json' } });
@@ -175,5 +175,25 @@ test('own variants: made from a signature with editable fields, chosen, inserted
     assert.deepEqual(JSON.parse(await page.evaluate(() => window.__roaming['osign.variants'])), []);
     assert.equal(JSON.parse(await page.evaluate(() => window.__roaming['osign.prefs'])).new, '');
     assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
+
+test('classic Outlook: the pane keeps what goes in by itself in the mailbox, its images as small as shown', { skip }, async () => {
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(cfg), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
+  try {
+    const page = await openPane(browser, dir, graph, 'en-US', 'PC');
+    await page.waitForFunction(() => !!window.__roaming['osign.classic'], null, { timeout: 8000 });
+    const kept = JSON.parse(await page.evaluate(() => window.__roaming['osign.classic']));
+    assert.deepEqual(kept.cfg.signatures.map((x) => x.id), ['std']);
+    assert.ok(kept.images['assets/logo.png'] && kept.images['assets/logo.png'].b64.length > 0);
+    // All the add-in keeps in the mailbox stays below Outlook's 32 KB.
+    const all = await page.evaluate(() => Object.entries(window.__roaming).reduce((n, [k, v]) => n + k.length + String(v).length, 0));
+    assert.ok(all < 32 * 1024, all);
+    // Not in new Outlook or on the web: nothing kept there.
+    const page2 = await openPane(browser, dir, graph, 'en-US');
+    await page2.waitForTimeout(500);
+    assert.equal(await page2.evaluate(() => window.__roaming['osign.classic']), undefined);
   } finally { await browser.close(); }
 });

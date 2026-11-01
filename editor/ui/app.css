@@ -597,3 +597,5 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 /* a thin line between groups of the top bar (as in NOBS SQL Editor) */
 .top .tbsep { display: block; flex: none; width: 1px; height: 20px; margin: 0 4px; background: var(--line); }
 .top .tbsep[hidden] { display: none; }
+
+.field-actions { display: flex; gap: 8px; flex-wrap: wrap; }

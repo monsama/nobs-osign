@@ -43,7 +43,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang, runtimeStorage } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang, runtimeStorage, platform } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -80,6 +80,7 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
     actions: { associate: (name, fn) => { handlers[name] = fn; } },
     context: {
       requirements: { isSetSupported: () => true },
+      diagnostics: { platform: platform || 'OfficeOnline' },
       displayLanguage: lang || 'en-US',
       roamingSettings: { get: (k) => settings[k], set: (k, v) => { settings[k] = v; }, saveAsync: (cb) => cb && cb({ status: 'succeeded' }) },
       mailbox: { item, userProfile: { displayName: 'Anna Muster', emailAddress: 'anna@example.com' } }
@@ -263,6 +264,34 @@ test('sign-in refused (classic Outlook\'s event runtime): the signature and imag
   assert.match(set[1], /Anna Muster/);
   assert.ok(r.calls.some((c) => c[0] === 'attach' && /logo/.test(c[1])), 'the logo from the copy');
   assert.ok(r.calls.some((c) => c[0] === 'log' && /from the copy kept before/.test(c[1])));
+  assert.deepEqual(notices, {});
+});
+
+test('classic Outlook: refused the sign-in, with nothing kept, it says what to do instead of the code', async () => {
+  const notices = {};
+  const r = runtime({ signInFails: true, notices, platform: 'PC', lang: 'de-CH' });
+  await r.fire('onNewMessageComposeHandler');
+  assert.ok(!setCall(r));
+  assert.match(notices.osign.message, /Im klassischen Outlook einmal NOBS OSign → Signaturen öffnen/);
+});
+
+test('classic Outlook: the copy the pane kept in the mailbox goes in, with the images that fit', async () => {
+  // What the pane keeps (keepForClassic), here written by hand: one signature, its logo.
+  const config = makeConfig();
+  const std = config.signatures[0];
+  const roaming = {
+    'osign.profile': JSON.stringify({ at: Date.now() - 60 * 60 * 1000, values: { givenName: 'Anna', sn: 'Muster', mobile: '', sAMAccountName: 'mustera', mail: 'anna@example.com' }, groups: [], groupsFor: 'graph\n' }),
+    'osign.classic': JSON.stringify({ at: config.updated, cfg: { schemaVersion: config.schemaVersion, options: config.options, fields: [], signatures: [{ id: std.id, name: std.name, compiled: std.compiled, defaultNew: true, audience: std.audience }] },
+      images: { 'assets/logo.png': { b64: PNG.toString('base64'), type: 'image/png', file: 'assets-logo.png' } } })
+  };
+  const notices = {};
+  const r = runtime({ signInFails: true, notices, roaming, platform: 'PC' });
+  await r.fire('onNewMessageComposeHandler');
+  const set = setCall(r);
+  assert.ok(set, r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+  assert.match(set[1], /Anna Muster/);
+  assert.ok(r.calls.some((c) => c[0] === 'attach' && /logo/.test(c[1])), 'the logo from the mailbox');
+  assert.ok(r.calls.some((c) => c[0] === 'log' && /copy in the mailbox/.test(c[1])));
   assert.deepEqual(notices, {});
 });
 
