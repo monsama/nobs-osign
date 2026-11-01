@@ -1155,7 +1155,7 @@
     document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
     document.querySelector('#dlgSettings .dlg').scrollTop = 0;
-    // Status and Info save nothing: only Close there.
+    // Info saves nothing: only Close there.
     const view = name === 'about';
     $('setSave').hidden = view;
     document.querySelector('#dlgSettings .dlg-foot button[value=cancel]').textContent = view ? t('Close') : t('Cancel');
@@ -1164,9 +1164,15 @@
 
   // Status: every part the server depends on, tried now, in one list; a part to set up opens
   // its tab in Server connections.
-  let healthRunning = null;
+  // Asked again while it runs (say, after the add-in's files were made again): once more after it,
+  // so the rows show what is there now.
+  let healthRunning = null, healthAgain = false;
   function runHealth() {
-    if (!healthRunning) healthRunning = health().finally(() => { healthRunning = null; });
+    if (healthRunning) { healthAgain = true; return healthRunning; }
+    healthRunning = health().finally(() => {
+      healthRunning = null;
+      if (healthAgain) { healthAgain = false; runHealth(); }
+    });
     return healthRunning;
   }
   async function health() {
@@ -1207,7 +1213,7 @@
         if (!v) return { state: 'off', text: t('Nothing published yet.') };
         return { state: 'good', text: new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' · ' + v.by + (f.requireApproval ? ' · ' + t('four eyes on') : '') };
       } },
-      { name: 'Outlook add-in files', act: () => (f.addinVersion === S.info.version && (!f.pagesUpload || (f.addinUploaded && f.addinUploaded.version === f.addinVersion)) ? null
+      { name: 'Outlook add-in files', act: () => (!f.addinVersion || !f.addinFiles || f.addinVersion === S.info.version && (!f.pagesUpload || (f.addinUploaded && f.addinUploaded.version === f.addinVersion)) ? null
         : { label: f.pagesUpload ? t('Make and upload') : t('Make again'), fn: addinRemake }), run: async () => {
         const v = f.addinVersion, up = f.addinUploaded;
         if (!v) return { state: 'off', text: t('Not made yet (Settings → Outlook add-in).') };
@@ -1247,9 +1253,10 @@
     try {
       const r = await api('addin/build');
       if (S.info.features.pagesUpload) await api('addin/upload');
-      toast(t('Add-in files made for {0}.', r.version) + (S.info.features.pagesUpload ? ' ' + t('Uploaded to Cloudflare Pages.') : ''));
+      toast(t('Add-in files made for {0}.', r.version) + (S.info.features.pagesUpload ? ' ' + t('Uploaded to Cloudflare Pages.') : '') + (r.note ? ' ' + t(r.note) : ''), !!r.note);
     } catch (e) { toast(t(e.message), true); }
-    S.info = await api('info'); renderStatusBar(); runHealth();
+    try { S.info = await api('info'); renderStatusBar(); } catch (e) { /* as it was */ }
+    runHealth();
   }
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -2471,6 +2478,9 @@
   function normalize(c) {
     const d = core.defaultConfig();
     c = c && typeof c === 'object' ? c : d;
+    // One made before the value source could be chosen took its values from Entra ID: it stays so
+    // (new setups start with Entra ID and AD).
+    if (c !== d && !(c.options && c.options.valueSource)) c.options = Object.assign({}, c.options || {}, { valueSource: 'graph' });
     c.schemaVersion = core.SCHEMA_VERSION;
     c.options = Object.assign({}, d.options, c.options || {});
     delete c.auth; delete c.assetBaseUrl;

@@ -259,8 +259,8 @@ too (step 7).
    see. Check that the logo still shows on a dark background.
 8. **Status** (Settings → Server, the local `admin`): every part the server depends on, tried now: Active
    Directory, SharePoint, Cloudflare Pages, the web certificate, the sign-in to Microsoft 365 and
-   until when, the key for passwords, the daily export of the users, the last publish and the
-   version. Each part to set up opens its tab in Server connections.
+   until when, the key for passwords, the daily export of the users, the add-in's files (made again with one
+   click after an update), the last publish and the version. Each part to set up opens its tab in Server connections.
 
 ## 7. Deploy the add-in
 
