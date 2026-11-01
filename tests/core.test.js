@@ -68,6 +68,13 @@ test('removeEmptyLines false keeps every line', () => {
   assert.equal(run('<p>Mobile @@mobile</p>', { mobile: '' }, { removeEmptyLines: false }), '<p>Mobile </p>');
 });
 
+test('a photo for someone with no login is the placeholder photo', () => {
+  const out = core.render(core.compile('<p><img src="photos/@@sAMAccountName.jpg" width="100"></p>', doc), { sAMAccountName: '' });
+  assert.match(out, /src="photos\/_default\.jpg"/);
+  const ed = core.render(core.compile('<p><img src="photos/@@sAMAccountName.jpg"></p>', doc), { sAMAccountName: '' }, { assetBase: '/' });
+  assert.match(ed, /src="\/photos\/_default\.jpg"/);
+});
+
 test('unknown placeholders stay as they are', () => {
   assert.equal(run('<p>@@nothing</p>', {}), '<p>@@nothing</p>');
 });

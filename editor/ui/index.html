@@ -214,8 +214,8 @@
     <section id="viewPhotos" class="view" hidden>
       <h1>Photos</h1>
       <p class="lead" data-th="photosLead">A signature can show each person's own photo: <code>photos/@@sAMAccountName.jpg</code> in its HTML
-        takes the file of that name from the <b>photos</b> folder next to the signatures. Someone without a photo gets the signature
-        without it. Photos count at once, without publishing; they are made 400 pixels wide at most.</p>
+        takes the file of that name from the <b>photos</b> folder next to the signatures. Someone without a photo gets the placeholder
+        photo below, or the signature without one. Photos count at once, without publishing; they are made 400 pixels wide at most.</p>
       <p id="photosRule" class="callout"></p>
       <div class="photo-add">
         <label>Person <input id="photoWho" placeholder="Login, e.g. mustera" autocomplete="off"></label>
@@ -225,6 +225,18 @@
         <label class="photo-url">From a web address <span class="pick"><input id="photoUrl" placeholder="https://www.company.ch/team/anna.jpg" autocomplete="off"><button type="button" id="photoUrlGo">Fetch</button></span></label>
       </div>
       <p id="photoErr" class="err" role="alert"></p>
+      <div class="photo-default">
+        <div class="pd-img"><img id="photoDefaultImg" alt="" hidden><span id="photoDefaultNone">–</span></div>
+        <div class="pd-text">
+          <b>Without a photo of their own</b>
+          <p id="photoDefaultNote" class="hint"></p>
+          <p class="pd-btns">
+            <button type="button" id="photoDefaultMake" class="small">Use a neutral placeholder</button>
+            <label class="filepick small">Own placeholder image… <input id="photoDefaultFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+            <button type="button" id="photoDefaultOff" class="small ghost danger">No placeholder</button>
+          </p>
+        </div>
+      </div>
       <div class="users-bar">
         <input id="photosFilter" placeholder="Search name" aria-label="Search name">
         <span id="photosInfo" class="users-info"></span>

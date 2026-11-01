@@ -87,7 +87,9 @@ each person's photo: a template image `photos/@@sAMAccountName.jpg` becomes
 The editor's **Photos** page lists them and adds one for a person: a file, or an image from a web
 address (https on the internet only: the server refuses addresses in the company's network), made
 400 pixels wide at most; *Insert image → Photo per person* puts the image into a signature, and the
-preview says when the person shown has no photo.
+preview says when the person shown has no photo. A placeholder photo (`photos/_default.jpg`: a
+neutral one made with one click, or an image of your own) goes in for whoever has none, also for an
+account with no login; without one, the signature goes without a photo.
 
 A line whose fields all come out empty is left out, so nobody's signature shows "Mobile:" with no
 number. This works for paragraphs, lines split by line breaks, and table rows.
