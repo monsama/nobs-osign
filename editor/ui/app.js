@@ -519,8 +519,12 @@
       else { const c = fieldChip(ddoc, k); insertHtml(c.outerHTML); }
     });
     fillFieldSelect(fieldSel);
+    // The HTML tab: indent it again after typing in it.
+    const fmt = el('button', { type: 'button', class: 'html-only', title: t('Indent the HTML again (Alt+Shift+F)') }, t('Format'));
+    fmt.addEventListener('click', formatSource);
+    fmt.style.display = S.mode === 'html' ? '' : 'none';
     tb.append(
-      fieldSel, sep(), fontSel, sizeSel, color, sep(),
+      fieldSel, fmt, sep(), fontSel, sizeSel, color, sep(),
       btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline'), sep(),
       btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), sep(),
       btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), btn('table', 'Two columns (logo beside the text)', insertTable), btn('hr', 'Line', () => exec('insertHorizontalRule')), sep(),
@@ -528,6 +532,16 @@
     );
   }
 
+  // Placeholders the signatures use that no field has: fields for them (as CI-Sign read them from
+  // AD, with the Graph property where there is one). Answers the keys added.
+  function addMissingFields(sigs) {
+    const have = new Set(S.config.fields.map((f) => f.key));
+    const added = [];
+    for (const s of sigs || S.config.signatures) {
+      for (const k of core.placeholdersIn(s.html)) if (!have.has(k)) { have.add(k); S.config.fields.push(core.fieldFor(k)); added.push(k); }
+    }
+    return added;
+  }
   function fillFieldSelect(sel) {
     sel.textContent = '';
     sel.append(el('option', { value: '' }, t('+ Insert field')));
@@ -702,13 +716,16 @@
 
   // Zoom: the design view and the preview each their own, 50 to 200 %, kept for this browser.
   // The buttons above each, or Ctrl + mouse wheel over it; the percentage puts it back to 100 %.
-  const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10;
-  const zoom = { design: 100, preview: 100 };
+  // At first 80 %: the signature as large as Outlook shows it on most screens, the wide ones whole.
+  const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10, ZOOM_START = 80;
+  const zoom = { design: ZOOM_START, preview: ZOOM_START };
   const zoomKept = (k, v) => { try { if (v === undefined) return localStorage.getItem('osign.zoom.' + k); if (v === null) localStorage.removeItem('osign.zoom.' + k); else localStorage.setItem('osign.zoom.' + k, v); } catch (e) { /* no storage */ } return null; };
   for (const k of Object.keys(zoom)) { const v = Number(zoomKept(k)); if (v >= ZOOM_MIN && v <= ZOOM_MAX) zoom[k] = v; }
   function zoomApply(k) {
     const doc = k === 'design' ? ddoc : $('preview').contentDocument;
-    if (doc && doc.documentElement) doc.documentElement.style.zoom = zoom[k] === 100 ? '' : String(zoom[k] / 100);
+    if (doc && doc.documentElement) doc.documentElement.style.zoom = String(zoom[k] / 100);
+    // The HTML tab follows the design view's zoom with its text size.
+    if (k === 'design') $('source').style.fontSize = zoom[k] === 100 ? '' : (12.5 * zoom[k] / 100).toFixed(1) + 'px';
     const box = document.querySelector('.zoom[data-zoom="' + k + '"]');
     if (box) {
       box.querySelector('.zpct').textContent = zoom[k] + ' %';
@@ -717,8 +734,8 @@
     }
   }
   function zoomBy(k, dir) {
-    zoom[k] = dir === 0 ? 100 : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((zoom[k] + dir * ZOOM_STEP) / ZOOM_STEP) * ZOOM_STEP));
-    zoomKept(k, zoom[k] === 100 ? null : String(zoom[k]));
+    zoom[k] = dir === 0 ? ZOOM_START : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((zoom[k] + dir * ZOOM_STEP) / ZOOM_STEP) * ZOOM_STEP));
+    zoomKept(k, zoom[k] === ZOOM_START ? null : String(zoom[k]));
     zoomApply(k);
   }
   document.querySelectorAll('.zoom[data-zoom]').forEach((box) => {
@@ -768,6 +785,14 @@
     }
     return out.replace(/[ \t]+$/gm, '').replace(/^\n+/, '').replace(/\n+$/, '');
   }
+  // The HTML tab indented again, the cursor kept near where it was (by line).
+  function formatSource() {
+    const src = $('source'), line = src.value.slice(0, src.selectionStart).split('\n').length;
+    src.value = prettyHtml(plainHtml(src.value));
+    const lines = src.value.split('\n'), at = lines.slice(0, Math.min(line, lines.length) - 1).join('\n').length + (line > 1 ? 1 : 0);
+    src.focus(); src.setSelectionRange(at, at);
+  }
+  $('source').addEventListener('keydown', (e) => { if (e.altKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) { e.preventDefault(); formatSource(); } });
   function plainHtml(text) {
     return unwrap(text).replace(/^\s+|\s+$/g, '');
   }
@@ -784,7 +809,7 @@
     document.querySelectorAll('.tab[data-mode]').forEach((t) => { t.classList.toggle('active', t.dataset.mode === mode); t.setAttribute('aria-selected', t.dataset.mode === mode); });
     design.hidden = mode !== 'design';
     $('source').hidden = mode !== 'html';
-    document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
+    document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = n.classList.contains('html-only') ? (mode === 'html' ? '' : 'none') : mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
     hideImgBar();
   }
   // What was typed in the HTML tab, made safe, once the tab is left.
@@ -846,7 +871,13 @@
     const notes = [], keys = fieldKeys(), used = core.placeholdersIn(s.html);
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && core.fieldSource(S.config, f) === 'none'; });
-    if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', '))));
+    if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', ')) + ' ',
+      el('a', { href: '#', onclick: (e) => {
+        e.preventDefault();
+        const added = addMissingFields([s]);
+        changed({ list: false });
+        toast(t('Fields added: {0}. Check their AD attribute and Graph source under Fields.', added.map((k) => '@@' + k).join(', ')));
+      } }, t('Add them as fields'))));
     if ($('pvDark').checked && /<img\b/i.test(s.html || '')) notes.push(el('div', null, t('Dark mode, roughly: Outlook turns the colours itself. Check that the logo still shows on a dark background (a white edge or a light version helps).')));
     if (core.isCampaign(s) && !core.inPeriod(s)) notes.push(el('div', { class: 'warn' }, t('A campaign, not running today ({0}): nobody gets it now.', campaignText(s))));
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
@@ -1314,6 +1345,7 @@
     let first = null, count = 0;
     const campaigns = [];
     try {
+      const imported = [];
       for (const it of impItems.filter((x) => x.checked)) {
         const t = inertTemplate(sanitize(it.body));
         for (const img of t.content.querySelectorAll('img[src]')) {
@@ -1341,6 +1373,7 @@
           let s = S.config.signatures.find((x) => x.name.toLowerCase() === name.toLowerCase());
           if (!s) { s = core.newSignature(newId(name), name); S.config.signatures.push(s); }
           s.html = body; s.validFrom = from || ''; s.validUntil = until || '';
+          imported.push(s);
           return s;
         };
         const s = put(it.name, plain);
@@ -1361,6 +1394,8 @@
       }
       // A campaign stands in for its template while it runs: the same defaults.
       for (const [c, base] of campaigns) { c.defaultNew = !!base.defaultNew; c.defaultReply = !!base.defaultReply; }
+      // Placeholders of CI-Sign beyond the fields there are (@@telephoneNumber, @@company …): fields.
+      const newFields = addMissingFields(imported);
       changed();
       $('dlgImport').close();
       if (first) openSig(first.id);
@@ -1374,7 +1409,9 @@
         }
       }
       toast((uploaded.size ? t('{0} template(s) imported, with {1} image(s).', count, uploaded.size) : t('{0} template(s) imported.', count))
-        + (impPhotosOn ? ' ' + t('{0} of {1} photo(s) uploaded.', photosDone, impPhotos.length) : '') + ' ' + t('The signatures go live only when you publish.'));
+        + (impPhotosOn ? ' ' + t('{0} of {1} photo(s) uploaded.', photosDone, impPhotos.length) : '')
+        + (newFields.length ? ' ' + t('Fields added: {0}. Check their AD attribute and Graph source under Fields.', newFields.map((k) => '@@' + k).join(', ')) : '')
+        + ' ' + t('The signatures go live only when you publish.'));
     } catch (e) { $('impErr').textContent = t(e.message); $('impGo').disabled = false; }
   }
 

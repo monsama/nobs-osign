@@ -888,22 +888,23 @@ test('zoom: the design view and the preview each their own, kept; the HTML tab i
   const z = (k) => page.textContent('.zoom[data-zoom=' + k + '] .zpct');
   await page.click('.zoom[data-zoom=design] [data-z="1"]');
   await page.click('.zoom[data-zoom=design] [data-z="1"]');
-  assert.equal(await z('design'), '120 %');
-  assert.equal(await page.evaluate(() => document.querySelector('#design').contentDocument.documentElement.style.zoom), '1.2');
+  // At first 80 %.
+  assert.equal(await z('design'), '100 %');
+  assert.equal(await page.evaluate(() => document.querySelector('#design').contentDocument.documentElement.style.zoom), '1');
   await page.click('.zoom[data-zoom=preview] [data-z="-1"]');
-  assert.equal(await z('preview'), '90 %');
+  assert.equal(await z('preview'), '70 %');
   await page.reload();
   await page.waitForSelector('html[data-ready="1"]');
   await page.click('#sigList li:last-child a');
-  assert.equal(await z('design'), '120 %');
-  await page.waitForFunction(() => document.querySelector('#preview').contentDocument.documentElement.style.zoom === '0.9');
+  assert.equal(await z('design'), '100 %');
+  await page.waitForFunction(() => document.querySelector('#preview').contentDocument.documentElement.style.zoom === '0.7');
   await page.hover('#design');
   await page.keyboard.down('Control'); await page.mouse.wheel(0, -100); await page.keyboard.up('Control');
-  await page.waitForFunction(() => document.querySelector('.zoom[data-zoom=design] .zpct').textContent === '130 %');
-  // Back to 100 % with the percentage.
+  await page.waitForFunction(() => document.querySelector('.zoom[data-zoom=design] .zpct').textContent === '110 %');
+  // Back to 80 % with the percentage.
   await page.click('.zoom[data-zoom=design] .zpct');
   await page.click('.zoom[data-zoom=preview] .zpct');
-  assert.equal(await z('design'), '100 %');
+  assert.equal(await z('design'), '80 %');
   await page.click('#btnDel');
   await page.click('#askOk');
 });
@@ -935,6 +936,31 @@ test('undo and redo: typing and a field put in, with Ctrl+Z / Ctrl+Y, also when 
   // The toolbar's buttons the same.
   await page.click('#toolbar [data-cmd=undo]');
   assert.equal(await text(), 'Hello');
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});
+
+test('placeholders no field has: added as fields from the preview\'s note; the HTML tab formats again', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.click('.tab[data-mode=html]');
+  assert.equal(await page.isVisible('#toolbar .html-only'), true);
+  await page.fill('#source', '<p>@@company<br>@@streetAdress, @@postalCode @@l</p><table><tr><td>@@telephoneNumber</td></tr></table>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('#toolbar .html-only');
+  assert.match(await page.inputValue('#source'), /^<p>\n  @@company<br>\n  @@streetAdress, @@postalCode @@l\n<\/p>\n<table>/);
+  await page.waitForFunction(() => /Not a field: .*@@company/.test(document.querySelector('#pvNote').textContent));
+  await page.click('#pvNote a:has-text("Add them as fields")');
+  await page.waitForFunction(() => !/Not a field/.test(document.querySelector('#pvNote').textContent));
+  await page.click('.tab[data-mode=design]');
+  assert.equal(await page.isVisible('#toolbar .html-only'), false);
+  await page.click('.nav-list a[data-view=fields]');
+  const rows = await page.$$eval('#fieldRows tr', (trs) => trs.map((tr) => [...tr.querySelectorAll('input')].slice(1, 4).map((i) => i.value)));
+  assert.deepEqual(rows.find((r) => r[0] === 'streetAdress'), ['streetAdress', 'streetAddress', 'streetAddress']);
+  assert.deepEqual(rows.find((r) => r[0] === 'company'), ['company', 'company', 'companyName']);
+  await page.click('#sigList li:last-child a');
   await page.click('#btnDel');
   await page.click('#askOk');
 });
