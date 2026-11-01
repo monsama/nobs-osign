@@ -149,6 +149,10 @@ function createApp(opts) {
   const users = createUsers({ dataDir, directory: dir, log });
   // The add-in's files, as last made; and where they go (Cloudflare Pages).
   const addinDir = path.join(dataDir, 'addin');
+  // The add-in's files as last made (their version), and as last uploaded to Cloudflare Pages.
+  const addinUploadFile = path.join(dataDir, 'addin-upload.json');
+  const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } };
+  const addinMade = () => (fs.existsSync(path.join(addinDir, 'manifest.xml')) && readJson(path.join(addinDir, 'osign-addin.json'))) || { version: '' };
   const fetchFn = (opts && opts.fetch) || fetch;
   // The scheduled export (OSIGN_AD_EXPORT_AT, hh:mm in TZ): every day, what the published
   // signatures ask for, so the values stay as current as AD without anyone publishing.
@@ -287,6 +291,9 @@ function createApp(opts) {
         adLookup: adOn, addinFiles: !!addin.templateDir(env), pickFolder: false, signOut: true,
         // Made already: its manifest.xml to download (Settings → Outlook add-in).
         addinBuilt: fs.existsSync(path.join(addinDir, 'manifest.xml')),
+        // Their version, and the one on Cloudflare Pages: older than the server's, they are made again.
+        addinVersion: addinMade().version || '',
+        addinUploaded: readJson(addinUploadFile),
         // The add-in's files go to Cloudflare Pages from here, or by hand as a ZIP.
         pagesUpload: !addin.pagesProblem(pages),
         pagesProblem: addin.pagesProblem(pages),
@@ -527,7 +534,12 @@ function createApp(opts) {
     'addin/upload': async (d, s) => {
       if (adminOnly(s)) return { error: adminOnly(s) };
       if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
-      try { return await addin.pagesDeploy(pages, addinDir, fetchFn); } catch (e) { return { error: e.message }; }
+      try {
+        const r = await addin.pagesDeploy(pages, addinDir, fetchFn);
+        // Which version went up, and when: Status compares it with this server's.
+        writeAtomic(addinUploadFile, JSON.stringify({ version: addinMade().version, at: Date.now(), url: r.url }));
+        return r;
+      } catch (e) { return { error: e.message }; }
     },
     // Active Directory, with the service account.
     'ad/lookup': async (d, s) => {

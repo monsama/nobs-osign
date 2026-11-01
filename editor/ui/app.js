@@ -204,6 +204,11 @@
     $('stSecret').hidden = !(typeof left === 'number' && left <= 30);
     // A newer version, when the server may look; a publish waiting for approval.
     const up = f.update;
+    // The add-in's files older than this server (after an update): for the local admin, who makes them.
+    const f0s = S.info.features || {}, admin = !!(S.info.user && S.info.user.local);
+    const stale = admin && f0s.addinVersion && f0s.addinVersion !== S.info.version;
+    $('stAddin').hidden = !stale;
+    if (stale) { $('stAddin').textContent = t('Add-in files from {0}: make them again', f0s.addinVersion); $('stAddin').title = t('Settings → Server'); }
     $('stUpdate').hidden = !up;
     if (up) { $('stUpdate').textContent = t('Version {0} is out', up.version); $('stUpdate').href = up.url || '#'; $('stUpdate').title = t('Update with sudo ./scripts/update.sh {0}', up.version); }
     const ap = S.approval && S.approval.pending;
@@ -1039,15 +1044,16 @@
     $('usersInfo').textContent = t('Read {0}: {1} users - {2} new, {3} changed, {4} removed.', when(snap.readAt), snap.users.length, c.new, c.changed, c.removed) +
       (!S.snapMatches ? ' ' + t('The fields or groups changed since: read again.') : snap.written ? ' ' + t('Published already.') : ' ' + t('Not published yet.'));
     const showGroups = core.groupsUsed(S.config).length > 0;
-    head.append(el('tr', null, el('th', null, ''), el('th', null, t('Mail')), fields.map((f) => el('th', null, (f.label || f.key))), showGroups ? el('th', null, t('Groups')) : null));
+    head.append(el('tr', null, el('th', null, ''), el('th', null, t('Name')), el('th', null, t('Mail')), fields.map((f) => el('th', null, (f.label || f.key))), showGroups ? el('th', null, t('Groups')) : null));
     const q = $('usersFilter').value.trim().toLowerCase();
     const only = $('usersChanges').checked;
     const rows = snap.users.filter((u) => (!only || u.status !== 'unchanged') &&
-      (!q || u.mail.toLowerCase().includes(q) || Object.values(u.values || {}).some((v) => String(v).toLowerCase().includes(q))));
+      (!q || u.mail.toLowerCase().includes(q) || String(u.name || '').toLowerCase().includes(q) || Object.values(u.values || {}).some((v) => String(v).toLowerCase().includes(q))));
     const LIMIT = 500;
     rows.slice(0, LIMIT).forEach((u) => {
       body.append(el('tr', null,
         el('td', null, el('span', { class: 'st ' + u.status }, t(u.status))),
+        el('td', { class: 'nowrap' }, u.name || ''),
         el('td', null, u.mail),
         fields.map((f) => {
           const v = (u.values || {})[f.key] || '', was = u.old ? (u.old[f.key] || '') : null;
@@ -1057,7 +1063,7 @@
         showGroups ? el('td', null, (u.groups || []).join(', ')) : null));
     });
     snap.removed.filter((m) => !q || m.includes(q)).forEach((m) => {
-      body.append(el('tr', { class: 'removed' }, el('td', null, el('span', { class: 'st removed' }, t('removed'))), el('td', { colspan: fields.length + (showGroups ? 2 : 1) }, m)));
+      body.append(el('tr', { class: 'removed' }, el('td', null, el('span', { class: 'st removed' }, t('removed'))), el('td', { colspan: fields.length + (showGroups ? 3 : 2) }, m)));
     });
     if (rows.length > LIMIT) $('usersMore').textContent = t('{0} more - narrow the search to see them.', rows.length - LIMIT);
     if (!rows.length && !snap.removed.length) body.append(el('tr', null, el('td', { colspan: fields.length + 3 }, only ? t('No changes: everything is as published.') : t('No users found.'))));
@@ -1125,11 +1131,7 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = true;
     $('setTabServer').hidden = !(onServer() && S.info.user && S.info.user.local);
-    $('setTabStatus').hidden = $('setTabServer').hidden;
     $('setApproval').checked = S.settings.requireApproval === 'on';
-    $('setTls').textContent = '…';
-    // Under its own heading: without the "Web certificate:" in front.
-    loadTls().then((c) => { const x = tlsText(c).replace(/^[^:]*:\s*/, ''); $('setTls').textContent = x.charAt(0).toUpperCase() + x.slice(1); $('setTls').className = !c || (!c.error && c.trusted && c.daysLeft > 30) ? '' : 'warn'; });
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
@@ -1153,18 +1155,24 @@
     document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
     document.querySelector('#dlgSettings .dlg').scrollTop = 0;
-    // Status and Info save nothing: only Close there.
-    const view = name === 'status' || name === 'about';
+    // Info saves nothing: only Close there.
+    const view = name === 'about';
     $('setSave').hidden = view;
     document.querySelector('#dlgSettings .dlg-foot button[value=cancel]').textContent = view ? t('Close') : t('Cancel');
   }
-  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'status') runHealth(); }));
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
 
   // Status: every part the server depends on, tried now, in one list; a part to set up opens
   // its tab in Server connections.
-  let healthRunning = null;
+  // Asked again while it runs (say, after the add-in's files were made again): once more after it,
+  // so the rows show what is there now.
+  let healthRunning = null, healthAgain = false;
   function runHealth() {
-    if (!healthRunning) healthRunning = health().finally(() => { healthRunning = null; });
+    if (healthRunning) { healthAgain = true; return healthRunning; }
+    healthRunning = health().finally(() => {
+      healthRunning = null;
+      if (healthAgain) { healthAgain = false; runHealth(); }
+    });
     return healthRunning;
   }
   async function health() {
@@ -1205,13 +1213,23 @@
         if (!v) return { state: 'off', text: t('Nothing published yet.') };
         return { state: 'good', text: new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' · ' + v.by + (f.requireApproval ? ' · ' + t('four eyes on') : '') };
       } },
+      { name: 'Outlook add-in files', act: () => (!f.addinVersion || !f.addinFiles || f.addinVersion === S.info.version && (!f.pagesUpload || (f.addinUploaded && f.addinUploaded.version === f.addinVersion)) ? null
+        : { label: f.pagesUpload ? t('Make and upload') : t('Make again'), fn: addinRemake }), run: async () => {
+        const v = f.addinVersion, up = f.addinUploaded;
+        if (!v) return { state: 'off', text: t('Not made yet (Settings → Outlook add-in).') };
+        if (v !== S.info.version) return { state: 'warn', text: t('Made with {0}; this server is {1}: make them again, so Outlook gets the new version.', v, S.info.version) };
+        if (f.pagesUpload && (!up || up.version !== v)) return { state: 'warn', text: t('Made, but not uploaded to Cloudflare Pages yet.') };
+        return { state: 'good', text: f.pagesUpload ? t('Version {0}, on Cloudflare Pages since {1}.', v, new Date(up.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) : t('Version {0}.', v) };
+      } },
       { name: 'Version', run: async () => (f.update ? { state: 'warn', text: t('{0} runs here; {1} is out: sudo ./scripts/update.sh {1}', S.info.version, f.update.version) }
         : { state: 'good', text: S.info.version }) }
     ];
     const rows = checks.map((c) => {
       const dot = el('span', { class: 'hdot run' }), text = el('small', null, t('Checking…'));
+      const act = c.act && c.act();
       const row = el('div', { class: 'setrow' }, dot, el('div', { class: 'setrow-text' }, el('b', null, t(c.name)), text),
-        c.tab ? el('button', { type: 'button', class: 'ghost', onclick: () => openConn(c.tab) }, t('Open…')) : null);
+        c.tab ? el('button', { type: 'button', id: c.tab === 'ad' ? 'setConn' : null, onclick: () => openConn(c.tab) }, t(c.name.replace(/ \(.*\)$/, '') + '…')) : null,
+        act ? el('button', { type: 'button', class: 'primary', onclick: (e) => act.fn(e.currentTarget) }, act.label) : null);
       return { c, row, dot, text };
     });
     $('healthRows').replaceChildren(...rows.map((r) => r.row));
@@ -1229,6 +1247,17 @@
     $('healthRun').disabled = false;
   }
   $('healthRun').addEventListener('click', runHealth);
+  // The add-in's files made again for this version (and uploaded, with Cloudflare Pages).
+  async function addinRemake(btn) {
+    btn.disabled = true;
+    try {
+      const r = await api('addin/build');
+      if (S.info.features.pagesUpload) await api('addin/upload');
+      toast(t('Add-in files made for {0}.', r.version) + (S.info.features.pagesUpload ? ' ' + t('Uploaded to Cloudflare Pages.') : '') + (r.note ? ' ' + t(r.note) : ''), !!r.note);
+    } catch (e) { toast(t(e.message), true); }
+    try { S.info = await api('info'); renderStatusBar(); } catch (e) { /* as it was */ }
+    runHealth();
+  }
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
     try {
@@ -1422,10 +1451,8 @@
     $('setErr').textContent = '';
     try { renderConnections(await api('connections/get')); connTab(tab || 'ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
   }
-  $('setConn').addEventListener('click', () => openConn('ad'));
-  document.querySelectorAll('#dlgSettings [data-conn]').forEach((b) => b.addEventListener('click', () => openConn(b.dataset.conn)));
   // Back from Server connections to Status: checked again, with what was just changed.
-  $('dlgConn').addEventListener('close', () => { if ($('dlgSettings').open && !document.querySelector('#dlgSettings [data-spane=status]').hidden) runHealth(); });
+  $('dlgConn').addEventListener('close', () => { if ($('dlgSettings').open && !document.querySelector('#dlgSettings [data-spane=server]').hidden) runHealth(); });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
     if (!b) return;
@@ -2387,6 +2414,8 @@
     $('pubWithdraw').textContent = p.mine ? t('Withdraw') : t('Reject');
   }
   $('stApproval').addEventListener('click', () => $('btnPublish').click());
+  // To the place that makes them again.
+  $('stAddin').addEventListener('click', async () => { $('btnSettings').click(); setTab('server'); runHealth(); });
   $('pubApprove').addEventListener('click', async () => {
     $('pubApprove').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
@@ -2449,6 +2478,9 @@
   function normalize(c) {
     const d = core.defaultConfig();
     c = c && typeof c === 'object' ? c : d;
+    // One made before the value source could be chosen took its values from Entra ID: it stays so
+    // (new setups start with Entra ID and AD).
+    if (c !== d && !(c.options && c.options.valueSource)) c.options = Object.assign({}, c.options || {}, { valueSource: 'graph' });
     c.schemaVersion = core.SCHEMA_VERSION;
     c.options = Object.assign({}, d.options, c.options || {});
     delete c.auth; delete c.assetBaseUrl;

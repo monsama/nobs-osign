@@ -71,7 +71,7 @@ function createUsers({ dataDir, directory, log }) {
       const status = old === null ? 'new' : old === json ? 'unchanged' : 'changed';
       let oldValues = null;
       if (status === 'changed') { try { oldValues = JSON.parse(old); } catch (e) { /* not JSON */ } }
-      entries.push({ file: name, mail: r.mail, status, values, groups, old: oldValues, json });
+      entries.push({ file: name, mail: r.mail, name: r.name || '', status, values, groups, old: oldValues, json });
     }
     const removed = Object.keys(there).filter((n) => !seen.has(n)).sort();
     const snap = { entries, removed, readAt: Date.now(), sig: req.sig, written: false };
@@ -103,7 +103,7 @@ function createUsers({ dataDir, directory, log }) {
     const count = (st) => snap.entries.filter((e) => e.status === st).length;
     return {
       readAt: snap.readAt, sig: snap.sig, written: !!snap.written,
-      users: snap.entries.map((e) => ({ mail: e.mail, status: e.status, values: e.values, groups: e.groups, old: e.old ? e.old.values : null })),
+      users: snap.entries.map((e) => ({ mail: e.mail, name: e.name || '', status: e.status, values: e.values, groups: e.groups, old: e.old ? e.old.values : null })),
       removed: snap.removed.map((n) => n.replace(/\.json$/, '')),
       counts: { new: count('new'), changed: count('changed'), unchanged: count('unchanged'), removed: snap.removed.length }
     };

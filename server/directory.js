@@ -152,10 +152,10 @@ async function userRecords(c, attributes, groupNames) {
         }
       }
     }
-    return (await search(client, c.base, ACTIVE_USERS, ['mail', ...attrs])).map((u) => {
+    return (await search(client, c.base, ACTIVE_USERS, ['mail', 'displayname', ...attrs])).map((u) => {
       const a = {};
       for (const x of attrs) a[x] = first(u.attrs, x);
-      return { mail: first(u.attrs, 'mail'), attrs: a, groups: [...(memberOf.get(u.dn.toLowerCase()) || [])] };
+      return { mail: first(u.attrs, 'mail'), name: first(u.attrs, 'displayname'), attrs: a, groups: [...(memberOf.get(u.dn.toLowerCase()) || [])] };
     });
   });
 }

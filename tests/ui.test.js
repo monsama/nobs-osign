@@ -198,7 +198,8 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
   const checks = await page.textContent('#pubChecks');
-  assert.match(checks, /GroupMember\.Read\.All/);
+  // The groups come from AD (new setups take Entra ID and AD): no Graph group permission asked for.
+  assert.doesNotMatch(checks, /GroupMember\.Read\.All/);
   assert.match(checks, /Photos per person \(Vertrieb\) come from photos\\<username>\.jpg/);
   await page.click('#dlgPublish button[value=cancel]');
   assert.deepEqual(errors, []);
@@ -252,7 +253,7 @@ test('users from AD: read, look, and publish exactly that', { skip }, async () =
   await page.waitForFunction(() => /Read .*2 users - 2 new/.test(document.querySelector('#usersInfo').textContent));
   const rows = await page.$$eval('#usersRows tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
   // The last column: groups (an earlier test made a signature for groups).
-  assert.deepEqual(rows[0], ['new', 'anna@example.com', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
+  assert.deepEqual(rows[0], ['new', 'Anna Muster', 'anna@example.com', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
   assert.ok(!fs.existsSync(path.join(folder, 'users')), 'reading writes nothing');
 
   await page.click('#btnPublish');
@@ -562,7 +563,7 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
   await page.click('#btnSettings');
-  await page.click('#dlgSettings [data-stab=status]');
+  await page.click('#dlgSettings [data-stab=server]');
   await page.waitForFunction(() => document.querySelectorAll('#healthRows .setrow').length >= 8 && !document.querySelector('#healthRows .hdot.run'));
   const rows = await page.$$eval('#healthRows .setrow', (rs) => rs.map((r) => [r.querySelector('b').textContent, r.dataset.state]));
   assert.deepEqual(rows.find((r) => r[0] === 'Active Directory'), ['Active Directory', 'good']);
@@ -614,4 +615,25 @@ test('suggestions while typing: AD groups anywhere in their name, people for the
   assert.equal(await page.isVisible('#coffeeBtn'), true, 'the coffee at the top right stays');
   await page.click('#dlgSettings button[value=cancel]');
   assert.deepEqual(errors, []);
+});
+
+test('the add-in\'s files older than the server: said in the status bar and under Server, made again with one click', { skip }, async () => {
+  // Made "with an older version": their version file says so.
+  await api('settings/save', { settings: { addinUrl: 'https://osign.example.com/', clientId: '11111111-2222-3333-4444-555555555555' } });
+  const b = await api('addin/build');
+  assert.equal(b.ok, true, b.error);
+  const ver = path.join(dataDir, 'addin', 'osign-addin.json');
+  const j = JSON.parse(fs.readFileSync(ver, 'utf8'));
+  fs.writeFileSync(ver, JSON.stringify(Object.assign({}, j, { version: '0.0.1' })));
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.waitForSelector('#stAddin:not([hidden])');
+  assert.match(await page.textContent('#stAddin'), /Add-in files from 0\.0\.1/);
+  await page.click('#stAddin');
+  await page.waitForSelector('#dlgSettings [data-spane=server]:not([hidden])');
+  await page.waitForFunction(() => /Made with 0\.0\.1/.test(document.querySelector('#healthRows').textContent));
+  await page.click('#healthRows button:has-text("Make again")');
+  await page.waitForFunction(() => !/Made with 0\.0\.1/.test(document.querySelector('#healthRows').textContent) && !document.querySelector('#healthRows .hdot.run'));
+  assert.equal(await page.isVisible('#stAddin'), false);
+  await page.click('#dlgSettings button[value=cancel]');
 });
