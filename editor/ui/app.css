@@ -203,6 +203,7 @@ table.fields input { padding: 4px 6px !important; }
 table.fields .ph { display: flex; align-items: center; gap: 2px; font-family: ui-monospace, Consolas, monospace; }
 table.fields .ph span { color: var(--muted); }
 table.fields .nograph input { border-color: var(--warn) !important; }
+table.fields .center { text-align: center; }
 table.fields td:last-child { width: 40px; text-align: center; }
 .callout { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: var(--radius); padding: 10px 14px; margin-top: 16px; max-width: 900px; color: var(--muted); }
 .callout b { color: var(--text); }

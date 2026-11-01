@@ -2,7 +2,7 @@
  * The task pane: the signatures open to this user, each with a preview to insert, and - when the
  * editor allows it - which one is used for new mail and which for replies.
  */
-import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
+import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
 
 /* global Office, OSIGN_VERSION */
 const $ = (id) => document.getElementById(id);
@@ -29,7 +29,21 @@ const DE = {
   'Your groups could not be read, so signatures meant for groups are not shown.': 'Ihre Gruppen konnten nicht gelesen werden, darum fehlen die Signaturen für Gruppen.',
   'Your groups could not be read, so signatures meant for groups are not shown: {0}': 'Ihre Gruppen konnten nicht gelesen werden, darum fehlen die Signaturen für Gruppen: {0}',
   'details not available, fields stay empty': 'Angaben nicht verfügbar, Felder bleiben leer',
-  'signatures published {0}': 'Signaturen veröffentlicht {0}'
+  'signatures published {0}': 'Signaturen veröffentlicht {0}',
+  'Own variant': 'Eigene Variante',
+  'Your variant of {0}': 'Ihre Variante von {0}',
+  'Edit': 'Bearbeiten',
+  'Delete': 'Löschen',
+  'Save': 'Speichern',
+  'Cancel': 'Abbrechen',
+  'Name': 'Name',
+  'New variant of {0}': 'Neue Variante von {0}',
+  'Variant of {0}': 'Variante von {0}',
+  'Give the variant a name.': 'Geben Sie der Variante einen Namen.',
+  'Variant saved. Pick it above for new mail or replies, or insert it here.': 'Variante gespeichert. Wählen Sie sie oben für neue Mails oder Antworten, oder fügen Sie sie hier ein.',
+  'Really delete?': 'Wirklich löschen?',
+  'You have {0} variants, the most there can be.': 'Sie haben {0} Varianten, mehr sind nicht möglich.',
+  'Only the fields below are yours to change; the rest stays the company signature.': 'Nur die Felder unten können Sie ändern; der Rest bleibt die Firmensignatur.'
 };
 let german = false;
 function t(s, ...args) {
@@ -43,7 +57,7 @@ function translatePage() {
     el.childNodes.forEach((n) => { if (n.nodeType === 3 && n.nodeValue.trim() && DE[n.nodeValue.trim()] && german) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), DE[n.nodeValue.trim()]); });
   });
 }
-let cfg = null, user = null, from = '', info = { kind: 'new', html: true };
+let cfg = null, full = null, user = null, from = '', info = { kind: 'new', html: true };
 
 function message(text, isError) {
   const m = $('msg');
@@ -59,7 +73,7 @@ function renderChoice(list) {
   const prefs = getPrefs();
   ['new', 'reply'].forEach((kind) => {
     const sel = $(kind === 'new' ? 'prefNew' : 'prefReply');
-    const central = core.pick(cfg, user.values, from, kind, null, user.groups);
+    const central = core.pick(full, user.values, from, kind, null, user.groups);
     sel.replaceChildren(
       option('', t('Company default') + (central ? ' (' + central.name + ')' : ' ' + t('(none)')), !prefs[kind]),
       option('none', t('No signature'), prefs[kind] === 'none'),
@@ -72,33 +86,119 @@ function renderChoice(list) {
   $('choice').hidden = false;
 }
 
+const PAGE = (body) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}</style></head><body>' + body + '</body></html>';
+function previewFrame(sig, title) {
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', '');
+  frame.title = title;
+  frame.srcdoc = PAGE('');
+  frame.show = (s) => previewHtml(s, user.values).then((h) => { frame.srcdoc = PAGE(h); });
+  frame.show(sig);
+  return frame;
+}
+function button(text, onclick, secondary) {
+  const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.onclick = onclick;
+  if (secondary) b.className = 'secondary';
+  return b;
+}
+
 function renderList(list) {
   const box = $('list'); box.textContent = '';
   if (!list.length) { box.textContent = t('No signature is set up for you.'); return; }
+  const names = {}; (cfg.signatures || []).forEach((s) => { names[s.id] = s.name; });
   list.forEach((s) => {
     const card = document.createElement('div'); card.className = 'card';
     const head = document.createElement('div'); head.className = 'card-head';
     const name = document.createElement('b'); name.textContent = s.name;
     const tags = document.createElement('small');
-    tags.textContent = [s.defaultNew ? t('new mail') : '', s.defaultReply ? t('replies') : ''].filter(Boolean).join(', ');
+    tags.textContent = s.variantOf ? t('Your variant of {0}', names[s.variantOf] || '')
+      : [s.defaultNew ? t('new mail') : '', s.defaultReply ? t('replies') : ''].filter(Boolean).join(', ');
     const left = document.createElement('div'); left.append(name, document.createElement('br'), tags);
-    const btn = document.createElement('button'); btn.textContent = t('Insert');
-    btn.onclick = async () => {
+    const btn = button(t('Insert'), async () => {
       btn.disabled = true;
       try { await insertSignature(Office.context.mailbox.item, cfg, s, user.values, info.html, { interactive: true }); message(''); }
       catch (e) { message(t('Outlook did not take the signature: {0}', e.message || e), true); }
       finally { btn.disabled = false; }
-    };
-    head.append(left, btn);
-    const frame = document.createElement('iframe');
-    frame.setAttribute('sandbox', '');
-    frame.title = s.name;
-    const page = (body) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}</style></head><body>' + body + '</body></html>';
-    frame.srcdoc = page('');
-    previewHtml(s, user.values).then((h) => { frame.srcdoc = page(h); });
-    card.append(head, frame);
+    });
+    const actions = document.createElement('div'); actions.className = 'actions';
+    if (s.variantOf) {
+      actions.append(button(t('Edit'), () => editVariant(card, s, getVariants().find((v) => v.id === s.id)), true),
+        button(t('Delete'), (e) => deleteVariant(s, e.currentTarget), true));
+    } else if (core.variantsAllowed(cfg) && core.editableIn(cfg, s).length) {
+      actions.append(button(t('Own variant'), () => editVariant(card, s, null), true));
+    }
+    actions.append(btn);
+    head.append(left, actions);
+    card.append(head, previewFrame(s, s.name));
     box.append(card);
   });
+}
+
+// A variant: its name and the editable fields its signature uses, with the preview as it changes.
+function editVariant(card, sig, existing) {
+  const base = (cfg.signatures || []).find((x) => x.id === (sig.variantOf || sig.id));
+  if (!base) return;
+  if (!existing && getVariants().length >= core.VARIANT_MAX) { message(t('You have {0} variants, the most there can be.', core.VARIANT_MAX), true); return; }
+  const labels = {}; (cfg.fields || []).forEach((f) => { labels[f.key] = f.label || f.key; });
+  const form = document.createElement('form'); form.className = 'variant';
+  const title = document.createElement('b'); title.textContent = existing ? t('Variant of {0}', base.name) : t('New variant of {0}', base.name);
+  const hint = document.createElement('small'); hint.textContent = t('Only the fields below are yours to change; the rest stays the company signature.');
+  const field = (label, value, max) => {
+    const l = document.createElement('label'); l.append(label);
+    const i = document.createElement('input'); i.value = value || ''; i.maxLength = max;
+    l.append(i); form.append(l); return i;
+  };
+  form.append(title, hint);
+  const nameIn = field(t('Name'), existing ? existing.name : base.name + ' – ' + t('Own variant'), core.VARIANT_NAME_MAX);
+  const inputs = {};
+  core.editableIn(cfg, base).forEach((k) => {
+    const had = existing && existing.values && typeof existing.values[k] === 'string' ? existing.values[k] : (user.values[k] || '');
+    inputs[k] = field(labels[k], had, core.VARIANT_VALUE_MAX);
+  });
+  const draft = () => {
+    const values = {}; Object.keys(inputs).forEach((k) => { values[k] = inputs[k].value; });
+    return { id: existing ? existing.id : 'my-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: nameIn.value.trim(), base: base.id, values };
+  };
+  const frame = previewFrame(core.withVariants(cfg, [draft()]).signatures.slice(-1)[0] || base, base.name);
+  let timer = null;
+  form.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = core.withVariants(cfg, [draft()]).signatures.slice(-1)[0]; if (v) frame.show(v); }, 250); };
+  const row = document.createElement('div'); row.className = 'actions';
+  row.append(button(t('Cancel'), () => render(), true), button(t('Save'), () => form.requestSubmit()));
+  form.append(row);
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const v = draft();
+    if (!v.name) { message(t('Give the variant a name.'), true); nameIn.focus(); return; }
+    const list = getVariants().filter((x) => x.id !== v.id); list.push(v);
+    await setVariants(list);
+    message(t('Variant saved. Pick it above for new mail or replies, or insert it here.'));
+    render();
+  };
+  card.replaceChildren(form, frame);
+  nameIn.focus();
+}
+
+// Outlook's pane has no confirm(): the button asks once more itself.
+async function deleteVariant(sig, btn) {
+  if (btn.dataset.sure !== '1') {
+    btn.dataset.sure = '1'; btn.textContent = t('Really delete?'); btn.classList.add('danger');
+    setTimeout(() => { btn.dataset.sure = ''; btn.textContent = t('Delete'); btn.classList.remove('danger'); }, 4000);
+    return;
+  }
+  await setVariants(getVariants().filter((v) => v.id !== sig.id));
+  // A choice that named it falls back to the company's.
+  const p = getPrefs(); let changed = false;
+  ['new', 'reply'].forEach((k) => { if (p[k] === sig.id) { p[k] = ''; changed = true; } });
+  if (changed) await setPrefs(p);
+  message('');
+  render();
+}
+
+function render() {
+  full = core.withVariants(cfg, getVariants());
+  const list = core.available(full, user.values, from, user.groups);
+  renderChoice(list);
+  renderList(list);
 }
 
 async function load(refresh) {
@@ -116,10 +216,8 @@ async function load(refresh) {
   $('who').textContent = (up.displayName || '') + (from ? ' · ' + from : '') +
     (user.source === 'outlook' ? ' · ' + t('details not available, fields stay empty') : '');
   if (user.error && user.source === 'cache') message(t('Showing your details as last read; reading them now failed: {0}', user.error.message));
-  const list = core.available(cfg, user.values, from, user.groups);
   if (user.groups === null && core.groupsUsed(cfg).length) message(user.error ? t('Your groups could not be read, so signatures meant for groups are not shown: {0}', user.error.message) : t('Your groups could not be read, so signatures meant for groups are not shown.'), true);
-  renderChoice(list);
-  renderList(list);
+  render();
 }
 
 // NOBS OSign 0.9.14 · signatures published 30.10.2026, 14:02

@@ -204,3 +204,30 @@ test('campaigns: only on their days, and then they win as default; before and af
   assert.deepEqual(core.validate({ schemaVersion: 1, signatures: [{ id: 'a', name: 'A', validFrom: '2026-12-31', validUntil: '2026-12-01' }] }), ['Signature 1: the campaign ends before it starts.']);
   assert.deepEqual(core.validate({ schemaVersion: 1, signatures: [{ id: 'a', name: 'A', validFrom: '1.12.2026' }] }), ['Signature 1: the campaign\'s days are dates like 2026-12-01.']);
 });
+
+test('variants: the user\'s own text only in editable fields, only of signatures still open', () => {
+  const c = core.defaultConfig();
+  c.fields.push({ key: 'greeting', label: 'Grussformel', ad: '', graph: '', sample: '', userEditable: true });
+  c.signatures = [Object.assign(core.newSignature('std', 'Standard'), { defaultNew: true, html: '<p>@@greeting</p><p>@@givenName</p>' })];
+  const variants = [
+    { id: 'my-a', name: 'Herzlich', base: 'std', values: { greeting: 'Herzliche Grüsse', givenName: 'Hacker' } },
+    { id: 'my-b', name: 'Gone', base: 'old', values: { greeting: 'x' } },
+    { id: 'evil id', name: 'Bad', base: 'std', values: {} }
+  ];
+  const full = core.withVariants(c, variants);
+  assert.deepEqual(full.signatures.map((s) => s.id), ['std', 'my-a']);
+  const v = full.signatures[1];
+  assert.equal(v.variantOf, 'std');
+  assert.equal(v.defaultNew, false);
+  // A field the editor did not open stays the user's own value.
+  assert.deepEqual(core.valuesFor(v, { givenName: 'Anna', greeting: '' }), { givenName: 'Anna', greeting: 'Herzliche Grüsse' });
+  assert.deepEqual(core.editableIn(c, c.signatures[0]), ['greeting']);
+  // Picked by the user, it is used; not picked, the company default.
+  assert.equal(core.pick(full, {}, 'a@b.ch', 'new', { new: 'my-a' }, []).id, 'my-a');
+  assert.equal(core.pick(full, {}, 'a@b.ch', 'new', {}, []).id, 'std');
+  // No editable field, or no choice for users: no variants.
+  c.options.allowUserChoice = false;
+  assert.equal(core.withVariants(c, variants).signatures.length, 1);
+  c.options.allowUserChoice = true; c.fields.pop();
+  assert.equal(core.withVariants(c, variants).signatures.length, 1);
+});

@@ -928,6 +928,12 @@
     .concat(Array.from({ length: 15 }, (_, i) => 'onPremisesExtensionAttributes.extensionAttribute' + (i + 1)));
   $('graphProps').append(...GRAPH_PROPS.map((p) => el('option', { value: p })));
 
+  function editable(f) {
+    const c = el('input', { type: 'checkbox', 'aria-label': t('Users may change this field in their own variants'), title: t('Users may change this field in their own variants') });
+    c.checked = !!f.userEditable;
+    c.addEventListener('change', () => { if (c.checked) f.userEditable = true; else delete f.userEditable; changed({ list: false }); });
+    return c;
+  }
   function renderFields() {
     const tb = $('fieldRows'); tb.textContent = '';
     S.config.fields.forEach((f, i) => {
@@ -960,6 +966,7 @@
         el('td', null, inp('ad', { 'aria-label': t('AD attribute') })),
         el('td', { class: f.graph ? '' : 'nograph' }, inp('graph', { list: 'graphProps', placeholder: t('not available'), 'aria-label': t('Graph source') })),
         el('td', null, inp('sample', { 'aria-label': t('Sample value') })),
+        el('td', { class: 'center' }, editable(f)),
         el('td', null, del)));
     });
   }

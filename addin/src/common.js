@@ -224,6 +224,10 @@ function writeRoaming(key, value) {
 }
 
 export function getPrefs() { return readRoaming(PREFS_KEY) || {}; }
+// The user's own variants of the company signatures (see core.withVariants), in the mailbox.
+const VARIANTS_KEY = 'osign.variants';
+export function getVariants() { const v = readRoaming(VARIANTS_KEY); return Array.isArray(v) ? v : []; }
+export function setVariants(list) { return writeRoaming(VARIANTS_KEY, (list || []).slice(0, core.VARIANT_MAX)); }
 export function setPrefs(p) { return writeRoaming(PREFS_KEY, { new: p.new || '', reply: p.reply || '' }); }
 
 // ---------------------------------------------------------------------------------------------
@@ -385,7 +389,7 @@ function placeImages(html, images, mode) {
 }
 
 function renderHtml(sig, values) {
-  return core.render(sig.compiled || sig.html, values, { removeEmptyLines: sig.removeEmptyLines !== false });
+  return core.render(sig.compiled || sig.html, core.valuesFor(sig, values), { removeEmptyLines: sig.removeEmptyLines !== false });
 }
 
 // For the pane: the signature as the mail will show it, images inside.

@@ -3,7 +3,7 @@
  * when the From address changes. It puts the right signature in, or none. Only when it could not
  * (the signatures or the user's details could not be read) does it show a short notice on the message.
  */
-import { core, localize, loadConfig, loadUserValues, getPrefs, composeInfo, fromAddress, insertSignature, isMessage } from './common.js';
+import { core, localize, loadConfig, loadUserValues, getPrefs, getVariants, composeInfo, fromAddress, insertSignature, isMessage } from './common.js';
 
 /* global Office */
 
@@ -40,7 +40,7 @@ async function sign(event, what) {
     item = Office.context.mailbox.item;
     const req = Office.context.requirements;
     log(what + ' started (sign-in through Outlook: ' + (req && req.isSetSupported && req.isSetSupported('NestedAppAuth', '1.1') ? 'yes' : 'no') + ').');
-    const cfg = await loadConfig({ interactive: false });
+    const cfg = core.withVariants(await loadConfig({ interactive: false }), getVariants());
     log('signatures loaded.');
     if (!isMessage(item) && !(cfg.options && cfg.options.meetings)) { log('a meeting, and meetings are off.'); return; }
     const info = await composeInfo(item);
