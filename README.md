@@ -8,7 +8,8 @@ Central email signatures for **classic and new Outlook**, managed in one place.
 - **The Outlook add-in** (`addin/`): it inserts the right signature by itself in every new message,
   reply and forward, and switches signatures when the From address changes. Its pane lets users pick
   another signature or choose their own defaults. It fills the placeholders (`@@givenName`,
-  `@@mobile`, and so on) with each user's details from Microsoft Graph.
+  `@@mobile`, and so on) with each user's details from Microsoft Graph. In Outlook it is called
+  just **OSign** (its ribbon group, pane and notices).
 
 ![The editor](docs/editor.png)
 

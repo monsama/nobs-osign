@@ -14,7 +14,7 @@ function showNotice(item, reason) {
   const n = notices(item); if (!n || !n.replaceAsync) return Promise.resolve();
   const german = /^de/i.test(Office.context.displayLanguage || '');
   // What to do first (the pane shows the whole story, and signs in where that is needed), then why.
-  let text = (german ? 'NOBS OSign hat keine Signatur eingefügt; mehr unter Signaturen. ' : 'NOBS OSign inserted no signature; see Signatures. ') + localize(reason, german);
+  let text = (german ? 'OSign hat keine Signatur eingefügt; mehr unter Signaturen. ' : 'OSign inserted no signature; see Signatures. ') + localize(reason, german);
   // Outlook takes at most 150 characters.
   if (text.length > 150) text = text.slice(0, 149) + '\u2026';
   return new Promise((resolve) => {
@@ -34,7 +34,7 @@ const VERSION = typeof OSIGN_VERSION !== 'undefined' ? OSIGN_VERSION : '';
 // Each step goes to the console (F12, filter "OSign"): when nothing is put in, it shows where it stopped.
 function log(m) { try { console.log('OSign ' + VERSION + ': ' + m); } catch (e) { /* none */ } }
 
-const CLASSIC_HINT = 'In classic Outlook, open NOBS OSign → Signatures once; from then on it goes in by itself.';
+const CLASSIC_HINT = 'In classic Outlook, open OSign → Signatures once; from then on it goes in by itself.';
 
 async function sign(event, what) {
   let item = null;

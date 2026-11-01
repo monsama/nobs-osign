@@ -258,11 +258,11 @@ async function load(refresh) {
   render();
 }
 
-// NOBS OSign 0.9.14 · signatures published 30.10.2026, 14:02
+// OSign 0.9.14 · signatures published 30.10.2026, 14:02
 function showVersion() {
   const at = cfg && cfg.updated ? new Date(cfg.updated) : null;
   const when = at && !isNaN(at) ? at.toLocaleString(german ? 'de-CH' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '';
-  $('ver').textContent = 'NOBS OSign ' + OSIGN_VERSION + (when ? ' · ' + t('signatures published {0}', when) : '');
+  $('ver').textContent = 'OSign ' + OSIGN_VERSION + (when ? ' · ' + t('signatures published {0}', when) : '');
 }
 
 Office.onReady(() => {

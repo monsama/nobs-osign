@@ -89,7 +89,7 @@ const MSG_DE = [
   [/You are not in the AD export, so your groups are not known\.$/, 'Sie sind nicht im AD-Export, darum sind Ihre Gruppen nicht bekannt.'],
   [/You are not in the AD export \((.+?)\)\. Ask IT to export the users again\.$/, 'Sie sind nicht im AD-Export ($1). Bitten Sie die IT, die Benutzer neu zu exportieren.'],
   [/No signatures are published yet: (.+) is not in SharePoint\.$/, 'Noch keine Signaturen veröffentlicht: $1 fehlt in SharePoint.'],
-  [/^In classic Outlook, open NOBS OSign → Signatures once; from then on it goes in by itself\.$/, 'Im klassischen Outlook einmal NOBS OSign → Signaturen öffnen; danach fügt es sie selbst ein.'],
+  [/^In classic Outlook, open OSign → Signatures once; from then on it goes in by itself\.$/, 'Im klassischen Outlook einmal OSign → Signaturen öffnen; danach fügt es sie selbst ein.'],
   [/ took too long\.$/, ' dauerte zu lange.'],
   [/: not found in SharePoint \(404\)\.$/, ': in SharePoint nicht gefunden (404).'],
   [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.']
