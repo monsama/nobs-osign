@@ -20,7 +20,26 @@ const { connect, close, bind, search, escapeFilter, chain, ldapProblem } = requi
 // An attribute a field may name. The LAPS password and the BitLocker recovery data never: the
 // values go into the preview and, exported, into SharePoint for every employee to read.
 const SECRET_ATTR = /ms-?mcs-?admpwd|mslaps-|msfve-|unicodepwd|userpassword|supplementalcredentials|password|pwd|msds-managed|mstpm-|mspki|dpapi|credential|secret|bitlocker|recovery/i;
-const attrOk = (a) => /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(a) && !SECRET_ATTR.test(a);
+const attrName = (a) => /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(a) && !SECRET_ATTR.test(a);
+// What a field may read from AD: the contact details a signature shows (and the fields CI-Sign
+// had). Anything else (an employee number, a private address, extensionAttributeN) only when the
+// local account admin allows it (Server connections → Active Directory: OSIGN_AD_ATTRIBUTES), as
+// what is read goes into the preview and, exported, into SharePoint for every employee to read.
+const CONTACT_ATTRS = ['givenName', 'sn', 'displayName', 'cn', 'initials', 'middleName', 'personalTitle', 'generationQualifier',
+  'title', 'department', 'departmentNumber', 'company', 'division', 'description', 'physicalDeliveryOfficeName',
+  'telephoneNumber', 'otherTelephone', 'mobile', 'otherMobile', 'homePhone', 'ipPhone', 'facsimileTelephoneNumber', 'pager',
+  'mail', 'userPrincipalName', 'sAMAccountName', 'wWWHomePage', 'url', 'streetAddress', 'postOfficeBox', 'l', 'st', 'postalCode',
+  'c', 'co', 'info'];
+const extraAttrs = (text) => [...new Set(String(text || '').split(/[\s,;]+/).filter(Boolean))];
+// The attributes allowed, as written (for the editor's list).
+function allowedAttrs(c) {
+  const out = CONTACT_ATTRS.slice();
+  for (const a of (c && c.extraAttrs) || []) if (attrName(a) && !out.some((x) => x.toLowerCase() === a.toLowerCase())) out.push(a);
+  return out;
+}
+// Without a configuration only the name is checked (whether a request is well-formed); reading
+// from AD always passes the configuration, so only allowed attributes are read.
+const attrOk = (a, c) => attrName(a) && (!c || allowedAttrs(c).some((x) => x.toLowerCase() === String(a).toLowerCase()));
 // Users with a mail address whose account is not disabled (userAccountControl flag 2).
 const ACTIVE_USERS = '(&(objectCategory=person)(objectClass=user)(mail=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))';
 
@@ -35,7 +54,9 @@ function directoryConfig(env, ldapCfg) {
   if (serviceDn && !/[=@\\]/.test(serviceDn) && ldapCfg.domain) serviceDn += '@' + ldapCfg.domain;
   return Object.assign({}, ldapCfg, { serviceDn, servicePassword: pw, base: String(env.OSIGN_LDAP_DIRECTORY_BASE || '').trim() || dcs || ldapCfg.searchBase,
     // The password in ./secrets is for this domain controller only (server/connections.js).
-    pinnedTo: String(env.OSIGN_PASSWORD_PINNED || '') });
+    pinnedTo: String(env.OSIGN_PASSWORD_PINNED || ''),
+    // More attributes fields may read, set by the local account admin.
+    extraAttrs: extraAttrs(env.OSIGN_AD_ATTRIBUTES) });
 }
 const directoryEnabled = (c) => !!(c.url && c.serviceDn);
 function directoryProblem(c) {
@@ -65,7 +86,7 @@ const first = (attrs, name) => { const v = attrs[String(name).toLowerCase()]; re
 async function lookup(c, query, fields) {
   const q = String(query || '').trim();
   if (!q) throw new Error('Enter a user name or mail address.');
-  const attrs = [...new Set((fields || []).map((f) => String(f.ad || '')).filter(attrOk).map((a) => a.toLowerCase()))];
+  const attrs = [...new Set((fields || []).map((f) => String(f.ad || '')).filter((a) => attrOk(a, c)).map((a) => a.toLowerCase()))];
   return withService(c, async (client) => {
     const v = escapeFilter(q);
     const found = await search(client, c.base, '(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=' + v + ')(mail=' + v + ')(userPrincipalName=' + v + ')))', ['displayname', 'samaccountname', ...attrs], 2);
@@ -73,7 +94,7 @@ async function lookup(c, query, fields) {
     if (found.length > 1) throw new Error('More than one user matches ' + q + '.');
     const u = found[0];
     const values = {};
-    for (const f of fields || []) { if (f && f.key) values[f.key] = attrOk(String(f.ad || '')) ? first(u.attrs, f.ad) : ''; }
+    for (const f of fields || []) { if (f && f.key) values[f.key] = attrOk(String(f.ad || ''), c) ? first(u.attrs, f.ad) : ''; }
     const groups = new Set();
     // The rule IN_CHAIN follows group in group, as the add-in reads groups from Entra ID.
     for (const g of await search(client, c.base, '(&(objectClass=group)(member:1.2.840.113556.1.4.1941:=' + escapeFilter(u.dn) + '))', ['name', 'samaccountname'])) {
@@ -139,7 +160,7 @@ async function departmentsMatching(c, query) {
 // groups: [<the named groups they are in, nested ones included, lower case>] }. One search per
 // group for its members, not one per user.
 async function userRecords(c, attributes, groupNames) {
-  const attrs = [...new Set((attributes || []).filter(attrOk).map((a) => a.toLowerCase()))];
+  const attrs = [...new Set((attributes || []).filter((a) => attrOk(a, c)).map((a) => a.toLowerCase()))];
   return withService(c, async (client) => {
     const memberOf = new Map();
     for (const name of groupNames || []) {
@@ -168,4 +189,4 @@ async function testService(c) {
   return withService(c, async (client) => ({ users: (await search(client, c.base, ACTIVE_USERS, ['samaccountname'], 5)).length }));
 }
 
-module.exports = { testService, attrOk, directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, usersMatching, departmentsMatching, userRecords, sha256 };
+module.exports = { testService, attrOk, attrName, allowedAttrs, extraAttrs, directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, usersMatching, departmentsMatching, userRecords, sha256 };

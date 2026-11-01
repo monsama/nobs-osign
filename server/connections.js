@@ -19,6 +19,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { writeAtomic, readText } = require('./store');
+const { attrName, extraAttrs } = require('./directory');
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DN = /^[^\u0000-\u001f]{1,500}$/;
@@ -48,6 +49,11 @@ const FIELDS = {
   ldapLoginAttr: { env: 'OSIGN_LDAP_LOGIN_ATTR', check: (v) => (/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(v) ? '' : 'The login attribute is the name of one attribute, such as sAMAccountName.') },
   ldapServiceDn: { env: 'OSIGN_LDAP_SERVICE_DN', check: (v) => (DN.test(v) ? '' : 'The service account is its login, like svc-osign.') },
   ldapDirectoryBase: { env: 'OSIGN_LDAP_DIRECTORY_BASE', check: (v) => (DN.test(v) ? '' : 'Where users and groups are read is a DN, like DC=example,DC=ch.') },
+  // More AD attributes fields may read than the contact details (server/directory.js).
+  adAttributes: { env: 'OSIGN_AD_ATTRIBUTES', check: (v) => {
+    const bad = extraAttrs(v).filter((a) => !attrName(a));
+    return bad.length ? 'Not an attribute fields may read: ' + bad.join(', ') + ' (one name each, separated by commas; passwords and recovery keys never).' : '';
+  } },
   adExportAt: { env: 'OSIGN_AD_EXPORT_AT', check: (v) => (/^([01]?\d|2[0-3]):[0-5]\d$/.test(v) ? '' : 'The daily export is a time of day, like 06:00.') },
   graphTenantId: { env: 'OSIGN_GRAPH_TENANT_ID', check: (v) => (GUID.test(v) ? '' : 'The tenant ID is the Directory (tenant) ID, a GUID.') },
   graphClientId: { env: 'OSIGN_GRAPH_CLIENT_ID', check: (v) => (GUID.test(v) ? '' : "The client ID is the server's app registration's Application (client) ID, a GUID.") },

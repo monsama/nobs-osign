@@ -604,7 +604,7 @@
   }
   async function deleteAsset(name) {
     const used = S.config.signatures.filter((s) => (s.html || '').includes('assets/' + name)).map((s) => s.name);
-    if (used.length && !confirm(t('{0} is used in: {1}. Remove it anyway?', name, used.join(', ')))) return;
+    if (used.length && !(await ask(t('{0} is used in: {1}. Remove it anyway?', name, used.join(', ')), t('Remove'), true))) return;
     try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = t(e.message); }
   }
   // An image as small as a signature needs, before it is uploaded: at most 1200 pixels wide
@@ -889,8 +889,8 @@
   $('btnNew').addEventListener('click', () => addSig());
   $('btnNew2').addEventListener('click', () => addSig());
   $('btnDup').addEventListener('click', () => { flushSource(); const s = sig(); if (s) addSig(s); });
-  $('btnDel').addEventListener('click', () => {
-    const s = sig(); if (!s || !confirm(t('Delete the signature "{0}"? It goes from Outlook with the next publish.', s.name))) return;
+  $('btnDel').addEventListener('click', async () => {
+    const s = sig(); if (!s || !(await ask(t('Delete the signature "{0}"? It goes from Outlook with the next publish.', s.name), t('Delete'), true))) return;
     S.config.signatures = S.config.signatures.filter((x) => x !== s);
     changed(); openSig(S.config.signatures[0] ? S.config.signatures[0].id : null);
   });
@@ -1103,7 +1103,20 @@
     c.addEventListener('change', () => { if (c.checked) f.userEditable = true; else delete f.userEditable; changed({ list: false }); });
     return c;
   }
+  // The AD attributes the server lets fields read (the local admin can allow more): offered, and
+  // one it does not allow marked, since it would stay empty.
+  const adAllowed = () => ((S.info && S.info.features && S.info.features.adAttributes) || []);
+  function adInput(f, x) {
+    const mark = () => {
+      const bad = !!f.ad && adAllowed().length > 0 && !adAllowed().some((a) => a.toLowerCase() === f.ad.toLowerCase());
+      x.classList.toggle('bad', bad);
+      x.title = bad ? t('Not read from AD: the local admin can allow it under Server connections → Active Directory.') : '';
+    };
+    x.addEventListener('input', mark); mark();
+    return x;
+  }
   function renderFields() {
+    $('adAttrs').replaceChildren(...adAllowed().map((a) => el('option', { value: a })));
     const tb = $('fieldRows'); tb.textContent = '';
     S.config.fields.forEach((f, i) => {
       const inp = (prop, attrs) => {
@@ -1113,26 +1126,31 @@
       };
       const key = el('input', { value: f.key, 'aria-label': t('Placeholder name') });
       let oldKey = f.key;
-      key.addEventListener('change', () => {
+      key.addEventListener('change', async () => {
         const nk = key.value.trim().replace(/^@@/, '');
         if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(nk)) { toast(t('A placeholder name is letters, digits and _, starting with a letter.'), true); key.value = oldKey; return; }
         if (S.config.fields.some((x) => x !== f && x.key === nk)) { toast(t('@@{0} is already a field.', nk), true); key.value = oldKey; return; }
         const uses = S.config.signatures.filter((s) => core.placeholdersIn(s.html).indexOf(oldKey) >= 0);
-        if (uses.length && confirm(t('Change @@{0} to @@{1} in {2} signature(s) too?', oldKey, nk, uses.length))) {
+        if (uses.length && await ask(t('Change @@{0} to @@{1} in {2} signature(s) too?', oldKey, nk, uses.length), t('Change them too'), false, t('Only the field'))) {
           const re = new RegExp('@@' + oldKey + '(?![A-Za-z0-9_])', 'g');
           uses.forEach((s) => { s.html = s.html.replace(re, '@@' + nk); });
         }
         f.key = nk; oldKey = nk; changed({ list: false });
       });
-      const del = el('button', { class: 'ghost small danger', title: t('Remove field'), 'aria-label': t('Remove field'), onclick: () => {
+      const del = el('button', { class: 'ghost small danger', title: t('Remove field'), 'aria-label': t('Remove field @@{0}', f.key), onclick: async () => {
         const uses = S.config.signatures.filter((s) => core.placeholdersIn(s.html).indexOf(f.key) >= 0).map((s) => s.name);
-        if (uses.length && !confirm(t('@@{0} is used in: {1}. Remove the field anyway? The placeholder then stays as typed.', f.key, uses.join(', ')))) return;
+        if (uses.length && !(await ask(t('@@{0} is used in: {1}. Remove the field anyway? The placeholder then stays as typed.', f.key, uses.join(', ')), t('Remove'), true))) return;
         S.config.fields.splice(i, 1); changed({ list: false }); renderFields();
+        // Back as it was, at its place, while the note shows.
+        toast(t('Field @@{0} removed.', f.key), false, { label: t('Undo'), run: () => {
+          if (S.config.fields.some((x) => x.key === f.key)) return;
+          S.config.fields.splice(Math.min(i, S.config.fields.length), 0, f); changed({ list: false }); renderFields();
+        } });
       } }, '✕');
       tb.append(el('tr', null,
         el('td', null, inp('label', { 'aria-label': t('Field') })),
         el('td', null, el('div', { class: 'ph' }, el('span', null, '@@'), key)),
-        el('td', null, inp('ad', { 'aria-label': t('AD attribute') })),
+        el('td', null, adInput(f, inp('ad', { list: 'adAttrs', 'aria-label': t('AD attribute') }))),
         el('td', { class: f.graph ? '' : 'nograph' }, inp('graph', { list: 'graphProps', placeholder: t('not available'), 'aria-label': t('Graph source') })),
         el('td', null, inp('sample', { 'aria-label': t('Sample value') })),
         el('td', { class: 'center' }, editable(f)),
@@ -1141,11 +1159,11 @@
   }
   // The starter fields as they were at first: missing ones come back, changed ones are reset
   // (label, AD attribute, Graph source, sample, editable in the add-in); fields of your own stay.
-  $('btnResetFields').addEventListener('click', () => {
+  $('btnResetFields').addEventListener('click', async () => {
     const defs = core.DEFAULT_FIELDS;
     const changedKeys = defs.filter((d) => { const f = S.config.fields.find((x) => x.key === d.key); return !f || ['label', 'ad', 'graph', 'sample'].some((k) => (f[k] || '') !== (d[k] || '')) || f.userEditable; }).map((d) => '@@' + d.key);
     if (!changedKeys.length) { toast(t('The default fields are as they were at first.')); return; }
-    if (!confirm(t('Restore the default fields? This resets: {0}. Fields of your own stay.', changedKeys.join(', ')))) return;
+    if (!(await ask(t('Restore the default fields? This resets: {0}. Fields of your own stay.', changedKeys.join(', ')), t('Restore'), true))) return;
     const own = S.config.fields.filter((f) => !defs.some((d) => d.key === f.key));
     S.config.fields = defs.map((d) => Object.assign({}, d)).concat(own);
     changed({ list: false }); renderFields();
@@ -1522,7 +1540,7 @@
   // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
   // saved wins over .env, an empty field takes .env's value (its placeholder). Secrets are only
   // ever sent, never shown: the server says where each comes from.
-  const CONN_FIELDS = ['ldapUrl', 'adDomain', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
+  const CONN_FIELDS = ['ldapUrl', 'adDomain', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'adAttributes', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
   const CONN_SECRETS = ['ldapServicePassword', 'cfApiToken'];
   let connDrop = {}, connCa;
   function day(iso) { return iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : ''; }
@@ -1643,7 +1661,7 @@
   $('connScriptGet').addEventListener('click', async () => {
     const out = $('connScriptNote');
     out.className = 'where'; out.textContent = ''; $('connScriptWizard').hidden = true;
-    if (personalNow() && !confirm(t('The folder is in a personal OneDrive: the script only works when run by its owner. Download it anyway?'))) return;
+    if (personalNow() && !(await ask(t('The folder is in a personal OneDrive: the script only works when run by its owner. Download it anyway?'), t('Download')))) return;
     try {
       const r = await api('setup/start', { origin: location.origin, groups: core.valueSource(S.config) === 'graph', users: $('connScriptUsers').checked });
       const a = el('a', { href: '/setup/nobs-osign-setup.ps1?id=' + encodeURIComponent(r.id), download: 'nobs-osign-setup.ps1' });
@@ -2646,7 +2664,7 @@
     $('bakErr').textContent = ''; $('bakRestoreOk').textContent = '';
     const f = $('bakFile').files[0];
     if (!f) { $('bakErr').textContent = t('Choose the backup file.'); return; }
-    if (!confirm(t('Replace the draft, the settings, the connections and the history here with the backup\'s?'))) return;
+    if (!(await ask(t('Replace the draft, the settings, the connections and the history here with the backup\'s?'), t('Restore'), true))) return;
     $('bakRestore').disabled = true; $('bakRestoreOk').textContent = t('Bringing it back…');
     try {
       const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
@@ -2722,7 +2740,7 @@
   }
   document.querySelectorAll('#dlgDiff input[name=diffAgainst]').forEach((r) => r.addEventListener('change', () => historyDiff()));
   async function historyRestore(v) {
-    if (!confirm(t('Replace the draft and its images with the version of {0}? What is not published is lost.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')))) return;
+    if (!(await ask(t('Replace the draft and its images with the version of {0}? What is not published is lost.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')), t('Bring back'), true))) return;
     try {
       await api('history/restore', { id: v.id });
       applyDraft(await api('draft/get'));
@@ -2730,9 +2748,13 @@
       toast(t('Loaded the version of {0} into the draft. Publish it to send it out.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')));
     } catch (err) { $('historyErr').textContent = t(err.message); }
   }
+  // Small screens: the sidebar opens over the page, and closes once something in it is chosen.
+  function sideOpen(on) { document.body.classList.toggle('side-open', on); $('btnSide').setAttribute('aria-expanded', on ? 'true' : 'false'); }
+  $('btnSide').addEventListener('click', () => sideOpen(!document.body.classList.contains('side-open')));
+  $('side').addEventListener('click', (e) => { if (e.target.closest('a, .sig-list li')) sideOpen(false); });
   $('navHistory').addEventListener('click', (e) => { e.preventDefault(); $('dlgHistory').showModal(); renderHistory(); });
   $('btnLoad').addEventListener('click', async () => {
-    if (S.dirty && !confirm(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'))) return;
+    if (S.dirty && !(await ask(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'), t('Replace'), true))) return;
     try { applyDraft(await api('load-published')); toast(t('Loaded the published signatures.')); }
     catch (e) { toast(t(e.message), true); }
   });
@@ -2771,9 +2793,29 @@
   }
 
   let toastTimer = null;
-  function toast(msg, isError) {
-    const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (isError ? ' error' : '');
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 6000 : 3000);
+  // A question with its answer as a button (Delete, Restore …), not the browser's OK: true when
+  // that was chosen. danger: the button in red, and Cancel the one ready for Enter.
+  function ask(text, okLabel, danger, cancelLabel) {
+    const d = $('dlgAsk');
+    $('askText').textContent = text;
+    $('askOk').textContent = okLabel || t('OK'); $('askOk').className = danger ? 'danger-btn' : 'primary';
+    $('askCancel').textContent = cancelLabel || t('Cancel');
+    d.returnValue = '';
+    return new Promise((resolve) => {
+      d.addEventListener('close', () => resolve(d.returnValue === 'ok'), { once: true });
+      d.showModal();
+      (danger ? $('askCancel') : $('askOk')).focus();
+    });
+  }
+  // action: { label, run }, a button in it (e.g. Undo), and it stays a little longer.
+  function toast(msg, isError, action) {
+    const box = $('toast'); box.replaceChildren(msg); box.className = 'toast show' + (isError ? ' error' : '') + (action ? ' act' : '');
+    if (action) {
+      const b = el('button', { type: 'button', class: 'small' }, action.label);
+      b.addEventListener('click', () => { clearTimeout(toastTimer); box.className = 'toast'; action.run(); });
+      box.append(' ', b);
+    }
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { box.className = 'toast'; }, action ? 9000 : isError ? 6000 : 3000);
   }
 
   // A file picked through a button-like label: its name next to it.

@@ -321,6 +321,7 @@ In Settings → Server connections, or as environment variables in `.env` with t
 | `OSIGN_LDAP_SERVICE_PASSWORD_FILE` | a file holding its password |
 | `OSIGN_LDAP_DIRECTORY_BASE` | where users and groups are searched; empty: the whole domain of `OSIGN_LDAP_BASE` |
 | `OSIGN_AD_EXPORT_AT` | `06:00`: the users' values are exported every day at that time (`TZ`) |
+| `OSIGN_AD_ATTRIBUTES` | more AD attributes fields may read (`extensionAttribute1, employeeID`); without, only contact details (names, title, department, company, office, phone numbers, mail, address, web page). Also under Server connections → Active Directory |
 | `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT`, `OSIGN_CF_API_TOKEN_FILE` | Cloudflare Pages |
 | `OSIGN_REQUIRE_ATTESTATION` | `1`: an update whose attestation cannot be checked stops |
 | `OSIGN_UPDATE_CHECK` | `0`: the server does not ask GitHub whether a newer version is out (default `1`) |

@@ -13,7 +13,7 @@ const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
 const { ldapConfig, ldapProblem, testSignIn, detect } = require('./ldap');
-const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStartingWith, usersMatching, departmentsMatching, testService } = require('./directory');
+const { directoryConfig, directoryEnabled, directoryProblem, allowedAttrs, lookup, groupsStartingWith, usersMatching, departmentsMatching, testService } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
@@ -323,6 +323,8 @@ function createApp(opts) {
         graphProblem: graphProblem(graphCfg),
         // AD with the server's service account; the scheduled export, and how its last run went.
         adProblem: adOn ? '' : directoryProblem(dir),
+        // The AD attributes fields may read.
+        adAttributes: allowedAttrs(dir),
         adExport: adOn && exportAt ? { at: exportAt, last: lastExport } : null,
         // A newer release, when the server is allowed to look (OSIGN_UPDATE_CHECK).
         update: updates.status(),
