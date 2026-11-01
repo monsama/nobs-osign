@@ -81,6 +81,7 @@
   // ---------------------------------------------------------------------------------------------
   let saveTimer = null, saving = Promise.resolve(), changeSeq = 0;
   function changed(opts) {
+    histNote();
     S.dirty = true; changeSeq++; renderStatus(t('Saving…'));
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 600);
@@ -297,7 +298,8 @@
     $('sigUntil').value = s.validUntil || '';
     $('campaignSummary').textContent = campaignText(s) || t('always');
     loadDesign(s.html);
-    $('source').value = s.html;
+    $('source').value = prettyHtml(s.html);
+    histReset(s);
     schedulePreview();
   }
 
@@ -341,6 +343,7 @@
     designReady = new Promise((resolve) => {
       design.addEventListener('load', () => {
         ddoc = design.contentDocument;
+        zoomWheel(ddoc, 'design'); zoomApply('design');
         ddoc.addEventListener('keydown', (e) => onKeys(e));
         ddoc.body.contentEditable = 'true';
         try { ddoc.execCommand('styleWithCSS', false, true); ddoc.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { }
@@ -439,6 +442,7 @@
   }
 
   function exec(cmd, val) {
+    if (cmd === 'undo' || cmd === 'redo') { histStep(cmd === 'undo' ? -1 : 1); return; }
     if (S.mode !== 'design') return;
     design.contentWindow.focus();
     ddoc.execCommand(cmd, false, val === undefined ? null : val);
@@ -517,7 +521,7 @@
       btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline'), sep(),
       btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), sep(),
       btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), btn('table', 'Two columns (logo beside the text)', insertTable), btn('hr', 'Line', () => exec('insertHorizontalRule')), sep(),
-      btn('clear', 'Clear formatting', () => exec('removeFormat')), btn('undo', 'Undo (Ctrl+Z)', () => exec('undo')), btn('redo', 'Redo (Ctrl+Y)', () => exec('redo'))
+      btn('clear', 'Clear formatting', () => exec('removeFormat')), btn('undo', 'Undo (Ctrl+Z)', () => histStep(-1), 'undo'), btn('redo', 'Redo (Ctrl+Y)', () => histStep(1), 'redo')
     );
   }
 
@@ -535,7 +539,7 @@
   function updateToolbarState() {
     if (!ddoc) return;
     document.querySelectorAll('#toolbar button[data-cmd]').forEach((b) => {
-      const c = b.dataset.cmd; if (!c) return;
+      const c = b.dataset.cmd; if (!c || c === 'undo' || c === 'redo') return;
       let on = false; try { on = ddoc.queryCommandState(c); } catch (e) { }
       b.classList.toggle('on', on);
     });
@@ -654,12 +658,125 @@
     } catch (e) { $('imgErr').textContent = t(e.message); }
   });
 
+  // Undo and redo for the signature open: its HTML after each change (typing a little bit at a
+  // time), up to 100 steps back. Everything counts: typing, a field put in, an image's width, the
+  // HTML tab; the browser's own undo knows only some of it, and nothing once the focus left.
+  const hist = { id: null, stack: [], pos: 0, timer: null };
+  function histReset(s) { clearTimeout(hist.timer); hist.id = s ? s.id : null; hist.stack = s ? [s.html || ''] : []; hist.pos = 0; histButtons(); }
+  function histRecord() {
+    clearTimeout(hist.timer); hist.timer = null;
+    const s = sig(); if (!s || s.id !== hist.id) return;
+    const h = s.html || '';
+    if (hist.stack[hist.pos] === h) return;
+    hist.stack = hist.stack.slice(0, hist.pos + 1);
+    hist.stack.push(h);
+    if (hist.stack.length > 101) hist.stack.shift();
+    hist.pos = hist.stack.length - 1;
+    histButtons();
+  }
+  // Typing goes in as one step once it pauses.
+  function histNote() { if (S.view === 'sig' && hist.id) { clearTimeout(hist.timer); hist.timer = setTimeout(histRecord, 500); } }
+  function histStep(dir) {
+    if (hist.timer) histRecord();
+    const s = sig(); if (!s || s.id !== hist.id) return;
+    if (S.mode === 'html') flushSource();
+    histRecord();
+    const to = hist.pos + dir;
+    if (to < 0 || to >= hist.stack.length) return;
+    hist.pos = to;
+    s.html = hist.stack[to];
+    loadDesign(s.html).then(() => { if (S.mode === 'design') { design.contentWindow.focus(); const r = ddoc.createRange(); r.selectNodeContents(ddoc.body); r.collapse(false); const sel = ddoc.getSelection(); sel.removeAllRanges(); sel.addRange(r); } });
+    $('source').value = prettyHtml(s.html);
+    changed({ list: false });
+    clearTimeout(hist.timer); hist.timer = null;
+    histButtons();
+  }
+  function histButtons() {
+    const u = document.querySelector('#toolbar [data-cmd=undo]'), r = document.querySelector('#toolbar [data-cmd=redo]');
+    if (u) u.disabled = hist.pos <= 0 && !hist.timer;
+    if (r) r.disabled = hist.pos >= hist.stack.length - 1;
+  }
+
+  // Zoom: the design view and the preview each their own, 50 to 200 %, kept for this browser.
+  // The buttons above each, or Ctrl + mouse wheel over it; the percentage puts it back to 100 %.
+  const ZOOM_MIN = 50, ZOOM_MAX = 200, ZOOM_STEP = 10;
+  const zoom = { design: 100, preview: 100 };
+  const zoomKept = (k, v) => { try { if (v === undefined) return localStorage.getItem('osign.zoom.' + k); if (v === null) localStorage.removeItem('osign.zoom.' + k); else localStorage.setItem('osign.zoom.' + k, v); } catch (e) { /* no storage */ } return null; };
+  for (const k of Object.keys(zoom)) { const v = Number(zoomKept(k)); if (v >= ZOOM_MIN && v <= ZOOM_MAX) zoom[k] = v; }
+  function zoomApply(k) {
+    const doc = k === 'design' ? ddoc : $('preview').contentDocument;
+    if (doc && doc.documentElement) doc.documentElement.style.zoom = zoom[k] === 100 ? '' : String(zoom[k] / 100);
+    const box = document.querySelector('.zoom[data-zoom="' + k + '"]');
+    if (box) {
+      box.querySelector('.zpct').textContent = zoom[k] + ' %';
+      box.querySelector('[data-z="-1"]').disabled = zoom[k] <= ZOOM_MIN;
+      box.querySelector('[data-z="1"]').disabled = zoom[k] >= ZOOM_MAX;
+    }
+  }
+  function zoomBy(k, dir) {
+    zoom[k] = dir === 0 ? 100 : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((zoom[k] + dir * ZOOM_STEP) / ZOOM_STEP) * ZOOM_STEP));
+    zoomKept(k, zoom[k] === 100 ? null : String(zoom[k]));
+    zoomApply(k);
+  }
+  document.querySelectorAll('.zoom[data-zoom]').forEach((box) => {
+    box.addEventListener('click', (e) => { const b = e.target.closest('button[data-z]'); if (b) zoomBy(box.dataset.zoom, Number(b.dataset.z)); });
+  });
+  // Ctrl + wheel over a view zooms that view, not the page.
+  function zoomWheel(doc, k) {
+    if (!doc || doc.__osignZoom) return;
+    doc.__osignZoom = true;
+    doc.addEventListener('wheel', (e) => { if (!e.ctrlKey) return; e.preventDefault(); zoomBy(k, e.deltaY < 0 ? 1 : -1); }, { passive: false });
+  }
+  $('preview').addEventListener('load', () => { zoomWheel($('preview').contentDocument, 'preview'); zoomApply('preview'); });
+  zoomApply('preview');
+
+  // The HTML tab: the signature indented, a block (table, row, cell, paragraph) and a line (<br>)
+  // each on a line of its own; what that adds (a line break and the indent next to a block or a
+  // <br>) goes again when it is kept, so the signature is the same as before.
+  const BLOCKS = 'table|thead|tbody|tfoot|tr|td|th|p|div|ul|ol|li|h[1-6]|blockquote|center|hr';
+  // Line breaks (and the indent after them) next to a block or a <br>: they show nothing.
+  const NLWS = '[ \\t]*(?:\\r?\\n[ \\t]*)+';
+  const unwrap = (h) => String(h || '').replace(new RegExp(NLWS + '(?=</?(?:' + BLOCKS + '|br)\\b)', 'gi'), '').replace(new RegExp('(</?(?:' + BLOCKS + '|br)\\b[^>]*>)' + NLWS, 'gi'), '$1');
+  function prettyHtml(html) {
+    const src = unwrap(html);
+    const parts = src.split(/(<!--[\s\S]*?-->|<[^>]+>)/);
+    const isBlock = new RegExp('^<(/?)(' + BLOCKS + ')\\b', 'i');
+    let out = '', depth = 0, atLineStart = true;
+    const nl = () => { out = out.replace(/[ \t]+$/, ''); if (out && !out.endsWith('\n')) out += '\n'; out += '  '.repeat(depth); atLineStart = true; };
+    for (const p of parts) {
+      if (!p) continue;
+      const m = isBlock.exec(p);
+      if (m && !m[1]) {
+        nl(); out += p; atLineStart = false;
+        // What the block holds starts on a line of its own, indented.
+        if (!/^<hr\b/i.test(p) && !/\/>$/.test(p)) { depth++; nl(); }
+      } else if (m && m[1]) {
+        depth = Math.max(0, depth - 1);
+        // An empty block stays on one line: <td></td>.
+        if (new RegExp('<' + m[2] + '\\b[^>]*>\\s*$', 'i').test(out)) out = out.replace(/\s+$/, '');
+        else nl();
+        out += p; atLineStart = false;
+      } else if (/^<br\b/i.test(p)) {
+        out += p; nl();
+      } else {
+        out += atLineStart ? p.replace(/^[ \t]+/, '') : p;
+        if (p.trim()) atLineStart = false;
+      }
+    }
+    return out.replace(/[ \t]+$/gm, '').replace(/^\n+/, '').replace(/\n+$/, '');
+  }
+  function plainHtml(text) {
+    return unwrap(text).replace(/^\s+|\s+$/g, '');
+  }
+
   // Design / HTML
   function setMode(mode) {
     if (mode === S.mode) return;
     const s = sig();
-    if (mode === 'html') { $('source').value = s ? s.html : ''; }
+    if (mode === 'html') { $('source').value = s ? prettyHtml(s.html) : ''; }
     else { flushSource(); loadDesign(s ? s.html : ''); }
+    // What was done in the other tab is a step of its own.
+    histRecord();
     S.mode = mode;
     document.querySelectorAll('.tab[data-mode]').forEach((t) => { t.classList.toggle('active', t.dataset.mode === mode); t.setAttribute('aria-selected', t.dataset.mode === mode); });
     design.hidden = mode !== 'design';
@@ -671,10 +788,10 @@
   function flushSource() {
     if (S.mode !== 'html') return;
     const s = sig(); if (!s) return;
-    const clean = sanitize($('source').value);
+    const clean = sanitize(plainHtml($('source').value));
     if (clean !== s.html) { s.html = clean; changed({ list: false }); }
   }
-  $('source').addEventListener('input', () => { const s = sig(); if (!s) return; s.html = $('source').value; changed({ list: false }); });
+  $('source').addEventListener('input', () => { const s = sig(); if (!s) return; s.html = plainHtml($('source').value); changed({ list: false }); });
   $('source').addEventListener('blur', flushSource);
 
   // ---------------------------------------------------------------------------------------------
@@ -702,6 +819,15 @@
     // A person's photo that is not there goes, as the add-in leaves it out; the note says which.
     $('preview').onload = () => {
       const d = $('preview').contentDocument; if (!d) return;
+      // A link in the signature does not open here (the site would refuse to be shown in the
+      // preview): where it goes is said instead.
+      d.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('a[href]');
+        if (!a) return;
+        e.preventDefault();
+        toast(t('Link: {0}', a.getAttribute('href')));
+      });
+      d.querySelectorAll('a[href]').forEach((a) => { a.title = a.getAttribute('href'); });
       const gone = (img) => {
         const name = decodeURIComponent(img.getAttribute('src').split('/').pop());
         img.remove();
@@ -859,11 +985,11 @@
     $('photosInfo').textContent = t('{0} photo(s)', photoItems.length) + (q ? ' · ' + t('{0} shown', list.length) : '');
     $('photoList').replaceChildren(...list.slice(0, 300).map((p) => el('li', null,
       el('img', { src: '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || ''), alt: '', loading: 'lazy' }),
-      el('span', { class: 'pn' }, p.name),
+      el('div', { class: 'pf' }, el('span', { class: 'pn' }, p.name),
       mayChange === false ? null : el('button', { type: 'button', class: 'ghost small danger', 'aria-label': t('Remove photo {0}', p.name), title: t('Remove'), onclick: async () => {
         if (!(await ask(t('Remove the photo {0}? The person\'s signature goes without one from now on.', p.name), t('Remove'), true))) return;
         try { await api('photos/delete', { name: p.name }); toast(t('Photo {0} removed.', p.name)); renderPhotos(); } catch (e) { $('photoErr').textContent = t(e.message); }
-      } }, '✕'))));
+      } }, '✕')))));
     if (!photoItems.length) $('photoList').replaceChildren(el('li', { class: 'empty' }, t('No photos yet.')));
   }
   $('photosFilter').addEventListener('input', () => photosShow(!$('photoFile').disabled));
@@ -2661,6 +2787,13 @@
   function onKeys(e) {
     const mod = e.ctrlKey || e.metaKey;
     const inDialog = document.querySelector('dialog[open]');
+    // Undo and redo of the signature: in the design view, and anywhere on its page but a field
+    // (a field, and the HTML tab, undo their own typing).
+    const k = (e.key || '').toLowerCase();
+    if (mod && !e.altKey && (k === 'z' || k === 'y') && S.view === 'sig' && !inDialog) {
+      const inField = e.target && e.target.ownerDocument !== ddoc && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
+      if (!inField) { e.preventDefault(); histStep(k === 'y' || e.shiftKey ? 1 : -1); return; }
+    }
     if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); toast(t('Draft saved.')); return; }
     if (mod && e.key === 'Enter' && !inDialog) { e.preventDefault(); $('btnPublish').click(); return; }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable) || (e.target && e.target.ownerDocument === ddoc);

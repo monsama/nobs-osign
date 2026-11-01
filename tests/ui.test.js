@@ -866,3 +866,75 @@ test('photos: one per person, uploaded and made small, listed, removed; the prev
   await page.click('#btnDel');
   await page.click('#askOk');
 });
+
+test('zoom: the design view and the preview each their own, kept; the HTML tab indented, the signature as it was', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  const html = '<table><tr><td>@@givenName<br>@@sn</td><td></td></tr></table><p>Text</p>';
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', html);
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await page.click('.tab[data-mode=html]');
+  assert.equal(await page.inputValue('#source'), '<table>\n  <tbody>\n    <tr>\n      <td>\n        @@givenName<br>\n        @@sn\n      </td>\n      <td></td>\n    </tr>\n  </tbody>\n</table>\n<p>\n  Text\n</p>');
+  // Kept as it was written: the indent is only for reading.
+  await page.click('.tab[data-mode=design]');
+  await page.waitForTimeout(800);
+  const draft = JSON.parse((await page.evaluate(() => fetch('/api/draft/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.json()))).configJson);
+  assert.ok(draft.signatures.some((s) => s.html === '<table><tbody><tr><td>@@givenName<br>@@sn</td><td></td></tr></tbody></table><p>Text</p>'), 'the signature is stored without the indent');
+  // Zoom: + twice in the design view, − once in the preview; Ctrl + wheel too; kept on reload.
+  const z = (k) => page.textContent('.zoom[data-zoom=' + k + '] .zpct');
+  await page.click('.zoom[data-zoom=design] [data-z="1"]');
+  await page.click('.zoom[data-zoom=design] [data-z="1"]');
+  assert.equal(await z('design'), '120 %');
+  assert.equal(await page.evaluate(() => document.querySelector('#design').contentDocument.documentElement.style.zoom), '1.2');
+  await page.click('.zoom[data-zoom=preview] [data-z="-1"]');
+  assert.equal(await z('preview'), '90 %');
+  await page.reload();
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList li:last-child a');
+  assert.equal(await z('design'), '120 %');
+  await page.waitForFunction(() => document.querySelector('#preview').contentDocument.documentElement.style.zoom === '0.9');
+  await page.hover('#design');
+  await page.keyboard.down('Control'); await page.mouse.wheel(0, -100); await page.keyboard.up('Control');
+  await page.waitForFunction(() => document.querySelector('.zoom[data-zoom=design] .zpct').textContent === '130 %');
+  // Back to 100 % with the percentage.
+  await page.click('.zoom[data-zoom=design] .zpct');
+  await page.click('.zoom[data-zoom=preview] .zpct');
+  assert.equal(await z('design'), '100 %');
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});
+
+test('undo and redo: typing and a field put in, with Ctrl+Z / Ctrl+Y, also when the focus left the editor', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Hello</p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  const text = () => page.evaluate(() => document.querySelector('#design').contentDocument.body.innerText.trim());
+  await page.frameLocator('#design').locator('p').click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' World');
+  await page.waitForTimeout(700);
+  await page.selectOption('#toolbar select.field-pick', 'mail');
+  await page.waitForFunction(() => /Mail/.test(document.querySelector('#design').contentDocument.body.innerText));
+  // The focus elsewhere on the page (not in a field): Ctrl+Z still undoes the signature.
+  await page.click('.pane-title');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => document.querySelector('#design').contentDocument.body.innerText.trim() === 'Hello World');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => document.querySelector('#design').contentDocument.body.innerText.trim() === 'Hello');
+  await page.keyboard.press('Control+y');
+  assert.equal(await text(), 'Hello World');
+  // The toolbar's buttons the same.
+  await page.click('#toolbar [data-cmd=undo]');
+  assert.equal(await text(), 'Hello');
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});
