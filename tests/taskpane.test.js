@@ -83,7 +83,7 @@ test('the pane speaks German in a German Outlook', { skip }, async () => {
     assert.equal((await page.$$eval('#prefNew option', (o) => o.map((x) => x.textContent)))[0], 'Firmenstandard (Standard)');
     assert.equal(await page.textContent('#refresh'), 'Meine Angaben neu lesen');
     // Which add-in, and since when the signatures are as they are.
-    assert.match(await page.textContent('#ver'), /^NOBS OSign 9\.9\.9 · Signaturen veröffentlicht 30\.10\.(20)?26/);
+    assert.match(await page.textContent('#ver'), /^OSign 9\.9\.9 · Signaturen veröffentlicht 30\.10\.(20)?26/);
   } finally { await browser.close(); }
 });
 

@@ -169,7 +169,7 @@ test('when no signature could be put in, a notice on the message says why; one t
   const r = runtime({ notices, signInFails: true });
   await r.fire('onNewMessageComposeHandler');
   assert.ok(!setCall(r));
-  assert.match(notices.osign.message, /^NOBS OSign inserted no signature; see Signatures\. .*sign-in failed/);
+  assert.match(notices.osign.message, /^OSign inserted no signature; see Signatures\. .*sign-in failed/);
   assert.equal(notices.osign.type, 'informationalMessage');
   assert.ok(notices.osign.message.length <= 150);
   // No signature meant for this message is no failure: no notice.
@@ -272,7 +272,7 @@ test('classic Outlook: refused the sign-in, with nothing kept, it says what to d
   const r = runtime({ signInFails: true, notices, platform: 'PC', lang: 'de-CH' });
   await r.fire('onNewMessageComposeHandler');
   assert.ok(!setCall(r));
-  assert.match(notices.osign.message, /Im klassischen Outlook einmal NOBS OSign → Signaturen öffnen/);
+  assert.match(notices.osign.message, /Im klassischen Outlook einmal OSign → Signaturen öffnen/);
 });
 
 test('classic Outlook: the copy the pane kept in the mailbox goes in, with the images that fit', async () => {
@@ -400,5 +400,5 @@ test('in a German Outlook, what went wrong is said in German', async () => {
   await r.fire('onNewMessageComposeHandler');
   const n = r.calls.find((c) => c[0] === 'notice');
   assert.ok(n, 'a notice');
-  assert.match(n[2], /^NOBS OSign hat keine Signatur eingefügt; mehr unter Signaturen\. Signaturen suchen: SharePoint lässt Sie den Ordner OSign nicht lesen/);
+  assert.match(n[2], /^OSign hat keine Signatur eingefügt; mehr unter Signaturen\. Signaturen suchen: SharePoint lässt Sie den Ordner OSign nicht lesen/);
 });

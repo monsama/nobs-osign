@@ -10,7 +10,7 @@
   <Version>{{VERSION}}</Version>
   <ProviderName>{{PROVIDER}}</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="NOBS OSign"/>
+  <DisplayName DefaultValue="OSign"/>
   <Description DefaultValue="Inserts the company email signature in new messages, replies and forwards.">
     <Override Locale="de-DE" Value="Fügt die Firmensignatur in neue Mails, Antworten und Weiterleitungen ein."/>
   </Description>
@@ -133,7 +133,7 @@
           <bt:Url id="RuntimeJs.Url" DefaultValue="{{BASE}}launchevent.js"/>
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="Group.Label" DefaultValue="NOBS OSign"/>
+          <bt:String id="Group.Label" DefaultValue="OSign"/>
           <bt:String id="Pane.Label" DefaultValue="Signatures">
             <bt:Override Locale="de-DE" Value="Signaturen"/>
           </bt:String>
