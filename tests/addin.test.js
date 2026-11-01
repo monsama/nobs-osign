@@ -43,7 +43,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang, runtimeStorage } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -92,6 +92,8 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
   // The sign-in's time limit (the only one this long) runs out at once in the tests.
   const fastTimeout = (fn, ms) => setTimeout(fn, ms >= 15000 ? 5 : ms);
   const sandbox = { Office, console: { log: (m) => calls.push(['log', String(m)]) }, setTimeout: fastTimeout, clearTimeout, fetch: graph.fetch, __osignSignInFails: !!signInFails, __osignSignInHangs: !!signInHangs };
+  // OfficeRuntime.storage, when the test gives one (classic Outlook's event runtime has it).
+  if (runtimeStorage) sandbox.OfficeRuntime = { storage: { getItem: async (k) => (k in runtimeStorage ? runtimeStorage[k] : null), setItem: async (k, v) => { runtimeStorage[k] = v; } } };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(byIds ? idsBundle : site ? siteBundle : bundle, sandbox, { filename: 'launchevent.js' });
@@ -245,6 +247,23 @@ test('nothing published yet, or no sign-in: no signature, and the event still co
   await r2.fire('onNewMessageComposeHandler');
   assert.ok(!setCall(r2));
   assert.ok(r2.calls.some((c) => c[0] === 'log' && /sign-in failed/.test(c[1])));
+});
+
+test('sign-in refused (classic Outlook\'s event runtime): the signature and images kept before are used', async () => {
+  const runtimeStorage = {}, roaming = {};
+  const first = runtime({ runtimeStorage, roaming });
+  await first.fire('onNewMessageComposeHandler');
+  assert.ok(setCall(first));
+  // Its mailbox settings (the details) and storage (signatures, images) carry over.
+  const notices = {};
+  const r = runtime({ runtimeStorage, roaming: first.settings, signInFails: true, notices });
+  await r.fire('onNewMessageComposeHandler');
+  const set = setCall(r);
+  assert.ok(set, r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+  assert.match(set[1], /Anna Muster/);
+  assert.ok(r.calls.some((c) => c[0] === 'attach' && /logo/.test(c[1])), 'the logo from the copy');
+  assert.ok(r.calls.some((c) => c[0] === 'log' && /from the copy kept before/.test(c[1])));
+  assert.deepEqual(notices, {});
 });
 
 test('a sign-in that never answers: after a while a notice, and the event completes', async () => {

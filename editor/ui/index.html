@@ -20,13 +20,19 @@
     <button type="button" id="stPub" class="status pub"></button>
   </div>
   <div class="spacer"></div>
-  <button id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button>
-  <button id="btnWizard" class="ghost" title="Step by step through the SharePoint folder, the app registration and the add-in">Setup assistant</button>
-  <button id="btnSettings" class="ghost">Settings</button>
+  <!-- As in NOBS SQL Editor: the main action first, then the tools, then, always at the right,
+       Settings, the coffee and who is signed in. -->
   <button id="btnPublish" class="primary">Publish…</button>
+  <button id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button>
+  <span id="wizSep" class="tbsep" aria-hidden="true"></span>
+  <button id="btnWizard" class="ghost" title="Step by step through the SharePoint folder, the app registration and the add-in">Setup assistant</button>
+  <span class="tbsep" aria-hidden="true"></span>
+  <button id="btnSettings" class="ghost">Settings</button>
+  <span class="tbsep" aria-hidden="true"></span>
+  <a id="coffeeBtn" class="btnlike icon" href="https://buymeacoffee.com/monsama" target="_blank" rel="noopener noreferrer" title="Buy me a coffee: if NOBS OSign saves you some time" aria-label="Buy me a coffee"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/></svg></a>
+  <span id="whoSep" class="tbsep" aria-hidden="true" hidden></span>
   <span id="who" class="who" hidden></span>
   <button id="btnLogout" class="ghost" hidden>Sign out</button>
-  <a id="coffeeBtn" class="btnlike icon" href="https://buymeacoffee.com/monsama" target="_blank" rel="noopener noreferrer" title="Buy me a coffee: if NOBS OSign saves you some time" aria-label="Buy me a coffee"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/></svg></a>
 </header>
 
 <div class="layout">

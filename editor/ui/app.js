@@ -2790,7 +2790,7 @@
       document.querySelector('#pvSource option[value=entra]').hidden = !(onServer() && info.features.publishTarget === 'sharepoint');
       if (info.features.signOut) {
         const out = $('btnLogout');
-        out.hidden = false;
+        out.hidden = false; $('whoSep').hidden = false;
         if (info.user) {
           out.title = t('Signed in as {0}', info.user.name || info.user.login);
           $('who').textContent = info.user.name || info.user.login; $('who').title = out.title; $('who').hidden = false;
@@ -2810,7 +2810,7 @@
       // until what it sets up is there anyway (the app registration and the add-in's address).
       // On the server the setup is the local account admin's: the others neither get nor see it.
       const mayWizard = !onServer() || !!(info.user && info.user.local);
-      $('btnWizard').hidden = !mayWizard;
+      $('btnWizard').hidden = !mayWizard; $('wizSep').hidden = !mayWizard;
       const setUp = S.settings.setupDone === '1' || (onServer() ? !!(S.settings.clientId && S.settings.addinUrl) : !!(S.settings.folder && S.settings.clientId));
       if (mayWizard && (resume !== null || !setUp)) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
