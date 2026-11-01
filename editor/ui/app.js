@@ -1928,7 +1928,7 @@
     // The server's connections: only on the server, and only for who may set them.
     && !(n === 'connect' && !(onServer() && S.info.user && S.info.user.local)));
   const WIZ_KEY = 'osign.wizStep';
-  const wiz = { step: 0, built: false, warned: '', checking: null, spOk: false, checkSeq: 0, scriptWaiting: false };
+  const wiz = { step: 0, reached: 0, built: false, warned: '', checking: null, spOk: false, checkSeq: 0, scriptWaiting: false };
   const stored = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no storage */ } return null; };
   const radio = (name) => (document.querySelector('input[name=' + name + ']:checked') || {}).value || '';
   const setRadio = (name, v) => document.querySelectorAll('input[name=' + name + ']').forEach((r) => { r.checked = r.value === v; });
@@ -1959,6 +1959,7 @@
     $('wizCount').textContent = wiz.step && wiz.step < WIZ.length - 1 ? t('Step {0} of {1}', wiz.step, WIZ.length - 2) : '';
     $('wizBar').style.width = Math.round(100 * wiz.step / (WIZ.length - 1)) + '%';
     $('wizBack').hidden = wiz.step === 0;
+    wizNavRender();
     $('wizNext').textContent = name === 'welcome' ? t('Start') : name === 'done' ? t('Finish') : t('Next');
     $('wizLater').hidden = name === 'done';
     $('wizErr').textContent = '';
@@ -1999,6 +2000,35 @@
   // Step 1: where the folder is, given one way or the other - its SharePoint address (NOBS OSign finds
   // the synced folder on this PC), or the folder on this PC (NOBS OSign finds where it is in SharePoint).
   const isPersonal = (site) => /:\/personal\//.test(site || '');
+  // The steps as a row to jump to: once set up, any of them; before, those reached already.
+  const WIZ_SHORT = { welcome: 'Welcome', connect: 'Connections', folder: 'Signatures', values: 'Values', host: 'Add-in address', app: 'App registration', files: 'Add-in files', deploy: 'Deployment', done: 'Ready' };
+  const wizAnyStep = () => S.settings.setupDone === '1';
+  function wizNavRender() {
+    const nav = $('wizNav');
+    nav.replaceChildren(...WIZ.map((n, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.dataset.step = n;
+      b.textContent = t(WIZ_SHORT[n] || n);
+      b.title = t(document.querySelector('#dlgWizard .wiz-step[data-step=' + n + ']').dataset.title);
+      if (i === wiz.step) b.setAttribute('aria-current', 'step');
+      b.disabled = i !== wiz.step && !wizAnyStep() && i > wiz.reached;
+      b.addEventListener('click', () => wizGo(i));
+      return b;
+    }));
+  }
+  // To another step: forward keeps what this step asks for, as Next does (it stays here if that
+  // fails); back, as Back, keeps nothing. The add-in files need not be made again to pass by.
+  async function wizGo(i) {
+    if (i === wiz.step || $('wizNext').disabled) return;
+    $('wizErr').textContent = '';
+    const name = WIZ[wiz.step];
+    $('wizNext').disabled = true; $('wizBack').disabled = true;
+    try {
+      if (i > wiz.step && wizLeave[name] && name !== 'files' && name !== 'done') await wizLeave[name]();
+      wiz.step = i; wiz.reached = Math.max(wiz.reached, i); wiz.warned = ''; wizRender();
+    } catch (err) { $('wizErr').textContent = err.message ? t(err.message) : ''; }
+    finally { $('wizNext').disabled = false; $('wizBack').disabled = false; }
+  }
   function wizPermNote() {
     const site = $('wizSpFolder').value ? $('wizSpSite').value : '';
     $('wizPerm').hidden = !site;
@@ -2189,7 +2219,7 @@
   function wizOpen(step) {
     WIZ = wizSteps();
     wizFill();
-    wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.built = false; wiz.warned = '';
+    wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.reached = wiz.step; wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
     $('wizWhereFound').textContent = ''; $('wizLinkNote').textContent = ''; $('wizGrantMsNote').textContent = '';
     wiz.spOk = false; $('wizFolderNote').textContent = ''; $('wizCfOk').textContent = '';
@@ -2340,7 +2370,7 @@
     try {
       if (wizLeave[name]) await wizLeave[name]();
       if (name === 'done') { $('dlgWizard').close(); toast(t('NOBS OSign is set up.')); return; }
-      wiz.step++; wiz.warned = ''; wizRender();
+      wiz.step++; wiz.reached = Math.max(wiz.reached, wiz.step); wiz.warned = ''; wizRender();
     } catch (err) { $('wizErr').textContent = err.message ? t(err.message) : ''; }
     finally { $('wizNext').disabled = false; $('wizBack').disabled = false; }
   });

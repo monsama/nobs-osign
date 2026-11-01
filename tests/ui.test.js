@@ -289,6 +289,8 @@ test('setup assistant: opens by itself until NOBS OSign is set up, and walks thr
 
   // From the top bar, step by step; each step keeps what it asks for.
   await page.click('#btnWizard');
+  // Not set up yet: only the steps reached so far can be jumped to.
+  assert.equal(await page.isDisabled('#wizNav button[data-step=host]'), true);
   await next("The server's connections");
   // AD is set up here; SharePoint is the setup script's, a few steps on.
   await page.waitForFunction(() => /SharePoint .* set up by the setup script/.test(document.querySelector('#wizConnList').textContent));
@@ -346,6 +348,25 @@ test('setup assistant: opens by itself until NOBS OSign is set up, and walks thr
   await page.reload();
   await page.waitForSelector('html[data-ready]');
   assert.equal(await page.isVisible('#dlgWizard'), false);
+  // Set up: any step can be jumped to; going forward keeps what the step asks for.
+  await page.click('#btnWizard');
+  await page.click('#wizNav button[data-step=host]');
+  await page.waitForFunction(() => document.querySelector('#wizTitle').textContent === 'Where the add-in is served');
+  assert.equal(await page.getAttribute('#wizNav button[data-step=host]', 'aria-current'), 'step');
+  await page.fill('#wizUrl', 'https://osign2.example.com');
+  await page.click('#wizNav button[data-step=deploy]');
+  await page.waitForFunction(() => document.querySelector('#wizTitle').textContent === "Into everyone's Outlook");
+  assert.equal((await api('settings/get')).settings.addinUrl, 'https://osign2.example.com');
+  // Back keeps nothing, and a step that fails keeps you there.
+  await page.click('#wizNav button[data-step=host]');
+  await page.fill('#wizUrl', '');
+  await page.click('#wizNav button[data-step=app]');
+  await page.waitForFunction(() => /Enter the address/.test(document.querySelector('#wizErr').textContent));
+  assert.equal(await page.textContent('#wizTitle'), 'Where the add-in is served');
+  await page.fill('#wizUrl', 'https://osign.example.com');
+  await page.click('#wizNav button[data-step=welcome]');
+  await page.click('#wizLater');
+  await api('settings/save', { settings: { addinUrl: 'https://osign.example.com' } });
   // Back to the folder the other tests publish to.
   await api('settings/save', { settings: { spSite: 'root', spFolder: 'OSign' } });
   assert.deepEqual(errors, []);
