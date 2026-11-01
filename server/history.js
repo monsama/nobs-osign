@@ -78,8 +78,14 @@ function createHistory({ dataDir, assetDir }) {
   }
   // The last one published ('' before the first).
   function latest() { const id = ids()[0]; const h = id ? load(id) : null; return h ? h.configJson : ''; }
+  // Its images: name → sha256 of the content.
+  function latestImages() {
+    const id = ids()[0]; const h = id ? load(id) : null; const out = {};
+    for (const a of (h && h.assets) || []) out[a.name] = String(a.blob).replace(/\.[^.]*$/, '');
+    return out;
+  }
 
-  return { add, list, restore, get, latest };
+  return { add, list, restore, get, latest, latestImages };
 }
 
 module.exports = { createHistory };

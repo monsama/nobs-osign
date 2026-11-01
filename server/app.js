@@ -261,8 +261,15 @@ function createApp(opts) {
     return {
       required: needsApproval(),
       pending: { by: a.by, at: a.at, message: a.message, current, mine: same(a.login, s.user.login), mayApprove: !same(a.login, s.user.login) && current,
-        changes: diffConfigs(history.latest(), a.configJson) }
+        hash: a.hash, changes: diffConfigs(history.latest(), a.configJson).concat(current ? imageChanges() : []) }
     };
+  }
+  // The draft's images against the last published ones: added, removed, replaced (same name).
+  function imageChanges() {
+    const was = history.latestImages(), now = store.assetHashes(), out = [];
+    for (const n of Object.keys(now).sort()) if (!(n in was)) out.push({ kind: 'imgadd', name: n }); else if (was[n] !== now[n]) out.push({ kind: 'imgchg', name: n });
+    for (const n of Object.keys(was).sort()) if (!(n in now)) out.push({ kind: 'imgdel', name: n });
+    return out;
   }
   async function publishNow(configJson, by, message) {
     const t = settings.target();
@@ -473,6 +480,8 @@ function createApp(opts) {
       if (!a) return { error: 'Nothing is waiting for approval.' };
       if (same(a.login, s.user.login)) return { error: 'Someone else has to approve what you asked for.' };
       if (store.draftHash() !== a.hash) return { error: 'The draft changed after approval was asked for: it has to be asked for again.' };
+      // Only what the approver was shown: asked for again since, it is to be looked at again.
+      if (String(d.hash || '') !== a.hash) return { error: 'The request changed while you looked at it: look at it again, then approve.' };
       const r = await publishNow(a.configJson, a.by + ' (' + (s.user.name || s.user.login) + ' approved)', a.message);
       if (r.error) return r;
       fs.rmSync(approvalFile, { force: true });

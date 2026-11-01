@@ -77,7 +77,7 @@ test('the pane speaks German in a German Outlook', { skip }, async () => {
   const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
   try {
     const page = await openPane(browser, dir, graph, 'de-CH');
-    assert.equal(await page.textContent('h1'), 'Signaturen');
+    assert.equal(await page.textContent('h1'), 'OSign Signaturen');
     assert.match(await page.textContent('#choice'), /Für neue Mails.*Für Antworten und Weiterleitungen/s);
     assert.deepEqual(await page.$$eval('.card button', (b) => b.map((x) => x.textContent)), ['Einfügen', 'Einfügen']);
     assert.equal((await page.$$eval('#prefNew option', (o) => o.map((x) => x.textContent)))[0], 'Firmenstandard (Standard)');
@@ -188,9 +188,19 @@ test('classic Outlook: the pane keeps what goes in by itself in the mailbox, its
     const kept = JSON.parse(await page.evaluate(() => window.__roaming['osign.classic']));
     assert.deepEqual(kept.cfg.signatures.map((x) => x.id), ['std']);
     assert.ok(kept.images['assets/logo.png'] && kept.images['assets/logo.png'].b64.length > 0);
+    // The fields, as far as reading the details needs them: without, they would be read empty.
+    assert.deepEqual(kept.cfg.fields.map((f) => f.key), cfg.fields.map((f) => f.key));
+    assert.equal(kept.cfg.fields.some((f) => 'label' in f || 'sample' in f), false);
     // All the add-in keeps in the mailbox stays below Outlook's 32 KB.
     const all = await page.evaluate(() => Object.entries(window.__roaming).reduce((n, [k, v]) => n + k.length + String(v).length, 0));
     assert.ok(all < 32 * 1024, all);
+    // A campaign running now: kept with what goes in once it ends.
+    const withCampaign = JSON.parse(JSON.stringify(cfg));
+    withCampaign.signatures.push(Object.assign(core.newSignature('camp', 'Campaign'), { defaultNew: true, validFrom: '2020-01-01', validUntil: '2099-12-31', html: '<p>Fair</p>', compiled: core.compile('<p>Fair</p>', doc) }));
+    const graph2 = fakeGraph({ files: { 'signatures.json': JSON.stringify(withCampaign), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+    const page3 = await openPane(browser, dir, graph2, 'en-US', 'PC');
+    await page3.waitForFunction(() => !!window.__roaming['osign.classic'], null, { timeout: 8000 });
+    assert.deepEqual(JSON.parse(await page3.evaluate(() => window.__roaming['osign.classic'])).cfg.signatures.map((x) => x.id), ['camp', 'std']);
     // Not in new Outlook or on the web: nothing kept there.
     const page2 = await openPane(browser, dir, graph, 'en-US');
     await page2.waitForTimeout(500);

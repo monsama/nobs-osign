@@ -90,12 +90,14 @@ test('four eyes: asked for by one, published by another, never by the same; a ch
     assert.match((await anna('publish', { configJson: cfg([]) })).error, /second person's approval/);
 
     const next = cfg([{ id: 'a', name: 'A', html: '<p>two</p>' }, { id: 'b', name: 'B', html: '<p>b</p>' }]);
+    // An image that was not published: shown to the approver too.
+    assert.equal((await anna('assets/upload', { name: 'sales.png', data: PNG.toString('base64') })).name, 'sales.png');
     let r = await anna('approval/request', { configJson: next, message: 'B for sales' });
     assert.equal(r.ok, true, r.error);
     assert.equal(r.pending.mine, true);
     assert.equal(r.pending.mayApprove, false);
     // What would go out, against what is published.
-    assert.deepEqual(r.pending.changes.map((c) => c.kind + ' ' + c.name), ['html A', 'added B']);
+    assert.deepEqual(r.pending.changes.map((c) => c.kind + ' ' + c.name), ['html A', 'added B', 'imgadd sales.png']);
     assert.match((await anna('approval/approve')).error, /Someone else/);
     // Signed in again with the login typed otherwise: still Anna, as AD writes her login.
     const ANNA = s.as(await s.signIn('ANNA', 'anna-pw'));
@@ -106,7 +108,9 @@ test('four eyes: asked for by one, published by another, never by the same; a ch
     r = await beat('approval/get');
     assert.equal(r.pending.by, 'Anna Muster');
     assert.equal(r.pending.mayApprove, true);
-    r = await beat('approval/approve');
+    // Only what was shown: a request asked for again since is to be looked at again.
+    assert.match((await beat('approval/approve', { hash: 'other' })).error, /look at it again/);
+    r = await beat('approval/approve', { hash: r.pending.hash });
     assert.equal(r.ok, true, r.error);
     assert.equal(r.changed, true);
     assert.equal((await beat('approval/get')).pending, null);
@@ -118,12 +122,12 @@ test('four eyes: asked for by one, published by another, never by the same; a ch
     await anna('approval/request', { configJson: cfg([{ id: 'a', name: 'A', html: '<p>three</p>' }]) });
     await anna('draft/save', { configJson: cfg([{ id: 'a', name: 'A', html: '<p>four</p>' }]) });
     assert.equal((await beat('approval/get')).pending.current, false);
-    assert.match((await beat('approval/approve')).error, /draft changed/);
+    assert.match((await beat('approval/approve', { hash: (await beat('approval/get')).pending.hash })).error, /draft changed/);
     // Withdrawn by who asked (or the local admin), not by anyone else.
     assert.match((await beat('approval/cancel')).error, /Only who asked for it/);
     assert.equal((await anna('approval/cancel')).ok, true);
     const log = (await admin('audit/list', { what: 'approval/approve' })).entries;
-    assert.deepEqual(log.map((x) => [x.who, x.ok]), [['beat', false], ['beat', true], ['anna', false], ['anna', false]]);
+    assert.deepEqual(log.map((x) => [x.who, x.ok]), [['beat', false], ['beat', true], ['beat', false], ['anna', false], ['anna', false]]);
   } finally { s.srv.close(); }
 });
 

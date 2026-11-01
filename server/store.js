@@ -73,6 +73,12 @@ function createStore(dataDir) {
     for (const a of assets()) parts.push(a.name + ':' + sha256(fs.readFileSync(path.join(assetDir, a.name))));
     return sha256(Buffer.from(parts.join('\n'), 'utf8'));
   }
+  // The draft's images: name → sha256 of the content.
+  function assetHashes() {
+    const out = {};
+    for (const a of assets()) out[a.name] = sha256(fs.readFileSync(path.join(assetDir, a.name)));
+    return out;
+  }
   const dirty = () => draftHash() !== String(state().publishedHash || '');
 
   function getDraft() {
@@ -156,7 +162,7 @@ function createStore(dataDir) {
     return getDraft();
   }
 
-  return { assetDir, getDraft, saveDraft, uploadAsset, deleteAsset, publish, loadPublished, draftHash };
+  return { assetDir, getDraft, saveDraft, uploadAsset, deleteAsset, publish, loadPublished, draftHash, assetHashes };
 }
 
 module.exports = { createStore, safeAssetName, checkConfigJson, ASSET_TYPES, writeAtomic, readText };

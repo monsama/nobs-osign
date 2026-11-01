@@ -860,7 +860,7 @@
       item(t('Duplicate'), () => { openSig(s.id); flushSource(); addSig(s); }),
       el('hr'),
       item(t('Default for new mail'), asDefault('defaultNew', 'sigNew'), { check: !!s.defaultNew }),
-      item(t('Default for replies'), asDefault('defaultReply', 'sigReply'), { check: !!s.defaultReply }),
+      item(t('Default for replies & forwards'), asDefault('defaultReply', 'sigReply'), { check: !!s.defaultReply }),
       el('hr'),
       item(t('Move up'), move(-1), { disabled: i <= 0 }),
       item(t('Move down'), move(1), { disabled: i < 0 || i >= n - 1 }),
@@ -1956,7 +1956,7 @@
     document.querySelectorAll('#dlgWizard .wiz-step').forEach((sec) => { sec.hidden = sec.dataset.step !== name; });
     const sec = document.querySelector('#dlgWizard .wiz-step[data-step=' + name + ']');
     $('wizTitle').textContent = t(sec.dataset.title);
-    $('wizCount').textContent = wiz.step && wiz.step < WIZ.length - 1 ? t('Step {0} of {1}', wiz.step, WIZ.length - 2) : '';
+    $('wizCount').textContent = t('Step {0} of {1}', wiz.step + 1, WIZ.length);
     $('wizBar').style.width = Math.round(100 * wiz.step / (WIZ.length - 1)) + '%';
     $('wizBack').hidden = wiz.step === 0;
     wizNavRender();
@@ -2016,6 +2016,11 @@
       return b;
     }));
   }
+  // What stops a step, where it is seen (on a small screen it is below what shows).
+  function wizError(err) {
+    $('wizErr').textContent = err && err.message ? t(err.message) : '';
+    if ($('wizErr').textContent) $('wizErr').scrollIntoView({ block: 'nearest' });
+  }
   // To another step: forward keeps what this step asks for, as Next does (it stays here if that
   // fails); back, as Back, keeps nothing. The add-in files need not be made again to pass by.
   async function wizGo(i) {
@@ -2024,9 +2029,16 @@
     const name = WIZ[wiz.step];
     $('wizNext').disabled = true; $('wizBack').disabled = true;
     try {
-      if (i > wiz.step && wizLeave[name] && name !== 'files' && name !== 'done') await wizLeave[name]();
+      if (i > wiz.step && wizLeave[name] && name !== 'files' && name !== 'done') {
+        try { await wizLeave[name](); }
+        catch (err) {
+          // Set up already: the step is left as it is saved, and says so; before, it is finished first.
+          if (!wizAnyStep()) throw err;
+          if (err.message) toast(t('Not saved: {0}', t(err.message)));
+        }
+      }
       wiz.step = i; wiz.reached = Math.max(wiz.reached, i); wiz.warned = ''; wizRender();
-    } catch (err) { $('wizErr').textContent = err.message ? t(err.message) : ''; }
+    } catch (err) { wizError(err); }
     finally { $('wizNext').disabled = false; $('wizBack').disabled = false; }
   }
   function wizPermNote() {
@@ -2371,7 +2383,7 @@
       if (wizLeave[name]) await wizLeave[name]();
       if (name === 'done') { $('dlgWizard').close(); toast(t('NOBS OSign is set up.')); return; }
       wiz.step++; wiz.reached = Math.max(wiz.reached, wiz.step); wiz.warned = ''; wizRender();
-    } catch (err) { $('wizErr').textContent = err.message ? t(err.message) : ''; }
+    } catch (err) { wizError(err); }
     finally { $('wizNext').disabled = false; $('wizBack').disabled = false; }
   });
   $('wizBack').addEventListener('click', () => { if (wiz.step) { wiz.step--; wizRender(); } });
@@ -2561,9 +2573,9 @@
   // them, the fields and the options.
   function renderChanges(box, changes) {
     if (!changes.length) { box.replaceChildren(el('p', { class: 'muted' }, t('Nothing changed.'))); return; }
-    const KIND = { added: 'Added', removed: 'Removed', renamed: 'Renamed', html: 'Changed', rules: 'Who gets it, defaults or days', fields: 'Fields', options: 'Add-in options' };
+    const KIND = { added: 'Added', removed: 'Removed', renamed: 'Renamed', html: 'Changed', rules: 'Who gets it, defaults or days', fields: 'Fields', options: 'Add-in options', imgadd: 'Image added', imgdel: 'Image removed', imgchg: 'Image replaced' };
     box.replaceChildren(...changes.map((c) => el('div', { class: 'change ' + c.kind },
-      el('div', { class: 'change-head' }, el('span', { class: 'badge' + (c.kind === 'removed' ? ' danger' : c.kind === 'added' ? ' on' : '') }, t(KIND[c.kind] || c.kind)), ' ',
+      el('div', { class: 'change-head' }, el('span', { class: 'badge' + (c.kind === 'removed' || c.kind === 'imgdel' ? ' danger' : c.kind === 'added' || c.kind === 'imgadd' ? ' on' : '') }, t(KIND[c.kind] || c.kind)), ' ',
         c.name ? el('b', null, c.name) : null, c.kind === 'renamed' ? ' ' + t('(was {0})', c.detail) : c.detail ? ' ' + c.detail : ''),
       c.lines && c.lines.length ? el('pre', { class: 'diff' }, ...c.lines.map((l) => el('span', { class: l.op === '+' ? 'add' : 'del' }, l.op + ' ' + l.text + '\n'))) : null)));
   }
@@ -2674,7 +2686,7 @@
   $('pubApprove').addEventListener('click', async () => {
     $('pubApprove').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
-      const r = await api('approval/approve');
+      const r = await api('approval/approve', { hash: (S.approval && S.approval.pending && S.approval.pending.hash) || '' });
       S.dirty = false; S.publishedAt = Date.now(); renderStatus();
       $('pubOk').textContent = r.changed ? t('Approved and published to {0}.', r.folder) : t('Nothing had changed.');
       await loadApproval(); renderApproval();
