@@ -22,6 +22,7 @@ const DE = {
   'new mail': 'neue Mails',
   'replies': 'Antworten',
   'Insert': 'Einfügen',
+  'Inserted: {0}': 'Eingefügt: {0}',
   'Outlook did not take the signature: {0}': 'Outlook hat die Signatur nicht übernommen: {0}',
   'Your details could not be read.': 'Ihre Angaben konnten nicht gelesen werden.',
   'Your details could not be read: {0}': 'Ihre Angaben konnten nicht gelesen werden: {0}',
@@ -56,7 +57,7 @@ function t(s, ...args) {
 function translatePage() {
   german = /^de/i.test((Office.context && Office.context.displayLanguage) || navigator.language || '');
   document.documentElement.lang = german ? 'de' : 'en';
-  document.querySelectorAll('h1, label, #refresh').forEach((el) => {
+  document.querySelectorAll('h1 .sub, label, #refresh').forEach((el) => {
     el.childNodes.forEach((n) => { if (n.nodeType === 3 && n.nodeValue.trim() && DE[n.nodeValue.trim()] && german) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), DE[n.nodeValue.trim()]); });
   });
 }
@@ -119,7 +120,7 @@ function renderList(list) {
     const left = document.createElement('div'); left.append(name, document.createElement('br'), tags);
     const btn = button(t('Insert'), async () => {
       btn.disabled = true;
-      try { await insertSignature(Office.context.mailbox.item, cfg, s, user.values, info.html, { interactive: true }); message(''); }
+      try { await insertSignature(Office.context.mailbox.item, cfg, s, user.values, info.html, { interactive: true }); message(t('Inserted: {0}', s.name)); }
       catch (e) { message(t('Outlook did not take the signature: {0}', e.message || e), true); }
       finally { btn.disabled = false; }
     });
@@ -230,8 +231,16 @@ async function keepClassic() {
   if (classicBusy) return;
   classicBusy = true;
   try {
+    // What goes in today first; then what goes in once today's campaigns end, and on the first
+    // days of those still to come: the event handler picks among them by the day.
     const prefs = getPrefs(), sigs = [];
-    ['new', 'reply'].forEach((kind) => { const x = core.pick(full, user.values, from, kind, prefs, user.groups); if (x && !sigs.some((y) => y.id === x.id)) sigs.push(x); });
+    const add = (x) => { if (x && !sigs.some((y) => y.id === x.id)) sigs.push(x); };
+    const plain = Object.assign({}, full, { signatures: full.signatures.filter((s) => !core.isCampaign(s)) });
+    const today = new Date().toISOString().slice(0, 10);
+    const later = full.signatures.map((s) => String(s.validFrom || '')).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d > today).sort().slice(0, 3);
+    ['new', 'reply'].forEach((kind) => add(core.pick(full, user.values, from, kind, prefs, user.groups)));
+    ['new', 'reply'].forEach((kind) => add(core.pick(plain, user.values, from, kind, prefs, user.groups)));
+    later.forEach((d) => ['new', 'reply'].forEach((kind) => add(core.pick(full, user.values, from, kind, prefs, user.groups, new Date(d + 'T12:00:00')))));
     if (!sigs.length) return;
     const r = await keepForClassic(cfg, sigs, user.values, shrink);
     if (!r.kept) message(t('Classic Outlook: these signatures are too large to be kept in your mailbox, so they are not put in by themselves there. Use Insert.'), true);

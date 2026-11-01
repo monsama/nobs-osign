@@ -357,13 +357,14 @@ test('setup assistant: opens by itself until NOBS OSign is set up, and walks thr
   await page.click('#wizNav button[data-step=deploy]');
   await page.waitForFunction(() => document.querySelector('#wizTitle').textContent === "Into everyone's Outlook");
   assert.equal((await api('settings/get')).settings.addinUrl, 'https://osign2.example.com');
-  // Back keeps nothing, and a step that fails keeps you there.
+  assert.equal(await page.textContent('#wizCount'), 'Step 8 of 9');
+  // Set up already: a step that cannot be saved is left as saved, and says so (Next stays on it).
   await page.click('#wizNav button[data-step=host]');
   await page.fill('#wizUrl', '');
   await page.click('#wizNav button[data-step=app]');
-  await page.waitForFunction(() => /Enter the address/.test(document.querySelector('#wizErr').textContent));
-  assert.equal(await page.textContent('#wizTitle'), 'Where the add-in is served');
-  await page.fill('#wizUrl', 'https://osign.example.com');
+  await page.waitForFunction(() => document.querySelector('#wizTitle').textContent === 'Register the app in Entra ID');
+  await page.waitForFunction(() => /Not saved: Enter the address/.test(document.body.textContent));
+  assert.equal((await api('settings/get')).settings.addinUrl, 'https://osign2.example.com');
   await page.click('#wizNav button[data-step=welcome]');
   await page.click('#wizLater');
   await api('settings/save', { settings: { addinUrl: 'https://osign.example.com' } });
@@ -673,7 +674,7 @@ test('right-click on a signature: a menu with what its page offers, by mouse and
   await page.click('#sigList li:first-child a', { button: 'right' });
   await page.waitForSelector('#ctxMenu:not([hidden])');
   const items = await page.$$eval('#ctxMenu button', (bs) => bs.map((b) => [b.textContent.replace('✓', '').trim(), b.disabled]));
-  assert.deepEqual(items.map((x) => x[0]), ['Open', 'Rename', 'Duplicate', 'Default for new mail', 'Default for replies', 'Move up', 'Move down', 'Delete…']);
+  assert.deepEqual(items.map((x) => x[0]), ['Open', 'Rename', 'Duplicate', 'Default for new mail', 'Default for replies & forwards', 'Move up', 'Move down', 'Delete…']);
   assert.equal(items[5][1], true, 'the first cannot move up');
   // Escape closes it; nothing changes.
   await page.keyboard.press('Escape');

@@ -90,6 +90,12 @@ const MSG_DE = [
   [/You are not in the AD export \((.+?)\)\. Ask IT to export the users again\.$/, 'Sie sind nicht im AD-Export ($1). Bitten Sie die IT, die Benutzer neu zu exportieren.'],
   [/No signatures are published yet: (.+) is not in SharePoint\.$/, 'Noch keine Signaturen veröffentlicht: $1 fehlt in SharePoint.'],
   [/^In classic Outlook, open OSign → Signatures once; from then on it goes in by itself\.$/, 'Im klassischen Outlook einmal OSign → Signaturen öffnen; danach fügt es sie selbst ein.'],
+  [/^These add-in files have no app registration \(client ID\)\.$/, 'Diesen Add-in-Dateien fehlt die App-Registrierung (Client-ID). Bitten Sie die IT, sie neu zu erstellen.'],
+  [/^This Outlook cannot sign in add-ins \(nested app authentication\)\. Update Outlook\.$/, 'Dieses Outlook kann Add-ins nicht anmelden (Nested App Authentication). Aktualisieren Sie Outlook.'],
+  [/^The add-in was made for the SharePoint site "(.*)": make its files again in NOBS OSign\.$/, 'Das Add-in wurde für die SharePoint-Website «$1» erstellt: Die IT muss seine Dateien in NOBS OSign neu erstellen.'],
+  [/^Finding the site: Microsoft Graph did not name its id\.$/, 'Website suchen: Microsoft Graph nannte keine ID.'],
+  [/^The published signatures are not valid: /, 'Die veröffentlichten Signaturen sind ungültig: '],
+  [/^Outlook refused\.$/, 'Outlook hat abgelehnt.'],
   [/ took too long\.$/, ' dauerte zu lange.'],
   [/: not found in SharePoint \(404\)\.$/, ': in SharePoint nicht gefunden (404).'],
   [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.']
@@ -325,7 +331,8 @@ export async function loadUserValues(cfg, opts) {
   let error = null;
   try {
     const r = await readGraph(cfg, !!opts.interactive, wanted);
-    await writeRoaming(PROFILE_KEY, { at: Date.now(), values: r.values, groups: r.groups, groupsFor: r.groups ? key : '\u0000' });
+    // Only from a configuration that names its fields (not ever an empty set read from too little).
+    if ((cfg.fields || []).length) await writeRoaming(PROFILE_KEY, { at: Date.now(), values: r.values, groups: r.groups, groupsFor: r.groups ? key : '\u0000' });
     return { values: r.values, groups: r.groups, source: 'graph', error: r.groupError };
   } catch (e) { error = e; }
   if (cached && cached.values) return { values: cached.values, groups: cacheFits ? cached.groups || [] : null, source: 'cache', error };
@@ -447,14 +454,20 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
   const used = [PREFS_KEY, VARIANTS_KEY, PROFILE_KEY].reduce((n, k) => { try { const v = roaming() && roaming().get(k); return n + (v ? String(v).length + k.length : 0); } catch (e) { return n; } }, 0);
   const room = ROAMING_ROOM - used;
   const keep = ['id', 'name', 'compiled', 'removeEmptyLines', 'defaultNew', 'defaultReply', 'audience', 'validFrom', 'validUntil', 'variantOf', 'userValues'];
+  // The fields as far as reading the user's details and their variants needs them: without them
+  // the details read from here would come out empty, and be kept so for every Outlook.
+  const fields = (cfg.fields || []).map((f) => { const o = { key: f.key }; ['graph', 'ad', 'userEditable'].forEach((k) => { if (f[k]) o[k] = f[k]; }); return o; });
   const copy = {
     at: cfg.updated || '',
-    cfg: { schemaVersion: cfg.schemaVersion, updated: cfg.updated, options: cfg.options, fields: [], signatures: sigs.map((x) => {
+    cfg: { schemaVersion: cfg.schemaVersion, updated: cfg.updated, options: cfg.options, fields, signatures: sigs.map((x) => {
       const o = {}; keep.forEach((k) => { if (x[k] !== undefined) o[k] = x[k]; }); if (!o.compiled) o.compiled = x.html; return o;
     }) },
     images: {}
   };
+  // sigs come most needed first: the later ones go when not all fit.
+  while (copy.cfg.signatures.length > 1 && JSON.stringify(copy).length > room) copy.cfg.signatures.pop();
   if (JSON.stringify(copy).length > room) { console.log('OSign: the signatures do not fit into the mailbox settings for classic Outlook.'); return { kept: false, images: 0, left: 0 }; }
+  sigs = sigs.slice(0, copy.cfg.signatures.length);
   // The images, each as small as it is shown; the smallest first, as many as fit.
   const wanted = [];
   for (const sg of sigs) {
@@ -462,7 +475,8 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     for (const r of core.localImages(html)) {
       const key = r.dir + '/' + r.name;
       if (wanted.some((w) => w.key === key)) continue;
-      const wm = /\bwidth\s*=\s*["']?(\d+)/i.exec(r.tag);
+      // A width in pixels only: width="100%" says nothing about how many.
+      const wm = /\bwidth\s*=\s*["']?(\d+)(?![\d%])/i.exec(r.tag);
       wanted.push({ key, ref: r, width: wm ? Number(wm[1]) : 0 });
     }
   }
@@ -486,8 +500,15 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
   const text = JSON.stringify(copy);
   let had = '';
   try { had = roaming() ? String(roaming().get(CLASSIC_KEY) || '') : ''; } catch (e) { had = ''; }
-  if (had !== text) await writeRoaming(CLASSIC_KEY, copy);
-  return { kept: true, images: Object.keys(copy.images).length, left };
+  if (had !== text && !(await writeRoaming(CLASSIC_KEY, copy))) {
+    // Refused (too large after all): the copy before back, so the settings saved later with it
+    // (the user's choices, their variants) are not refused too.
+    try { if (had) roaming().set(CLASSIC_KEY, had); else roaming().remove(CLASSIC_KEY); } catch (e) { /* nothing to put back */ }
+    await new Promise((resolve) => { try { roaming().saveAsync(() => resolve()); } catch (e) { resolve(); } });
+    console.log('OSign: the mailbox did not keep the signatures for classic Outlook.');
+    return { kept: false, images: 0, left: 0 };
+  }
+  return { kept: true, images: Object.keys(copy.images).length, left, signatures: copy.cfg.signatures.length };
 }
 function classicCopy() { const c = readRoaming(CLASSIC_KEY); return c && c.cfg && Array.isArray(c.cfg.signatures) ? c : null; }
 
