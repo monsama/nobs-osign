@@ -198,7 +198,8 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
   const checks = await page.textContent('#pubChecks');
-  assert.match(checks, /GroupMember\.Read\.All/);
+  // The groups come from AD (new setups take Entra ID and AD): no Graph group permission asked for.
+  assert.doesNotMatch(checks, /GroupMember\.Read\.All/);
   assert.match(checks, /Photos per person \(Vertrieb\) come from photos\\<username>\.jpg/);
   await page.click('#dlgPublish button[value=cancel]');
   assert.deepEqual(errors, []);
@@ -562,7 +563,7 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
   await page.click('#btnSettings');
-  await page.click('#dlgSettings [data-stab=status]');
+  await page.click('#dlgSettings [data-stab=server]');
   await page.waitForFunction(() => document.querySelectorAll('#healthRows .setrow').length >= 8 && !document.querySelector('#healthRows .hdot.run'));
   const rows = await page.$$eval('#healthRows .setrow', (rs) => rs.map((r) => [r.querySelector('b').textContent, r.dataset.state]));
   assert.deepEqual(rows.find((r) => r[0] === 'Active Directory'), ['Active Directory', 'good']);

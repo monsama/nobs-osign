@@ -635,6 +635,7 @@
     'Against the version before it': 'Gegenüber der Version davor',
     'Against the draft now': 'Gegenüber dem aktuellen Entwurf',
     'Audit log': 'Audit-Log',
+    'Connections and state': 'Verbindungen und Zustand',
     'no app registration yet': 'noch keine App-Registrierung',
     'Note on the change': 'Notiz zur Änderung',
     '(optional, shown in History)': '(optional, erscheint im Verlauf)',

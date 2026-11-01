@@ -1125,11 +1125,7 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = true;
     $('setTabServer').hidden = !(onServer() && S.info.user && S.info.user.local);
-    $('setTabStatus').hidden = $('setTabServer').hidden;
     $('setApproval').checked = S.settings.requireApproval === 'on';
-    $('setTls').textContent = '…';
-    // Under its own heading: without the "Web certificate:" in front.
-    loadTls().then((c) => { const x = tlsText(c).replace(/^[^:]*:\s*/, ''); $('setTls').textContent = x.charAt(0).toUpperCase() + x.slice(1); $('setTls').className = !c || (!c.error && c.trusted && c.daysLeft > 30) ? '' : 'warn'; });
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
     $('setLocked').hidden = !locked;
@@ -1154,11 +1150,11 @@
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
     document.querySelector('#dlgSettings .dlg').scrollTop = 0;
     // Status and Info save nothing: only Close there.
-    const view = name === 'status' || name === 'about';
+    const view = name === 'about';
     $('setSave').hidden = view;
     document.querySelector('#dlgSettings .dlg-foot button[value=cancel]').textContent = view ? t('Close') : t('Cancel');
   }
-  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'status') runHealth(); }));
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
 
   // Status: every part the server depends on, tried now, in one list; a part to set up opens
   // its tab in Server connections.
@@ -1211,7 +1207,7 @@
     const rows = checks.map((c) => {
       const dot = el('span', { class: 'hdot run' }), text = el('small', null, t('Checking…'));
       const row = el('div', { class: 'setrow' }, dot, el('div', { class: 'setrow-text' }, el('b', null, t(c.name)), text),
-        c.tab ? el('button', { type: 'button', class: 'ghost', onclick: () => openConn(c.tab) }, t('Open…')) : null);
+        c.tab ? el('button', { type: 'button', id: c.tab === 'ad' ? 'setConn' : null, onclick: () => openConn(c.tab) }, t(c.name.replace(/ \(.*\)$/, '') + '…')) : null);
       return { c, row, dot, text };
     });
     $('healthRows').replaceChildren(...rows.map((r) => r.row));
@@ -1422,10 +1418,8 @@
     $('setErr').textContent = '';
     try { renderConnections(await api('connections/get')); connTab(tab || 'ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
   }
-  $('setConn').addEventListener('click', () => openConn('ad'));
-  document.querySelectorAll('#dlgSettings [data-conn]').forEach((b) => b.addEventListener('click', () => openConn(b.dataset.conn)));
   // Back from Server connections to Status: checked again, with what was just changed.
-  $('dlgConn').addEventListener('close', () => { if ($('dlgSettings').open && !document.querySelector('#dlgSettings [data-spane=status]').hidden) runHealth(); });
+  $('dlgConn').addEventListener('close', () => { if ($('dlgSettings').open && !document.querySelector('#dlgSettings [data-spane=server]').hidden) runHealth(); });
   $('dlgConn').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
     if (!b) return;

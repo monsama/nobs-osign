@@ -157,6 +157,11 @@ test('signature files are read in their own encoding', () => {
 test('value source: each field from Entra ID, from AD, or from nowhere', () => {
   const cfg = core.defaultConfig();
   const src = () => Object.fromEntries(cfg.fields.map((f) => [f.key, core.fieldSource(cfg, f)]));
+  // New setups take both: Entra ID where a field has a Graph source, AD for the rest.
+  assert.equal(core.valueSource(cfg), 'mixed');
+  // A configuration that names none (made before) stays with Entra ID alone.
+  assert.equal(core.valueSource({ options: {} }), 'graph');
+  cfg.options.valueSource = 'graph';
   assert.equal(src().description, 'none');
   assert.equal(src().givenName, 'graph');
   assert.equal(core.usesAdExport(cfg), false);

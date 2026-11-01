@@ -66,7 +66,9 @@
         //   'ad'     Active Directory: the editor exports every user's fields and groups into
         //            users/<mail>.json next to signatures.json
         //   'mixed'  Graph for the fields that have a Graph source, AD for the others; groups from AD
-        valueSource: 'graph'
+        // New setups start with both (what the setup assistant recommends): the starter fields
+        // without a Graph source (description, homePhone) then come from AD, not empty.
+        valueSource: 'mixed'
       },
       fields: DEFAULT_FIELDS.map(function (f) { return Object.assign({}, f); }),
       signatures: []

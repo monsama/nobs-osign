@@ -229,8 +229,8 @@ too (step 7).
 2. **Fields and where their values come from** (*Add-in → Where the users' values come from*):
    - **Entra ID**: each field by its Graph source. Fields without one (`description`, `homePhone`,
      `info`) stay empty, unless Entra Connect syncs them as directory extensions.
-   - **Entra ID and Active Directory** (recommended without those extensions): fields with a Graph
-     source from Entra ID, the others from AD.
+   - **Entra ID and Active Directory** (recommended without those extensions; what a new setup
+     starts with): fields with a Graph source from Entra ID, the others from AD.
    - **Active Directory**: every field from AD.
 
    With AD, the users' values go to `OSign/users/`: one file per person (`<mail>.json`) with their
@@ -257,7 +257,7 @@ too (step 7).
    and publishes it, or rejects it; a change to the draft after that withdraws the request.
 7. **Dark mode**: the preview's *Dark mode* shows roughly what recipients with Outlook's dark mode
    see. Check that the logo still shows on a dark background.
-8. **Status** (Settings, the local `admin`): every part the server depends on, tried now: Active
+8. **Status** (Settings → Server, the local `admin`): every part the server depends on, tried now: Active
    Directory, SharePoint, Cloudflare Pages, the web certificate, the sign-in to Microsoft 365 and
    until when, the key for passwords, the daily export of the users, the last publish and the
    version. Each part to set up opens its tab in Server connections.

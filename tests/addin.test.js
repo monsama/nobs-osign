@@ -31,6 +31,8 @@ function sig(id, name, html, extra) {
 }
 function makeConfig(edit) {
   const c = core.defaultConfig();
+  // The values from Entra ID (Graph), as these tests' stand-in serves them.
+  c.options.valueSource = 'graph';
   c.signatures = [
     sig('std', 'Standard', '<p><b>@@givenName @@sn</b></p><p>Mobile @@mobile</p><p><img src="assets/logo.png" width="90"><img src="photos/@@sAMAccountName.jpg" width="100"></p>', { defaultNew: true }),
     sig('short', 'Short', '<p>@@givenName</p>', { defaultReply: true }),
