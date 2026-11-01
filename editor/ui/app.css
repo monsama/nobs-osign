@@ -577,3 +577,13 @@ label > button.help + small, label > button.help { vertical-align: middle; }
 table.fields.history { min-width: 0; }
 table.history td:last-child { width: auto; white-space: nowrap; text-align: right; }
 table.history td[colspan] { text-align: center; white-space: normal; }
+
+/* right-click menu on a signature */
+.ctx-menu { position: fixed; z-index: 1000; min-width: 220px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 6px 24px rgba(0, 0, 0, .18); }
+.ctx-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.ctx-menu button:hover, .ctx-menu button:focus-visible { background: var(--panel-2); outline: none; }
+.ctx-menu button:disabled { opacity: .45; cursor: default; background: transparent; }
+.ctx-menu button .check { width: 14px; text-align: center; }
+.ctx-menu button .key { margin-left: auto; color: var(--muted); font-size: 12px; }
+.ctx-menu button.danger { color: var(--danger); }
+.ctx-menu hr { border: 0; border-top: 1px solid var(--line-2); margin: 4px 2px; }

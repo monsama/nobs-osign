@@ -185,6 +185,12 @@
           s.defaultReply ? el('span', { class: 'badge on' }, t('Reply')) : null,
           audienceText(s) !== t('everyone') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
           core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' on' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
+      a.addEventListener('contextmenu', (e) => { e.preventDefault(); sigMenu(s, e.clientX, e.clientY); });
+      a.addEventListener('keydown', (e) => {
+        if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = a.getBoundingClientRect(); sigMenu(s, r.left + 24, r.bottom); }
+        else if (e.key === 'F2') { e.preventDefault(); openSig(s.id); $('sigName').focus(); $('sigName').select(); }
+        else if (e.key === 'Delete') { e.preventDefault(); openSig(s.id); $('btnDel').click(); }
+      });
       ul.append(el('li', null, a));
     });
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
@@ -220,6 +226,34 @@
       : t(cert ? 'The server\'s certificate runs out on {0} (in {1} days): run the setup script again.' : 'The client secret runs out on {0} (in {1} days): run the setup script again.', day(f.secretExpires), left);
   }
 
+  // Back and forward (the mouse's side buttons, Alt+← and Alt+→, the browser's own): each page
+  // and each signature opened is a step in the browser's history. The address stays as it is.
+  let navRestoring = false;
+  function navStep() {
+    if (navRestoring) return;
+    const st = { osign: 1, view: S.view, sigId: S.view === 'sig' ? S.sigId : null };
+    const cur = history.state;
+    if (cur && cur.osign && cur.view === st.view && cur.sigId === st.sigId) return;
+    if (cur && cur.osign) history.pushState(st, ''); else history.replaceState(st, '');
+  }
+  function goView(view) {
+    show(view);
+    if (view === 'fields') renderFields(); else if (view === 'users') renderUsers(); else if (view === 'options') renderOptions();
+  }
+  addEventListener('popstate', (e) => {
+    const st = e.state;
+    if (!st || !st.osign || !S.config) return;
+    closeMenu();
+    navRestoring = true;
+    try {
+      if (st.view === 'sig' && S.config.signatures.some((x) => x.id === st.sigId)) openSig(st.sigId);
+      else if (st.view === 'sig' || st.view === 'empty') openSig(null);
+      else { flushSource(); goView(st.view); }
+    } finally { navRestoring = false; }
+    // What history held may be gone (a deleted signature): the step now says what is shown.
+    history.replaceState({ osign: 1, view: S.view, sigId: S.view === 'sig' ? S.sigId : null }, '');
+  });
+
   function show(view) {
     S.view = view;
     $('viewSig').hidden = view !== 'sig';
@@ -228,6 +262,7 @@
     $('viewUsers').hidden = view !== 'users';
     $('viewEmpty').hidden = view !== 'empty';
     renderList();
+    navStep();
   }
 
   function openSig(id) {
@@ -753,6 +788,65 @@
   suggest($('sigDeps'), { multi: true, min: 0, fetch: async (q) => (adOn() ? (await api('ad/departments', { query: q })).departments : []).map((g) => ({ value: g, label: g })) });
   $('sigDeps').addEventListener('input', () => { const s = sig(); if (s) { s.audience.departments = splitList($('sigDeps').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
   $('sigDoms').addEventListener('input', () => { const s = sig(); if (s) { s.audience.domains = splitList($('sigDoms').value).map((d) => d.replace(/^@/, '').toLowerCase()); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
+  // ---------------------------------------------------------------------------------------------
+  // Right-click on a signature in the list (or the menu key, or Shift+F10): what the signature's
+  // own page offers, without opening it first.
+  // ---------------------------------------------------------------------------------------------
+  function closeMenu() {
+    const m = $('ctxMenu'); if (m.hidden) return;
+    m.hidden = true; m.textContent = '';
+    if (closeMenu.back && document.contains(closeMenu.back)) closeMenu.back.focus();
+  }
+  function sigMenu(s, x, y) {
+    closeMenu();
+    closeMenu.back = document.activeElement;
+    const m = $('ctxMenu'), i = S.config.signatures.indexOf(s), n = S.config.signatures.length;
+    const item = (label, run, opts) => {
+      opts = opts || {};
+      const b = el('button', { type: 'button', role: opts.check === undefined ? 'menuitem' : 'menuitemcheckbox', class: opts.danger ? 'danger' : '' },
+        el('span', { class: 'check', 'aria-hidden': 'true' }, opts.check ? '✓' : ''), label, opts.key ? el('span', { class: 'key' }, opts.key) : null);
+      if (opts.check !== undefined) b.setAttribute('aria-checked', String(!!opts.check));
+      b.disabled = !!opts.disabled;
+      b.addEventListener('click', () => { closeMenu.back = null; closeMenu(); run(); });
+      return b;
+    };
+    const asDefault = (flag, id) => () => { openSig(s.id); $(id).checked = !s[flag]; $(id).dispatchEvent(new Event('change')); };
+    const move = (by) => () => {
+      const list = S.config.signatures, j = list.indexOf(s);
+      list.splice(j, 1); list.splice(j + by, 0, s); changed({ list: true });
+    };
+    m.replaceChildren(
+      item(t('Open'), () => openSig(s.id)),
+      item(t('Rename'), () => { openSig(s.id); $('sigName').focus(); $('sigName').select(); }),
+      item(t('Duplicate'), () => { openSig(s.id); flushSource(); addSig(s); }),
+      el('hr'),
+      item(t('Default for new mail'), asDefault('defaultNew', 'sigNew'), { check: !!s.defaultNew }),
+      item(t('Default for replies'), asDefault('defaultReply', 'sigReply'), { check: !!s.defaultReply }),
+      el('hr'),
+      item(t('Move up'), move(-1), { disabled: i <= 0 }),
+      item(t('Move down'), move(1), { disabled: i < 0 || i >= n - 1 }),
+      el('hr'),
+      item(t('Delete…'), () => { openSig(s.id); $('btnDel').click(); }, { danger: true }));
+    m.hidden = false;
+    // Inside the window, also near its right or bottom edge.
+    const w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = Math.max(4, Math.min(x, innerWidth - w - 4)) + 'px';
+    m.style.top = Math.max(4, Math.min(y, innerHeight - h - 4)) + 'px';
+    m.querySelector('button:not(:disabled)').focus();
+  }
+  $('ctxMenu').addEventListener('keydown', (e) => {
+    const items = [...$('ctxMenu').querySelectorAll('button:not(:disabled)')], at = items.indexOf(document.activeElement);
+    if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); closeMenu(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(at + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(at - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+  });
+  document.addEventListener('mousedown', (e) => { if (!$('ctxMenu').contains(e.target)) { closeMenu.back = null; closeMenu(); } });
+  addEventListener('blur', () => { closeMenu.back = null; closeMenu(); });
+  addEventListener('resize', () => closeMenu());
+  document.addEventListener('scroll', () => closeMenu(), true);
+
   $('btnNew').addEventListener('click', () => addSig());
   $('btnNew2').addEventListener('click', () => addSig());
   $('btnDup').addEventListener('click', () => { flushSource(); const s = sig(); if (s) addSig(s); });
@@ -769,7 +863,7 @@
   // Import: templates (.htm) with their images, from a folder or picked files. CI-Sign keeps them
   // as UTF-16 files that load "images/<name>"; classic Outlook as "<name>_files/<name>".
   // ---------------------------------------------------------------------------------------------
-  let impItems = [], impImages = new Map(), impBlocks = new Map();
+  let impItems = [], impImages = new Map(), impBlocks = new Map(), impPhotos = [], impPhotosOn = false;
   const IMG_EXT = /\.(png|jpe?g|gif)$/i;
   // CI-Sign's text blocks: {##Name}…{end ##Name} in a file of their own (__intern.htm), each with
   // the days it is shown ({dats 01.12.2026}{date 31.12.2026}), used in a template as {##Name}.
@@ -780,7 +874,8 @@
     for (const m of text.matchAll(BLOCK_DEF)) {
       let html = m[2], from = '', until = '';
       html = html.replace(/\{dats\s+([^}]*)\}/i, (a, d) => { from = ciDay(d); return ''; }).replace(/\{date\s+([^}]*)\}/i, (a, d) => { until = ciDay(d); return ''; });
-      impBlocks.set(m[1].toLowerCase(), { name: m[1], html: html.trim(), from, until });
+      // A block whose last day is past is shown no more: it stays out (CI-Sign keeps its samples).
+      impBlocks.set(m[1].toLowerCase(), { name: m[1], html: html.trim(), from, until, expired: !!until && until < core.today() });
     }
   }
 
@@ -791,7 +886,10 @@
   async function readImportFiles(files) {
     impItems = []; impImages = new Map(); impBlocks = new Map();
     const list = [...files];
-    list.filter((f) => IMG_EXT.test(f.name)).forEach((f) => { if (!impImages.has(f.name.toLowerCase())) impImages.set(f.name.toLowerCase(), f); });
+    // The same image name in several places (CI-Sign keeps copies in ci-sign\, in each
+    // AutoBackup-… and in its update folder): the one nearest the top, outside the copies, wins.
+    const rank = (f) => { const p = (f.webkitRelativePath || f.name).replace(/\\/g, '/'); return (/\/(AutoBackup-[^/]*|ci-sign-update|editor|Templates)\//i.test('/' + p) ? 100 : 0) + p.split('/').length; };
+    list.filter((f) => IMG_EXT.test(f.name)).sort((a, b) => rank(a) - rank(b)).forEach((f) => { if (!impImages.has(f.name.toLowerCase())) impImages.set(f.name.toLowerCase(), f); });
     for (const f of list.filter((x) => /\.html?$/i.test(x.name))) {
       // A folder holds more than templates (CI-Sign's own editor, for one): those stay unticked.
       const path = f.webkitRelativePath || f.name;
@@ -811,6 +909,17 @@
       impItems.push({ file: f, path, name, body, fields, blocks, refs, perPerson, imgs, missing, checked: looksLikeSig });
     }
     impItems.sort((a, b) => (b.checked - a.checked) || a.name.localeCompare(b.name));
+    // Photos per person: with a template that uses one (images/@@sAMAccountName.jpg), the images
+    // no template names, of that type, named like a user (mustera.jpg, not Newsletter-2.jpg).
+    const per = impItems.filter((x) => x.checked && x.perPerson.length).map((x) => x.perPerson[0]);
+    impPhotos = [];
+    if (per.length) {
+      const ext = (per[0].split('.').pop() || 'jpg').toLowerCase();
+      const used = new Set(impItems.flatMap((x) => x.imgs.map((n) => n.toLowerCase())));
+      impPhotos = [...impImages.entries()].filter(([k]) => !used.has(k) && k.endsWith('.' + ext) && /^[a-z][a-z0-9._]{1,40}$/i.test(k.slice(0, -ext.length - 1))).map(([, f]) => f);
+    }
+    // Off unless ticked: photos in the folder are used at once, without publishing.
+    impPhotosOn = false;
     // The same template twice (CI-Sign keeps a copy next to the program): the first one is ticked.
     const seen = new Set();
     impItems.forEach((it) => { const k = it.name.toLowerCase(); if (it.checked && seen.has(k)) it.checked = false; if (it.checked) seen.add(k); });
@@ -830,7 +939,9 @@
       if (it.missing.length) meta.push(el('span', { class: 'warn' }, t(' · not picked: {0}', [...new Set(it.missing)].join(', '))));
       if (it.refs.length) {
         const known = it.refs.filter((r) => impBlocks.has(r.toLowerCase())), unknown = it.refs.filter((r) => !impBlocks.has(r.toLowerCase()));
-        const timed = known.filter((r) => { const b = impBlocks.get(r.toLowerCase()); return b.from || b.until; });
+        const timed = known.filter((r) => { const b = impBlocks.get(r.toLowerCase()); return (b.from || b.until) && !b.expired; });
+        const old = known.filter((r) => impBlocks.get(r.toLowerCase()).expired);
+        if (old.length) meta.push(t(' · past text blocks left out: {0}', old.join(', ')));
         if (known.length) meta.push(t(' · text blocks {0}', known.join(', ')) + (timed.length ? t(' (with days: a campaign each)') : ''));
         if (unknown.length) meta.push(el('span', { class: 'warn' }, t(' · text blocks not picked: {0} (pick the file with them, e.g. __intern.htm)', unknown.join(', '))));
       }
@@ -838,6 +949,14 @@
       if (exists) meta.push(t(' · replaces the signature of the same name'));
       ul.append(el('li', { class: it.checked ? '' : 'skip' }, box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta))));
     });
+    if (impPhotos.length) {
+      const box = el('input', { type: 'checkbox' }); box.checked = impPhotosOn;
+      box.addEventListener('change', () => { impPhotosOn = box.checked; });
+      const names = impPhotos.map((f) => f.name);
+      ul.append(el('li', { class: impPhotosOn ? '' : 'skip' }, box, el('div', null,
+        el('div', { class: 'imp-name' }, t('Photos per person: {0} into photos\\ in the OSign folder', impPhotos.length)),
+        el('div', { class: 'imp-meta' }, names.slice(0, 12).join(', ') + (names.length > 12 ? ' …' : '') + t(' · used at once, without publishing; a photo already there of the same name is replaced')))));
+    }
     const n = impItems.length;
     $('impNote').textContent = n ? t('{0} template file(s) found, {1} image(s) picked.', n, impImages.size) : t('No .htm files among what was picked.');
     $('impGo').disabled = !impItems.some((x) => x.checked);
@@ -876,6 +995,7 @@
         const plain = html.replace(BLOCK_REF, (all, name) => {
           const b = impBlocks.get(name.toLowerCase());
           if (!b) return all;
+          if (b.expired) return '';
           if (b.from || b.until) { timed.push(b); return ''; }
           return sanitize(b.html);
         });
@@ -889,7 +1009,7 @@
         for (const b of timed) {
           const c = put(it.name + ' – ' + b.name, html.replace(BLOCK_REF, (all, name) => {
             const x = impBlocks.get(name.toLowerCase());
-            return !x ? all : x === b || !(x.from || x.until) ? sanitize(x.html) : '';
+            return !x ? all : x === b || !(x.from || x.until || x.expired) ? sanitize(x.html) : '';
           }), b.from, b.until);
           c.audience = JSON.parse(JSON.stringify(s.audience));
           campaigns.push([c, s]);
@@ -906,12 +1026,21 @@
       changed();
       $('dlgImport').close();
       if (first) openSig(first.id);
-      toast(uploaded.size ? t('{0} template(s) imported, with {1} image(s).', count, uploaded.size) : t('{0} template(s) imported.', count));
+      let photosDone = 0;
+      if (impPhotosOn) {
+        for (const f of impPhotos) {
+          const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+          const r = await api('photos/upload', { name: f.name, data }).catch((e) => ({ error: e.message }));
+          if (!r.error) photosDone++;
+        }
+      }
+      toast((uploaded.size ? t('{0} template(s) imported, with {1} image(s).', count, uploaded.size) : t('{0} template(s) imported.', count))
+        + (impPhotosOn ? ' ' + t('{0} of {1} photo(s) uploaded.', photosDone, impPhotos.length) : '') + ' ' + t('The signatures go live only when you publish.'));
     } catch (e) { $('impErr').textContent = t(e.message); $('impGo').disabled = false; }
   }
 
   $('btnImportOpen').addEventListener('click', () => {
-    impItems = []; impImages = new Map(); renderImportList(); $('impNote').textContent = ''; $('impErr').textContent = '';
+    impItems = []; impImages = new Map(); impPhotos = []; impPhotosOn = false; renderImportList(); $('impNote').textContent = ''; $('impErr').textContent = '';
     $('dlgImport').showModal();
   });
   ['impFiles', 'impFolder'].forEach((id) => $(id).addEventListener('change', async () => {
@@ -1019,8 +1148,7 @@
     // Not loaded yet (a slow server): nothing to show.
     if (!S.config) return;
     flushSource();
-    show(a.dataset.view);
-    if (a.dataset.view === 'fields') renderFields(); else if (a.dataset.view === 'users') renderUsers(); else renderOptions();
+    goView(a.dataset.view);
   }));
 
   // ---------------------------------------------------------------------------------------------

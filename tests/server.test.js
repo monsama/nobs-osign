@@ -201,6 +201,15 @@ test('serves the UI and the shared engine, nothing outside them', async () => {
   }
 });
 
+test('photos: a real image under a user\'s name goes into photos/ of the folder', async () => {
+  assert.equal((await api('photos/upload', { name: '../evil.png', data: PNG.toString('base64') })).ok, false);
+  assert.equal((await api('photos/upload', { name: 'fake.png', data: Buffer.from('GIF89a....').toString('base64') })).ok, false);
+  const r = await api('photos/upload', { name: 'mustera.png', data: PNG.toString('base64') });
+  assert.equal(r.name, 'mustera.png');
+  assert.ok(fs.readFileSync(path.join(publishDir, 'photos', 'mustera.png')).equals(PNG));
+  fs.rmSync(path.join(publishDir, 'photos'), { recursive: true, force: true });
+});
+
 test('draft: saved as sent, and checked', async () => {
   assert.equal((await api('draft/save', { configJson: '{"schemaVersion":2}' })).ok, false);
   assert.equal((await api('draft/save', { configJson: 'nope' })).ok, false);
