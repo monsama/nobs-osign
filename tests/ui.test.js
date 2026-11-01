@@ -58,7 +58,7 @@ test.before(async () => {
   context = await signedIn();
   page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text() + ' @ ' + JSON.stringify(m.location())); });
   page.on('response', (r) => { if (r.status() >= 400) notFound.push(new URL(r.url()).pathname); });
   page.on('dialog', (d) => d.accept());
 });
