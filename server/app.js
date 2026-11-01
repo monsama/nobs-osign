@@ -17,6 +17,7 @@ const { directoryConfig, directoryEnabled, directoryProblem, lookup, groupsStart
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
+const { createDeployment } = require('./deployment');
 const { createHistory } = require('./history');
 const { createCerts } = require('./cert');
 const { createAudit } = require('./audit');
@@ -186,7 +187,10 @@ function createApp(opts) {
     const left = secretDaysLeft();
     const what = cert ? 'certificate' : 'client secret';
     if (left !== null && left <= 30) log.warn(left < 0 ? 'The server\'s ' + what + ' ran out on ' + secretExpires + ': publishing to SharePoint fails until a new one is set (run the setup script again).' : 'The server\'s ' + what + ' runs out on ' + secretExpires + ' (in ' + left + ' days): run the setup script again.');
-    graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch }) : null;
+    graph = graphEnabled(graphCfg) && !graphProblem(graphCfg) ? createGraph(graphCfg, { fetch: opts && opts.fetch, nextCert: () => certs.waiting(), onNextCert: (thumb) => {
+      // The setup script's answer did not arrive, but its certificate is on the app: in use now.
+      if (certs.activate(thumb)) { log.info('graph: the certificate of the last setup script (' + thumb + ') signs in; it is used from now on'); setImmediate(configure); }
+    } }) : null;
     if (graphProblem(graphCfg)) log.warn('Publishing to SharePoint is not set up right: ' + graphProblem(graphCfg));
     refill(ldapCfg, Object.assign(ldapConfig(e), (opts && opts.ldap) || {}));
     refill(dir, directoryConfig(e, ldapCfg));
@@ -204,6 +208,9 @@ function createApp(opts) {
   configure();
   // The setup script for Microsoft 365 (server/setup.js): one at a time, for an hour.
   const setup = createSetup();
+  // Where the add-in is deployed in Microsoft 365: asked by a script of its own, only reading.
+  const deployment = createDeployment({ dataDir });
+  const addinId = () => { try { return JSON.parse(fs.readFileSync(path.join(addin.templateDir(env), 'osign-addin.json'), 'utf8')).id || ''; } catch (e) { return ''; } };
   // Its result goes where the admin would type it, and takes effect at once.
   async function setupApply(r) {
     let c;
@@ -364,6 +371,8 @@ function createApp(opts) {
         // The apps of an earlier run, the only ones the script may use again.
         knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
     },
+    'deploy/start': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : deployment.start({ origin: String(d.origin || ''), addinId: addinId() })),
+    'deploy/status': () => ({ last: deployment.last(), waiting: deployment.waiting() }),
     'setup/status': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : setup.status()),
     // "Test" in Server connections: each part, with what is saved, for real. → { message } or { error }.
     'connections/test': async (d, s) => {
@@ -640,6 +649,7 @@ function createApp(opts) {
     'setup/start': () => 'setup script made',
     'connections/cert': (d, r) => 'certificate downloaded (' + (r.thumbprint || '') + ')',
     'addin/build': () => 'add-in files made',
+    'deploy/start': () => 'deployment script made',
     'photos/upload': (d) => 'photo ' + String(d.name || '').slice(0, 120),
     'addin/upload': (d, r) => 'uploaded to Cloudflare Pages' + (r.url ? ' ' + r.url : ''),
     'ad/export': () => 'users exported',
@@ -662,7 +672,7 @@ function createApp(opts) {
     if (req.method !== 'POST' || !/^application\/json\b/i.test(String(req.headers['content-type'] || '')) || !sameSite(req)) return send(res, 403, 'text/plain; charset=utf-8', '403 Forbidden');
     // Signed in first, then the body is read: nobody who is not signed in makes the server hold a
     // large one, and only the local account admin may send a backup.
-    const open = ['login', 'login-methods', 'setup/finish', 'logout'].includes(name);
+    const open = ['login', 'login-methods', 'setup/finish', 'deploy/finish', 'logout'].includes(name);
     const s = open ? null : auth.session(req);
     if (!open && !s) return fail(res, 'Not signed in.', 401);
     let data = {};
@@ -692,6 +702,13 @@ function createApp(opts) {
         setup.done(r.data);
         note(true, 'Microsoft 365 set up (server ' + r.data.serverClientId + ', ' + (r.data.certThumbprint ? 'certificate' : 'client secret') + ')');
       }
+      return ok(res, {});
+    }
+    // The deployment script's answer, with its one-time code.
+    if (name === 'deploy/finish') {
+      const r = deployment.finish(data);
+      audit.add({ who: 'deployment script', ip, what: 'deploy/finish', ok: !r.error && !(r.result && r.result.error), detail: r.error || (r.result.error ? 'the script stopped: ' + r.result.error : r.result.found ? 'the add-in is deployed' : 'the add-in is not deployed') });
+      if (r.error) return fail(res, r.error, r.status);
       return ok(res, {});
     }
     if (name === 'logout') {
@@ -742,6 +759,12 @@ function createApp(opts) {
         const text = s.user.local ? setup.script(new URL(req.url, 'http://x').searchParams.get('id') || '') : null;
         if (!text) return send(res, 404, 'text/plain; charset=utf-8', 'Download the setup script again in the setup assistant.');
         return send(res, 200, 'text/plain; charset=utf-8', text, { 'Content-Disposition': 'attachment; filename="nobs-osign-setup.ps1"' });
+      }
+      // The script that reads where the add-in is deployed (made by deploy/start).
+      if (pathname === '/setup/nobs-osign-deployment.ps1') {
+        const text = s.user.local ? deployment.script(new URL(req.url, 'http://x').searchParams.get('id') || '') : null;
+        if (!text) return send(res, 404, 'text/plain; charset=utf-8', 'Download the script again under Settings → Server.');
+        return send(res, 200, 'text/plain; charset=utf-8', text, { 'Content-Disposition': 'attachment; filename="nobs-osign-deployment.ps1"' });
       }
       // The add-in's files as last made, to upload by hand.
       // Its manifest alone, for "Add from file" in Outlook or "Upload manifest file" in the admin center.

@@ -237,6 +237,40 @@ test('the server\'s certificate: made for the setup script, put on the app, and 
   } finally { s.close(); }
 });
 
+test('the setup script\'s answer lost after it swapped the certificate: the server finds the new one by itself', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-cert2-'));
+  const env = envFor(dir, { OSIGN_APP_KEY: 'a-key-for-the-cert-test', OSIGN_GRAPH_CLIENT_SECRET_FILE: '' });
+  delete env.OSIGN_GRAPH_CLIENT_SECRET_FILE;
+  const s = await start(env);
+  const at = 'http://127.0.0.1:' + s.address().port;
+  const certOf = async (c) => {
+    const st = await call(at, c, 'setup/start', { origin: at });
+    const text = await (await fetch(at + '/setup/nobs-osign-setup.ps1?id=' + st.id, { headers: { Cookie: c } })).text();
+    return { cert: new crypto.X509Certificate(Buffer.from(/\$Cert = '([^']+)'/.exec(text)[1], 'base64')), thumb: /\$CertThumbprint = '([^']+)'/.exec(text)[1], token: /\$Token = '([^']+)'/.exec(text)[1] };
+  };
+  const post = (b) => fetch(at + '/api/setup/finish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((r) => r.json());
+  try {
+    const c = await signIn(at);
+    await call(at, c, 'settings/save', { settings: { spSite: SITE, spFolder: 'OSign', addinUrl: 'https://osign.contoso.com/' } });
+    // A first run, answered: the first certificate is in use.
+    const one = await certOf(c);
+    sp.certs.length = 0; sp.certs.push(one.cert);
+    assert.equal((await post({ token: one.token, tenantId: TENANT, addin: { clientId: '22222222-2222-2222-2222-222222222222' }, server: { clientId: CLIENT, certThumbprint: one.thumb } })).ok, true);
+    // A second run puts its certificate on the app in place of the first, and its answer never arrives.
+    const two = await certOf(c);
+    sp.certs.length = 0; sp.certs.push(two.cert);
+    const p = await call(at, c, 'publish', { configJson: cfg([{ id: 's', name: 'S', html: '<p>y</p>' }]) });
+    assert.equal(p.ok, true, p.error);
+    assert.ok(logs.some((m) => m.indexOf(two.thumb) >= 0 && /used from now on/.test(m)));
+    // And it stays in use: a server started again signs in with it.
+    const s2 = await start(env);
+    try {
+      const at2 = 'http://127.0.0.1:' + s2.address().port;
+      assert.equal((await call(at2, await signIn(at2), 'connections/test', { what: 'graph' })).error, undefined);
+    } finally { s2.close(); }
+  } finally { s.close(); sp.certs.length = 0; }
+});
+
 test('by hand: the server\'s certificate to upload in Entra, made once and then in use; no secret', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-cert-hand-'));
   const env = envFor(dir, { OSIGN_APP_KEY: 'a-key-for-the-hand-test' });

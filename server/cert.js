@@ -89,6 +89,8 @@ function createCerts({ dataDir, seal, open }) {
       return true;
     },
     active() { return unseal(load().active); },
+    // The one a setup script was given and may have put on the app without its answer arriving.
+    waiting() { return unseal(load().pending); },
     remove() { writeAtomic(file, JSON.stringify({})); }
   };
 }
