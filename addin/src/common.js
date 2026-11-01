@@ -76,7 +76,7 @@ async function readJson(key) { try { const v = await store.get(key); return v ? 
 const WHAT_DE = {
   'Finding the signatures': 'Signaturen suchen', 'Loading the signatures': 'Signaturen laden', 'Finding the site': 'Website suchen',
   'Reading your details': 'Ihre Angaben lesen', 'Reading your groups': 'Ihre Gruppen lesen', 'Finding your entry': 'Ihren Eintrag suchen',
-  'Loading your entry': 'Ihren Eintrag laden', 'Listing the images': 'Bilder auflisten', 'Finding the photo': 'Foto suchen'
+  'Loading your entry': 'Ihren Eintrag laden', 'Signing in': 'Anmelden', 'Listing the images': 'Bilder auflisten', 'Finding the photo': 'Foto suchen'
 };
 const MSG_DE = [
   [/SharePoint does not let you read the folder (.+?) \((\d+)\)\. It has to be shared with everyone who gets a signature: .*$/, 'SharePoint lässt Sie den Ordner $1 nicht lesen ($2). Er muss für alle freigegeben sein, die eine Signatur bekommen: in SharePoint beim Ordner → Zugriff verwalten → Zugriff gewähren: «Jeder ausser externen Benutzern», Anzeigen.'],
@@ -129,13 +129,17 @@ async function graphGet(token, url, what, allowNotFound) {
 // MSAL keeps the token and renews it; this only saves asking it again for each call of one message.
 // Kept well below a token's life (an hour at least): a runtime Outlook reuses never sends an expired one.
 const TOKEN_REUSE_MS = 10 * 60 * 1000;
+// Outlook's sign-in answers in a second or two. When it does not answer at all, the event handler
+// would wait until Outlook gives up on it, silently: so it waits this long, then says so.
+const SIGN_IN_MS = 20 * 1000;
 let tokens = {};
 async function token(scopes, interactive) {
   const key = scopes.join(' ');
   const had = tokens[key];
   if (!had || interactive || Date.now() - had.at > TOKEN_REUSE_MS) {
     const entry = { at: Date.now() };
-    entry.p = getGraphToken(interactive, scopes).catch((e) => { if (tokens[key] === entry) delete tokens[key]; throw e; });
+    const p = getGraphToken(interactive, scopes);
+    entry.p = (interactive ? p : withTimeout(p, SIGN_IN_MS, 'Signing in')).catch((e) => { if (tokens[key] === entry) delete tokens[key]; throw e; });
     tokens[key] = entry;
   }
   return tokens[key].p;

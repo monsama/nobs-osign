@@ -12,5 +12,6 @@ function b64url(text) {
 }
 export async function getGraphToken(interactive, scopes) {
   if (globalThis.__osignSignInFails) throw new Error('sign-in failed');
+  if (globalThis.__osignSignInHangs) return new Promise(() => {});
   return b64url('{"alg":"none"}') + '.' + b64url(JSON.stringify({ scp: (scopes || []).join(' ') })) + '.token:' + (scopes || []).join(' ');
 }
