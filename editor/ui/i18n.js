@@ -707,7 +707,7 @@
     'SharePoint…': 'SharePoint…',
     'Cloudflare Pages…': 'Cloudflare Pages…',
     'General': 'Allgemein',
-    'Of this editor; the signatures keep their own.': 'Dieses Editors; die Signaturen behalten ihre eigene.',
+    'The language of this interface. Signatures are not affected.': 'Sprache der Benutzeroberfläche. Die Signaturen bleiben unverändert.',
     'Connections': 'Verbindungen',
     'Sign-in with Active Directory, SharePoint for the signatures, Cloudflare Pages for the add-in.': 'Anmeldung mit Active Directory, SharePoint für die Signaturen, Cloudflare Pages für das Add-in.',
     'Web certificate': 'Webzertifikat',

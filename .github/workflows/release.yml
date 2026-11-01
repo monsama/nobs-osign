@@ -4,8 +4,10 @@
 #    with IMAGE: the image by its digest, so an install runs exactly the image that was scanned; attested too
 #
 # Runs on a version tag such as v0.5.0 (scripts/release.sh pushes one), or by hand (Actions →
-# release → Run workflow) on main, which tags the version in package.json first. Tests must pass
-# first. A version that is already tagged is refused.
+# release → Run workflow) on main, which tags the version in package.json first. A version that is
+# already tagged is refused. The tests are not run again here: the image is built and scanned while
+# the test workflow (it runs on every push, so on this commit too) finishes, and nothing is published
+# until it has passed on exactly this commit.
 name: release
 
 on:
@@ -23,29 +25,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  test:
-    # Pinned: Playwright 1.56 installs Chromium only on releases it knows (not yet 26.04).
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
     # By hand, only main is released: a release from another branch would publish code that is not on main.
     if: github.event_name == 'push' || github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: 22
-          cache: npm
-      # A dropped connection to the npm registry (ECONNRESET) is tried once more before the job fails.
-      - run: npm ci || (sleep 15 && npm ci)
-      - run: npx playwright install --with-deps chromium
-      # pwsh comes with the runner, so the setup script's test runs too.
-      - run: npm test
-
-  publish:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
+      # To see whether the tests passed on this commit (the test workflow's runs).
+      actions: read
       contents: write
       packages: write
       # Signed statements of where the image and the server's files were built (GitHub artifact attestation, Sigstore).
@@ -98,6 +85,19 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+      # Nothing is published before the tests (test.yml, Linux, Windows, Docker) passed on this very commit.
+      - name: The tests passed on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 150); do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=$GITHUB_SHA&per_page=20" --jq '.workflow_runs[] | .status + " " + (.conclusion // "")')"
+            if echo "$runs" | grep -q '^completed success$'; then echo "Tests passed on $GITHUB_SHA."; exit 0; fi
+            if [ -n "$runs" ] && ! echo "$runs" | grep -vq '^completed '; then echo "The tests failed on $GITHUB_SHA:"; echo "$runs"; exit 1; fi
+            if [ -z "$runs" ] && [ "$i" -gt 18 ]; then echo "The tests never ran on $GITHUB_SHA (push it to a branch first)."; exit 1; fi
+            sleep 10
+          done
+          echo "The tests on $GITHUB_SHA did not finish in time."; exit 1
       - name: Push the scanned image
         id: push
         run: |
