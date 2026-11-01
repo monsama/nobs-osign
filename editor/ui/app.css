@@ -613,6 +613,24 @@ table.history td[colspan] { text-align: center; white-space: normal; }
   dialog.settings[open], dialog:has(.wiz)[open] { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
 }
 
+/* Photos: add one (person, then a file or a web address), and those there as small pictures. */
+.photo-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 14px 0 6px; }
+.photo-add > label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.photo-add > label.filepick { flex-direction: row; color: var(--text); height: 32px; margin-bottom: 0; }
+.photo-add .photo-name:empty { display: none; }
+#photosFilter { width: 260px; max-width: 100%; }
+.photo-add .photo-url { flex: 1 1 320px; }
+.photo-add .photo-url .pick { display: flex; gap: 6px; }
+.photo-add .photo-url input { flex: 1; }
+.photo-add .or { color: var(--muted); padding-bottom: 7px; }
+.photo-name { font-family: Consolas, monospace; font-size: 12.5px; color: var(--muted); padding-bottom: 7px; min-width: 120px; }
+.photo-list { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.photo-list li { position: relative; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.photo-list li.empty { grid-column: 1 / -1; border-style: dashed; color: var(--muted); padding: 18px; }
+.photo-list img { width: 100%; height: 120px; object-fit: contain; background: var(--panel-2); border-radius: var(--r-s); }
+.photo-list .pn { font-size: 12.5px; word-break: break-all; text-align: center; }
+.photo-list button { position: absolute; top: 4px; right: 4px; }
+
 /* A question before something that cannot be taken back. */
 dialog.ask { width: min(460px, 92vw); }
 .ask-text { margin: 4px 0 18px; line-height: 1.5; white-space: pre-line; }

@@ -54,6 +54,7 @@
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
+      <li><a href="#" data-view="photos" class="nav">Photos <small>one per person</small></a></li>
     </ul>
     </section>
     <section class="side-sect" aria-labelledby="sidePub">
@@ -208,6 +209,28 @@
       </div>
       <div class="table-wrap"><table class="fields users"><thead id="usersHead"></thead><tbody id="usersRows"></tbody></table></div>
       <p id="usersMore" class="hint"></p>
+    </section>
+
+    <section id="viewPhotos" class="view" hidden>
+      <h1>Photos</h1>
+      <p class="lead" data-th="photosLead">A signature can show each person's own photo: <code>photos/@@sAMAccountName.jpg</code> in its HTML
+        takes the file of that name from the <b>photos</b> folder next to the signatures. Someone without a photo gets the signature
+        without it. Photos count at once, without publishing; they are made 400 pixels wide at most.</p>
+      <p id="photosRule" class="callout"></p>
+      <div class="photo-add">
+        <label>Person <input id="photoWho" placeholder="Login, e.g. mustera" autocomplete="off"></label>
+        <span id="photoName" class="photo-name"></span>
+        <label class="filepick small photo-file">Upload file… <input id="photoFile" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+        <span class="or">or</span>
+        <label class="photo-url">From a web address <span class="pick"><input id="photoUrl" placeholder="https://www.company.ch/team/anna.jpg" autocomplete="off"><button type="button" id="photoUrlGo">Fetch</button></span></label>
+      </div>
+      <p id="photoErr" class="err" role="alert"></p>
+      <div class="users-bar">
+        <input id="photosFilter" placeholder="Search name" aria-label="Search name">
+        <span id="photosInfo" class="users-info"></span>
+      </div>
+      <ul id="photoList" class="photo-list"></ul>
+      <p class="hint" data-th="photosImport">Photos from CI-Sign come along with <b>Import templates</b> (tick <i>Photos per person</i>).</p>
     </section>
 
     <section id="viewEmpty" class="view empty" hidden>
@@ -617,7 +640,8 @@
     <h2>Image</h2>
     <p class="lead">PNG, JPG or GIF, at most 1 MB. It is published with the signatures.</p>
     <div id="imgList" class="img-list"></div>
-    <p class="btn-row"><label class="filepick small">Upload an image… <input type="file" id="imgFile" accept=".png,.jpg,.jpeg,.gif"></label></p>
+    <p class="btn-row"><label class="filepick small">Upload an image… <input type="file" id="imgFile" accept=".png,.jpg,.jpeg,.gif"></label>
+      <button type="button" id="imgPerson" class="small" title="Each person's own photo from the photos folder (Photos)">Photo per person</button></p>
     <p id="imgErr" class="err"></p>
     <div class="dlg-foot"><button value="cancel" class="ghost">Cancel</button></div>
   </form>

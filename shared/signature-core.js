@@ -137,11 +137,15 @@
   }
 
   // Inside one block, lines split by <br> ("Tel @@homePhone<br>Mobile @@mobile") are each a line.
+  // So are the lines inside an inline element that holds <br>s itself, as CI-Sign writes them
+  // (<font>@@info<br><br><img banner></font>): the banner is a line of its own, not part of
+  // the line of an empty field.
   function markBrLines(doc, block) {
     var segs = [[]];
     for (var c = block.firstChild; c; c = c.nextSibling) {
       // A nested block is a line of its own (it gets its own marks), never part of a <br> line.
       if (c.nodeType === 1 && BLOCK[c.nodeName]) { segs.push([]); continue; }
+      if (c.nodeType === 1 && c.querySelector && c.querySelector('br')) { segs.push([]); markBrLines(doc, c); continue; }
       segs[segs.length - 1].push(c);
       if (c.nodeType === 1 && c.nodeName === 'BR') segs.push([]);
     }
@@ -179,7 +183,11 @@
     blocks.unshift(host);
     blocks.forEach(function (el) {
       if (el.nodeName === 'TR') {
-        var rowKeys = ownPlaceholders(el, true);
+        // A row of single lines goes as a whole ("Mobile | @@mobile"); a row whose cells hold lines
+        // of their own (a field, then a banner) keeps what is not empty: its lines are judged each.
+        var multi = false;
+        for (var td = el.firstChild; td; td = td.nextSibling) if (td.nodeType === 1 && td.querySelector('br, p, div, table')) multi = true;
+        var rowKeys = multi ? [] : ownPlaceholders(el, true);
         if (rowKeys.length) wrap(doc, el, el, rowKeys);
         return;
       }

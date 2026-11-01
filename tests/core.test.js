@@ -41,6 +41,18 @@ test('a table row goes, never a single cell', () => {
   assert.ok(!/<td>Mobile/.test(out));
 });
 
+test('CI-Sign: an empty field and a banner in one row, lines inside a <font>: the field\'s line goes, the banner stays', () => {
+  const html = '<table><tr><td>@@givenName</td></tr><tr><td><font size="2">@@info<br><br><img src="assets/banner.jpg" width="601"><br></font></td></tr></table>';
+  const out = run(html, { givenName: 'Anna', info: '' });
+  assert.match(out, /banner\.jpg/);
+  assert.doesNotMatch(out, /@@info/);
+  // With a note in the field, both.
+  const out2 = run(html, { givenName: 'Anna', info: 'Away until Monday' });
+  assert.match(out2, /Away until Monday[\s\S]*banner\.jpg/);
+  // A row of single lines still goes as a whole.
+  assert.equal(text(run('<table><tr><td>Mobile</td><td>@@mobile</td></tr></table>', { mobile: '' })), '');
+});
+
 test('placeholders in attributes are filled and count for the line', () => {
   const out = run('<p><a href="mailto:@@mail">@@mail</a></p><p><a href="tel:@@mobile">call</a></p>', { mail: 'a"b@c.ch', mobile: '' });
   assert.equal(out, '<p><a href="mailto:a&quot;b@c.ch">a&quot;b@c.ch</a></p>');

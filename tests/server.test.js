@@ -207,7 +207,25 @@ test('photos: a real image under a user\'s name goes into photos/ of the folder'
   const r = await api('photos/upload', { name: 'mustera.png', data: PNG.toString('base64') });
   assert.equal(r.name, 'mustera.png');
   assert.ok(fs.readFileSync(path.join(publishDir, 'photos', 'mustera.png')).equals(PNG));
+  // Listed, and removed again.
+  assert.deepEqual((await api('photos/list')).photos.map((p) => p.name), ['mustera.png']);
+  assert.equal((await api('photos/delete', { name: '../signatures.json' })).ok, false);
+  assert.equal((await api('photos/delete', { name: 'mustera.png' })).ok, true);
+  assert.deepEqual((await api('photos/list')).photos, []);
   fs.rmSync(path.join(publishDir, 'photos'), { recursive: true, force: true });
+});
+
+test('photos from the web: only https, only on the internet', async () => {
+  const { fetchPhoto, isPrivate } = require('../server/photofetch');
+  for (const ip of ['10.1.2.3', '127.0.0.1', '172.20.0.5', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1']) assert.equal(isPrivate(ip), true, ip);
+  for (const ip of ['8.8.8.8', '193.5.1.1', '2a00:1450:4001::1']) assert.equal(isPrivate(ip), false, ip);
+  await assert.rejects(fetchPhoto('http://example.com/a.jpg'), /Only https/);
+  await assert.rejects(fetchPhoto('https://10.0.0.5/a.jpg'), /own network/);
+  await assert.rejects(fetchPhoto('https://[::1]/a.jpg'), /own network/);
+  await assert.rejects(fetchPhoto('https://localhost/a.jpg'), /own network/);
+  await assert.rejects(fetchPhoto('https://user:pw@example.com/a.jpg'), /password/);
+  // Through the server: what it says goes back as the error.
+  assert.match((await api('photos/fetch', { url: 'https://127.0.0.1/x.jpg' })).error, /own network/);
 });
 
 test('draft: saved as sent, and checked', async () => {

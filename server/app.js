@@ -28,6 +28,7 @@ const tlsInfo = require('./tls');
 const { writeAtomic, readText } = require('./store');
 const core = require('../shared/signature-core.js');
 const addin = require('./addin');
+const { fetchPhoto } = require('./photofetch');
 
 const VERSION = require('../package.json').version;
 const ROOT = path.resolve(__dirname, '..');
@@ -357,6 +358,30 @@ function createApp(opts) {
       photos.clear();
       return { name, size: bytes.length };
     },
+    // The photos there, for the Photos page: name and a tag that changes with the file.
+    'photos/list': async (d, s) => {
+      const t = settings.target();
+      try {
+        const list = (await t.listInfo('photos')).filter((f) => PHOTO_NAME.test(f.name) && !f.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+        return { photos: list.map((f) => ({ name: f.name, tag: f.tag })), where: t.describe() + '/photos', mayChange: !needsApproval() || !!s.user.local };
+      } catch (e) { return { error: e.message }; }
+    },
+    'photos/delete': async (d, s) => {
+      if (needsApproval() && !s.user.local) return { error: 'With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.' };
+      const name = String(d.name || '');
+      if (!PHOTO_NAME.test(name) || name !== path.basename(name) || name.startsWith('.')) return { error: 'There is no such photo.' };
+      await settings.target().remove('photos/' + name);
+      photos.clear();
+      return { name };
+    },
+    // A photo from a web address (the team page, say): fetched here, as the browser may not fetch
+    // it from another site; the editor makes it small and keeps it with photos/upload.
+    'photos/fetch': async (d) => {
+      try {
+        const r = await ((opts && opts.photoFetch) || fetchPhoto)(d.url);
+        return { type: r.type, data: r.bytes.toString('base64') };
+      } catch (e) { return { error: e.message }; }
+    },
     'settings/get': () => settings.answer(),
     // Where the server publishes and what the add-in is made with: the local account admin's, like
     // the connections (the site goes into the setup script, the add-in's address is fetched).
@@ -662,6 +687,8 @@ function createApp(opts) {
     'addin/build': () => 'add-in files made',
     'deploy/start': () => 'deployment script made',
     'photos/upload': (d) => 'photo ' + String(d.name || '').slice(0, 120),
+    'photos/delete': (d) => 'photo removed ' + String(d.name || '').slice(0, 120),
+    'photos/fetch': (d) => 'photo fetched from ' + String(d.url || '').slice(0, 200),
     'addin/upload': (d, r) => 'uploaded to Cloudflare Pages' + (r.url ? ' ' + r.url : ''),
     'ad/export': () => 'users exported',
     'backup/export': () => 'backup downloaded',
