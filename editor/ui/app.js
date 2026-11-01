@@ -123,8 +123,11 @@
   // HTML hygiene: what goes into a signature is markup Outlook shows, nothing that runs.
   // ---------------------------------------------------------------------------------------------
   const DROP = 'script,style,meta,link,title,iframe,object,embed,form,input,button,select,textarea,base,xml,o\\:p,svg,video,audio';
+  // Parsed in a document of its own, without a window: nothing in it can run or load, and the
+  // page's Content-Security-Policy is not even asked (a <template> of this page still is).
+  const inertDoc = () => new DOMParser().parseFromString('<!doctype html><template></template>', 'text/html');
   function sanitize(html) {
-    const t = document.createElement('template');
+    const t = inertDoc().querySelector('template');
     t.innerHTML = String(html || '');
     t.content.querySelectorAll(DROP).forEach((n) => {
       // Word's <o:p> holds the text of the paragraph's end: keep that, lose the tag.
@@ -976,7 +979,7 @@
     const campaigns = [];
     try {
       for (const it of impItems.filter((x) => x.checked)) {
-        const t = document.createElement('template');
+        const t = inertDoc().querySelector('template');
         t.innerHTML = sanitize(it.body);
         for (const img of t.content.querySelectorAll('img[src]')) {
           const src = img.getAttribute('src');
