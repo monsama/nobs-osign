@@ -718,8 +718,34 @@ test('an image uploaded is made as small as a signature needs, in its own type',
   const big = Buffer.from(b64, 'base64');
   await page.setInputFiles('#imgFile', { name: 'Banner.jpg', mimeType: 'image/jpeg', buffer: big });
   await page.waitForFunction(() => /Image made smaller: .* \(2400 → 1200 pixels wide\)/.test(document.querySelector('#toast').textContent));
+  // Uploaded and put in: then it is there to fetch.
+  await page.waitForFunction(() => (document.querySelector('#design').contentDocument || document).querySelector('img[src="assets/Banner.jpg"]'));
   const r = await fetch(url.replace(/\/(#.*)?$/, '') + '/assets/Banner.jpg', { headers: { Cookie: (await page.context().cookies()).map((c) => c.name + '=' + c.value).join('; ') } });
   const got = Buffer.from(await r.arrayBuffer());
   assert.equal(got.subarray(0, 3).toString('hex'), 'ffd8ff', 'still a JPEG');
   assert.ok(got.length < big.length, got.length + ' < ' + big.length);
+});
+
+test('fields: the default fields restored, fields of your own kept', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('.nav-list a[data-view=fields]');
+  await page.waitForSelector('#viewFields:not([hidden])');
+  const keys = () => page.$$eval('#fieldRows tr .ph input', (xs) => xs.map((x) => x.value));
+  // One of your own, a default one taken away and another changed.
+  await page.click('#btnAddField');
+  const before = await keys();
+  const own = before[before.length - 1];
+  await page.click('#fieldRows tr:has(input[value="mobile"]) button[aria-label="Remove field"]');
+  await page.fill('#fieldRows tr:first-child td:first-child input', 'Given name (changed)');
+  assert.ok(!(await keys()).includes('mobile'));
+  await page.click('#btnResetFields');
+  await page.waitForFunction(() => /Default fields restored/.test(document.querySelector('#toast').textContent));
+  const after = await keys();
+  assert.ok(after.includes('mobile'), 'the default field is back');
+  assert.ok(after.includes(own), 'your own field stays');
+  assert.equal(await page.inputValue('#fieldRows tr:first-child td:first-child input'), 'Vorname');
+  // As they were at first now: said as that.
+  await page.click('#btnResetFields');
+  await page.waitForFunction(() => /as they were at first/.test(document.querySelector('#toast').textContent));
 });

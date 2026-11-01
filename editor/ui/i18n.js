@@ -35,6 +35,11 @@
     // a signature
     'Signature name': 'Name der Signatur',
     'Duplicate': 'Duplizieren',
+    'Restore default fields': 'Standardfelder wiederherstellen',
+    'The starter fields as they were at first: missing ones come back, changed ones are reset. Fields of your own stay.': 'Die Startfelder wie zu Beginn: fehlende kommen zurück, geänderte werden zurückgesetzt. Eigene Felder bleiben.',
+    'The default fields are as they were at first.': 'Die Standardfelder sind unverändert.',
+    'Restore the default fields? This resets: {0}. Fields of your own stay.': 'Standardfelder wiederherstellen? Zurückgesetzt wird: {0}. Eigene Felder bleiben.',
+    'Default fields restored.': 'Standardfelder wiederhergestellt.',
     'Open': 'Öffnen',
     'Rename': 'Umbenennen',
     'Default for new mail': 'Standard für neue Mails',

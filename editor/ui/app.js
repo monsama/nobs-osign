@@ -1139,6 +1139,18 @@
         el('td', null, del)));
     });
   }
+  // The starter fields as they were at first: missing ones come back, changed ones are reset
+  // (label, AD attribute, Graph source, sample, editable in the add-in); fields of your own stay.
+  $('btnResetFields').addEventListener('click', () => {
+    const defs = core.DEFAULT_FIELDS;
+    const changedKeys = defs.filter((d) => { const f = S.config.fields.find((x) => x.key === d.key); return !f || ['label', 'ad', 'graph', 'sample'].some((k) => (f[k] || '') !== (d[k] || '')) || f.userEditable; }).map((d) => '@@' + d.key);
+    if (!changedKeys.length) { toast(t('The default fields are as they were at first.')); return; }
+    if (!confirm(t('Restore the default fields? This resets: {0}. Fields of your own stay.', changedKeys.join(', ')))) return;
+    const own = S.config.fields.filter((f) => !defs.some((d) => d.key === f.key));
+    S.config.fields = defs.map((d) => Object.assign({}, d)).concat(own);
+    changed({ list: false }); renderFields();
+    toast(t('Default fields restored.'));
+  });
   $('btnAddField').addEventListener('click', () => {
     let n = 1; while (S.config.fields.some((f) => f.key === 'field' + n)) n++;
     S.config.fields.push({ key: 'field' + n, label: t('New field'), ad: '', graph: '', sample: '' });

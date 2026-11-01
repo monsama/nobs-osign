@@ -147,7 +147,10 @@
           <tbody id="fieldRows"></tbody>
         </table>
       </div>
-      <button id="btnAddField" class="ghost">+ Add field</button>
+      <div class="field-actions">
+        <button id="btnAddField" class="ghost">+ Add field</button>
+        <button id="btnResetFields" class="ghost" title="The starter fields as they were at first: missing ones come back, changed ones are reset. Fields of your own stay.">Restore default fields</button>
+      </div>
       <datalist id="graphProps"></datalist>
       <div class="callout" data-th="fieldsCallout">
         <b>Without a Graph source</b> a field stays empty in Outlook. Graph knows no <code>description</code>,
