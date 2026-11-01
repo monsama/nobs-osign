@@ -147,21 +147,25 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   const utf16 = (s) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, 'utf16le')]);
   const tpl = '<!DOCTYPE html><html><head><title></title></head><body><table><tbody><tr>' +
     '<td><img src="images/logo.png" width="90" /><br /><img src="images/@@sAMAccountName.jpg" width="100" /></td>' +
-    '<td><strong>@@givenName @@sn</strong><br />@@title<br />Mobile @@mobile</td></tr></tbody></table>@@info{##notice}{##legal}</body></html>';
-  const blocks = '<html><body>{##notice}{dats 01.01.2020}{date 31.01.2020}<p>Closed in January</p>{end ##notice}{##legal}<p>Contoso AG</p>{end ##legal}</body></html>';
+    '<td><strong>@@givenName @@sn</strong><br />@@title<br />Mobile @@mobile</td></tr></tbody></table>@@info{##notice}{##legal}{##old}</body></html>';
+  const blocks = '<html><body>{##notice}{dats 01.01.2099}{date 31.01.2099}<p>Closed in January</p>{end ##notice}{##legal}<p>Contoso AG</p>{end ##legal}{##old}{dats 01.01.2020}{date 31.01.2020}<p>Fair 2020</p>{end ##old}</body></html>';
   await page.click('#btnImportOpen');
   await page.waitForSelector('#dlgImport[open]');
   await page.setInputFiles('#impFiles', [
     { name: 'Vertrieb.htm', mimeType: 'text/html', buffer: utf16(tpl) },
     { name: 'textblocks.htm', mimeType: 'text/html', buffer: utf16(blocks) },
-    { name: 'logo.png', mimeType: 'image/png', buffer: PNG }
+    { name: 'logo.png', mimeType: 'image/png', buffer: PNG },
+    { name: 'mustera.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('ffd8ffe000104a464946', 'hex') },
+    { name: 'Newsletter-1.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('ffd8ffe000104a464946', 'hex') }
   ]);
   await page.waitForSelector('#impList li');
   const items = await page.$$eval('#impList li', (lis) => lis.map((li) => ({ name: li.querySelector('.imp-name').textContent, on: li.querySelector('input').checked, meta: li.querySelector('.imp-meta').textContent })));
-  assert.deepEqual(items.map((i) => [i.name, i.on]), [['Vertrieb', true], ['textblocks', false]]);
+  assert.deepEqual(items.map((i) => [i.name, i.on]), [['Vertrieb', true], ['textblocks', false], ['Photos per person: 1 into photos\\ in the OSign folder', false]]);
+  // Named like a user: a photo; a newsletter image is not one. Off unless ticked (photos count at once).
+  assert.match(items[2].meta, /^mustera\.jpg · used at once/);
   assert.match(items[0].meta, /photo per person images\/@@sAMAccountName\.jpg → photos\\@@sAMAccountName\.jpg/);
   assert.match(items[1].meta, /text blocks/);
-  assert.match(items[0].meta, /text blocks notice, legal \(with days: a campaign each\)/);
+  assert.match(items[0].meta, /past text blocks left out: old · text blocks notice, legal, old \(with days: a campaign each\)/);
   await page.click('#impGo');
   await page.waitForSelector('#dlgImport:not([open])', { state: 'attached' });
   assert.equal(await page.inputValue('#sigName'), 'Vertrieb');
@@ -171,9 +175,10 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   const sigs = JSON.parse(imported).signatures;
   const vt = sigs.find((x) => x.name === 'Vertrieb'), camp = sigs.find((x) => x.name === 'Vertrieb – notice');
   assert.match(vt.html, /Contoso AG/);
-  assert.doesNotMatch(vt.html, /Closed in January|\{##/);
+  assert.doesNotMatch(vt.html, /Closed in January|Fair 2020|\{##/);
+  assert.ok(!sigs.some((x) => /old$/.test(x.name)), 'a past block makes no campaign');
   assert.match(camp.html, /Closed in January.*Contoso AG|Contoso AG.*Closed in January/s);
-  assert.deepEqual([camp.validFrom, camp.validUntil], ['2020-01-01', '2020-01-31']);
+  assert.deepEqual([camp.validFrom, camp.validUntil], ['2099-01-01', '2099-01-31']);
   await page.click('#sigList a:has-text("Vertrieb – notice")');
   await page.click('#btnDel');
   await page.click('#sigList a:has-text("Vertrieb")');
@@ -636,4 +641,63 @@ test('the add-in\'s files older than the server: said in the status bar and unde
   await page.waitForFunction(() => !/Made with 0\.0\.1/.test(document.querySelector('#healthRows').textContent) && !document.querySelector('#healthRows .hdot.run'));
   assert.equal(await page.isVisible('#stAddin'), false);
   await page.click('#dlgSettings button[value=cancel]');
+});
+
+test('right-click on a signature: a menu with what its page offers, by mouse and by keyboard', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  const names = () => page.$$eval('#sigList li a', (as) => as.map((a) => a.childNodes[0].textContent));
+  const before = await names();
+  assert.ok(before.length >= 1, 'a signature to try it on');
+  await page.click('#sigList li:first-child a', { button: 'right' });
+  await page.waitForSelector('#ctxMenu:not([hidden])');
+  const items = await page.$$eval('#ctxMenu button', (bs) => bs.map((b) => [b.textContent.replace('✓', '').trim(), b.disabled]));
+  assert.deepEqual(items.map((x) => x[0]), ['Open', 'Rename', 'Duplicate', 'Default for new mail', 'Default for replies', 'Move up', 'Move down', 'Delete…']);
+  assert.equal(items[5][1], true, 'the first cannot move up');
+  // Escape closes it; nothing changes.
+  await page.keyboard.press('Escape');
+  assert.equal(await page.isHidden('#ctxMenu'), true);
+  // Duplicate: one more; the copy goes last, and can then move up.
+  await page.click('#sigList li:first-child a', { button: 'right' });
+  await page.click('#ctxMenu button:has-text("Duplicate")');
+  await page.waitForFunction((n) => document.querySelectorAll('#sigList li a').length === n + 1, before.length);
+  const after = await names();
+  await page.click('#sigList li:last-child a', { button: 'right' });
+  await page.click('#ctxMenu button:has-text("Move up")');
+  const moved = await names();
+  assert.equal(moved[moved.length - 2], after[after.length - 1]);
+  // By keyboard: Shift+F10 on the focused entry, arrows, Enter.
+  await page.focus('#sigList li:last-child a');
+  await page.keyboard.press('Shift+F10');
+  await page.waitForSelector('#ctxMenu:not([hidden])');
+  assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), 'Open');
+  await page.keyboard.press('ArrowUp');
+  assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), 'Delete…');
+  await page.keyboard.press('Escape');
+  // Delete the copy again (the dialog asks first; these tests answer yes).
+  const copyName = after[after.length - 1];
+  await page.click(`#sigList li a:has-text("${copyName}") >> nth=-1`, { button: 'right' });
+  await page.click('#ctxMenu button:has-text("Delete…")');
+  await page.waitForFunction((n) => document.querySelectorAll('#sigList li a').length === n, before.length);
+});
+
+test('back and forward (mouse side buttons, Alt+arrows): through the pages and signatures opened', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  const first = await page.$eval('#sigList li:first-child a', (a) => a.childNodes[0].textContent);
+  await page.click('#sigList li:first-child a');
+  await page.click('.nav-list a[data-view=fields]');
+  await page.waitForSelector('#viewFields:not([hidden])');
+  await page.click('.nav-list a[data-view=options]');
+  await page.waitForSelector('#viewOptions:not([hidden])');
+  const href = page.url();
+  await page.goBack();
+  await page.waitForSelector('#viewFields:not([hidden])');
+  await page.goBack();
+  await page.waitForSelector('#viewSig:not([hidden])');
+  assert.equal(await page.inputValue('#sigName'), first);
+  await page.goForward();
+  await page.waitForSelector('#viewFields:not([hidden])');
+  // The address (with its sign-in) stays the same throughout.
+  assert.equal(page.url(), href);
 });

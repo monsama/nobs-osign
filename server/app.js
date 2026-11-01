@@ -325,6 +325,20 @@ function createApp(opts) {
     'draft/save': (d) => store.saveDraft(typeof d.configJson === 'string' ? d.configJson : ''),
     'assets/upload': (d) => store.uploadAsset(d.name, d.data),
     'assets/delete': (d) => store.deleteAsset(d.name),
+    // A person's photo (photos/<username>.jpg in the OSign folder), e.g. brought over from CI-Sign.
+    'photos/upload': async (d) => {
+      const name = String(d.name || '');
+      if (!PHOTO_NAME.test(name) || name !== path.basename(name)) return { error: 'A photo is a PNG, JPG or GIF named after the user, like mustera.jpg.' };
+      const data = String(d.data || '');
+      const bytes = Buffer.from(data, 'base64');
+      if (!bytes.length || bytes.toString('base64').replace(/=+$/, '') !== data.replace(/\s+/g, '').replace(/=+$/, '')) return { error: 'The image did not arrive whole.' };
+      if (bytes.length > 1024 * 1024) return { error: 'The image is larger than 1 MB. A signature image is best well under 100 KB.' };
+      const magic = { png: '89504e47', jpg: 'ffd8ff', jpeg: 'ffd8ff', gif: '47494638' }[name.split('.').pop().toLowerCase()];
+      if (!bytes.subarray(0, 8).toString('hex').startsWith(magic)) return { error: 'The file is not the image its name says.' };
+      await settings.target().write('photos/' + name, bytes, 'image/' + (/png$/i.test(name) ? 'png' : /gif$/i.test(name) ? 'gif' : 'jpeg'));
+      photos.clear();
+      return { name, size: bytes.length };
+    },
     'settings/get': () => settings.answer(),
     // Where the server publishes and what the add-in is made with: the local account admin's, like
     // the connections (the site goes into the setup script, the add-in's address is fetched).
@@ -624,6 +638,7 @@ function createApp(opts) {
     'setup/start': () => 'setup script made',
     'connections/cert': (d, r) => 'certificate downloaded (' + (r.thumbprint || '') + ')',
     'addin/build': () => 'add-in files made',
+    'photos/upload': (d) => 'photo ' + String(d.name || '').slice(0, 120),
     'addin/upload': (d, r) => 'uploaded to Cloudflare Pages' + (r.url ? ' ' + r.url : ''),
     'ad/export': () => 'users exported',
     'backup/export': () => 'backup downloaded',

@@ -117,7 +117,12 @@ next to `CI-Sign.exe`, as UTF-16, with images in `images\`) or from classic Outl
 template files and images together. A per-person image (`images/@@sAMAccountName.jpg`) becomes the
 photo from `OSign/photos`. CI-Sign's text blocks (`{##Name}…{end ##Name}` in
 `__intern.htm`, picked with the templates) go into the templates that use them; one with days
-(`{dats …}{date …}`) becomes a campaign of its own.
+(`{dats …}{date …}`) becomes a campaign of its own, one whose last day is past stays out. Picking
+the whole CI-Sign share works: copies in `AutoBackup-…`, `editor`, `Templates` and
+`ci-sign-update` are left unticked, and of images with the same name the current one is taken.
+With a per-person photo in a template, the user photos in `images\` (named like a user,
+`mustera.jpg`) can go into `photos\` of the OSign folder in the same step; they count at once.
+Nothing else goes live before *Publish*.
 
 ## Privacy
 
