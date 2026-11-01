@@ -790,3 +790,59 @@ test('fields: the default fields restored, fields of your own kept', { skip }, a
   await page.click('#btnResetFields');
   await page.waitForFunction(() => /as they were at first/.test(document.querySelector('#toast').textContent));
 });
+
+test('photos: one per person, uploaded and made small, listed, removed; the preview says when one is missing', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('.nav-list a[data-view=photos]');
+  await page.waitForSelector('#viewPhotos:not([hidden])');
+  // A file for a person: under the name the signatures take (no rule yet: .jpg).
+  await page.fill('#photoWho', 'neu1');
+  assert.equal(await page.textContent('#photoName'), '→ photos/neu1.jpg');
+  // An image larger than a signature needs.
+  const big = await page.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 1200; c.height = 900;
+    const g = c.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 1200, 900);
+    const b = await new Promise((r) => c.toBlob(r, 'image/png'));
+    return Array.from(new Uint8Array(await b.arrayBuffer()));
+  });
+  await page.setInputFiles('#photoFile', { name: 'anna.png', mimeType: 'image/png', buffer: Buffer.from(big) });
+  await page.waitForFunction(() => /neu1\.jpg/.test(document.querySelector('#photoList').textContent));
+  const saved = fs.readFileSync(path.join(folder, 'photos', 'neu1.jpg'));
+  assert.equal(saved.subarray(0, 3).toString('hex'), 'ffd8ff');
+  // 400 pixels wide at most (the JPEG's SOF0 marker holds height and width).
+  const sof = saved.indexOf(Buffer.from([0xff, 0xc0]));
+  assert.equal(saved.readUInt16BE(sof + 7), 400);
+  // One there already: asked before it is replaced.
+  await page.fill('#photoWho', 'mustera');
+  await page.setInputFiles('#photoFile', { name: 'anna.png', mimeType: 'image/png', buffer: Buffer.from(big) });
+  await page.waitForSelector('#dlgAsk[open]');
+  assert.match(await page.textContent('#askText'), /mustera\.jpg is there already/);
+  await page.click('#askCancel');
+  assert.ok(fs.readFileSync(path.join(folder, 'photos', 'mustera.jpg')).equals(PNG));
+  // A web address in the company's network is refused, and said why.
+  await page.fill('#photoWho', 'beispielb');
+  await page.fill('#photoUrl', 'https://10.0.0.1/b.jpg');
+  await page.click('#photoUrlGo');
+  await page.waitForFunction(() => /own network/.test(document.querySelector('#photoErr').textContent));
+  // A signature with a photo per person: the preview of someone without one says so.
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>@@givenName</p><p><img src="photos/@@sn.jpg" width="100"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.waitForFunction(() => /No photo .*\.jpg in the photos folder/.test(document.querySelector('#pvNote').textContent));
+  // Removed again (asked first).
+  await page.click('#pvNote a:has-text("Add the photo")');
+  await page.waitForSelector('#viewPhotos:not([hidden])');
+  assert.match(await page.textContent("#photosRule"), /takes photos\/@@\w+\.jpg/);
+  assert.equal(await page.inputValue('#photoWho'), 'Muster');
+  await page.click('#photoList button[aria-label="Remove photo neu1.jpg"]');
+  await page.click('#askOk');
+  await page.waitForFunction(() => !/neu1\.jpg/.test(document.querySelector('#photoList').textContent));
+  assert.equal(fs.existsSync(path.join(folder, 'photos', 'neu1.jpg')), false);
+  // The signature made here goes again.
+  await page.click('#sigList li:last-child a');
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});
