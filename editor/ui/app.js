@@ -601,7 +601,7 @@
     S.assets.forEach((a) => {
       const del = el('span', { class: 'del', title: t('Remove from the draft'), role: 'button', onclick: (e) => { e.stopPropagation(); deleteAsset(a.name); } }, t('remove'));
       box.append(el('button', { type: 'button', onclick: () => { $('dlgImage').close(); insertImage('assets/' + a.name); } },
-        el('img', { src: '/assets/' + encodeURIComponent(a.name), alt: '' }), a.name, del));
+        el('img', { src: '/assets/' + encodeURIComponent(a.name), alt: '' }), el('span', { class: 'nm', title: a.name }, a.name), del));
     });
   }
   // Each person's own photo: photos/@@<login>.jpg, the photos kept under Photos.
