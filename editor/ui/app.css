@@ -703,3 +703,18 @@ button.status.pub { height: 24px; }
 .zoom button.zpct { min-width: 54px; font-size: 12px; font-variant-numeric: tabular-nums; border-left: 1px solid var(--line-2); border-right: 1px solid var(--line-2); }
 .zoom button:hover:not(:disabled) { color: var(--text); background: var(--hover); filter: none; }
 .source { tab-size: 2; white-space: pre; overflow: auto; }
+
+/* A field with suggestions (AD attribute, Graph source): the same chevron as a dropdown, at the
+   same place; the browser's own arrow, invisible, lies over it and still opens the list. */
+input[list]:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]) { padding-right: 28px; background: var(--in) var(--chev) no-repeat right 8px center / 12px 12px; }
+input[list]::-webkit-calendar-picker-indicator { opacity: 0; cursor: pointer; width: 22px; height: var(--h); margin: 0 -24px 0 0; padding: 0; }
+input[list]::-webkit-list-button { opacity: 0; }
+table.fields input[list] { padding-right: 28px !important; }
+
+/* Images to pick: cards, each with the picture large enough to tell them apart and its name. */
+#dlgImage { width: min(760px, 94vw); }
+.img-list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; max-height: min(60vh, 520px); overflow: auto; padding: 2px; }
+.img-list button { height: auto; padding: 8px; justify-content: flex-start; gap: 6px; line-height: 1.3; white-space: normal; font-size: 12px; }
+.img-list img { width: 100%; height: 96px; max-width: none; max-height: none; object-fit: contain; background: repeating-conic-gradient(var(--panel-2) 0 25%, var(--panel) 0 50%) 0 0 / 14px 14px; border-radius: var(--r-s); }
+.img-list button > :not(img) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.img-list .del { display: inline-block; font-size: 11.5px; }
