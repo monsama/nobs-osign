@@ -43,7 +43,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, site, byIds, lang } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -89,7 +89,9 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
     files: files || { 'signatures.json': JSON.stringify(config || makeConfig()), 'assets/logo.png': PNG, 'photos/mustera.jpg': JPG },
     me, groups, deny, site, byIds
   });
-  const sandbox = { Office, console: { log: (m) => calls.push(['log', String(m)]) }, setTimeout, clearTimeout, fetch: graph.fetch, __osignSignInFails: !!signInFails };
+  // The sign-in's time limit (the only one this long) runs out at once in the tests.
+  const fastTimeout = (fn, ms) => setTimeout(fn, ms >= 15000 ? 5 : ms);
+  const sandbox = { Office, console: { log: (m) => calls.push(['log', String(m)]) }, setTimeout: fastTimeout, clearTimeout, fetch: graph.fetch, __osignSignInFails: !!signInFails, __osignSignInHangs: !!signInHangs };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(byIds ? idsBundle : site ? siteBundle : bundle, sandbox, { filename: 'launchevent.js' });
@@ -243,6 +245,24 @@ test('nothing published yet, or no sign-in: no signature, and the event still co
   await r2.fire('onNewMessageComposeHandler');
   assert.ok(!setCall(r2));
   assert.ok(r2.calls.some((c) => c[0] === 'log' && /sign-in failed/.test(c[1])));
+});
+
+test('a sign-in that never answers: after a while a notice, and the event completes', async () => {
+  const notices = {};
+  const r = runtime({ signInHangs: true, notices });
+  await r.fire('onNewMessageComposeHandler');
+  assert.ok(!setCall(r));
+  assert.ok(r.calls.some((c) => c[0] === 'log' && /Signing in took too long/.test(c[1])), r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+  assert.match(notices.osign.message, /Signing in took too long/);
+});
+
+test('each step is logged, so the console shows where it stopped', async () => {
+  const r = runtime();
+  await r.fire('onNewMessageComposeHandler');
+  const logs = r.calls.filter((c) => c[0] === 'log').map((c) => c[1]);
+  for (const rx of [/^OSign [\d.]+: event handler ready/, /new started \(sign-in through Outlook: yes\)/, /signatures loaded/, /signature "Standard" put in/]) {
+    assert.ok(logs.some((l) => rx.test(l)), rx + '\n' + logs.join('\n'));
+  }
 });
 
 test('values from AD: mixed takes the fields without a Graph source, and the groups, from the user file', async () => {
