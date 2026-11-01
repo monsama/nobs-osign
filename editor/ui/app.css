@@ -124,6 +124,12 @@ table.keys td { padding: 6px 4px; border-bottom: 1px solid var(--line-2); vertic
 table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 18px; }
 kbd { font-family: var(--mono); font-size: 11.5px; padding: 1px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: var(--r-s); background: var(--panel-2); }
 .side { width: 250px; flex: none; background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 12px 8px; }
+/* The two parts of the side bar, each a block of its own with a line between them. */
+.side-sect { padding: 4px 0 8px; }
+.side-sect + .side-sect { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.side-sect .side-head { margin-top: 0; }
+.side-head > span:first-child { display: inline-flex; align-items: center; gap: 7px; }
+.side-ic { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .85; }
 .side-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; margin: 8px 0 4px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .sig-list, .nav-list { list-style: none; margin: 0; padding: 0; }
 .sig-list li a, .nav-list a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--text); text-decoration: none; }

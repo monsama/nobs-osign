@@ -37,21 +37,25 @@
 
 <div class="layout">
   <nav class="side">
+    <section class="side-sect" aria-labelledby="sideSigs">
     <div class="side-head">
-      <span>Signatures</span>
+      <span id="sideSigs"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M6 15c2.5-6 4.5-9 6-9s1 4-1 7 1 3 3 1 3-3 4-2"/></svg>Signatures</span>
       <span class="side-btns">
         <button id="btnImportOpen" class="icon-btn" title="Import templates (.htm, e.g. from CI-Sign or classic Outlook)" aria-label="Import templates">⤓</button>
         <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
       </span>
     </div>
     <ul id="sigList" class="sig-list"></ul>
-    <div class="side-head"><span>Setup</span></div>
+    </section>
+    <section class="side-sect" aria-labelledby="sideSetup">
+    <div class="side-head"><span id="sideSetup"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Setup</span></div>
     <ul class="nav-list">
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
       <li><a href="#" id="navHistory" class="nav">History <small>published versions</small></a></li>
     </ul>
+    </section>
   </nav>
 
   <main id="main">
