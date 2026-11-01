@@ -703,3 +703,10 @@ button.status.pub { height: 24px; }
 .zoom button.zpct { min-width: 54px; font-size: 12px; font-variant-numeric: tabular-nums; border-left: 1px solid var(--line-2); border-right: 1px solid var(--line-2); }
 .zoom button:hover:not(:disabled) { color: var(--text); background: var(--hover); filter: none; }
 .source { tab-size: 2; white-space: pre; overflow: auto; }
+
+/* A field with suggestions (AD attribute, Graph source): the same chevron as a dropdown, at the
+   same place; the browser's own arrow, invisible, lies over it and still opens the list. */
+input[list]:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]) { padding-right: 28px; background: var(--in) var(--chev) no-repeat right 8px center / 12px 12px; }
+input[list]::-webkit-calendar-picker-indicator { opacity: 0; cursor: pointer; width: 22px; height: var(--h); margin: 0 -24px 0 0; padding: 0; }
+input[list]::-webkit-list-button { opacity: 0; }
+table.fields input[list] { padding-right: 28px !important; }
