@@ -63,6 +63,9 @@ export function fillTemplate(from, outDir, setup) {
   fill('launchevent.js', js);
   fill('taskpane.js', js);
   fill('manifest.xml', xml);
+  // Cloudflare Pages answers /x.html with a redirect to /x. Outlook loads the pane through it, but
+  // its event runtime is safer at an address that answers at once: the manifest names /x there.
+  if (host === 'cloudflare') fill('manifest.xml', { 'commands.html"': 'commands"', 'taskpane.html"': 'taskpane"' });
   return { ...s, host };
 }
 

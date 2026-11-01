@@ -35,8 +35,9 @@ const VERSION = typeof OSIGN_VERSION !== 'undefined' ? OSIGN_VERSION : '';
 function log(m) { try { console.log('OSign ' + VERSION + ': ' + m); } catch (e) { /* none */ } }
 
 async function sign(event, what) {
-  const item = Office.context.mailbox.item;
+  let item = null;
   try {
+    item = Office.context.mailbox.item;
     const req = Office.context.requirements;
     log(what + ' started (sign-in through Outlook: ' + (req && req.isSetSupported && req.isSetSupported('NestedAppAuth', '1.1') ? 'yes' : 'no') + ').');
     const cfg = await loadConfig({ interactive: false });
@@ -66,9 +67,22 @@ async function sign(event, what) {
   }
 }
 
-function onNewMessageCompose(event) { sign(event, 'new'); }
-function onNewAppointmentOrganizer(event) { sign(event, 'new'); }
-function onMessageFromChanged(event) { sign(event, 'fromChanged'); }
+function onNewMessageCompose(event) { log('Outlook called onNewMessageCompose.'); sign(event, 'new'); }
+function onNewAppointmentOrganizer(event) { log('Outlook called onNewAppointmentOrganizer.'); sign(event, 'new'); }
+function onMessageFromChanged(event) { log('Outlook called onMessageFromChanged.'); sign(event, 'fromChanged'); }
+
+// Errors nobody caught land in the log too, under the same name.
+try {
+  if (typeof addEventListener === 'function') {
+    addEventListener('error', (e) => log('error: ' + (e && e.message)));
+    addEventListener('unhandledrejection', (e) => log('error: ' + (e && e.reason && e.reason.message ? e.reason.message : e && e.reason)));
+  }
+} catch (e) { /* no window in classic Outlook */ }
+
+// Outlook waits for the add-in to say it is ready before it hands over an event.
+if (typeof Office.onReady === 'function') {
+  Office.onReady((info) => log('Office ready (' + (info && info.host) + ', ' + (info && info.platform) + ').'));
+}
 
 // The names are the ones in the manifest's LaunchEvent entries.
 Office.actions.associate('onNewMessageComposeHandler', onNewMessageCompose);
