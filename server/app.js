@@ -326,7 +326,9 @@ function createApp(opts) {
     'assets/upload': (d) => store.uploadAsset(d.name, d.data),
     'assets/delete': (d) => store.deleteAsset(d.name),
     // A person's photo (photos/<username>.jpg in the OSign folder), e.g. brought over from CI-Sign.
-    'photos/upload': async (d) => {
+    'photos/upload': async (d, s) => {
+      // A photo counts at once, without publishing: with four eyes, only the local admin may.
+      if (needsApproval() && !s.user.local) return { error: 'With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.' };
       const name = String(d.name || '');
       if (!PHOTO_NAME.test(name) || name !== path.basename(name)) return { error: 'A photo is a PNG, JPG or GIF named after the user, like mustera.jpg.' };
       const data = String(d.data || '');

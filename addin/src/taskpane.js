@@ -42,6 +42,7 @@ const DE = {
   'Give the variant a name.': 'Geben Sie der Variante einen Namen.',
   'Variant saved. Pick it above for new mail or replies, or insert it here.': 'Variante gespeichert. Wählen Sie sie oben für neue Mails oder Antworten, oder fügen Sie sie hier ein.',
   'Really delete?': 'Wirklich löschen?',
+  'Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.': 'Outlook hat die Variante nicht gespeichert: Der Platz für Add-in-Einstellungen in Ihrem Postfach ist voll. Kürzen oder löschen Sie andere Varianten.',
   'You have {0} variants, the most there can be.': 'Sie haben {0} Varianten, mehr sind nicht möglich.',
   'Only the fields below are yours to change; the rest stays the company signature.': 'Nur die Felder unten können Sie ändern; der Rest bleibt die Firmensignatur.'
 };
@@ -169,8 +170,14 @@ function editVariant(card, sig, existing) {
     e.preventDefault();
     const v = draft();
     if (!v.name) { message(t('Give the variant a name.'), true); nameIn.focus(); return; }
-    const list = getVariants().filter((x) => x.id !== v.id); list.push(v);
-    await setVariants(list);
+    const before = getVariants();
+    const list = before.filter((x) => x.id !== v.id); list.push(v);
+    if (!(await setVariants(list))) {
+      // Not kept (the mailbox's room for add-in settings is full): as it was before.
+      await setVariants(before);
+      message(t('Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.'), true);
+      return;
+    }
     message(t('Variant saved. Pick it above for new mail or replies, or insert it here.'));
     render();
   };

@@ -227,10 +227,14 @@ export async function loadConfig(opts) {
 // ---------------------------------------------------------------------------------------------
 function roaming() { return Office.context && Office.context.roamingSettings; }
 function readRoaming(key) { try { const v = roaming() && roaming().get(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+// Answers whether Outlook kept it: the mailbox holds 32 KB of these at most.
 function writeRoaming(key, value) {
   return new Promise((resolve) => {
-    const rs = roaming(); if (!rs) { resolve(); return; }
-    try { rs.set(key, JSON.stringify(value)); rs.saveAsync(() => resolve()); } catch (e) { resolve(); }
+    const rs = roaming(); if (!rs) { resolve(false); return; }
+    try {
+      rs.set(key, JSON.stringify(value));
+      rs.saveAsync((r) => resolve(!r || !r.status || r.status === 'succeeded' || (Office.AsyncResultStatus && r.status === Office.AsyncResultStatus.Succeeded)));
+    } catch (e) { resolve(false); }
   });
 }
 
