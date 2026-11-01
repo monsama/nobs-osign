@@ -250,3 +250,12 @@ test('variants: the user\'s own text only in editable fields, only of signatures
   c.options.allowUserChoice = true; c.fields.pop();
   assert.equal(core.withVariants(c, variants).signatures.length, 1);
 });
+
+test('a field for a placeholder from CI-Sign: as known (AD and Graph), whatever its case, a misspelling too', () => {
+  assert.deepEqual(core.fieldFor('telephoneNumber'), { key: 'telephoneNumber', label: 'Telefon', ad: 'telephoneNumber', graph: 'businessPhones[0]', sample: '+41 44 123 45 00' });
+  assert.equal(core.fieldFor('wWWHomepage').ad, 'wWWHomePage');
+  assert.equal(core.fieldFor('wWWHomepage').key, 'wWWHomepage');
+  assert.deepEqual([core.fieldFor('streetAdress').ad, core.fieldFor('streetAdress').graph], ['streetAddress', 'streetAddress']);
+  assert.deepEqual([core.fieldFor('l').label, core.fieldFor('l').graph], ['Ort', 'city']);
+  assert.deepEqual(core.fieldFor('extensionAttribute3'), { key: 'extensionAttribute3', label: 'extensionAttribute3', ad: 'extensionAttribute3', graph: '', sample: '' });
+});

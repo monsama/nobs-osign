@@ -47,6 +47,42 @@
     { key: 'sAMAccountName', label: 'Benutzername',    ad: 'sAMAccountName', graph: 'onPremisesSamAccountName', sample: 'mustera' }
   ];
 
+  // Fields a template may name beyond those: the AD attributes CI-Sign took a placeholder from
+  // (@@telephoneNumber), with the Graph property for the same where there is one. A placeholder
+  // matches whatever its case (@@wWWHomepage); a misspelling CI-Sign templates carry is known too.
+  var KNOWN_FIELDS = [
+    { key: 'displayName', label: 'Anzeigename', ad: 'displayName', graph: 'displayName', sample: 'Anna Muster' },
+    { key: 'initials', label: 'Initialen', ad: 'initials', graph: '', sample: 'AM' },
+    { key: 'company', label: 'Firma', ad: 'company', graph: 'companyName', sample: 'Contoso AG' },
+    { key: 'telephoneNumber', label: 'Telefon', ad: 'telephoneNumber', graph: 'businessPhones[0]', sample: '+41 44 123 45 00' },
+    { key: 'otherTelephone', label: 'Telefon 2', ad: 'otherTelephone', graph: '', sample: '+41 44 123 45 01' },
+    { key: 'ipPhone', label: 'IP-Telefon', ad: 'ipPhone', graph: '', sample: '4500' },
+    { key: 'facsimileTelephoneNumber', label: 'Fax', ad: 'facsimileTelephoneNumber', graph: 'faxNumber', sample: '+41 44 123 45 99' },
+    { key: 'pager', label: 'Pager', ad: 'pager', graph: '', sample: '' },
+    { key: 'physicalDeliveryOfficeName', label: 'Büro', ad: 'physicalDeliveryOfficeName', graph: 'officeLocation', sample: 'Zürich' },
+    { key: 'streetAddress', label: 'Strasse', ad: 'streetAddress', graph: 'streetAddress', sample: 'Musterstrasse 1', also: ['streetAdress'] },
+    { key: 'postOfficeBox', label: 'Postfach', ad: 'postOfficeBox', graph: '', sample: '' },
+    { key: 'postalCode', label: 'PLZ', ad: 'postalCode', graph: 'postalCode', sample: '8000' },
+    { key: 'l', label: 'Ort', ad: 'l', graph: 'city', sample: 'Zürich' },
+    { key: 'st', label: 'Kanton', ad: 'st', graph: 'state', sample: 'ZH' },
+    { key: 'co', label: 'Land', ad: 'co', graph: 'country', sample: 'Schweiz' },
+    { key: 'c', label: 'Land (Kürzel)', ad: 'c', graph: '', sample: 'CH' },
+    { key: 'wWWHomePage', label: 'Webseite', ad: 'wWWHomePage', graph: '', sample: 'www.contoso.ch' },
+    { key: 'userPrincipalName', label: 'Anmeldename', ad: 'userPrincipalName', graph: 'userPrincipalName', sample: 'anna.muster@contoso.ch' }
+  ];
+  // The field for a placeholder no field has yet: as it is known, or one of its own name (read
+  // from the AD attribute of that name, which the server reads only if it is allowed).
+  function fieldFor(key) {
+    var k = String(key || '').toLowerCase();
+    for (var i = 0; i < KNOWN_FIELDS.length; i++) {
+      var f = KNOWN_FIELDS[i];
+      if (f.key.toLowerCase() === k || (f.also || []).some(function (a) { return a.toLowerCase() === k; })) {
+        return { key: key, label: f.label, ad: f.ad, graph: f.graph, sample: f.sample };
+      }
+    }
+    return { key: key, label: key, ad: /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(key) ? key : '', graph: '', sample: '' };
+  }
+
   function defaultConfig() {
     return {
       schemaVersion: SCHEMA_VERSION,
@@ -545,6 +581,7 @@
     decodeHtmlFile: decodeHtmlFile,
     assetName: assetName,
     DEFAULT_FIELDS: DEFAULT_FIELDS,
+    fieldFor: fieldFor,
     defaultConfig: defaultConfig,
     newSignature: newSignature,
     placeholdersIn: placeholdersIn,
