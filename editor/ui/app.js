@@ -333,6 +333,9 @@
   let ddoc = null, designReady = null;
   const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;outline:none;word-wrap:break-word}' +
     'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
+    // A person's photo (photos/@@sAMAccountName.jpg) has no picture here: a grey figure in its
+    // place and size, framed, so it is seen where it is and how large.
+    'img[src*="@@"]{content:url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 80\'><rect width=\'100\' height=\'80\' fill=\'%23e9ecef\'/><circle cx=\'50\' cy=\'31\' r=\'14\' fill=\'%23b8bec6\'/><ellipse cx=\'50\' cy=\'82\' rx=\'30\' ry=\'26\' fill=\'%23b8bec6\'/></svg>");background:#e9ecef;outline:1px dashed #8a94a3;outline-offset:-1px;object-fit:cover}' +
     'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}' +
     // A field, shown by its name in a plain token; in the signature it is the placeholder @@key.
     'span.osf{display:inline-block;padding:0 .35em;margin:0 .05em;border-radius:3px;background:#f2f4f7;color:#344054;' +
