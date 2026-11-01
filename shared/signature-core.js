@@ -188,7 +188,12 @@
     for (var c = block.firstChild; c; c = c.nextSibling) {
       // A nested block is a line of its own (it gets its own marks), never part of a <br> line.
       if (c.nodeType === 1 && BLOCK[c.nodeName]) { segs.push([]); continue; }
-      if (c.nodeType === 1 && c.querySelector && c.querySelector('br')) { segs.push([]); markBrLines(doc, c); continue; }
+      // An inline element that starts a line and holds <br>s itself (CI-Sign's <font>@@info<br><br>
+      // <img>): its own lines. Not when something stands before it on the line (a label, "Tel"),
+      // nor when it carries a field itself (<a href="mailto:@@mail">): then it is part of the line.
+      if (c.nodeType === 1 && c.querySelector && c.querySelector('br') && !segs[segs.length - 1].some(visible) && !attrPlaceholders(c).length) {
+        segs.push([]); markBrLines(doc, c); continue;
+      }
       segs[segs.length - 1].push(c);
       if (c.nodeType === 1 && c.nodeName === 'BR') segs.push([]);
     }
@@ -203,9 +208,21 @@
     });
   }
 
-  // A block holding a <br> or a block of its own is a container of lines, not one line.
+  // Something on a line that shows: text that is not only space, or an element.
+  function visible(n) { return n.nodeType === 1 || (n.nodeType === 3 && /\S/.test(n.nodeValue.replace(/\u00a0/g, 'x'))); }
+  // The placeholders in an element's own attributes (an <a href="mailto:@@mail">).
+  function attrPlaceholders(el) {
+    var keys = [];
+    for (var i = 0; i < el.attributes.length; i++) placeholdersIn(el.attributes[i].value).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });
+    return keys;
+  }
+  // A block holding a <br> or a block of its own is a container of lines, not one line; so is one
+  // whose first inline element holds the <br>s (CI-Sign: <td><font>@@info<br><br><img></font>).
   function hasLines(el) {
-    for (var c = el.firstChild; c; c = c.nextSibling) if (c.nodeType === 1 && (c.nodeName === 'BR' || BLOCK[c.nodeName])) return true;
+    for (var c = el.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 1 && (c.nodeName === 'BR' || BLOCK[c.nodeName])) return true;
+      if (c.nodeType === 1 && c.querySelector('br') && !attrPlaceholders(c).length) return true;
+    }
     return false;
   }
 
@@ -226,10 +243,13 @@
     blocks.unshift(host);
     blocks.forEach(function (el) {
       if (el.nodeName === 'TR') {
-        // A row of single lines goes as a whole ("Mobile | @@mobile"); a row whose cells hold lines
-        // of their own (a field, then a banner) keeps what is not empty: its lines are judged each.
+        // A row goes as a whole when its fields are all empty ("Phone | @@telephoneNumber<br>@@mobile"),
+        // but not one whose cell holds lines and a picture of its own (a field, then a banner): its
+        // lines are judged each, so the picture stays.
         var multi = false;
-        for (var td = el.firstChild; td; td = td.nextSibling) if (td.nodeType === 1 && td.querySelector('br, p, div, table')) multi = true;
+        for (var td = el.firstChild; td; td = td.nextSibling) {
+          if (td.nodeType === 1 && td.querySelector('br, p, div, table') && Array.prototype.some.call(td.querySelectorAll('img'), function (im) { return (im.getAttribute('src') || '').indexOf('@@') < 0; })) multi = true;
+        }
         var rowKeys = multi ? [] : ownPlaceholders(el, true);
         if (rowKeys.length) wrap(doc, el, el, rowKeys);
         return;

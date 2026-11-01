@@ -162,6 +162,7 @@
     'Manage': 'Verwaltung',
     'Zoom': 'Zoom',
     'Format': 'Formatieren',
+    'The signatures take GIF photos: choose a GIF of your own.': 'Die Signaturen nehmen GIF-Fotos: Wählen Sie ein eigenes GIF.',
     'Indent the HTML again (Alt+Shift+F)': 'HTML wieder einrücken (Alt+Shift+F)',
     'Add them as fields': 'Als Felder anlegen',
     'Fields added: {0}. Check their AD attribute and Graph source under Fields.': 'Felder angelegt: {0}. Prüfen Sie AD-Attribut und Graph-Quelle unter Felder.',

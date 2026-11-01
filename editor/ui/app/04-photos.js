@@ -27,7 +27,8 @@
     try {
       const r = await api('photos/list');
       photoItems = r.photos.filter((p) => !isDefaultPhoto(p.name));
-      photoDefaultShow(r.photos.find((p) => isDefaultPhoto(p.name)), r.mayChange);
+      // The one the signatures take: _default with their extension (a _default of another kind is not used).
+      photoDefaultShow(r.photos.find((p) => p.name.toLowerCase() === defaultName().toLowerCase()), r.mayChange);
       $('photoFile').disabled = $('photoUrlGo').disabled = !r.mayChange;
       if (!r.mayChange) $('photoErr').textContent = t('With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.');
       photosShow(r.mayChange);
@@ -73,6 +74,9 @@
     $('photoDefaultNote').textContent = p ? t('People without a photo get this one ({0}).', p.name) : t('People without a photo get the signature without one.');
     $('photoDefaultOff').hidden = !p;
     $('photoDefaultMake').disabled = $('photoDefaultFile').disabled = $('photoDefaultOff').disabled = mayChange === false;
+    // A neutral one is drawn, and a drawing is no GIF: for signatures that take GIF photos, an image of your own.
+    if (/\.gif$/i.test(defaultName())) { $('photoDefaultMake').disabled = true; $('photoDefaultMake').title = t('The signatures take GIF photos: choose a GIF of your own.'); }
+    else $('photoDefaultMake').title = '';
   }
   const defaultName = () => core.PHOTO_DEFAULT + '.' + ((photoRule() || {}).ext || 'jpg');
   // A neutral one: a grey figure on a light ground, in the shape the signature shows photos.
