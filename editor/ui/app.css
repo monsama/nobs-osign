@@ -631,6 +631,13 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 .photo-list .pn { font-size: 12.5px; word-break: break-all; text-align: center; }
 .photo-list button { position: absolute; top: 4px; right: 4px; }
 
+.photo-default { display: flex; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); padding: 10px 12px; margin: 8px 0 14px; max-width: 760px; }
+.photo-default .pd-img { width: 80px; height: 80px; flex: none; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border-radius: var(--r-s); color: var(--muted); }
+.photo-default .pd-img img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.photo-default .pd-text p { margin: 4px 0; }
+.photo-default .pd-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.photo-default .pd-btns > * { height: 28px; box-sizing: border-box; }
+
 /* A question before something that cannot be taken back. */
 dialog.ask { width: min(460px, 92vw); }
 .ask-text { margin: 4px 0 18px; line-height: 1.5; white-space: pre-line; }

@@ -393,11 +393,24 @@ async function loadImages(refs, interactive) {
     assets = {};
     ((j && j.value) || []).forEach((it) => { assets[String(it.name).toLowerCase()] = it; });
   }
+  // The placeholder photo, for whoever has none of their own: looked for once per extension.
+  const placeholders = {};
+  const placeholder = async (ext) => {
+    if (!(ext in placeholders)) {
+      placeholders[ext] = null;
+      try {
+        const m = await graphGet(tok, await itemUrl(tok, 'photos/' + core.PHOTO_DEFAULT + '.' + ext), 'Finding the photo', true);
+        if (m) { m.__rel = 'photos/' + core.PHOTO_DEFAULT + '.' + ext; placeholders[ext] = m; }
+      } catch (e) { /* none */ }
+    }
+    return placeholders[ext];
+  };
   for (const w of wanted) {
     try {
-      const meta = w.dir === 'assets' ? assets[w.name.toLowerCase()] : await graphGet(tok, await itemUrl(tok, 'photos/' + w.name), 'Finding the photo', true);
+      let meta = w.dir === 'assets' ? assets[w.name.toLowerCase()] : await graphGet(tok, await itemUrl(tok, 'photos/' + w.name), 'Finding the photo', true);
+      if (meta) meta.__rel = w.key;
+      else if (w.dir === 'photos') meta = await placeholder(w.name.split('.').pop().toLowerCase());
       if (!meta) continue;
-      meta.__rel = w.key;
       const ck = 'osign.img.' + w.key.toLowerCase();
       const cached = await readJson(ck);
       let b64 = cached && cached.etag && cached.etag === meta.eTag ? cached.b64 : null;

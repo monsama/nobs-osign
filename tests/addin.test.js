@@ -141,6 +141,17 @@ test('a user with no photo gets the signature without one', async () => {
   assert.equal(setCall(r)[1], '<p><b>Anna Muster</b></p><p><img src="cid:osign-assets-logo.png" width="90"></p>');
 });
 
+test('with a placeholder photo (photos/_default.jpg), a user with none, or with no login, gets that one', async () => {
+  const files = { 'signatures.json': JSON.stringify(makeConfig()), 'assets/logo.png': PNG, 'photos/mustera.jpg': JPG, 'photos/_default.jpg': Buffer.concat([JPG, Buffer.from([1, 2, 3])]) };
+  for (const login of ['nobody', null]) {
+    const r = runtime({ files, me: Object.assign({}, ME, { onPremisesSamAccountName: login }) });
+    await r.fire('onNewMessageComposeHandler');
+    assert.match(setCall(r)[1], /<img src="cid:osign-photos-[^"]+\.jpg" width="100">/, String(login));
+    const att = r.calls.filter((c) => c[0] === 'attach' && /photos-/.test(c[1]));
+    assert.equal(Buffer.from(att[0][2], 'base64').length, JPG.length + 3);
+  }
+});
+
 test('the images of an earlier signature go when another one is put in; the user\'s attachments stay', async () => {
   const r = runtime({ attachments: [{ id: 'old1', name: 'osign-assets-logo.png', isInline: true }, { id: 'mine', name: 'offer.pdf', isInline: false }] });
   await r.fire('onMessageFromChangedHandler');

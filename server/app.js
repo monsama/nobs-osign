@@ -821,6 +821,10 @@ function createApp(opts) {
         if (!PHOTO_NAME.test(name) || name.startsWith('.')) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
         let bytes = null;
         try { bytes = await photo(name); } catch (e) { log.warn('photo ' + name + ': ' + e.message); }
+        // None of their own: the placeholder photo, as the add-in takes it.
+        if (!bytes && !name.startsWith(core.PHOTO_DEFAULT + '.')) {
+          try { bytes = await photo(core.PHOTO_DEFAULT + path.extname(name).toLowerCase()); } catch (e) { bytes = null; }
+        }
         if (!bytes) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
         return send(res, 200, ASSET_TYPES[path.extname(name).toLowerCase()], bytes, { 'Cache-Control': 'private, max-age=300' });
       }

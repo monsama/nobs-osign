@@ -26,6 +26,8 @@
   // A placeholder is @@ followed by a name: @@givenName, @@mobile. The name runs as far as letters,
   // digits and _ go, so @@mailNickname is never read as @@mail followed by "Nickname".
   var PLACEHOLDER = /@@([A-Za-z][A-Za-z0-9_]*)/g;
+  // The photo for whoever has none of their own: photos/_default.<the extension the signature takes>.
+  var PHOTO_DEFAULT = '_default';
 
   // The fields of the first version, the same placeholders the signatures used before (CI-Sign).
   // "graph" is where the add-in reads the value: a property of the user in Microsoft Graph
@@ -123,7 +125,12 @@
       if (n.nodeType !== 1) return;
       // A row counts what is in its cells (and what those cells hold), a nested table aside.
       if (!top && BLOCK[n.nodeName] && !(cells && n.nodeName !== 'TABLE')) return;
-      for (var i = 0; i < n.attributes.length; i++) add(placeholdersIn(n.attributes[i].value));
+      // A person's photo (photos/@@sAMAccountName.jpg) is not a field of the line: without one,
+      // the placeholder photo goes in, or nothing, and the logo next to it stays.
+      for (var i = 0; i < n.attributes.length; i++) {
+        if (n.nodeName === 'IMG' && /^src$/i.test(n.attributes[i].name) && /(^|\/)photos\//i.test(n.attributes[i].value)) continue;
+        add(placeholdersIn(n.attributes[i].value));
+      }
       for (var c = n.firstChild; c; c = c.nextSibling) walk(c, false);
     }
     walk(node, true);
@@ -238,6 +245,9 @@
       if (base && !/\/$/.test(base)) base += '/';
       html = html.replace(/(\s(?:src|background)\s*=\s*["'])(assets|photos)\//gi, function (all, pre, dir) { return pre + base + dir.toLowerCase() + '/'; });
     }
+    // A photo for a user with no name (photos/.jpg: no login, a cloud-only account): the placeholder
+    // photo, photos/_default.jpg, which the add-in leaves out too when there is none.
+    html = html.replace(/(\s(?:src)\s*=\s*["'](?:[^"']*\/)?photos\/)\.(png|jpe?g|gif)(["'])/gi, function (all, pre, ext, q) { return pre + PHOTO_DEFAULT + '.' + ext + q; });
     // An image no mail program can load - a path on some computer ("images/logo.gif", as imported),
     // an address still holding a placeholder, a photo for a user with no name - would show as a
     // broken image: it goes.
@@ -547,6 +557,7 @@
     isAvailable: isAvailable,
     inPeriod: inPeriod,
     isCampaign: isCampaign,
+    PHOTO_DEFAULT: PHOTO_DEFAULT,
     today: today,
     available: available,
     pick: pick,

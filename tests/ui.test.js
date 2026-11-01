@@ -841,6 +841,21 @@ test('photos: one per person, uploaded and made small, listed, removed; the prev
   await page.click('#askOk');
   await page.waitForFunction(() => !/neu1\.jpg/.test(document.querySelector('#photoList').textContent));
   assert.equal(fs.existsSync(path.join(folder, 'photos', 'neu1.jpg')), false);
+  // A neutral placeholder for whoever has none: kept as photos/_default.jpg, not among the people.
+  await page.click('#photoDefaultMake');
+  await page.waitForFunction(() => !document.querySelector('#photoDefaultImg').hidden);
+  const ph = fs.readFileSync(path.join(folder, 'photos', '_default.jpg'));
+  assert.equal(ph.subarray(0, 3).toString('hex'), 'ffd8ff');
+  assert.doesNotMatch(await page.textContent('#photoList'), /_default/);
+  // The server gives it for someone without a photo, as the add-in takes it.
+  const viaServer = await fetch(base + '/photos/Muster.jpg', { headers: { Cookie: 'osign_session=' + cookie } });
+  assert.equal(viaServer.status, 200);
+  assert.ok(Buffer.from(await viaServer.arrayBuffer()).equals(ph));
+  // Removed again: nobody gets one.
+  await page.click('#photoDefaultOff');
+  await page.click('#askOk');
+  await page.waitForFunction(() => document.querySelector('#photoDefaultImg').hidden);
+  assert.equal(fs.existsSync(path.join(folder, 'photos', '_default.jpg')), false);
   // The signature made here goes again.
   await page.click('#sigList li:last-child a');
   await page.click('#btnDel');
