@@ -769,14 +769,19 @@ test('fields: the default fields restored, fields of your own kept', { skip }, a
   await page.click('#btnAddField');
   const before = await keys();
   const own = before[before.length - 1];
-  await page.click('#fieldRows tr:has(input[value="mobile"]) button[aria-label="Remove field @@mobile"]');
-  if (await page.isVisible('#dlgAsk[open]')) await page.click('#askOk');
+  // Removing it: asked first when a signature uses it; then it is gone.
+  const removeMobile = async () => {
+    await page.click('#fieldRows tr:has(input[value="mobile"]) button[aria-label="Remove field @@mobile"]');
+    await page.waitForFunction(() => document.querySelector('#dlgAsk[open]') || !document.querySelector('#fieldRows button[aria-label="Remove field @@mobile"]'));
+    if (await page.isVisible('#dlgAsk[open]')) await page.click('#askOk');
+    await page.waitForFunction(() => !document.querySelector('#fieldRows button[aria-label="Remove field @@mobile"]'));
+  };
+  await removeMobile();
   // Removed: it can come back at once.
   await page.waitForFunction(() => /Field @@mobile removed/.test(document.querySelector('#toast').textContent));
   await page.click('#toast button');
   assert.ok((await keys()).includes('mobile'));
-  await page.click('#fieldRows tr:has(input[value="mobile"]) button[aria-label="Remove field @@mobile"]');
-  if (await page.isVisible('#dlgAsk[open]')) await page.click('#askOk');
+  await removeMobile();
   await page.fill('#fieldRows tr:first-child td:first-child input', 'Given name (changed)');
   assert.ok(!(await keys()).includes('mobile'));
   await page.click('#btnResetFields');

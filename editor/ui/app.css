@@ -169,8 +169,7 @@ main { flex: 1; overflow: auto; padding: 20px 24px; min-width: 0; }
 /* A tab: quiet; the active one has its own background and a short line under its text. */
 .tab { position: relative; height: 28px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--r-s); background: transparent; color: var(--muted); }
 .tab:hover:not(:disabled) { background: var(--hover); color: var(--text); border-color: transparent; filter: none; }
-.tab.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
-.tab.active::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 2px; height: 2px; border-radius: 1px; background: var(--accent); }
+.tab.active { background: var(--panel-2); border-color: var(--line); color: var(--text); font-weight: 600; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); align-items: center; }
 .toolbar button { border: 1px solid transparent; background: transparent; padding: 0 6px; min-width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; }
 .toolbar button:hover { background: var(--panel-2); border-color: var(--line); }
@@ -616,7 +615,7 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 /* Photos: add one (person, then a file or a web address), and those there as small pictures. */
 .photo-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 14px 0 6px; }
 .photo-add > label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-.photo-add > label.filepick { flex-direction: row; color: var(--text); height: 32px; margin-bottom: 0; }
+.photo-add > label.filepick { flex-direction: row; color: var(--text); margin-bottom: 0; }
 .photo-add .photo-name:empty { display: none; }
 #photosFilter { width: 260px; max-width: 100%; }
 .photo-add .photo-url { flex: 1 1 320px; }
@@ -636,7 +635,6 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 .photo-default .pd-img img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .photo-default .pd-text p { margin: 4px 0; }
 .photo-default .pd-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.photo-default .pd-btns > * { height: 28px; box-sizing: border-box; }
 
 /* A question before something that cannot be taken back. */
 dialog.ask { width: min(460px, 92vw); }
@@ -659,3 +657,40 @@ button.danger-btn:hover { filter: brightness(1.08); }
   dialog.ask .dlg { height: auto; }
   .top .who { border-left: 0; padding-left: 0; }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   One size for every control, the last word on it: buttons, file pickers, links that look like
+   buttons, fields and dropdowns are all 28 px high, their text centred in them and on the line
+   with what stands next to them. Only the round ? (help), the window buttons of a dialog and the
+   status pills are their own size.
+   --------------------------------------------------------------------------------------------- */
+:root { --h: 28px; }
+button, a.btnlike, label.filepick.small, label.filepick.button-like {
+  box-sizing: border-box; height: var(--h); padding: 0 10px; font-size: 13px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; vertical-align: middle; white-space: nowrap;
+}
+label.filepick.small, label.filepick.button-like { font-weight: normal; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--btn); cursor: pointer; position: relative; }
+label.filepick.small:hover, label.filepick.button-like:hover { border-color: var(--muted); }
+button.small, button.copy { height: var(--h); padding: 0 10px; font-size: 13px; }
+.icon-btn { width: var(--h); height: var(--h); padding: 0; }
+a.btnlike.icon { width: auto; padding: 0 7px; }
+/* Fields and dropdowns: the same height, padding and corner; a dropdown with its chevron at the
+   same place everywhere and room for it, so its text never runs under it. */
+input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]), select {
+  box-sizing: border-box; height: var(--h); padding: 0 8px; font-size: 13px; line-height: normal; vertical-align: middle;
+}
+select { padding: 0 28px 0 8px; background-position: right 8px center; background-size: 12px 12px; cursor: pointer; max-width: 100%; }
+select:hover:not(:disabled), input:hover:not(:disabled):not([type=checkbox]):not([type=radio]):not([type=file]) { border-color: var(--muted); }
+select:disabled { opacity: .55; cursor: not-allowed; }
+.preview-head select, .toolbar select, .dlg-toolbar select, .setrow > select { padding: 0 28px 0 8px; height: var(--h); }
+.pv-ad input, .imgbar input { padding: 0 8px !important; height: var(--h); }
+.toolbar input[type=color] { height: var(--h); width: 32px; vertical-align: middle; }
+/* Rows of controls: everything on one middle line. */
+.pick, .btn-row, .users-bar, .field-actions, .side-btns, .preview-head, .imgbar, .dlg-toolbar, .sig-head, .photo-default .pd-btns, .copyline, .wiz-actions, .top { align-items: center; }
+.btn-row, .wiz-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.copyline { display: inline-flex; gap: 6px; }
+label.check { min-height: var(--h); }
+label.check.block { min-height: 0; }
+/* The status pills: one height, their text centred. */
+.status { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; padding: 0 10px; }
+button.status.pub { height: 24px; }
