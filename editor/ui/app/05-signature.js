@@ -21,12 +21,22 @@
     changed({ list: true });
   }));
   $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
-  $('sigGroups').addEventListener('input', () => { const s = sig(); if (s) { s.audience.groups = splitList($('sigGroups').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
+  // Who gets it, said: the lists, else everyone or nobody (the box for everyone only counts then).
+  function audienceShow(s) {
+    const a = s.audience || {}, open = !(a.groups || []).length && !(a.departments || []).length && !(a.domains || []).length;
+    $('audienceSummary').textContent = audienceText(s);
+    $('audienceSummary').classList.toggle('warn', core.forNobody(s));
+    $('sigEveryone').checked = open && a.everyone !== false;
+    $('sigEveryone').disabled = !open;
+    $('sigEveryone').closest('label').title = open ? '' : t('Only when no groups, departments or domains are given.');
+  }
+  $('sigEveryone').addEventListener('change', () => { const s = sig(); if (!s) return; s.audience.everyone = $('sigEveryone').checked; audienceShow(s); changed(); });
+  $('sigGroups').addEventListener('input', () => { const s = sig(); if (s) { s.audience.groups = splitList($('sigGroups').value); audienceShow(s); changed({ preview: false }); } });
   // Group names and departments from AD to pick from, for what is typed after the last comma.
   suggest($('sigGroups'), { multi: true, fetch: async (q) => (adOn() ? (await api('ad/groups', { query: q })).groups : []).map((g) => ({ value: g, label: g })) });
   suggest($('sigDeps'), { multi: true, min: 0, fetch: async (q) => (adOn() ? (await api('ad/departments', { query: q })).departments : []).map((g) => ({ value: g, label: g })) });
-  $('sigDeps').addEventListener('input', () => { const s = sig(); if (s) { s.audience.departments = splitList($('sigDeps').value); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
-  $('sigDoms').addEventListener('input', () => { const s = sig(); if (s) { s.audience.domains = splitList($('sigDoms').value).map((d) => d.replace(/^@/, '').toLowerCase()); $('audienceSummary').textContent = audienceText(s); changed({ preview: false }); } });
+  $('sigDeps').addEventListener('input', () => { const s = sig(); if (s) { s.audience.departments = splitList($('sigDeps').value); audienceShow(s); changed({ preview: false }); } });
+  $('sigDoms').addEventListener('input', () => { const s = sig(); if (s) { s.audience.domains = splitList($('sigDoms').value).map((d) => d.replace(/^@/, '').toLowerCase()); audienceShow(s); changed({ preview: false }); } });
   // ---------------------------------------------------------------------------------------------
   // Right-click on a signature in the list (or the menu key, or Shift+F10): what the signature's
   // own page offers, without opening it first.

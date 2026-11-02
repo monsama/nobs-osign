@@ -125,8 +125,11 @@
       defaultNew: false,
       defaultReply: false,
       removeEmptyLines: true,
-      // Who gets this signature. Empty lists mean everyone.
-      audience: { departments: [], domains: [], groups: [] },
+      // Who gets this signature: those in the groups, departments and sender domains given; with
+      // none given, everyone only when "everyone" is set, else nobody (a new signature goes to
+      // nobody until it is given an audience). A signature from before "everyone" was there has
+      // no such flag: it goes to everyone, as it did.
+      audience: { departments: [], domains: [], groups: [], everyone: false },
       // A campaign: only from / until these days (YYYY-MM-DD, both included); empty is always.
       validFrom: '',
       validUntil: ''
@@ -396,7 +399,13 @@
       var mine = lowerList(groups);
       if (!grps.some(function (g) { return mine.indexOf(g) >= 0; })) return false;
     }
+    if (!deps.length && !doms.length && !grps.length) return a.everyone !== false;
     return true;
+  }
+  // Nobody gets it: no group, department or domain, and not for everyone.
+  function forNobody(sig) {
+    var a = (sig && sig.audience) || {};
+    return !lowerList(a.departments).length && !lowerList(a.domains).length && !lowerList(a.groups).length && a.everyone === false;
   }
 
   function available(config, values, from, groups, now) {
@@ -632,6 +641,7 @@
     isAvailable: isAvailable,
     inPeriod: inPeriod,
     isCampaign: isCampaign,
+    forNobody: forNobody,
     PHOTO_DEFAULT: PHOTO_DEFAULT,
     today: today,
     available: available,

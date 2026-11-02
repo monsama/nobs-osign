@@ -11,6 +11,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { JSDOM } = require('jsdom');
 const core = require('../shared/signature-core.js');
+// A signature for the entire organization (a new one is not assigned to anybody).
+const sigAll = (id, name) => { const s = core.newSignature(id, name); s.audience.everyone = true; return s; };
 const buildTestAddin = require('./support/build-test-addin.js');
 const fakeGraph = require('./support/fake-graph.js');
 
@@ -25,7 +27,7 @@ test.before(async () => {
 });
 
 function sig(id, name, html, extra) {
-  const s = Object.assign(core.newSignature(id, name), { html }, extra || {});
+  const s = Object.assign(sigAll(id, name), { html }, extra || {});
   s.compiled = core.compile(s.html, doc);
   return s;
 }

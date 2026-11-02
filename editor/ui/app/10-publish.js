@@ -6,7 +6,9 @@
     const errs = core.validate(prepared());
     errs.forEach((e) => out.push(['bad', t(e)]));
     if (!c.signatures.length) out.push(['bad', t('There is no signature.')]);
-    const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length);
+    const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length && s.audience.everyone !== false);
+    const nobody = c.signatures.filter((s) => core.forNobody(s));
+    if (nobody.length) out.push(['warn', t('Not assigned, nobody gets: {0} (Who gets it).', nobody.map((s) => s.name).join(', '))]);
     if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', t('No signature is the default for new mail: users get none unless they pick one.')]);
     else if (!plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.')]);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
