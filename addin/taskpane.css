@@ -50,3 +50,5 @@ select { appearance: none; -webkit-appearance: none; padding-right: 28px; cursor
 .own-edit img { max-width: 100%; }
 .own-tools { display: flex; gap: 6px; flex-wrap: wrap; }
 .own-tools button { min-width: 30px; padding: 0 8px; }
+.card-head small.editable { color: #8a6d00; }
+@media (prefers-color-scheme: dark) { .card-head small.editable { color: #e0b84a; } }

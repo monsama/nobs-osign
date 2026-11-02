@@ -32,6 +32,8 @@ const DE = {
   'details not available, fields stay empty': 'Angaben nicht verfügbar, Felder bleiben leer',
   'signatures published {0}': 'Signaturen veröffentlicht {0}',
   'Own variant': 'Eigene Variante',
+  'Yours to change: {0}': 'Änderbar: {0}',
+  'Yours to change: {0} (marked in the preview). The rest stays the company signature.': 'Änderbar: {0} (in der Vorschau markiert). Alles andere bleibt die Firmensignatur.',
   'Your signature from {0}': 'Ihre Signatur aus {0}',
   'Your own signature from {0}': 'Ihre eigene Signatur aus {0}',
   "Change it as you like right here: click into it and type. Ctrl+B, Ctrl+I and Ctrl+U format; the company's images stay.": 'Ändern Sie sie direkt hier, wie Sie möchten: hineinklicken und schreiben. Strg+B, Strg+I und Strg+U formatieren; die Bilder der Firma bleiben.',
@@ -108,7 +110,24 @@ function previewFrame(sig, title) {
   frame.setAttribute('sandbox', '');
   frame.title = title;
   frame.srcdoc = PAGE('');
-  frame.show = (s) => previewHtml(s, user.values).then((h) => { frame.srcdoc = PAGE(h); });
+  // mark: the field keys a variant may change, shown marked in the preview (where they are, even
+  // when empty: their name then).
+  frame.show = (s, mark) => {
+    let shown = s;
+    if (mark && mark.length) {
+      const vals = Object.assign({}, user.values, s.userValues || {}), uv = {};
+      mark.forEach((k) => { uv[k] = '\u2063' + (vals[k] || '') + '\u2064' + k + '\u2065'; });
+      shown = Object.assign({}, s, { userValues: Object.assign({}, s.userValues || {}, uv) });
+    }
+    return previewHtml(shown, user.values).then((h) => {
+      if (mark && mark.length) {
+        const labels = {}; (cfg.fields || []).forEach((f) => { labels[f.key] = f.label || f.key; });
+        h = h.replace(/\u2063([^\u2064]*)\u2064([^\u2065]*)\u2065/g, (all, v, k) =>
+          '<span style="background:#fff3bf;outline:1px dashed #d4a017;border-radius:2px;padding:0 1px" title="' + (labels[k] || k).replace(/"/g, '&quot;') + '">' + (v || '<i style="color:#8a6d00">' + (labels[k] || k).replace(/</g, '&lt;') + '</i>') + '</span>');
+      }
+      frame.srcdoc = PAGE(h);
+    });
+  };
   frame.show(sig);
   return frame;
 }
@@ -141,6 +160,13 @@ function renderList(list) {
       actions.append(button(t('Edit'), () => editVariant(card, s, getVariants().find((v) => v.id === s.id)), true),
         button(t('Delete'), (e) => deleteVariant(s, e.currentTarget), true));
     } else if (core.variantsAllowed(cfg) && (core.editableIn(cfg, s).length || core.ownAllowed(cfg))) {
+      // Which fields a variant of it may change (all of it, when own signatures are allowed).
+      if (!core.ownAllowed(cfg)) {
+        const lab = {}; (cfg.fields || []).forEach((f) => { lab[f.key] = f.label || f.key; });
+        const ed = document.createElement('small'); ed.className = 'editable';
+        ed.textContent = t('Yours to change: {0}', core.editableIn(cfg, s).map((k) => lab[k] || k).join(', '));
+        left.append(document.createElement('br'), ed);
+      }
       actions.append(button(t('Own variant'), () => editVariant(card, s, null), true));
     }
     actions.append(btn);
@@ -225,7 +251,7 @@ function editVariant(card, sig, existing) {
   const labels = {}; (cfg.fields || []).forEach((f) => { labels[f.key] = f.label || f.key; });
   const form = document.createElement('form'); form.className = 'variant';
   const title = document.createElement('b'); title.textContent = existing ? t('Variant of {0}', base.name) : t('New variant of {0}', base.name);
-  const hint = document.createElement('small'); hint.textContent = t('Only the fields below are yours to change; the rest stays the company signature.');
+  const hint = document.createElement('small'); hint.textContent = t('Yours to change: {0} (marked in the preview). The rest stays the company signature.', core.editableIn(cfg, base).map((k) => labels[k] || k).join(', '));
   const field = (label, value, max) => {
     const l = document.createElement('label'); l.append(label);
     const i = document.createElement('input'); i.value = value || ''; i.maxLength = max;
@@ -242,9 +268,11 @@ function editVariant(card, sig, existing) {
     const values = {}; Object.keys(inputs).forEach((k) => { values[k] = inputs[k].value; });
     return { id: existing ? existing.id : 'my-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: nameIn.value.trim(), base: base.id, values };
   };
-  const frame = previewFrame(core.withVariants(cfg, [draft()]).signatures.slice(-1)[0] || base, base.name);
+  const marked = core.editableIn(cfg, base);
+  const frame = previewFrame(base, base.name);
+  frame.show(core.withVariants(cfg, [draft()]).signatures.slice(-1)[0] || base, marked);
   let timer = null;
-  form.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = core.withVariants(cfg, [draft()]).signatures.slice(-1)[0]; if (v) frame.show(v); }, 250); };
+  form.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = core.withVariants(cfg, [draft()]).signatures.slice(-1)[0]; if (v) frame.show(v, marked); }, 250); };
   const row = document.createElement('div'); row.className = 'actions';
   row.append(button(t('Cancel'), () => render(), true), button(t('Save'), () => form.requestSubmit()));
   form.append(row);
