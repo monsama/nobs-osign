@@ -21,22 +21,82 @@
     changed({ list: true });
   }));
   $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
-  // Who gets it, said: the lists, else everyone or nobody (the box for everyone only counts then).
+  // Who gets it, as in the Microsoft 365 admin center: the entire organization, specific groups,
+  // departments or sender domains (one field, each a token), or not assigned.
+  const AUD_KINDS = { groups: { label: 'AD group', icon: '👥' }, departments: { label: 'Department', icon: '🏢' }, domains: { label: 'Sender domain', icon: '🌐' } };
+  const audMode = (s) => {
+    const a = s.audience || {};
+    if ((a.groups || []).length || (a.departments || []).length || (a.domains || []).length || s.__audSome) return 'some';
+    return a.everyone === false ? 'none' : 'all';
+  };
   function audienceShow(s) {
-    const a = s.audience || {}, open = !(a.groups || []).length && !(a.departments || []).length && !(a.domains || []).length;
+    const a = s.audience || (s.audience = { groups: [], departments: [], domains: [] }), mode = audMode(s);
     $('audienceSummary').textContent = audienceText(s);
     $('audienceSummary').classList.toggle('warn', core.forNobody(s));
-    $('sigEveryone').checked = open && a.everyone !== false;
-    $('sigEveryone').disabled = !open;
-    $('sigEveryone').closest('label').title = open ? '' : t('Only when no groups, departments or domains are given.');
+    document.querySelectorAll('input[name=audMode]').forEach((r) => { r.checked = r.value === mode; });
+    $('audSome').hidden = mode !== 'some';
+    $('audNone').hidden = mode !== 'none';
+    const toks = [];
+    for (const kind of Object.keys(AUD_KINDS)) {
+      for (const v of a[kind] || []) {
+        toks.push(el('span', { class: 'tok tok-' + kind, title: t(AUD_KINDS[kind].label) },
+          el('span', { class: 'tok-i', 'aria-hidden': 'true' }, AUD_KINDS[kind].icon), kind === 'domains' ? '@' + v : v,
+          el('button', { type: 'button', class: 'tok-x', 'aria-label': t('Remove {0}', v), onclick: () => audRemove(kind, v) }, '×')));
+      }
+    }
+    $('audTokens').replaceChildren(...toks, $('audInput'));
   }
-  $('sigEveryone').addEventListener('change', () => { const s = sig(); if (!s) return; s.audience.everyone = $('sigEveryone').checked; audienceShow(s); changed(); });
-  $('sigGroups').addEventListener('input', () => { const s = sig(); if (s) { s.audience.groups = splitList($('sigGroups').value); audienceShow(s); changed({ preview: false }); } });
-  // Group names and departments from AD to pick from, for what is typed after the last comma.
-  suggest($('sigGroups'), { multi: true, fetch: async (q) => (adOn() ? (await api('ad/groups', { query: q })).groups : []).map((g) => ({ value: g, label: g })) });
-  suggest($('sigDeps'), { multi: true, min: 0, fetch: async (q) => (adOn() ? (await api('ad/departments', { query: q })).departments : []).map((g) => ({ value: g, label: g })) });
-  $('sigDeps').addEventListener('input', () => { const s = sig(); if (s) { s.audience.departments = splitList($('sigDeps').value); audienceShow(s); changed({ preview: false }); } });
-  $('sigDoms').addEventListener('input', () => { const s = sig(); if (s) { s.audience.domains = splitList($('sigDoms').value).map((d) => d.replace(/^@/, '').toLowerCase()); audienceShow(s); changed({ preview: false }); } });
+  function audAdd(kind, value) {
+    const s = sig(); if (!s) return;
+    let v = String(value || '').trim(); if (!v) return;
+    if (kind === 'domains') v = v.replace(/^@/, '').toLowerCase();
+    const list = s.audience[kind] || (s.audience[kind] = []);
+    if (!list.some((x) => x.toLowerCase() === v.toLowerCase())) list.push(v);
+    s.audience.everyone = false; delete s.__audSome;
+    audienceShow(s); changed();
+    $('audInput').value = ''; $('audInput').focus();
+  }
+  function audRemove(kind, v) {
+    const s = sig(); if (!s) return;
+    s.audience[kind] = (s.audience[kind] || []).filter((x) => x !== v);
+    if (!s.audience.groups.length && !s.audience.departments.length && !s.audience.domains.length) s.__audSome = true;
+    audienceShow(s); changed();
+  }
+  // What was there before "not assigned" or "entire organization": back when "specific" is chosen again.
+  const audKept = new Map();
+  document.querySelectorAll('input[name=audMode]').forEach((r) => r.addEventListener('change', () => {
+    const s = sig(); if (!s || !r.checked) return;
+    const a = s.audience, had = { groups: a.groups || [], departments: a.departments || [], domains: a.domains || [] };
+    if (had.groups.length || had.departments.length || had.domains.length) audKept.set(s.id, had);
+    if (r.value === 'some') {
+      Object.assign(a, audKept.get(s.id) || { groups: [], departments: [], domains: [] }, { everyone: false });
+      s.__audSome = true;
+    } else {
+      Object.assign(a, { groups: [], departments: [], domains: [], everyone: r.value === 'all' });
+      delete s.__audSome;
+    }
+    audienceShow(s); changed();
+    if (r.value === 'some') $('audInput').focus();
+  }));
+  // Typed: picked from AD's groups and departments, or as typed (@… a domain, else a group).
+  suggest($('audInput'), { min: 2, fetch: async (q) => {
+    if (/^@/.test(q)) return [{ value: q.replace(/^@/, ''), label: '@' + q.replace(/^@/, ''), sub: t('Sender domain'), kind: 'domains' }];
+    if (!adOn()) return [];
+    const [g, d] = await Promise.all([api('ad/groups', { query: q }).then((r) => r.groups).catch(() => []), api('ad/departments', { query: q }).then((r) => r.departments).catch(() => [])]);
+    return g.map((x) => ({ value: x, label: x, sub: t('AD group'), kind: 'groups' })).concat(d.map((x) => ({ value: x, label: x, sub: t('Department'), kind: 'departments' })));
+  }, pick: (it) => audAdd(it.kind, it.value) });
+  $('audInput').addEventListener('keydown', (e) => {
+    if (e.defaultPrevented) return;
+    const v = $('audInput').value.trim();
+    if ((e.key === 'Enter' || e.key === ',' || e.key === ';') && v) {
+      e.preventDefault();
+      audAdd(/^@/.test(v) || /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(v) ? 'domains' : 'groups', v);
+    } else if (e.key === 'Backspace' && !v) {
+      const s = sig(); if (!s) return;
+      for (const kind of ['domains', 'departments', 'groups']) { const l = s.audience[kind] || []; if (l.length) { audRemove(kind, l[l.length - 1]); break; } }
+    }
+  });
+  $('audTokens').addEventListener('click', (e) => { if (e.target === $('audTokens')) $('audInput').focus(); });
   // ---------------------------------------------------------------------------------------------
   // Right-click on a signature in the list (or the menu key, or Shift+F10): what the signature's
   // own page offers, without opening it first.

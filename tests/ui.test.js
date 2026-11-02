@@ -201,6 +201,7 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   await page.click('.tab[data-mode=design]');
   // (The preview of the signature shown before may still be there for a moment.)
   await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return d && d.body && /Anna Muster/.test(d.body.textContent) && !/Freundliche/.test(d.body.textContent); });
+  await page.waitForFunction(() => document.querySelector('#preview').contentDocument.querySelectorAll('img').length >= 2);
   const imgs = await page.evaluate(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].map((i) => i.getAttribute('src')));
   assert.deepEqual(imgs, ['/assets/logo.png', '/photos/mustera.jpg']);
   // Both load: the logo from the draft, the photo from the photos folder.
@@ -208,7 +209,8 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
 
   // Who gets it: an AD group.
   await page.click('.audience:not(.campaign) summary');
-  await page.fill('#sigGroups', 'SG-Vertrieb, SG-Marketing');
+  await page.click('.seg label:has(input[value=some])');
+  for (const g of ['SG-Vertrieb', 'SG-Marketing']) { await page.fill('#audInput', g); await page.keyboard.press('Enter'); }
   assert.equal(await page.textContent('#audienceSummary'), 'SG-Vertrieb, SG-Marketing');
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
@@ -465,9 +467,9 @@ test('campaigns, dark mode, comparing versions, the audit log, the backup and fo
   await page.fill('#sigFrom', ''); await page.fill('#sigUntil', '');
   await page.waitForFunction(() => !/Campaign/.test(document.querySelector('#sigList').textContent));
   // Dark mode in the preview.
-  await page.check('#pvDark');
+  await page.click('label.tgl:has(#pvDark)');
   await page.waitForFunction(() => /invert\(1\)/.test(document.querySelector('#preview').srcdoc));
-  await page.uncheck('#pvDark');
+  await page.click('label.tgl:has(#pvDark)');
 
   // A version against the one before it.
   await page.click('#navHistory');
@@ -627,15 +629,20 @@ test('suggestions while typing: AD groups anywhere in their name, people for the
   await page.waitForSelector('#sigList a');
   await page.click('#sigList a');
   await page.waitForSelector('#viewSig:not([hidden])');
-  // A group by a part of its name; ↓ and Enter take it, with a comma for the next one.
+  // A group by a part of its name; ↓ and Enter take it, as a token.
   await page.click('.audience:not(.campaign) summary');
-  await page.fill('#sigGroups', 'osign');
-  await page.waitForSelector('#sigGroupsSuggest:not([hidden]) .sg-item');
-  assert.match(await page.textContent('#sigGroupsSuggest'), /NOBS-OSign-Admins/);
+  const mode0 = await page.$eval('input[name=audMode]:checked', (r) => r.value);
+  await page.click('.seg label:has(input[value=some])');
+  await page.type('#audInput', 'osign');
+  await page.waitForSelector('#audInputSuggest:not([hidden]) .sg-item');
+  assert.match(await page.textContent('#audInputSuggest'), /NOBS-OSign-Admins/);
   await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
-  assert.equal(await page.inputValue('#sigGroups'), 'NOBS-OSign-Admins, ');
-  assert.equal(await page.isVisible('#sigGroupsSuggest'), false);
-  await page.fill('#sigGroups', '');
+  await page.waitForSelector('#audTokens .tok-groups');
+  assert.match(await page.textContent('#audTokens'), /NOBS-OSign-Admins/);
+  assert.equal(await page.inputValue('#audInput'), '');
+  assert.equal(await page.isVisible('#audInputSuggest'), false);
+  await page.click('#audTokens .tok-x');
+  await page.click('.seg label:has(input[value=' + mode0 + '])');
   // A person by a part of the name: picked, looked up, in the preview.
   await page.selectOption('#pvSource', 'ad');
   await page.fill('#pvUser', 'Mus');
@@ -1085,15 +1092,23 @@ test('who gets it: a new signature is not assigned until the entire organization
   assert.equal(await page.textContent('#audienceSummary'), 'not assigned');
   assert.match(await page.textContent('#sigList li a.active'), /Not assigned/);
   await page.click('#audienceSummary');
-  await page.check('#sigEveryone');
+  assert.equal(await page.isChecked('input[name=audMode][value=none]'), true);
+  await page.click('.seg label:has(input[value=all])');
   assert.equal(await page.textContent('#audienceSummary'), 'entire organization');
   assert.doesNotMatch(await page.textContent('#sigList li a.active'), /Not assigned/);
-  // A group given: the box does not count, and cannot be changed.
-  await page.fill('#sigGroups', 'SG-X'); await page.dispatchEvent('#sigGroups', 'input');
-  assert.equal(await page.isDisabled('#sigEveryone'), true);
-  await page.fill('#sigGroups', ''); await page.dispatchEvent('#sigGroups', 'input');
-  // Back to not assigned: the publish check says so.
-  await page.uncheck('#sigEveryone');
+  // Specific: a group and a domain as tokens; Backspace takes the last one away.
+  await page.click('.seg label:has(input[value=some])');
+  await page.fill('#audInput', 'SG-X'); await page.keyboard.press('Enter');
+  await page.fill('#audInput', '@example.com'); await page.keyboard.press('Enter');
+  assert.equal(await page.textContent('#audienceSummary'), 'SG-X · @example.com');
+  await page.keyboard.press('Backspace');
+  assert.equal(await page.textContent('#audienceSummary'), 'SG-X');
+  // Back to not assigned: the tokens go (and come back with Specific); the publish check says so.
+  await page.click('.seg label:has(input[value=none])');
+  assert.equal(await page.textContent('#audienceSummary'), 'not assigned');
+  await page.click('.seg label:has(input[value=some])');
+  assert.equal(await page.textContent('#audienceSummary'), 'SG-X');
+  await page.click('.seg label:has(input[value=none])');
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
   assert.match(await page.textContent('#pubChecks'), /Not assigned, nobody gets: /);

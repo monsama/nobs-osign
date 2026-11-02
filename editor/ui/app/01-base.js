@@ -76,7 +76,7 @@
   // The configuration as published: every signature compiled, the image address set.
   function prepared() {
     const c = JSON.parse(JSON.stringify(S.config));
-    c.signatures.forEach((s) => { s.html = sanitize(s.html); s.compiled = core.compile(s.html, scratchDoc); });
+    c.signatures.forEach((s) => { delete s.__audSome; s.html = sanitize(s.html); s.compiled = core.compile(s.html, scratchDoc); });
     return c;
   }
 
@@ -340,9 +340,6 @@
     $('sigNew').checked = !!s.defaultNew;
     $('sigReply').checked = !!s.defaultReply;
     $('sigRemoveEmpty').checked = s.removeEmptyLines !== false;
-    $('sigGroups').value = (s.audience.groups || []).join(', ');
-    $('sigDeps').value = (s.audience.departments || []).join(', ');
-    $('sigDoms').value = (s.audience.domains || []).join(', ');
     audienceShow(s);
     $('sigFrom').value = s.validFrom || '';
     $('sigUntil').value = s.validUntil || '';
