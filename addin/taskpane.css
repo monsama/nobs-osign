@@ -52,3 +52,8 @@ select { appearance: none; -webkit-appearance: none; padding-right: 28px; cursor
 .own-tools button { min-width: 30px; padding: 0 8px; }
 .card-head small.editable { color: #8a6d00; }
 @media (prefers-color-scheme: dark) { .card-head small.editable { color: #e0b84a; } }
+/* A variant's signature with its own fields written in place. */
+.own-edit.live { border: 0; border-top: 1px solid var(--line); border-radius: 0; min-height: 0; max-height: none; }
+.own-edit .fld { background: #fff3bf; outline: 1px dashed #d4a017; border-radius: 2px; padding: 0 2px; cursor: text; min-width: 2.5em; display: inline-block; }
+.own-edit .fld:focus { outline: 2px solid var(--accent); background: #fffbe6; }
+.own-edit .fld:empty::before { content: attr(data-ph); color: #8a6d00; font-style: italic; }

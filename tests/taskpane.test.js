@@ -142,7 +142,7 @@ test('the pane lists what is open to the user, with images, inserts, and saves t
 test('own variants: made from a signature with editable fields, chosen, inserted, deleted', { skip }, async () => {
   const c = JSON.parse(JSON.stringify(cfg));
   c.fields.push({ key: 'greeting', label: 'Greeting', ad: '', graph: '', sample: '', userEditable: true });
-  c.signatures[1].html = '<p>@@greeting</p><p>@@givenName</p>';
+  c.signatures[1].html = '<p>@@greeting</p><p>@@givenName</p><p><a href="mailto:@@greeting">@@greeting</a></p>';
   c.signatures[1].compiled = core.compile(c.signatures[1].html, doc);
   const dir = await buildTestAddin();
   const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(c), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
@@ -155,8 +155,15 @@ test('own variants: made from a signature with editable fields, chosen, inserted
     // Which fields are the user's to change: on the card, in the form, marked in its preview.
     assert.match(await page.textContent('.card:nth-child(2) .card-head'), /Yours to change: Greeting/);
     await page.click('.card:nth-child(2) button.secondary');
-    assert.match(await page.textContent('.variant small'), /Yours to change: Greeting \(marked in the preview\)/);
-    await page.waitForFunction(() => /background:#fff3bf/.test(document.querySelector('.card:nth-child(2) iframe').srcdoc));
+    assert.match(await page.textContent('.variant small'), /Yours to change: Greeting: in the boxes below, or right in the signature/);
+    // Written right in the signature: the box above follows.
+    await page.waitForSelector('.own-edit.live .fld[data-k=greeting]');
+    assert.equal(await page.$$eval('.own-edit.live .fld[data-k=greeting]', (x) => x.length), 2);
+    assert.equal(await page.$$eval('.own-edit.live a[href]', (x) => x.length), 0);
+    await page.click('.own-edit.live .fld[data-k=greeting] >> nth=0');
+    await page.keyboard.type('Hi');
+    assert.equal(await page.inputValue('.variant label:nth-of-type(2) input'), 'Hi');
+    assert.equal(await page.textContent('.own-edit.live .fld[data-k=greeting] >> nth=1'), 'Hi');
     await page.fill('.variant label:nth-of-type(1) input', 'Warm');
     await page.fill('.variant label:nth-of-type(2) input', 'Kind regards');
     await page.click('.variant button:not(.secondary)');
@@ -168,7 +175,7 @@ test('own variants: made from a signature with editable fields, chosen, inserted
     // Inserted with the user's text.
     await page.click('.card:nth-child(3) button:not(.secondary)');
     await page.waitForFunction(() => window.__calls.some((x) => x[0] === 'set'));
-    assert.equal((await page.evaluate(() => window.__calls)).find((x) => x[0] === 'set')[1], '<p>Kind regards</p><p>Anna</p>');
+    assert.equal((await page.evaluate(() => window.__calls)).find((x) => x[0] === 'set')[1], '<p>Kind regards</p><p>Anna</p><p><a href="mailto:Kind regards">Kind regards</a></p>');
     // Picked for new mail, then deleted (asked twice): the choice goes back to the company's.
     await page.selectOption('#prefNew', saved[0].id);
     await page.waitForFunction(() => /Saved/.test(document.querySelector('#msg').textContent));
