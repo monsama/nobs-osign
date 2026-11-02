@@ -639,7 +639,8 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 
 /* A question before something that cannot be taken back. */
 dialog.ask { width: min(460px, 92vw); }
-.ask-text { margin: 4px 0 18px; line-height: 1.5; white-space: pre-line; }
+.ask-text { margin: 18px 0 18px; line-height: 1.5; white-space: pre-line; }
+.ask-input { margin: -6px 0 18px; }
 button.danger-btn { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
 button.danger-btn:hover { filter: brightness(1.08); }
 
@@ -755,3 +756,12 @@ table.fields th { white-space: nowrap; }
   /* The status bar: the count and the shortcuts only. */
   .statusbar #stTarget, .statusbar #verFoot { display: none; }
 }
+
+/* A destructive button: the same strong red in light and dark (the theme's danger red is light in
+   dark mode, white text on it hard to read). */
+button.danger-btn { background: #c62828; border-color: #c62828; color: #fff; }
+/* Several signatures picked. */
+.sig-list li a.picked { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.sig-list li a.picked::before { content: "✓ "; color: var(--accent); font-weight: 700; }
+.sig-picked { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; padding: 6px 8px; border: 1px solid var(--accent); border-radius: var(--r-m); background: var(--accent-soft); font-size: 12.5px; font-weight: 600; }
+.sig-picked { flex-wrap: wrap; } .sig-picked #sigPickedN { flex: 1 0 100%; } .sig-picked .spacer { display: none; } .sig-picked button { flex: 1; }

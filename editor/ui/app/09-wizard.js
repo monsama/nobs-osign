@@ -485,6 +485,7 @@
       if (!onServer()) await wizSave({ addinFolder: $('wizAddinFolder').value });
       const r = await api('addin/build');
       wiz.built = true;
+      afterAddinChange();
       $('wizMakeOk').textContent = onServer() ? t('{0} files (version {1}) made.', r.files, r.version) : t('{0} files (version {1}) in {2}.', r.files, r.version, r.folder);
       wizRender();
     } catch (err) { $('wizErr').textContent = t(err.message); }
