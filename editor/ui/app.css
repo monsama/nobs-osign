@@ -382,9 +382,9 @@ th button.help { text-transform: none; }
 .login-error { color: var(--danger); margin: 0 0 12px; font-size: 13px; }
 .login-box .hint { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; }
 /* Server connections: whether each one is ready, at a glance. */
-#dlgConn .lead.warn { color: var(--warn); }
-#dlgConn .lead.ok { color: var(--ok); }
-#dlgConn h3 { margin-top: 18px; }
+#connHost .lead.warn { color: var(--warn); }
+#connHost .lead.ok { color: var(--ok); }
+#connHost h3 { margin-top: 18px; }
 
 /* Tabs in a dialog (Server connections): one row, each with a dot for whether it is ready. */
 .dtabs { display: flex; gap: 4px; margin: 0 -16px 14px; padding: 6px 12px; border-bottom: 1px solid var(--line); overflow-x: auto; }
@@ -832,3 +832,6 @@ table.fields .ph { gap: 4px; }
 .tgl:hover { border-color: var(--muted); color: var(--text); }
 .tgl:has(input:checked) { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: var(--text); }
 .tgl:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* The connections, a tab of Settings: their own parts as smaller tabs, their own Save. */
+#connHost .dtabs { position: static; margin: 4px 0 12px; padding: 0 0 6px; }
+#connHost .conn-foot { display: flex; justify-content: flex-end; gap: 8px; margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }

@@ -1,6 +1,13 @@
   // ---------------------------------------------------------------------------------------------
   // Settings
   // ---------------------------------------------------------------------------------------------
+  // The server's connections live in a tab of Settings: their parts moved there first, before
+  // anything below looks for them.
+  (function () {
+    const form = $('dlgConn').querySelector('form');
+    [...form.childNodes].forEach((n) => { if (!(n.nodeType === 1 && n.tagName === 'H2')) $('connHost').append(n); });
+    $('dlgConn').remove();
+  })();
   function renderSettingsNotes(r) {
     if (onServer()) {
       const w = $('setServerWhere');
@@ -52,6 +59,7 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = true;
     $('setTabServer').hidden = !(onServer() && S.info.user && S.info.user.local);
+    $('setTabConn').hidden = $('setTabServer').hidden;
     $('setApproval').checked = S.settings.requireApproval === 'on';
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
@@ -76,12 +84,13 @@
     document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
     document.querySelector('#dlgSettings .dlg').scrollTop = 0;
-    // Info saves nothing: only Close there.
+    // Info saves nothing: only Close there. The connections have their own Save and Cancel.
     const view = name === 'about';
-    $('setSave').hidden = view;
+    $('setSave').hidden = view || name === 'conn';
+    document.querySelector('#dlgSettings .dlg-foot').hidden = name === 'conn';
     document.querySelector('#dlgSettings .dlg-foot button[value=cancel]').textContent = view ? t('Close') : t('Cancel');
   }
-  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.stab === 'conn') { openConn(); return; } setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
 
   // Status: every part the server depends on, tried now, in one list; a part to set up opens
   // its tab in Server connections.
@@ -278,7 +287,7 @@
       const x = r.secrets[k];
       $('cs_' + k).value = '';
       $('cs_' + k).placeholder = x.saved ? '••••••••' : '';
-      document.querySelector('#dlgConn [data-drop=' + k + ']').hidden = !x.saved;
+      document.querySelector('#connHost [data-drop=' + k + ']').hidden = !x.saved;
       $('cx_' + k).textContent = x.saved ? (x.readable ? t('Set here on {0}.', day(x.saved)) : t('Set here, but the server cannot read it any more (another secrets/app_key): enter it again.'))
         : x.file ? t('From {0}.', x.fileName) : t('Not set.');
       $('cx_' + k).className = x.saved && !x.readable ? 'err' : '';
@@ -301,7 +310,7 @@
     line('connGraph', r.problems.graph, 'Ready: publishing goes into SharePoint.');
     line('connPages', r.problems.pages, 'Ready: the add-in\'s files can be uploaded from here.');
     // Each tab's dot: ready, or something to set.
-    document.querySelectorAll('#dlgConn [data-cdot]').forEach((d) => { d.className = 'dot ' + (r.problems[d.dataset.cdot] ? 'warn' : 'good'); });
+    document.querySelectorAll('#connHost [data-cdot]').forEach((d) => { d.className = 'dot ' + (r.problems[d.dataset.cdot] ? 'warn' : 'good'); });
     connDrop = {}; connCa = undefined; connCaReading = null;
     $('connErr').textContent = '';
   }
@@ -316,7 +325,7 @@
   function connScriptPoll() {
     clearTimeout(connScriptTimer);
     connScriptTimer = setTimeout(async () => {
-      if (!$('dlgConn').open) return;
+      if (!connShown()) return;
       let r;
       try { r = await api('setup/status'); } catch (e) { return connScriptPoll(); }
       const out = $('connScriptNote');
@@ -345,7 +354,7 @@
     $('connSpWarn').textContent = personalNow() ? t('A personal OneDrive: only its owner can give the server access, and it goes with that person. Choose a folder in a SharePoint site.') : '';
   }
   $('connSpSet').addEventListener('click', async () => {
-    const out = document.querySelector('#dlgConn [data-ctestout="graph"]');
+    const out = document.querySelector('#connHost [data-ctestout="graph"]');
     out.className = 'where'; out.textContent = '';
     const p = parseSpAddress($('connSpUrl').value);
     if (!$('connSpUrl').value.trim() || !p.folder || !/^[A-Za-z0-9.-]+:\/(sites|teams|personal)\/[^:/]+:$|^root$/.test(p.site)) {
@@ -396,7 +405,7 @@
       $('connScriptWizard').hidden = !/first/i.test(err.message);
     }
   });
-  $('connScriptWizard').addEventListener('click', () => { $('dlgConn').close(); wizOpen(Math.max(0, wizSteps().indexOf('folder'))); });
+  $('connScriptWizard').addEventListener('click', () => { $('dlgSettings').close(); wizOpen(Math.max(0, wizSteps().indexOf('folder'))); });
 
   // The add-in's address that follows from the Pages project.
   function cfAddress() {
@@ -406,19 +415,27 @@
   $('cn_cfProject').addEventListener('input', cfAddress);
 
   // Server connections in tabs: one part at a time.
-  function connTestsClear() { document.querySelectorAll('#dlgConn [data-ctestout]').forEach((o) => { o.textContent = ''; o.className = 'where'; }); }
+  function connTestsClear() { document.querySelectorAll('#connHost [data-ctestout]').forEach((o) => { o.textContent = ''; o.className = 'where'; }); }
   function connTab(name) {
-    document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => { b.classList.toggle('active', b.dataset.ctab === name); b.setAttribute('aria-selected', b.dataset.ctab === name); });
-    document.querySelectorAll('#dlgConn [data-cpane]').forEach((p) => { p.hidden = p.dataset.cpane !== name; });
+    document.querySelectorAll('#connHost [data-ctab]').forEach((b) => { b.classList.toggle('active', b.dataset.ctab === name); b.setAttribute('aria-selected', b.dataset.ctab === name); });
+    document.querySelectorAll('#connHost [data-cpane]').forEach((p) => { p.hidden = p.dataset.cpane !== name; });
   }
-  document.querySelectorAll('#dlgConn [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
+  document.querySelectorAll('#connHost [data-ctab]').forEach((b) => b.addEventListener('click', () => connTab(b.dataset.ctab)));
+  // The connections: a tab of Settings (they were a dialog of their own). Opened from anywhere:
+  // Settings opens on it.
+  const connShown = () => $('dlgSettings').open && !$('connHost').hidden;
   async function openConn(tab) {
     $('setErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab(tab || 'ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('setErr').textContent = t(err.message); }
+    try {
+      renderConnections(await api('connections/get'));
+      if (!$('dlgSettings').open) $('btnSettings').click();
+      setTab('conn'); connTab(tab || 'ad'); connTestsClear();
+    } catch (err) { $('setErr').textContent = t(err.message); }
   }
-  // Back from Server connections to Status: checked again, with what was just changed.
-  $('dlgConn').addEventListener('close', () => { if ($('dlgSettings').open && !document.querySelector('#dlgSettings [data-spane=server]').hidden) runHealth(); });
-  $('dlgConn').addEventListener('click', (e) => {
+  // Back from the connections to Status: checked again, with what was just changed.
+  function connBack() { setTab('server'); runHealth(); }
+  $('connCancel').addEventListener('click', connBack);
+  $('connHost').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
     if (!b) return;
     connDrop[b.dataset.drop] = true; b.hidden = true;
@@ -426,7 +443,7 @@
   });
   // By hand: the server's certificate (made now if there is none) to upload to the app in Entra.
   $('connCertGet').addEventListener('click', async () => {
-    const out = document.querySelector('#dlgConn [data-ctestout="graph"]');
+    const out = document.querySelector('#connHost [data-ctestout="graph"]');
     out.className = 'where'; out.textContent = '';
     try {
       const r = await api('connections/cert');
@@ -465,12 +482,12 @@
   $('connSave').addEventListener('click', async (e) => {
     e.preventDefault();
     $('connErr').textContent = '';
-    try { await connSaveNow(); $('dlgConn').close(); toast(t('Server connections saved.')); }
+    try { await connSaveNow(); connBack(); toast(t('Server connections saved.')); }
     catch (err) { $('connErr').textContent = t(err.message); }
   });
   // Detect: the domain from the domain controller (saved first, with its CA), into the field.
   $('connDetect').addEventListener('click', async () => {
-    const out = document.querySelector('#dlgConn [data-ctestout="ad"]');
+    const out = document.querySelector('#connHost [data-ctestout="ad"]');
     out.className = 'where'; out.textContent = t('Asking the domain controller…'); $('connDetect').disabled = true; $('connErr').textContent = '';
     try {
       renderConnections(await connSaveNow());
@@ -482,8 +499,8 @@
     finally { $('connDetect').disabled = false; }
   });
   // Test: saved first, so what is tested is what the dialog shows; the answer next to the button.
-  document.querySelectorAll('#dlgConn [data-ctest]').forEach((b) => b.addEventListener('click', async () => {
-    const out = document.querySelector('#dlgConn [data-ctestout="' + b.dataset.ctest + '"]');
+  document.querySelectorAll('#connHost [data-ctest]').forEach((b) => b.addEventListener('click', async () => {
+    const out = document.querySelector('#connHost [data-ctestout="' + b.dataset.ctest + '"]');
     out.className = 'where'; out.textContent = t('Testing…'); b.disabled = true; $('connErr').textContent = '';
     try {
       renderConnections(await connSaveNow());
