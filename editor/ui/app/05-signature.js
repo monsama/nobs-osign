@@ -185,8 +185,28 @@
   addEventListener('resize', () => closeMenu());
   document.addEventListener('scroll', () => closeMenu(), true);
 
-  $('btnNew').addEventListener('click', () => addSig());
-  $('btnNew2').addEventListener('click', () => addSig());
+  // New signature: first the layout, each shown with the sample values.
+  function openTemplates() {
+    const silhouette = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="100"><rect width="80" height="100" fill="#e3e7ee"/><circle cx="40" cy="38" r="17" fill="#b9c2d0"/><path d="M8 100c2-24 16-34 32-34s30 10 32 34z" fill="#b9c2d0"/></svg>');
+    const values = {};
+    S.config.fields.forEach((f) => { values[f.key] = f.sample || ''; });
+    $('tplList').replaceChildren(...TEMPLATES.map((tp) => {
+      const keys = core.placeholdersIn(tp.html);
+      keys.forEach((k) => { if (!(k in values)) values[k] = core.fieldFor(k).sample || ''; });
+      const html = core.render(core.compile(sanitize(tp.html.replace(/photos\/@@sAMAccountName\.jpg/g, silhouette)), scratchDoc), values, { assetBase: '/' });
+      const frame = el('iframe', { tabindex: '-1', 'aria-hidden': 'true', sandbox: '' });
+      frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:14px 16px;font-family:Arial,sans-serif;font-size:10pt;color:#222}p{margin:0}table{border-collapse:collapse}</style></head><body>' + html + '</body></html>';
+      const b = el('button', { type: 'button', class: 'tpl-card', 'data-tpl': tp.key },
+        frame, el('span', { class: 'tpl-name' }, t(tp.name)), el('span', { class: 'tpl-text' }, t(tp.text)));
+      b.addEventListener('click', () => { $('dlgTpl').close(); addSig(null, tp.html); });
+      return b;
+    }));
+    $('dlgTpl').showModal();
+    $('tplList').querySelector('.tpl-card').focus();
+  }
+  $('btnNew').addEventListener('click', openTemplates);
+  $('btnNew2').addEventListener('click', openTemplates);
+  $('btnImport2').addEventListener('click', () => $('btnImportOpen').click());
   $('btnDup').addEventListener('click', () => { flushSource(); const s = sig(); if (s) addSig(s); });
   $('btnDel').addEventListener('click', async () => {
     const s = sig(); if (!s || !(await ask(t('Delete the signature "{0}"? It goes from Outlook with the next publish.', s.name), t('Delete'), true))) return;

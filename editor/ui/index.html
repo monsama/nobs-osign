@@ -20,6 +20,7 @@
     <span id="stDraft" class="status"></span>
     <button type="button" id="stPub" class="status pub"></button>
   </div>
+  <button type="button" id="btnFind" class="find-btn" title="Search signatures, views, fields and photos (Ctrl+K)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="find-label">Search…</span><kbd>Ctrl K</kbd></button>
   <div class="spacer"></div>
   <!-- As in NOBS SQL Editor: the main action first, then the tools, then, always at the right,
        Settings, the coffee and who is signed in. -->
@@ -261,10 +262,13 @@
       <p class="hint" data-th="photosImport">Photos from CI-Sign come along with <b>Import templates</b> (tick <i>Photos per person</i>).</p>
     </section>
 
-    <section id="viewEmpty" class="view empty" hidden>
-      <h1>No signatures yet</h1>
-      <p>Start with a new one, or load what is published.</p>
-      <button id="btnNew2" class="primary">New signature</button>
+    <section id="viewEmpty" class="view" hidden>
+      <div class="empty-state">
+        <span class="es-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 15c2-6 4-9 5-9 2 0-1 9 1 9 1 0 2-3 3-3s0 3 2 3"/></svg></span>
+        <h1>No signatures yet</h1>
+        <p>Start with a layout, or import templates you already have (CI-Sign, classic Outlook).</p>
+        <div class="es-actions"><button id="btnNew2" class="primary">New signature</button><button type="button" id="btnImport2">Import templates</button></div>
+      </div>
     </section>
   </main>
 </div>
@@ -361,6 +365,7 @@
       <tr><td><kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Publish…</td></tr>
       <tr><td><kbd>Ctrl</kbd> + <kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd></td><td>Bold, italic, underline (in the design view)</td></tr>
       <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd> / <kbd>Y</kbd></td><td>Undo, redo</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Search: go to a signature, view, field or photo</td></tr>
       <tr><td><kbd>?</kbd></td><td>This list (outside a field)</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Close a dialog</td></tr>
       <tr><td><kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd></td><td>Back, forward (also the mouse's side buttons)</td></tr>
@@ -944,6 +949,20 @@
     <div id="phList" class="img-list"></div>
     <p id="phErr" class="err"></p>
     <div class="dlg-foot"><a href="#" id="phManage">Manage photos</a><span class="spacer"></span><button value="cancel" class="ghost">Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="dlgTpl">
+  <form method="dialog" class="dlg wide">
+    <h2>New signature</h2>
+    <p class="lead">Start from a layout: the texts, fields, colours and everything else can be changed afterwards.</p>
+    <div id="tplList" class="tpl-list"></div>
+    <div class="dlg-foot"><span class="spacer"></span><button value="cancel" class="ghost">Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="dlgFind" class="find" aria-label="Search">
+  <form method="dialog" class="dlg">
+    <input id="findInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search signatures, views, fields, photos…" aria-controls="findList">
+    <ul id="findList" class="find-list" role="listbox"></ul>
   </form>
 </dialog>
 <dialog id="dlgAsk" class="ask" aria-labelledby="askText">

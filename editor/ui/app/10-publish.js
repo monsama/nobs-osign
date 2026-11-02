@@ -50,12 +50,57 @@
       const inField = e.target && e.target.ownerDocument !== ddoc && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
       if (!inField) { e.preventDefault(); histStep(k === 'y' || e.shiftKey ? 1 : -1); return; }
     }
+    if (mod && !e.shiftKey && !e.altKey && k === 'k' && !(inDialog && inDialog.id !== 'dlgFind')) { e.preventDefault(); openFind(); return; }
     if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); toast(t('Draft saved.')); return; }
     if (mod && e.key === 'Enter' && !inDialog) { e.preventDefault(); $('btnPublish').click(); return; }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable) || (e.target && e.target.ownerDocument === ddoc);
     if (e.key === '?' && !mod && !typing && !inDialog) { e.preventDefault(); $('dlgKeys').showModal(); }
   }
   document.addEventListener('keydown', onKeys);
+
+  // Ctrl+K: one box to go anywhere. Signatures, the views, the dialogs, the fields, the photos.
+  let findItems = [], findAt = 0;
+  function findSources() {
+    const view = (v) => () => document.querySelector('.nav-list a[data-view="' + v + '"]').click();
+    const items = [];
+    S.config.signatures.forEach((s) => items.push({ kind: t('Signature'), label: s.name || t('(no name)'), go: () => openSig(s.id) }));
+    [[t('Fields'), view('fields')], [t('Add-in'), view('options')], [t('Users'), view('users')], [t('Photos'), view('photos')],
+      [t('History'), () => $('navHistory').click()], [t('Settings'), () => $('btnSettings').click()], [t('New signature'), () => $('btnNew').click()],
+      [t('Import templates'), () => $('btnImportOpen').click()], [t('Publish…'), () => $('btnPublish').click()], [t('Keyboard shortcuts'), () => $('dlgKeys').showModal()]]
+      .forEach(([label, go]) => items.push({ kind: t('Go to'), label, go }));
+    if (!$('btnWizard').hidden) items.push({ kind: t('Go to'), label: t('Setup assistant'), go: () => $('btnWizard').click() });
+    S.config.fields.forEach((f) => items.push({ kind: t('Field'), label: (f.label || f.key) + (f.label && f.label !== f.key ? ' · @@' + f.key : ''), go: () => { view('fields')(); setTimeout(() => {
+      const row = [...document.querySelectorAll('#viewFields tr')].find((tr) => [...tr.querySelectorAll('input')].some((i) => i.value === f.key));
+      if (row) { row.scrollIntoView({ block: 'center' }); const i = row.querySelector('input'); if (i) i.focus(); }
+    }, 50); } }));
+    (typeof photoItems !== 'undefined' ? photoItems : []).forEach((p) => items.push({ kind: t('Photo'), label: p.name, go: () => { view('photos')(); $('photosFilter').value = p.name; $('photosFilter').dispatchEvent(new Event('input')); } }));
+    return items;
+  }
+  function findShow() {
+    const q = $('findInput').value.trim().toLowerCase();
+    const all = findSources();
+    findItems = (q ? all.filter((x) => (x.label + ' ' + x.kind).toLowerCase().includes(q)) : all.filter((x) => x.kind !== t('Field') && x.kind !== t('Photo'))).slice(0, 40);
+    findAt = Math.min(findAt, Math.max(0, findItems.length - 1));
+    $('findList').replaceChildren(...(findItems.length ? findItems.map((x, i) => el('li', { role: 'option', 'aria-selected': String(i === findAt), class: i === findAt ? 'on' : '',
+      onmousedown: (e) => { e.preventDefault(); findGo(i); }, onmousemove: () => { if (findAt !== i) { findAt = i; findShow(); } } },
+      el('span', { class: 'fk' }, x.kind), el('span', { class: 'fl' }, x.label)))
+      : [el('li', { class: 'none' }, emptyState('search', t('Nothing found.'), t('Try another word: a signature, a view, a field or a photo.')))]));
+    const on = $('findList').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+  function findGo(i) { const x = findItems[i]; if (!x) return; $('dlgFind').close(); x.go(); }
+  function openFind() {
+    if ($('dlgFind').open) { $('findInput').select(); return; }
+    $('findInput').value = ''; findAt = 0; findShow();
+    $('dlgFind').showModal(); $('findInput').focus();
+  }
+  $('btnFind').addEventListener('click', openFind);
+  $('findInput').addEventListener('input', () => { findAt = 0; findShow(); });
+  $('findInput').addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); findAt = Math.min(findItems.length - 1, findAt + 1); findShow(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); findAt = Math.max(0, findAt - 1); findShow(); }
+    else if (e.key === 'Enter') { e.preventDefault(); findGo(findAt); }
+  });
+  $('dlgFind').addEventListener('click', (e) => { if (e.target === $('dlgFind')) $('dlgFind').close(); });
   $('keysBtn').addEventListener('click', () => $('dlgKeys').showModal());
   $('stPub').addEventListener('click', () => $('btnPublish').click());
   $('btnPublish').addEventListener('click', async () => {
@@ -282,7 +327,7 @@
     const tb = $('historyRows'); tb.replaceChildren(el('tr', null, el('td', { colspan: 5 }, t('Loading…'))));
     let r;
     try { r = await api('history/list'); } catch (err) { tb.replaceChildren(); $('historyErr').textContent = t(err.message); return; }
-    if (!r.versions.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted' }, t('Nothing published yet.')))); return; }
+    if (!r.versions.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5 }, emptyState('history', t('Nothing published yet.'), t('Each version you publish is kept here, to compare and to go back to.'), [t('Publish…'), () => { $('dlgHistory').open && $('dlgHistory').close(); $('btnPublish').click(); }])))); return; }
     tb.replaceChildren(...r.versions.map((v, i) => el('tr', null,
       el('td', null, new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB'), i === 0 ? el('span', { class: 'badge on', style: 'margin-left:6px' }, t('current')) : null),
       el('td', null, v.by), el('td', null, v.message || '–'), el('td', null, String(v.signatures)),

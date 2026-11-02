@@ -187,6 +187,20 @@
   }
 
   // A campaign's days, as words; '' when it has none.
+  // Nothing there yet, said the same way everywhere: an icon, what is missing, the next step.
+  const ES_ICON = {
+    photo: '<circle cx="12" cy="9" r="4"/><path d="M4 21c1-5 4-7 8-7s7 2 8 7"/>',
+    history: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'
+  };
+  function emptyState(icon, title, text, action) {
+    const ic = el('span', { class: 'es-icon', 'aria-hidden': 'true' });
+    ic.innerHTML = '<svg viewBox="0 0 24 24">' + ES_ICON[icon] + '</svg>';
+    return el('div', { class: 'empty-state' }, ic,
+      el('p', { class: 'es-title' }, title), text ? el('p', null, text) : null,
+      action ? el('div', { class: 'es-actions' }, el('button', { type: 'button', onclick: action[1] }, action[0])) : null);
+  }
+
   function campaignText(s) {
     if (!core.isCampaign(s)) return '';
     return s.validFrom && s.validUntil ? t('{0} to {1}', day(s.validFrom), day(s.validUntil)) : s.validFrom ? t('from {0}', day(s.validFrom)) : t('until {0}', day(s.validUntil));
@@ -345,6 +359,7 @@
     $('sigUntil').value = s.validUntil || '';
     $('campaignSummary').textContent = campaignText(s) || t('always');
     loadDesign(s.html);
+    document.querySelectorAll('.field-pick').forEach(fillFieldSelect);
     $('source').value = prettyHtml(s.html);
     histReset(s);
     schedulePreview();
@@ -362,11 +377,46 @@
     '<p style="margin:0;font-family:Arial,sans-serif;font-size:9pt"><a href="mailto:@@mail" style="color:#2f6fde">@@mail</a></p>'
   ].join('\n');
 
-  function addSig(from) {
+  // The layouts a new signature starts from (New signature): all with inline styles and tables only,
+  // as mail programs show them, and at most 600 pixels wide.
+  const P = (style, inner) => '<p style="margin:0;font-family:Arial,sans-serif;' + style + '">' + inner + '</p>';
+  const TEMPLATES = [
+    { key: 'classic', name: 'Classic', text: 'Text lines, one below the other.', html: STARTER },
+    { key: 'photo', name: 'With photo', text: 'The person\'s photo beside the text.', html: [
+      '<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">',
+      '<tr>',
+      '<td style="vertical-align:top;padding:0 14px 0 0"><img src="photos/@@sAMAccountName.jpg" width="80" height="100" alt="" style="border:0;display:block"></td>',
+      '<td style="vertical-align:top;padding:0 0 0 14px;border-left:2px solid #2f6fde">',
+      P('font-size:11pt;color:#222222', '<b>@@givenName @@sn</b>'),
+      P('font-size:9pt;color:#555555', '@@title'),
+      P('font-size:9pt;color:#555555', '@@company'),
+      P('font-size:9pt', '&nbsp;'),
+      P('font-size:9pt;color:#222222', 'T @@telephoneNumber'),
+      P('font-size:9pt;color:#222222', 'M @@mobile'),
+      P('font-size:9pt', '<a href="mailto:@@mail" style="color:#2f6fde;text-decoration:none">@@mail</a>'),
+      '</td>',
+      '</tr>',
+      '</table>'].join('\n') },
+    { key: 'compact', name: 'Compact', text: 'Three lines, for replies too.', html: [
+      P('font-size:10pt;color:#222222', '<b>@@givenName @@sn</b> <span style="color:#999999">|</span> @@title'),
+      P('font-size:9pt;color:#555555', '@@company <span style="color:#999999">|</span> @@telephoneNumber'),
+      P('font-size:9pt', '<a href="mailto:@@mail" style="color:#2f6fde;text-decoration:none">@@mail</a>')].join('\n') },
+    { key: 'accent', name: 'Accent', text: 'The name large, a coloured line, the company below.', html: [
+      P('font-size:10pt;color:#222222', 'Freundliche Grüsse'),
+      P('font-size:10pt', '&nbsp;'),
+      P('font-size:13pt;color:#2f6fde', '<b>@@givenName @@sn</b>'),
+      P('font-size:9pt;color:#555555', '@@title'),
+      '<table cellpadding="0" cellspacing="0" border="0" width="260" style="border-collapse:collapse"><tr><td style="border-bottom:2px solid #2f6fde;font-size:1px;line-height:1px;padding:4px 0 0">&nbsp;</td></tr></table>',
+      P('font-size:9pt;color:#222222;padding-top:6px', '<b>@@company</b>'),
+      P('font-size:9pt;color:#555555', '@@streetAddress, @@postalCode @@l'),
+      P('font-size:9pt;color:#555555', 'T @@telephoneNumber &nbsp;·&nbsp; <a href="mailto:@@mail" style="color:#2f6fde;text-decoration:none">@@mail</a>')].join('\n') }
+  ];
+
+  function addSig(from, html) {
     const name = from ? from.name + ' ' + t('(copy)') : (S.config.signatures.length ? t('New signature') : t('Main signature'));
     const s = from ? JSON.parse(JSON.stringify(from)) : core.newSignature('', name);
     s.id = newId(name); s.name = name;
-    if (from) { s.defaultNew = false; s.defaultReply = false; } else { s.html = STARTER; s.defaultNew = !S.config.signatures.some((x) => x.defaultNew); s.defaultReply = !S.config.signatures.some((x) => x.defaultReply); }
+    if (from) { s.defaultNew = false; s.defaultReply = false; } else { s.html = html || STARTER; addMissingFields([s]); s.defaultNew = !S.config.signatures.some((x) => x.defaultNew); s.defaultReply = !S.config.signatures.some((x) => x.defaultReply); }
     S.config.signatures.push(s);
     changed();
     openSig(s.id);
