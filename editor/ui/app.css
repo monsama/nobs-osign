@@ -774,3 +774,7 @@ button.danger-btn { background: #c62828; border-color: #c62828; color: #fff; }
 .sig-list li + li, .nav-list li + li { margin-top: 2px; }
 .sig-list li a.active, .nav-list a.active, .sig-list li a.picked { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .sig-list li a.active:hover, .nav-list a.active:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+/* Photos: a card's star makes it the placeholder; the image list in the placeholder's row. */
+.photo-list .pf button.pd-use { flex: none; width: var(--h); padding: 0; font-size: 15px; color: var(--muted); }
+.photo-list .pf button.pd-use:hover { color: var(--accent); }
+.photo-default .pd-btns select { width: auto; max-width: 240px; }

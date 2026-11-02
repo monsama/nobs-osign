@@ -1023,3 +1023,24 @@ test('several signatures: picked with Ctrl / Shift + click, deleted together (as
   await page.click('#askOk');
   await namesAre(before.filter((n) => !/^Multi /.test(n)));
 });
+
+test('a photo there is already, or an image of the signatures, as the placeholder photo', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  // A real photo there (the fixture's mustera.jpg is only a few bytes).
+  const real = await page.evaluate(async () => { const c = document.createElement('canvas'); c.width = 300; c.height = 240; const g = c.getContext('2d'); g.fillStyle = '#4a7'; g.fillRect(0, 0, 300, 240); return c.toDataURL('image/png').split(',')[1]; });
+  fs.writeFileSync(path.join(folder, 'photos', 'echt.png'), Buffer.from(real, 'base64'));
+  await page.click('.nav-list a[data-view=photos]');
+  await page.waitForSelector('#photoList button[aria-label="Use echt.png as the placeholder photo"]');
+  await page.click('#photoList button[aria-label="Use echt.png as the placeholder photo"]');
+  await page.waitForFunction(() => !document.querySelector('#photoDefaultImg').hidden);
+  assert.equal(fs.readFileSync(path.join(folder, 'photos', '_default.jpg')).subarray(0, 3).toString('hex'), 'ffd8ff');
+  // Another one instead: asked first.
+  await page.click('#photoList button[aria-label="Use echt.png as the placeholder photo"]');
+  await page.waitForSelector('#dlgAsk[open]');
+  await page.click('#askCancel');
+  await page.click('#photoDefaultOff');
+  await page.click('#askOk');
+  await page.waitForFunction(() => document.querySelector('#photoDefaultImg').hidden);
+  fs.rmSync(path.join(folder, 'photos', 'echt.png'));
+});
