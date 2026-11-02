@@ -11,6 +11,21 @@
     if (on) S.config.signatures.forEach((x) => { if (x !== s && x[flag] && audienceText(x) === audienceText(s)) x[flag] = false; });
     s[flag] = on; changed();
   }
+  // The panels of When and Who gets it: one at a time, closed by a click elsewhere or Esc.
+  const propPanels = () => document.querySelectorAll('.sig-props > details');
+  propPanels().forEach((d) => d.addEventListener('toggle', () => {
+    if (!d.open) return;
+    propPanels().forEach((o) => { if (o !== d) o.open = false; });
+    // Kept inside the window: moved left as far as it would stick out on the right.
+    const pop = d.querySelector('.pop'); pop.style.left = '0px';
+    const over = pop.getBoundingClientRect().right - (document.documentElement.clientWidth - 16);
+    if (over > 0) pop.style.left = -Math.min(over, d.getBoundingClientRect().left - 16) + 'px';
+  }));
+  document.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.sig-props > details') || e.target.closest('.suggest')) return;
+    propPanels().forEach((d) => { d.open = false; });
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') propPanels().forEach((d) => { if (d.open) { d.open = false; d.querySelector('summary').focus(); } }); });
   $('sigNew').addEventListener('change', () => setDefault('defaultNew', $('sigNew').checked));
   $('sigReply').addEventListener('change', () => setDefault('defaultReply', $('sigReply').checked));
   // A campaign: from / until.

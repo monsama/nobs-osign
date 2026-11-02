@@ -835,3 +835,26 @@ table.fields .ph { gap: 4px; }
 /* The connections, a tab of Settings: their own parts as smaller tabs, their own Save. */
 #connHost .dtabs { position: static; margin: 4px 0 12px; padding: 0 0 6px; }
 #connHost .conn-foot { display: flex; justify-content: flex-end; gap: 8px; margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* The signature's settings in one line: switches, then When and Who gets it as chips that open a
+   panel below them. */
+.sig-props { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 10px 0 14px; }
+.sig-props > label.check { margin: 0; min-height: var(--h); }
+.sig-props label.check input[type=checkbox] { appearance: none; -webkit-appearance: none; width: 30px; height: 18px; border-radius: 9px; background: var(--line); position: relative; cursor: pointer; flex: none; transition: background .15s; margin: 0; }
+.sig-props label.check input[type=checkbox]::before { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.sig-props label.check input[type=checkbox]:checked { background: var(--accent-btn); }
+.sig-props label.check input[type=checkbox]:checked::before { transform: translateX(12px); }
+.sig-props label.check input[type=checkbox]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.props-sep { width: 1px; height: 20px; background: var(--line); }
+.sig-props > details { position: relative; margin: 0; }
+.sig-props > details > summary { list-style: none; display: inline-flex; align-items: center; gap: 4px; height: var(--h); padding: 0 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); cursor: pointer; font-size: 13px; white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+.sig-props > details > summary::-webkit-details-marker { display: none; }
+.sig-props > details > summary::after { content: ""; width: 7px; height: 7px; margin-left: 6px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: translateY(-2px) rotate(45deg); flex: none; }
+.sig-props > details[open] > summary { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.sig-props > details > summary:hover { border-color: var(--muted); }
+.sig-props .chip-k { color: var(--muted); }
+.sig-props .pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: min(780px, 72vw); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 14px 16px; }
+.sig-props .pop .seg { margin-top: 0; }
+.sig-props .pop .grid3 { margin-top: 0; }
+.sig-props > details.audience { flex-basis: auto; margin-top: 0; }
+.sig-props > details.audience > summary { color: var(--text); }

@@ -79,17 +79,21 @@
         <label class="check"><input type="checkbox" id="sigNew"> Default for new mail</label>
         <label class="check"><input type="checkbox" id="sigReply"> Default for replies &amp; forwards</label>
         <label class="check"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines <button type="button" class="help" data-help="hRemoveEmpty" aria-label="Help">?</button></label>
+<span class="props-sep" aria-hidden="true"></span>
         <details class="audience campaign" id="sigCampaign">
-          <summary>When: <span id="campaignSummary">always</span></summary>
+          <summary><span class="chip-k">When:</span> <span id="campaignSummary">always</span></summary>
+          <div class="pop">
           <div class="grid3">
             <label>From <small>(the first day, included)</small><input id="sigFrom" type="date"></label>
             <label>Until <small>(the last day, included)</small><input id="sigUntil" type="date"></label>
           </div>
           <p class="hint">A campaign: on those days only, and as a default it wins over the others, for whoever it is open to. Before and after,
             the usual signatures again, by themselves.</p>
+          </div>
         </details>
         <details class="audience" id="sigAudience">
-          <summary>Who gets it: <span id="audienceSummary">not assigned</span></summary>
+          <summary><span class="chip-k">Who gets it:</span> <span id="audienceSummary">not assigned</span></summary>
+          <div class="pop">
           <div class="seg" role="radiogroup" aria-label="Who gets it">
             <label><input type="radio" name="audMode" value="all"> Entire organization</label>
             <label><input type="radio" name="audMode" value="some"> Specific groups, departments or domains</label>
@@ -100,6 +104,7 @@
             <p class="hint">Any one of a kind is enough (nested groups count); with several kinds, a user has to match each kind.</p>
           </div>
           <p id="audNone" class="hint" hidden>Nobody gets it until you choose: kept, but not used (a new or imported signature starts so).</p>
+          </div>
         </details>
       </div>
 

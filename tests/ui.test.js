@@ -466,6 +466,8 @@ test('campaigns, dark mode, comparing versions, the audit log, the backup and fo
   assert.match(await page.textContent('#campaignSummary'), /2020/);
   await page.fill('#sigFrom', ''); await page.fill('#sigUntil', '');
   await page.waitForFunction(() => !/Campaign/.test(document.querySelector('#sigList').textContent));
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#sigCampaign:not([open])');
   // Dark mode in the preview.
   await page.click('label.tgl:has(#pvDark)');
   await page.waitForFunction(() => /invert\(1\)/.test(document.querySelector('#preview').srcdoc));
