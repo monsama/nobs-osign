@@ -46,7 +46,8 @@
         <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
       </span>
     </div>
-    <ul id="sigList" class="sig-list"></ul>
+    <div id="sigPicked" class="sig-picked" hidden><span id="sigPickedN"></span><span class="spacer"></span><button type="button" id="sigPickedDel" class="small danger">Delete…</button><button type="button" id="sigPickedNone" class="small ghost" title="Let go of the selection (Esc)">Cancel</button></div>
+    <ul id="sigList" class="sig-list" aria-multiselectable="true"></ul>
     </section>
     <section class="side-sect" aria-labelledby="sideManage">
     <div class="side-head"><span id="sideManage"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Manage</span></div>

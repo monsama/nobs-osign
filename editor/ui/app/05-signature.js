@@ -36,8 +36,22 @@
     m.hidden = true; m.textContent = '';
     if (closeMenu.back && document.contains(closeMenu.back)) closeMenu.back.focus();
   }
+  $('sigPickedDel').addEventListener('click', () => deletePicked());
+  $('sigPickedNone').addEventListener('click', () => pickClear());
   function sigMenu(s, x, y) {
     closeMenu();
+    // On one of several picked: what is done with all of them.
+    if (picked.size > 1 && picked.has(s.id)) {
+      const m0 = $('ctxMenu');
+      const b = (label, run, danger) => { const x0 = el('button', { type: 'button', role: 'menuitem', class: danger ? 'danger' : '' }, el('span', { class: 'check', 'aria-hidden': 'true' }), label); x0.addEventListener('click', () => { closeMenu.back = null; closeMenu(); run(); }); return x0; };
+      closeMenu.back = document.activeElement;
+      m0.replaceChildren(b(t('Delete {0} signatures…', picked.size), deletePicked, true), el('hr'), b(t('Cancel the selection'), pickClear));
+      m0.hidden = false;
+      const r0 = m0.getBoundingClientRect();
+      m0.style.left = Math.min(x, innerWidth - r0.width - 8) + 'px'; m0.style.top = Math.min(y, innerHeight - r0.height - 8) + 'px';
+      m0.querySelector('button').focus();
+      return;
+    }
     closeMenu.back = document.activeElement;
     const m = $('ctxMenu'), i = S.config.signatures.indexOf(s), n = S.config.signatures.length;
     const item = (label, run, opts) => {

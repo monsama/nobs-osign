@@ -206,6 +206,12 @@
       setTimeout(poll, 4000);
     } catch (e) { toast(t(e.message), true); } finally { btn.disabled = false; }
   }
+  // After the add-in's files were made or uploaded: what the server now says about them, in the
+  // status bar (no more "Add-in files from …") and the status list, without reloading the page.
+  async function afterAddinChange() {
+    try { S.info = await api('info'); renderStatusBar(); } catch (e) { /* as it was */ }
+    if ($('dlgSettings').open) runHealth();
+  }
   // The add-in's files made again for this version (and uploaded, with Cloudflare Pages).
   async function addinRemake(btn) {
     btn.disabled = true;
@@ -214,8 +220,7 @@
       if (S.info.features.pagesUpload) await api('addin/upload');
       toast(t('Add-in files made for {0}.', r.version) + (S.info.features.pagesUpload ? ' ' + t('Uploaded to Cloudflare Pages.') : '') + (r.note ? ' ' + t(r.note) : ''), !!r.note);
     } catch (e) { toast(t(e.message), true); }
-    try { S.info = await api('info'); renderStatusBar(); } catch (e) { /* as it was */ }
-    runHealth();
+    await afterAddinChange();
   }
   $('setSave').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -251,6 +256,7 @@
       // Made, but without the folder's ids: said, so they are made again once SharePoint answers.
       if (r.note) $('setErr').textContent = t(r.note);
     } catch (err) { $('setErr').textContent = t(err.message); }
+    await afterAddinChange();
   });
 
   // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
@@ -493,6 +499,7 @@
     try {
       const r = await api('addin/upload');
       out.textContent = t('Uploaded to Cloudflare Pages ({0} of {1} files new): {2}', r.uploaded, r.files, r.url);
+      afterAddinChange();
       return true;
     } catch (err) { out.textContent = ''; throw err; } finally { btn.disabled = false; }
   }

@@ -196,7 +196,7 @@
     const ul = $('sigList'); ul.textContent = '';
     if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, t('None yet')));
     S.config.signatures.forEach((s) => {
-      const a = el('a', { href: '#', class: S.view === 'sig' && s.id === S.sigId ? 'active' : '', 'aria-current': S.view === 'sig' && s.id === S.sigId ? 'page' : null, onclick: (e) => { e.preventDefault(); openSig(s.id); } },
+      const a = el('a', { href: '#', class: (S.view === 'sig' && s.id === S.sigId ? 'active' : '') + (picked.has(s.id) ? ' picked' : ''), 'aria-current': S.view === 'sig' && s.id === S.sigId ? 'page' : null, 'aria-selected': picked.size ? String(picked.has(s.id)) : null, onclick: (e) => { e.preventDefault(); sigClick(s, e); } },
         s.name || t('(no name)'),
         el('div', { class: 'badges' },
           s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
@@ -207,12 +207,57 @@
       a.addEventListener('keydown', (e) => {
         if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = a.getBoundingClientRect(); sigMenu(s, r.left + 24, r.bottom); }
         else if (e.key === 'F2') { e.preventDefault(); openSig(s.id); $('sigName').focus(); $('sigName').select(); }
-        else if (e.key === 'Delete') { e.preventDefault(); openSig(s.id); $('btnDel').click(); }
+        else if (e.key === 'Delete') { e.preventDefault(); if (picked.size > 1 && picked.has(s.id)) deletePicked(); else { openSig(s.id); $('btnDel').click(); } }
+        else if (e.key === 'Escape' && picked.size) { e.preventDefault(); pickClear(); }
       });
       ul.append(el('li', null, a));
     });
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
+    // Several picked: what can be done with them, above the list.
+    $('sigPicked').hidden = picked.size < 2;
+    if (picked.size >= 2) $('sigPickedN').textContent = t('{0} selected', picked.size);
     renderStatusBar();
+  }
+  // Several signatures at once: Ctrl (or ⌘) + click picks one more or one less, Shift + click all
+  // between; a plain click opens one and lets go of the others.
+  const picked = new Set();
+  let pickAnchor = null;
+  function sigClick(s, e) {
+    const list = S.config.signatures;
+    if (e.ctrlKey || e.metaKey) {
+      if (!picked.size && S.view === 'sig' && S.sigId && S.sigId !== s.id) picked.add(S.sigId);
+      if (picked.has(s.id)) picked.delete(s.id); else picked.add(s.id);
+      pickAnchor = s.id;
+      renderList();
+      return;
+    }
+    if (e.shiftKey) {
+      const from = list.findIndex((x) => x.id === (pickAnchor || S.sigId)), to = list.indexOf(s);
+      picked.clear();
+      if (from < 0) picked.add(s.id);
+      else list.slice(Math.min(from, to), Math.max(from, to) + 1).forEach((x) => picked.add(x.id));
+      renderList();
+      return;
+    }
+    picked.clear(); pickAnchor = s.id;
+    openSig(s.id);
+  }
+  function pickClear() { picked.clear(); renderList(); }
+  // The picked ones deleted, asked first; Undo puts them back where they were.
+  async function deletePicked() {
+    const list = S.config.signatures, gone = list.filter((x) => picked.has(x.id));
+    if (!gone.length) return;
+    const names = gone.map((x) => '«' + (x.name || t('(no name)')) + '»').join(', ');
+    if (!(await ask(t('Delete {0} signatures: {1}? They go from Outlook with the next publish.', gone.length, names), t('Delete {0}', gone.length), true))) return;
+    const at = gone.map((x) => [list.indexOf(x), x]);
+    S.config.signatures = list.filter((x) => !picked.has(x.id));
+    picked.clear(); pickAnchor = null;
+    changed();
+    openSig(S.config.signatures[0] ? S.config.signatures[0].id : null);
+    toast(t('{0} signatures deleted.', gone.length), false, { label: t('Undo'), run: () => {
+      for (const [i, x] of at) if (!S.config.signatures.some((y) => y.id === x.id)) S.config.signatures.splice(Math.min(i, S.config.signatures.length), 0, x);
+      changed(); openSig(at[0][1].id);
+    } });
   }
   // The status bar: how many signatures, where publishing goes, which version runs where.
   function renderStatusBar() {

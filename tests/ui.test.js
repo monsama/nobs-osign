@@ -675,6 +675,16 @@ test('the add-in\'s files older than the server: said in the status bar and unde
   await page.waitForFunction(() => !/Made with 0\.0\.1/.test(document.querySelector('#healthRows').textContent) && !document.querySelector('#healthRows .hdot.run'));
   assert.equal(await page.isVisible('#stAddin'), false);
   await page.click('#dlgSettings button[value=cancel]');
+  // Made again under Settings → Outlook add-in: the status bar says so at once, without a reload.
+  const j2 = JSON.parse(fs.readFileSync(ver, 'utf8'));
+  fs.writeFileSync(ver, JSON.stringify(Object.assign({}, j2, { version: '0.0.2' })));
+  await page.goto(url);
+  await page.waitForSelector('#stAddin:not([hidden])');
+  await page.click('#btnSettings');
+  await page.click('#dlgSettings .tab[data-stab=addin]');
+  await page.click('#setAddinBuild');
+  await page.waitForSelector('#stAddin', { state: 'hidden' });
+  await page.click('#dlgSettings button[value=cancel]');
 });
 
 test('right-click on a signature: a menu with what its page offers, by mouse and by keyboard', { skip }, async () => {
@@ -983,4 +993,33 @@ test('a link: asked in the editor\'s own dialog (no browser prompt), Enter takes
   await page.click('#btnDel');
   assert.equal(await page.isVisible('#askInput'), false);
   await page.click('#askOk');
+});
+
+test('several signatures: picked with Ctrl / Shift + click, deleted together (asked first), Undo brings them back', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  for (let i = 0; i < 3; i++) { await page.click('#btnNew'); await page.waitForSelector('#viewSig:not([hidden])'); await page.fill('#sigName', 'Multi ' + i); await page.dispatchEvent('#sigName', 'input'); }
+  const names = () => page.$$eval('#sigList li a', (as) => as.map((a) => a.firstChild.textContent));
+  const namesAre = (want) => page.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('#sigList li a')].map((a) => a.firstChild.textContent)) === JSON.stringify(w), want);
+  await page.waitForFunction(() => /Multi 2/.test(document.querySelector('#sigList').textContent));
+  const before = await names();
+  await page.click('#sigList li a:has-text("Multi 0")');
+  await page.click('#sigList li a:has-text("Multi 2")', { modifiers: ['Shift'] });
+  assert.equal(await page.textContent('#sigPickedN'), '3 selected');
+  await page.click('#sigList li a:has-text("Multi 1")', { modifiers: ['Control'] });
+  assert.equal(await page.textContent('#sigPickedN'), '2 selected');
+  await page.click('#sigPickedDel');
+  assert.match(await page.textContent('#askText'), /Delete 2 signatures: «Multi 0», «Multi 2»/);
+  assert.equal(await page.textContent('#askOk'), 'Delete 2');
+  await page.click('#askOk');
+  await namesAre(before.filter((n) => n !== 'Multi 0' && n !== 'Multi 2'));
+  assert.equal(await page.isVisible('#sigPicked'), false);
+  await page.click('#toast button');
+  await namesAre(before);
+  // All three away again.
+  await page.click('#sigList li a:has-text("Multi 0")');
+  await page.click('#sigList li a:has-text("Multi 2")', { modifiers: ['Shift'] });
+  await page.click('#sigPickedDel');
+  await page.click('#askOk');
+  await namesAre(before.filter((n) => !/^Multi /.test(n)));
 });
