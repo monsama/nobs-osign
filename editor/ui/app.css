@@ -765,3 +765,12 @@ button.danger-btn { background: #c62828; border-color: #c62828; color: #fff; }
 .sig-list li a.picked::before { content: "✓ "; color: var(--accent); font-weight: 700; }
 .sig-picked { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; padding: 6px 8px; border: 1px solid var(--accent); border-radius: var(--r-m); background: var(--accent-soft); font-size: 12.5px; font-weight: 600; }
 .sig-picked { flex-wrap: wrap; } .sig-picked #sigPickedN { flex: 1 0 100%; } .sig-picked .spacer { display: none; } .sig-picked button { flex: 1; }
+
+/* The signature (or page) open: a quiet filled pill, no bar at its edge; picked ones the same,
+   with their tick. */
+.sig-list li a.active, .nav-list a.active, .sig-list li a.picked { box-shadow: none; background: var(--accent-soft); color: var(--text); border-radius: var(--r-m); }
+.sig-list li a.active, .nav-list a.active { font-weight: 600; }
+.sig-list li a, .nav-list a { border-radius: var(--r-m); transition: background .12s; }
+.sig-list li + li, .nav-list li + li { margin-top: 2px; }
+.sig-list li a.active, .nav-list a.active, .sig-list li a.picked { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.sig-list li a.active:hover, .nav-list a.active:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
