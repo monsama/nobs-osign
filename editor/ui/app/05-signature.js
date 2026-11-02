@@ -16,10 +16,12 @@
   propPanels().forEach((d) => d.addEventListener('toggle', () => {
     if (!d.open) return;
     propPanels().forEach((o) => { if (o !== d) o.open = false; });
-    // Kept inside the window: moved left as far as it would stick out on the right.
-    const pop = d.querySelector('.pop'); pop.style.left = '0px';
-    const over = pop.getBoundingClientRect().right - (document.documentElement.clientWidth - 16);
-    if (over > 0) pop.style.left = -Math.min(over, d.getBoundingClientRect().left - 16) + 'px';
+    // Kept inside the page's area (not under the sidebar): as wide as fits, moved left as far as it
+    // would stick out on the right.
+    const pop = d.querySelector('.pop'), box = d.closest('main').getBoundingClientRect();
+    pop.style.left = '0px'; pop.style.maxWidth = Math.max(240, box.width - 32) + 'px';
+    const over = pop.getBoundingClientRect().right - (box.right - 16);
+    if (over > 0) pop.style.left = -Math.max(0, Math.min(over, d.getBoundingClientRect().left - box.left - 16)) + 'px';
   }));
   document.addEventListener('mousedown', (e) => {
     if (e.target.closest('.sig-props > details') || e.target.closest('.suggest')) return;
