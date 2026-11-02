@@ -269,3 +269,18 @@ test('lines: a label row with several empty values goes whole; a label stays wit
   assert.match(banner, /<td><font><br><img src="assets\/b\.jpg"><\/font><\/td>/);
   assert.equal(r('<p><a href="mailto:@@mail">Mail<br>me</a></p>', { mail: '' }), '');
 });
+
+test('a signature of one\'s own: only while the editor allows it, and not too long', () => {
+  const c = core.defaultConfig();
+  c.signatures = [Object.assign(core.newSignature('std', 'Standard'), { html: '<p>@@givenName</p>', compiled: '<p>@@givenName</p>' })];
+  const v = [{ id: 'my-1', name: 'Mine', base: 'std', own: '<p>Anna, Team Lead</p>' }];
+  assert.equal(core.withVariants(c, v).signatures.length, 1, 'off: not there');
+  c.options.allowOwnSignatures = true;
+  const s = core.withVariants(c, v).signatures[1];
+  assert.deepEqual([s.id, s.own, s.compiled, s.variantOf], ['my-1', true, '<p>Anna, Team Lead</p>', 'std']);
+  assert.equal(core.render(s.compiled, { givenName: 'X' }), '<p>Anna, Team Lead</p>');
+  assert.equal(core.withVariants(c, [Object.assign({}, v[0], { own: 'x'.repeat(core.VARIANT_OWN_MAX + 1) })]).signatures.length, 1);
+  // Users may not choose: none of their own either.
+  c.options.allowUserChoice = false;
+  assert.equal(core.ownAllowed(c), false);
+});

@@ -2,7 +2,7 @@
  * The task pane: the signatures open to this user, each with a preview to insert, and - when the
  * editor allows it - which one is used for new mail and which for replies.
  */
-import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, isClassicOutlook, keepForClassic, composeInfo, fromAddress, insertSignature, previewHtml } from './common.js';
+import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, isClassicOutlook, keepForClassic, composeInfo, fromAddress, insertSignature, previewHtml, editableHtml } from './common.js';
 
 /* global Office, OSIGN_VERSION */
 const $ = (id) => document.getElementById(id);
@@ -32,6 +32,18 @@ const DE = {
   'details not available, fields stay empty': 'Angaben nicht verfügbar, Felder bleiben leer',
   'signatures published {0}': 'Signaturen veröffentlicht {0}',
   'Own variant': 'Eigene Variante',
+  'Your signature from {0}': 'Ihre Signatur aus {0}',
+  'Your own signature from {0}': 'Ihre eigene Signatur aus {0}',
+  "Change it as you like right here: click into it and type. Ctrl+B, Ctrl+I and Ctrl+U format; the company's images stay.": 'Ändern Sie sie direkt hier, wie Sie möchten: hineinklicken und schreiben. Strg+B, Strg+I und Strg+U formatieren; die Bilder der Firma bleiben.',
+  'Your signature': 'Ihre Signatur',
+  'Loading…': 'Wird geladen…',
+  'Company signature again': 'Wieder die Firmensignatur',
+  'Bold (Ctrl+B)': 'Fett (Strg+B)',
+  'Italic (Ctrl+I)': 'Kursiv (Strg+I)',
+  'Underline (Ctrl+U)': 'Unterstrichen (Strg+U)',
+  'Your signature is too long to be kept in your mailbox: shorten it.': 'Ihre Signatur ist zu lang, um im Postfach gespeichert zu werden: Kürzen Sie sie.',
+  'Your signature is saved. Pick it above for new mail or replies, or insert it here.': 'Ihre Signatur ist gespeichert. Wählen Sie sie oben für neue Mails oder Antworten, oder fügen Sie sie hier ein.',
+  'Your own signature, from {0}': 'Ihre eigene Signatur, aus {0}',
   'Your variant of {0}': 'Ihre Variante von {0}',
   'Edit': 'Bearbeiten',
   'Delete': 'Löschen',
@@ -115,7 +127,7 @@ function renderList(list) {
     const head = document.createElement('div'); head.className = 'card-head';
     const name = document.createElement('b'); name.textContent = s.name;
     const tags = document.createElement('small');
-    tags.textContent = s.variantOf ? t('Your variant of {0}', names[s.variantOf] || '')
+    tags.textContent = s.own ? t('Your own signature, from {0}', names[s.variantOf] || '') : s.variantOf ? t('Your variant of {0}', names[s.variantOf] || '')
       : [s.defaultNew ? t('new mail') : '', s.defaultReply ? t('replies') : ''].filter(Boolean).join(', ');
     const left = document.createElement('div'); left.append(name, document.createElement('br'), tags);
     const btn = button(t('Insert'), async () => {
@@ -128,7 +140,7 @@ function renderList(list) {
     if (s.variantOf) {
       actions.append(button(t('Edit'), () => editVariant(card, s, getVariants().find((v) => v.id === s.id)), true),
         button(t('Delete'), (e) => deleteVariant(s, e.currentTarget), true));
-    } else if (core.variantsAllowed(cfg) && core.editableIn(cfg, s).length) {
+    } else if (core.variantsAllowed(cfg) && (core.editableIn(cfg, s).length || core.ownAllowed(cfg))) {
       actions.append(button(t('Own variant'), () => editVariant(card, s, null), true));
     }
     actions.append(btn);
@@ -138,8 +150,75 @@ function renderList(list) {
   });
 }
 
+// What is kept of a signature of one's own: its markup, with nothing that runs or loads from
+// elsewhere; the company's images by their place (assets/, photos/), any other image left out.
+function ownHtml(box) {
+  const c = box.cloneNode(true);
+  c.querySelectorAll('script,style,iframe,object,embed,form,input,button,select,textarea,link,meta,base,svg,video,audio').forEach((n) => n.remove());
+  c.querySelectorAll('*').forEach((n) => {
+    [...n.attributes].forEach((a) => {
+      if (/^on/i.test(a.name) || a.name === 'contenteditable') n.removeAttribute(a.name);
+      if (/^(href|src)$/i.test(a.name) && /^\s*(javascript|vbscript):/i.test(a.value)) n.removeAttribute(a.name);
+    });
+  });
+  c.querySelectorAll('img').forEach((im) => {
+    const from = im.getAttribute('data-osign-src');
+    if (from && /^(assets|photos)\//.test(from)) { im.setAttribute('src', from); im.removeAttribute('data-osign-src'); }
+    else if (!/^https:\/\//i.test(im.getAttribute('src') || '')) im.remove();
+  });
+  return c.innerHTML.trim();
+}
+// A signature of one's own: all of the company signature to change, filled in with the user's
+// details (and the company's images), kept in the mailbox.
+async function editOwn(card, base, existing) {
+  const form = document.createElement('form'); form.className = 'variant';
+  const title = document.createElement('b'); title.textContent = existing ? t('Your signature from {0}', base.name) : t('Your own signature from {0}', base.name);
+  const hint = document.createElement('small'); hint.textContent = t('Change it as you like right here: click into it and type. Ctrl+B, Ctrl+I and Ctrl+U format; the company\'s images stay.');
+  const l = document.createElement('label'); l.append(t('Name'));
+  const nameIn = document.createElement('input'); nameIn.maxLength = core.VARIANT_NAME_MAX;
+  nameIn.value = existing ? existing.name : base.name + ' – ' + t('Own variant');
+  l.append(nameIn);
+  const box = document.createElement('div'); box.className = 'own-edit'; box.contentEditable = 'true'; box.spellcheck = true;
+  box.setAttribute('role', 'textbox'); box.setAttribute('aria-multiline', 'true'); box.setAttribute('aria-label', t('Your signature'));
+  box.textContent = t('Loading…');
+  const tools = document.createElement('div'); tools.className = 'own-tools';
+  const tool = (label, title2, cmd) => { const b = button(label, () => { box.focus(); document.execCommand(cmd); }, true); b.title = title2; b.addEventListener('mousedown', (e) => e.preventDefault()); return b; };
+  const reset = button(t('Company signature again'), async () => { box.innerHTML = await editableHtml(base, user.values); }, true);
+  tools.append(tool('B', t('Bold (Ctrl+B)'), 'bold'), tool('I', t('Italic (Ctrl+I)'), 'italic'), tool('U', t('Underline (Ctrl+U)'), 'underline'), reset);
+  const row = document.createElement('div'); row.className = 'actions';
+  row.append(button(t('Cancel'), () => render(), true), button(t('Save'), () => form.requestSubmit()));
+  form.append(title, hint, l, tools, box, row);
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const name = nameIn.value.trim();
+    if (!name) { message(t('Give the variant a name.'), true); nameIn.focus(); return; }
+    const own = core.compile(ownHtml(box), document);
+    if (own.length > core.VARIANT_OWN_MAX) { message(t('Your signature is too long to be kept in your mailbox: shorten it.'), true); return; }
+    const v = { id: existing ? existing.id : 'my-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, base: base.id, own };
+    const before = getVariants();
+    const list = before.filter((x) => x.id !== v.id); list.push(v);
+    if (!(await setVariants(list))) {
+      await setVariants(before);
+      message(t('Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.'), true);
+      return;
+    }
+    message(t('Your signature is saved. Pick it above for new mail or replies, or insert it here.'));
+    render();
+  };
+  card.replaceChildren(form);
+  form.scrollIntoView({ block: 'nearest' });
+  const ownSig = existing ? (full.signatures || []).find((x) => x.id === existing.id) : null;
+  box.innerHTML = await editableHtml(ownSig || base, user.values);
+  box.focus();
+}
+
 // A variant: its name and the editable fields its signature uses, with the preview as it changes.
 function editVariant(card, sig, existing) {
+  // All of it to change, when the editor allows that.
+  if (core.ownAllowed(cfg) && (!existing || typeof existing.own === 'string')) {
+    const base0 = (cfg.signatures || []).find((x) => x.id === (sig.variantOf || sig.id));
+    if (base0) { editOwn(card, base0, existing).catch((e) => message(e.message || String(e), true)); return; }
+  }
   const base = (cfg.signatures || []).find((x) => x.id === (sig.variantOf || sig.id));
   if (!base) return;
   if (!existing && getVariants().length >= core.VARIANT_MAX) { message(t('You have {0} variants, the most there can be.', core.VARIANT_MAX), true); return; }
@@ -185,6 +264,7 @@ function editVariant(card, sig, existing) {
     render();
   };
   card.replaceChildren(form, frame);
+  form.scrollIntoView({ block: 'nearest' });
   nameIn.focus();
 }
 

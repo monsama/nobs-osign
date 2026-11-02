@@ -207,3 +207,41 @@ test('classic Outlook: the pane keeps what goes in by itself in the mailbox, its
     assert.equal(await page2.evaluate(() => window.__roaming['osign.classic']), undefined);
   } finally { await browser.close(); }
 });
+
+test('a signature of one\'s own (when the editor allows it): all of it changed in the pane, kept, inserted with the company\'s image', { skip }, async () => {
+  const c = JSON.parse(JSON.stringify(cfg));
+  c.options.allowOwnSignatures = true;
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(c), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
+  try {
+    const page = await openPane(browser, dir, graph, 'en-US');
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+    // Every company signature offers it (no editable fields needed).
+    await page.click('.card:nth-child(1) button.secondary:has-text("Own variant")');
+    await page.waitForFunction(() => /Anna Muster/.test(document.querySelector('.own-edit').textContent));
+    // Filled in with her details, the logo shown.
+    assert.equal(await page.$$eval('.own-edit img[data-osign-src="assets/logo.png"]', (x) => x.length), 1);
+    await page.click('.own-edit b');
+    await page.keyboard.press('End');
+    await page.keyboard.type(', Team Lead');
+    await page.click('.variant button:not(.secondary):has-text("Save")');
+    await page.waitForFunction(() => /Your own signature/.test(document.body.textContent));
+    const saved = JSON.parse(await page.evaluate(() => window.__roaming['osign.variants']));
+    assert.equal(saved.length, 1);
+    assert.match(saved[0].own, /Anna Muster, Team Lead/);
+    assert.match(saved[0].own, /<img src="assets\/logo\.png"/);
+    assert.doesNotMatch(saved[0].own, /data:|data-osign-src|@@/);
+    // Inserted: as she wrote it, the logo embedded.
+    const card = page.locator('.card', { hasText: 'Your own signature' });
+    await card.locator('button:not(.secondary)', { hasText: 'Insert' }).click();
+    await page.waitForFunction(() => window.__calls.some((x) => x[0] === 'set'));
+    const set = (await page.evaluate(() => window.__calls)).find((x) => x[0] === 'set')[1];
+    assert.match(set, /Anna Muster, Team Lead/);
+    assert.match(set, /cid:osign-assets-logo\.png/);
+    // Edited again: the same box, with what she wrote.
+    await card.locator('button.secondary', { hasText: 'Edit' }).click();
+    await page.waitForFunction(() => /Team Lead/.test(document.querySelector('.own-edit').textContent));
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});
