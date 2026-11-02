@@ -1101,3 +1101,38 @@ test('who gets it: a new signature is not assigned until the entire organization
   await page.click('#btnDel');
   await page.click('#askOk');
 });
+
+test('photos: made in the shape the signature shows them (no stretching); one of another shape is said and made to fit', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p><img src="photos/@@sAMAccountName.jpg" width="100" height="80"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await page.waitForTimeout(800);
+  const wide = await page.evaluate(async () => { const c = document.createElement('canvas'); c.width = 1600; c.height = 900; const g = c.getContext('2d'); g.fillStyle = '#357'; g.fillRect(0, 0, 1600, 900); return c.toDataURL('image/png').split(',')[1]; });
+  const dims = (file) => { const b = fs.readFileSync(file); const i = b.indexOf(Buffer.from([0xff, 0xc0])); return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)]; };
+  // Uploaded 16:9: kept as 5:4, as the signature shows it.
+  await page.click('.nav-list a[data-view=photos]');
+  await page.fill('#photoWho', 'breit');
+  await page.setInputFiles('#photoFile', { name: 'b.png', mimeType: 'image/png', buffer: Buffer.from(wide, 'base64') });
+  await page.waitForFunction(() => /breit\.jpg/.test(document.querySelector('#photoList').textContent));
+  assert.deepEqual(dims(path.join(folder, 'photos', 'breit.jpg')), [400, 320]);
+  // One put there by hand in another shape: said, and made to fit.
+  const jpg = await page.evaluate(async () => { const c = document.createElement('canvas'); c.width = 400; c.height = 225; const g = c.getContext('2d'); g.fillStyle = '#753'; g.fillRect(0, 0, 400, 225); return c.toDataURL('image/jpeg').split(',')[1]; });
+  fs.writeFileSync(path.join(folder, 'photos', 'quer.jpg'), Buffer.from(jpg, 'base64'));
+  await page.click('.nav-list a[data-view=fields]');
+  await page.click('.nav-list a[data-view=photos]');
+  const card = page.locator('#photoList li', { hasText: 'quer.jpg' });
+  await card.locator('.pwarn').waitFor();
+  assert.match(await card.textContent(), /Gets stretched/);
+  await card.locator('.pwarn button').click();
+  await page.waitForFunction(() => /made to fit/.test(document.querySelector('#toast').textContent));
+  assert.deepEqual(dims(path.join(folder, 'photos', 'quer.jpg')), [281, 225]);
+  fs.rmSync(path.join(folder, 'photos', 'quer.jpg')); fs.rmSync(path.join(folder, 'photos', 'breit.jpg'));
+  await page.click('#sigList li:last-child a');
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});
