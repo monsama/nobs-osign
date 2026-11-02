@@ -88,15 +88,18 @@
           <p class="hint">A campaign: on those days only, and as a default it wins over the others, for whoever it is open to. Before and after,
             the usual signatures again, by themselves.</p>
         </details>
-        <details class="audience">
+        <details class="audience" id="sigAudience">
           <summary>Who gets it: <span id="audienceSummary">not assigned</span></summary>
-          <div class="grid3">
-            <label>AD groups <button type="button" class="help" data-help="hGroups" aria-label="Help">?</button> <small>(any of them; nested groups count)</small><input id="sigGroups" placeholder="SG-Signatur-Verkauf" autocomplete="off"></label>
-            <label>Departments <button type="button" class="help" data-help="hDeps" aria-label="Help">?</button> <small>(comma separated)</small><input id="sigDeps" placeholder="Informatik, Verkauf" autocomplete="off"></label>
-            <label>Sender domains <button type="button" class="help" data-help="hDoms" aria-label="Help">?</button> <small>(the From address)</small><input id="sigDoms" placeholder="example.com"></label>
+          <div class="seg" role="radiogroup" aria-label="Who gets it">
+            <label><input type="radio" name="audMode" value="all"> Entire organization</label>
+            <label><input type="radio" name="audMode" value="some"> Specific groups, departments or domains</label>
+            <label><input type="radio" name="audMode" value="none"> Not assigned</label>
           </div>
-          <label class="check block"><input type="checkbox" id="sigEveryone"> Entire organization (no groups, departments or domains needed)</label>
-          <p class="hint">Nothing filled in and not for the entire organization: not assigned, nobody gets it (a new signature, until you choose; take the tick away to stop one for now). When several are filled in, a user has to match each of them.</p>
+          <div id="audSome" class="aud-some" hidden>
+            <div class="tokens" id="audTokens"><input id="audInput" placeholder="Add an AD group, a department or @domain…" autocomplete="off" aria-label="Add an AD group, a department or @domain"></div>
+            <p class="hint">Any one of a kind is enough (nested groups count); with several kinds, a user has to match each kind.</p>
+          </div>
+          <p id="audNone" class="hint" hidden>Nobody gets it until you choose: kept, but not used (a new or imported signature starts so).</p>
         </details>
       </div>
 
@@ -136,8 +139,8 @@
             </span>
             <div class="spacer"></div>
             <span class="zoom" data-zoom="preview" role="group" aria-label="Zoom"><button type="button" class="ghost" data-z="-1" aria-label="Zoom out" title="Zoom out (Ctrl + mouse wheel)">−</button><button type="button" class="ghost zpct" data-z="0" title="Back to 80 %">80 %</button><button type="button" class="ghost" data-z="1" aria-label="Zoom in" title="Zoom in (Ctrl + mouse wheel)">+</button></span>
-            <label class="check small"><input type="checkbox" id="pvText"> Plain text</label>
-            <label class="check small" title="Roughly as Outlook's dark mode shows it to recipients who use it"><input type="checkbox" id="pvDark"> Dark mode</label>
+            <label class="tgl" title="Plain text"><input type="checkbox" id="pvText"><span aria-hidden="true">T</span><span class="sr-only">Plain text</span></label>
+            <label class="tgl" title="Dark mode: roughly as Outlook's dark mode shows it to recipients who use it"><input type="checkbox" id="pvDark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span class="sr-only">Dark mode</span></label>
           </div>
           <div id="pvNote" class="pv-note"></div>
           <div class="mail">

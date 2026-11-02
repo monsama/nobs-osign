@@ -745,7 +745,7 @@ label input:not([type=checkbox]):not([type=radio]), label select, label textarea
 /* The assistant's language: not the whole width. */
 .wiz-fields select { max-width: 320px; }
 /* The preview's bar: one line with the zoom (the source list narrower, the boxes not wrapped). */
-#pvSource { max-width: 200px; }
+#pvSource { max-width: 160px; }
 .preview-head label.check { white-space: nowrap; margin-right: 8px; }
 /* Fields: the column names on one line each. */
 table.fields th { white-space: nowrap; }
@@ -790,3 +790,45 @@ button.danger-btn { background: #c62828; border-color: #c62828; color: #fff; }
 .badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
 .photo-list .pwarn { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; font-size: 12px; color: var(--warn); }
 .photo-list .pwarn button { height: 24px; }
+
+/* Who gets it: a segmented choice, and the groups, departments and domains as tokens in one field. */
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; margin: 10px 0 12px; background: var(--panel); }
+.seg label { display: inline-flex; align-items: center; height: var(--h); padding: 0 14px; font-size: 13px; font-weight: 500; cursor: pointer; border-right: 1px solid var(--line); color: var(--muted); }
+.seg label:last-child { border-right: 0; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); font-weight: 600; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.tokens { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: var(--h); padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--in); cursor: text; max-width: 760px; }
+.tokens:focus-within { outline: 2px solid var(--focus); outline-offset: -1px; }
+.tokens input#audInput { flex: 1; min-width: 220px; border: 0 !important; outline: none; background: transparent; height: 26px; padding: 0 4px; }
+.tok { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 8px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); font-size: 12.5px; }
+.tok-i { font-size: 12px; opacity: .8; }
+.tok-x { height: 20px; width: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 15px; line-height: 1; }
+.tok-x:hover { background: var(--line); color: var(--text); }
+.aud-some .hint, #audNone { margin: 8px 0 0; }
+
+/* Layout review (measured): one left edge, even gaps, no double separators. */
+.top .who { border-left: 0; padding-left: 0; margin-left: 0; }
+input[type=checkbox], input[type=radio] { margin: 0; }
+.title-input { margin-left: -7px; }
+.wiz-fields > label > select { display: block; margin-top: 4px; }
+.wiz-head .wiz-bar { margin-right: -96px; }
+.wiz-head .wiz-nav { margin-right: -96px; }
+.imgbar input { width: 110px !important; }
+.imgbar label { display: inline-flex; align-items: center; gap: 6px; }
+#imgDone { margin-left: auto; }
+.preview-head { padding: 5px 8px; row-gap: 5px; }
+.preview-head label.check { margin-right: 0; }
+.users-bar label.check { margin-right: 0; }
+.toolbar > select + select, .toolbar > select + input[type=color] { margin-left: 4px; }
+.photo-add .or { padding: 0; height: var(--h); display: inline-flex; align-items: center; }
+.photo-default { margin-top: 14px; }
+.dtabs { padding: 6px 16px; }
+.setrow > :is(button, .btnlike) + :is(button, .btnlike) { margin-left: -8px; }
+table.fields .ph { gap: 4px; }
+/* Preview toggles (plain text, dark mode): small square buttons, on when filled. */
+.tgl { display: inline-flex; align-items: center; justify-content: center; width: var(--h); height: var(--h); border: 1px solid var(--line); border-radius: var(--r-s); background: var(--btn); cursor: pointer; font-weight: 700; font-size: 13px; color: var(--muted); position: relative; }
+.tgl input { position: absolute; opacity: 0; pointer-events: none; }
+.tgl:hover { border-color: var(--muted); color: var(--text); }
+.tgl:has(input:checked) { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: var(--text); }
+.tgl:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
