@@ -834,7 +834,12 @@ function createApp(opts) {
         const name = pathname.slice(8);
         // The design view asks for photos/@@sAMAccountName.jpg: a grey figure where a person's photo
         // goes (in every browser, not only where CSS can put a picture in place of an image).
-        if (/@@|%40%40/i.test(name)) return send(res, 200, 'image/svg+xml', PHOTO_PLACEHOLDER, { 'Cache-Control': 'private, max-age=3600' });
+        if (/@@|%40%40/i.test(name)) {
+          // The placeholder photo that is set (the one the signatures take, by extension), else the grey figure.
+          let ph = null;
+          try { ph = await photo(core.PHOTO_DEFAULT + path.extname(name).toLowerCase()); } catch (e) { ph = null; }
+          return ph ? send(res, 200, ASSET_TYPES[path.extname(name).toLowerCase()] || 'image/jpeg', ph) : send(res, 200, 'image/svg+xml', PHOTO_PLACEHOLDER);
+        }
         if (!PHOTO_NAME.test(name) || name.startsWith('.')) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
         let bytes = null;
         try { bytes = await photo(name); } catch (e) { log.warn('photo ' + name + ': ' + e.message); }

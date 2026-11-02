@@ -7,7 +7,7 @@
     'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
     // A person's photo (photos/@@sAMAccountName.jpg) has no picture here: a grey figure in its
     // place and size, framed, so it is seen where it is and how large.
-    'img[src*="@@"]{content:url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 80\'><rect width=\'100\' height=\'80\' fill=\'%23e9ecef\'/><circle cx=\'50\' cy=\'31\' r=\'14\' fill=\'%23b8bec6\'/><ellipse cx=\'50\' cy=\'82\' rx=\'30\' ry=\'26\' fill=\'%23b8bec6\'/></svg>");background:#e9ecef;outline:1px dashed #8a94a3;outline-offset:-1px;object-fit:cover}' +
+    'img[src*="@@"]{content:var(--osign-ph,url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 80\'><rect width=\'100\' height=\'80\' fill=\'%23e9ecef\'/><circle cx=\'50\' cy=\'31\' r=\'14\' fill=\'%23b8bec6\'/><ellipse cx=\'50\' cy=\'82\' rx=\'30\' ry=\'26\' fill=\'%23b8bec6\'/></svg>"));background:#e9ecef;outline:1px dashed #8a94a3;outline-offset:-1px;object-fit:cover}' +
     'table:not([border]) td{outline:1px dashed #d6dbe3}p{margin:0}a{color:#2f6fde}' +
     // A field, shown by its name in a plain token; in the signature it is the placeholder @@key.
     'span.osf{display:inline-block;padding:0 .35em;margin:0 .05em;border-radius:3px;background:#f2f4f7;color:#344054;' +
@@ -19,6 +19,7 @@
       design.addEventListener('load', () => {
         ddoc = design.contentDocument;
         zoomWheel(ddoc, 'design'); zoomApply('design');
+        phRefresh();
         ddoc.addEventListener('keydown', (e) => onKeys(e));
         ddoc.body.contentEditable = 'true';
         try { ddoc.execCommand('styleWithCSS', false, true); ddoc.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) { }
@@ -257,6 +258,11 @@
   function onDesignClick(e) {
     if (e.target && e.target.nodeName === 'IMG') {
       hideImgBar(); selImg = e.target; selImg.classList.add('sel');
+      // A person's photo: so named, with the placeholder for whoever has none (all signatures).
+      const person = /@@([A-Za-z0-9_]+)/.exec(selImg.getAttribute('src') || '');
+      $('imgKind').textContent = person ? t('Photo per person (@@{0})', person[1]) : t('Image');
+      $('imgPh').hidden = !person;
+      if (person) phRefresh();
       $('imgW').value = selImg.getAttribute('width') || selImg.naturalWidth || '';
       $('imgAlt').value = selImg.getAttribute('alt') || '';
       const a = selImg.closest('a'); $('imgHref').value = a ? a.getAttribute('href') : '';
