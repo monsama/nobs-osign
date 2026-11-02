@@ -76,7 +76,7 @@ const pvText = () => page.evaluate(() => document.querySelector('#preview').cont
 test('make, preview and publish a signature', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('#viewEmpty:not([hidden])');
-  await page.click('#btnNew2');
+  await page.click('#btnNew2'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   assert.equal(await page.inputValue('#sigName'), 'Main signature');
 
@@ -466,6 +466,8 @@ test('campaigns, dark mode, comparing versions, the audit log, the backup and fo
   assert.match(await page.textContent('#campaignSummary'), /2020/);
   await page.fill('#sigFrom', ''); await page.fill('#sigUntil', '');
   await page.waitForFunction(() => !/Campaign/.test(document.querySelector('#sigList').textContent));
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#sigCampaign:not([open])');
   // Dark mode in the preview.
   await page.click('label.tgl:has(#pvDark)');
   await page.waitForFunction(() => /invert\(1\)/.test(document.querySelector('#preview').srcdoc));
@@ -562,26 +564,26 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   await page.click('#btnSettings');
   await page.click('#dlgSettings [data-stab=server]');
   await page.click('#setConn');
-  await page.waitForSelector('#dlgConn[open]');
-  await page.click('#dlgConn [data-ctab=graph]');
+  await page.waitForSelector('#connHost:not([hidden])');
+  await page.click('#connHost [data-ctab=graph]');
   assert.equal(await page.isVisible('#connScriptGet'), true);
   assert.equal(await page.isVisible('#cn_graphTenantId'), false, 'by hand only when opened');
   const lead = await page.textContent('#connGraph');
   assert.match(lead, /setup script does it/);
-  await page.click('#dlgConn [data-ctest=graph]');
-  await page.waitForFunction(() => document.querySelector('#dlgConn [data-ctestout=graph]').textContent && !/Testing/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
-  assert.equal(await page.textContent('#dlgConn [data-ctestout=graph]'), await page.textContent('#connGraph'));
+  await page.click('#connHost [data-ctest=graph]');
+  await page.waitForFunction(() => document.querySelector('#connHost [data-ctestout=graph]').textContent && !/Testing/.test(document.querySelector('#connHost [data-ctestout=graph]').textContent));
+  assert.equal(await page.textContent('#connHost [data-ctestout=graph]'), await page.textContent('#connGraph'));
   // The folder the script gives access to: shown, and changed by pasting its address.
   assert.match(await page.textContent('#connSpWhere'), /OSign/);
   await page.fill('#connSpUrl', 'https://contoso.sharepoint.com/sites/Signaturen/Shared%20Documents/Forms/AllItems.aspx');
   await page.click('#connSpSet');
-  await page.waitForFunction(() => /names no folder/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
+  await page.waitForFunction(() => /names no folder/.test(document.querySelector('#connHost [data-ctestout=graph]').textContent));
   await page.fill('#connSpUrl', 'https://contoso-my.sharepoint.com/personal/anna_contoso_com/Documents/OSign');
   await page.click('#connSpSet');
   await page.waitForFunction(() => /personal OneDrive/.test(document.querySelector('#connSpWarn').textContent));
   await page.fill('#connSpUrl', 'https://contoso.sharepoint.com/sites/Signaturen/Shared%20Documents/OSign');
   await page.click('#connSpSet');
-  await page.waitForFunction(() => /Saved/.test(document.querySelector('#dlgConn [data-ctestout=graph]').textContent));
+  await page.waitForFunction(() => /Saved/.test(document.querySelector('#connHost [data-ctestout=graph]').textContent));
   assert.equal(await page.textContent('#connSpWarn'), '');
   const st = (await api('settings/get')).settings;
   assert.deepEqual([st.spSite, st.spFolder], ['contoso.sharepoint.com:/sites/Signaturen:', 'OSign']);
@@ -613,9 +615,9 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
   assert.match(await page.textContent('#healthSum'), /not working|to look at|works/);
   // Its button: Server connections on that tab; closed, Status is checked again.
   await page.click('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) button');
-  await page.waitForSelector('#dlgConn[open]');
+  await page.waitForSelector('#connHost:not([hidden])');
   assert.equal(await page.isVisible('#connScriptGet'), true);
-  await page.click('#dlgConn .wc-close');
+  await page.click('#connCancel');
   await page.waitForFunction(() => !document.querySelector('#healthRows .hdot.run'));
   // The Server tab names Active Directory itself.
   await page.click('#dlgSettings [data-stab=server]');
@@ -850,7 +852,7 @@ test('photos: one per person, uploaded and made small, listed, removed; the prev
   await page.click('#photoUrlGo');
   await page.waitForFunction(() => /own network/.test(document.querySelector('#photoErr').textContent));
   // A signature with a photo per person: the preview of someone without one says so.
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   await page.click('.tab[data-mode=html]');
   await page.fill('#source', '<p>@@givenName</p><p><img src="photos/@@sn.jpg" width="100"></p>');
@@ -889,7 +891,7 @@ test('photos: one per person, uploaded and made small, listed, removed; the prev
 test('zoom: the design view and the preview each their own, kept; the HTML tab indented, the signature as it was', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   const html = '<table><tr><td>@@givenName<br>@@sn</td><td></td></tr></table><p>Text</p>';
   await page.click('.tab[data-mode=html]');
@@ -931,7 +933,7 @@ test('zoom: the design view and the preview each their own, kept; the HTML tab i
 test('undo and redo: typing and a field put in, with Ctrl+Z / Ctrl+Y, also when the focus left the editor', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   await page.click('.tab[data-mode=html]');
   await page.fill('#source', '<p>Hello</p>');
@@ -962,7 +964,7 @@ test('undo and redo: typing and a field put in, with Ctrl+Z / Ctrl+Y, also when 
 test('placeholders no field has: added as fields from the preview\'s note; the HTML tab formats again', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   await page.click('.tab[data-mode=html]');
   assert.equal(await page.isVisible('#toolbar .html-only'), true);
@@ -987,7 +989,7 @@ test('placeholders no field has: added as fields from the preview\'s note; the H
 test('a link: asked in the editor\'s own dialog (no browser prompt), Enter takes it', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   await page.frameLocator('#design').locator('body').click({ position: { x: 60, y: 20 } });
   await page.keyboard.press('Shift+End');
@@ -1005,7 +1007,7 @@ test('a link: asked in the editor\'s own dialog (no browser prompt), Enter takes
 test('several signatures: picked with Ctrl / Shift + click, deleted together (asked first), Undo brings them back', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  for (let i = 0; i < 3; i++) { await page.click('#btnNew'); await page.waitForSelector('#viewSig:not([hidden])'); await page.fill('#sigName', 'Multi ' + i); await page.dispatchEvent('#sigName', 'input'); }
+  for (let i = 0; i < 3; i++) { await page.click('#btnNew'); await page.click('[data-tpl=classic]'); await page.waitForSelector('#viewSig:not([hidden])'); await page.fill('#sigName', 'Multi ' + i); await page.dispatchEvent('#sigName', 'input'); }
   const names = () => page.$$eval('#sigList li a', (as) => as.map((a) => a.firstChild.textContent));
   const namesAre = (want) => page.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('#sigList li a')].map((a) => a.firstChild.textContent)) === JSON.stringify(w), want);
   await page.waitForFunction(() => /Multi 2/.test(document.querySelector('#sigList').textContent));
@@ -1055,7 +1057,7 @@ test('a photo there is already, or an image of the signatures, as the placeholde
 test('the image bar on a person\'s photo: the placeholder for all signatures, changed there', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   await page.click('.tab[data-mode=html]');
   await page.fill('#source', '<p>@@givenName</p><p><img src="photos/@@sAMAccountName.jpg" width="100" height="80"></p>');
@@ -1087,7 +1089,7 @@ test('the image bar on a person\'s photo: the placeholder for all signatures, ch
 test('who gets it: a new signature is not assigned until the entire organization (or a group…) is given; one can be set to not assigned again', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   assert.equal(await page.textContent('#audienceSummary'), 'not assigned');
   assert.match(await page.textContent('#sigList li a.active'), /Not assigned/);
@@ -1120,7 +1122,7 @@ test('who gets it: a new signature is not assigned until the entire organization
 test('photos: made in the shape the signature shows them (no stretching); one of another shape is said and made to fit', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   await page.click('.tab[data-mode=html]');
   await page.fill('#source', '<p><img src="photos/@@sAMAccountName.jpg" width="100" height="80"></p>');
@@ -1150,4 +1152,38 @@ test('photos: made in the shape the signature shows them (no stretching); one of
   await page.click('#sigList li:last-child a');
   await page.click('#btnDel');
   await page.click('#askOk');
+});
+
+test('new signature: picked from the layouts, the fields it uses are added; the field list is in building blocks', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('#sigList');
+  await page.click('#btnNew');
+  await page.waitForSelector('#dlgTpl[open] .tpl-card');
+  assert.equal(await page.locator('#dlgTpl .tpl-card').count(), 4);
+  await page.click('[data-tpl=photo]');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  const html = await page.inputValue('#source');
+  assert.match(html, /photos\/@@sAMAccountName\.jpg/);
+  assert.match(html, /@@company/);
+  const groups = await page.$$eval('#viewSig .field-pick optgroup', (gs) => gs.map((g) => g.label));
+  assert.ok(groups.includes('Person') && groups.includes('Company'), groups.join(','));
+  assert.ok(await page.$$eval('#viewSig .field-pick optgroup[label=Company] option', (os) => os.some((o) => o.value === 'company')));
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});
+
+test('Ctrl+K: a search over signatures, views and fields goes where it is picked', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('#sigList');
+  await page.keyboard.press('Control+k');
+  await page.waitForSelector('#dlgFind[open]');
+  await page.fill('#findInput', 'photos');
+  await page.waitForSelector('#findList li.on');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#viewPhotos:not([hidden])');
+  assert.equal(await page.isVisible('#dlgFind'), false);
+  await page.click('#btnFind');
+  await page.fill('#findInput', 'zzzz-nothing');
+  await page.waitForSelector('#findList .empty-state');
+  await page.keyboard.press('Escape');
 });

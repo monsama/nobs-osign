@@ -215,10 +215,26 @@
     }
     return added;
   }
+  const FIELD_GROUPS = {
+    person: ['givenname', 'sn', 'displayname', 'initials', 'description', 'title', 'department', 'samaccountname', 'userprincipalname', 'photo', 'thumbnailphoto'],
+    contact: ['mail', 'mobile', 'homephone', 'telephonenumber', 'othertelephone', 'ipphone', 'facsimiletelephonenumber', 'pager', 'wwwhomepage', 'othermobile'],
+    company: ['company', 'physicaldeliveryofficename', 'streetaddress', 'postofficebox', 'postalcode', 'l', 'st', 'co', 'c']
+  };
   function fillFieldSelect(sel) {
     sel.textContent = '';
     sel.append(el('option', { value: '' }, t('+ Insert field')));
-    S.config && S.config.fields.forEach((f) => sel.append(el('option', { value: f.key }, f.label || f.key)));
+    if (!S.config) return;
+    // In building blocks, by what the field is read from: the person, how to reach them, the company.
+    const groups = [['Person', FIELD_GROUPS.person], ['Contact', FIELD_GROUPS.contact], ['Company', FIELD_GROUPS.company], ['More', null]];
+    const of = (f) => String(f.ad || f.key).toLowerCase();
+    const placed = new Set();
+    for (const [name, keys] of groups) {
+      const fs = S.config.fields.filter((f) => !placed.has(f) && (!keys || keys.includes(of(f))));
+      if (!fs.length) continue;
+      const g = el('optgroup', { label: t(name) });
+      fs.forEach((f) => { placed.add(f); g.append(el('option', { value: f.key }, f.label || f.key)); });
+      sel.append(g);
+    }
   }
 
   function insertAtCursor(ta, text) {

@@ -20,6 +20,7 @@
     <span id="stDraft" class="status"></span>
     <button type="button" id="stPub" class="status pub"></button>
   </div>
+  <button type="button" id="btnFind" class="find-btn" title="Search signatures, views, fields and photos (Ctrl+K)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="find-label">Search…</span><kbd>Ctrl K</kbd></button>
   <div class="spacer"></div>
   <!-- As in NOBS SQL Editor: the main action first, then the tools, then, always at the right,
        Settings, the coffee and who is signed in. -->
@@ -79,17 +80,21 @@
         <label class="check"><input type="checkbox" id="sigNew"> Default for new mail</label>
         <label class="check"><input type="checkbox" id="sigReply"> Default for replies &amp; forwards</label>
         <label class="check"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines <button type="button" class="help" data-help="hRemoveEmpty" aria-label="Help">?</button></label>
+<span class="props-sep" aria-hidden="true"></span>
         <details class="audience campaign" id="sigCampaign">
-          <summary>When: <span id="campaignSummary">always</span></summary>
+          <summary><span class="chip-k">When:</span> <span id="campaignSummary">always</span></summary>
+          <div class="pop">
           <div class="grid3">
             <label>From <small>(the first day, included)</small><input id="sigFrom" type="date"></label>
             <label>Until <small>(the last day, included)</small><input id="sigUntil" type="date"></label>
           </div>
           <p class="hint">A campaign: on those days only, and as a default it wins over the others, for whoever it is open to. Before and after,
             the usual signatures again, by themselves.</p>
+          </div>
         </details>
         <details class="audience" id="sigAudience">
-          <summary>Who gets it: <span id="audienceSummary">not assigned</span></summary>
+          <summary><span class="chip-k">Who gets it:</span> <span id="audienceSummary">not assigned</span></summary>
+          <div class="pop">
           <div class="seg" role="radiogroup" aria-label="Who gets it">
             <label><input type="radio" name="audMode" value="all"> Entire organization</label>
             <label><input type="radio" name="audMode" value="some"> Specific groups, departments or domains</label>
@@ -100,6 +105,7 @@
             <p class="hint">Any one of a kind is enough (nested groups count); with several kinds, a user has to match each kind.</p>
           </div>
           <p id="audNone" class="hint" hidden>Nobody gets it until you choose: kept, but not used (a new or imported signature starts so).</p>
+          </div>
         </details>
       </div>
 
@@ -256,10 +262,13 @@
       <p class="hint" data-th="photosImport">Photos from CI-Sign come along with <b>Import templates</b> (tick <i>Photos per person</i>).</p>
     </section>
 
-    <section id="viewEmpty" class="view empty" hidden>
-      <h1>No signatures yet</h1>
-      <p>Start with a new one, or load what is published.</p>
-      <button id="btnNew2" class="primary">New signature</button>
+    <section id="viewEmpty" class="view" hidden>
+      <div class="empty-state">
+        <span class="es-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 15c2-6 4-9 5-9 2 0-1 9 1 9 1 0 2-3 3-3s0 3 2 3"/></svg></span>
+        <h1>No signatures yet</h1>
+        <p>Start with a layout, or import templates you already have (CI-Sign, classic Outlook).</p>
+        <div class="es-actions"><button id="btnNew2" class="primary">New signature</button><button type="button" id="btnImport2">Import templates</button></div>
+      </div>
     </section>
   </main>
 </div>
@@ -356,6 +365,7 @@
       <tr><td><kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Publish…</td></tr>
       <tr><td><kbd>Ctrl</kbd> + <kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd></td><td>Bold, italic, underline (in the design view)</td></tr>
       <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd> / <kbd>Y</kbd></td><td>Undo, redo</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>K</kbd></td><td>Search: go to a signature, view, field or photo</td></tr>
       <tr><td><kbd>?</kbd></td><td>This list (outside a field)</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Close a dialog</td></tr>
       <tr><td><kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd></td><td>Back, forward (also the mouse's side buttons)</td></tr>
@@ -373,6 +383,7 @@
     <nav class="dtabs" role="tablist" aria-label="Settings">
       <button type="button" class="tab active" data-stab="general" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>General</button>
       <button type="button" class="tab" data-stab="server" id="setTabServer" role="tab" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Server</button>
+      <button type="button" class="tab" data-stab="conn" id="setTabConn" role="tab" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7h6M9 17h6"/><rect x="2" y="4" width="7" height="6" rx="1.5"/><rect x="15" y="14" width="7" height="6" rx="1.5"/><path d="M5.5 10v4a3 3 0 0 0 3 3"/><path d="M18.5 14v-4a3 3 0 0 0-3-3"/></svg>Connections</button>
       <button type="button" class="tab" data-stab="addin" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Outlook add-in</button>
       <button type="button" class="tab" data-stab="about" role="tab"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>Info</button>
     </nav>
@@ -428,6 +439,8 @@
         </div>
       </div>
     </section>
+
+    <section class="dpane conn-pane" role="tabpanel" data-spane="conn" id="connHost" hidden></section>
 
     <section class="dpane" role="tabpanel" data-spane="about" hidden>
       <div class="setcard">
@@ -630,9 +643,9 @@
     </section>
 
     <p id="connErr" class="err"></p>
-    <div class="dlg-foot">
-      <button value="cancel" class="ghost" formnovalidate>Cancel</button>
-      <button id="connSave" value="default" class="primary">Save</button>
+    <div class="conn-foot">
+      <button type="button" id="connCancel" class="ghost">Cancel</button>
+      <button type="button" id="connSave" class="primary">Save</button>
     </div>
   </form>
 </dialog>
@@ -936,6 +949,20 @@
     <div id="phList" class="img-list"></div>
     <p id="phErr" class="err"></p>
     <div class="dlg-foot"><a href="#" id="phManage">Manage photos</a><span class="spacer"></span><button value="cancel" class="ghost">Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="dlgTpl">
+  <form method="dialog" class="dlg wide">
+    <h2>New signature</h2>
+    <p class="lead">Start from a layout: the texts, fields, colours and everything else can be changed afterwards.</p>
+    <div id="tplList" class="tpl-list"></div>
+    <div class="dlg-foot"><span class="spacer"></span><button value="cancel" class="ghost">Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="dlgFind" class="find" aria-label="Search">
+  <form method="dialog" class="dlg">
+    <input id="findInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search signatures, views, fields, photos…" aria-controls="findList">
+    <ul id="findList" class="find-list" role="listbox"></ul>
   </form>
 </dialog>
 <dialog id="dlgAsk" class="ask" aria-labelledby="askText">

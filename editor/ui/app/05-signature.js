@@ -11,13 +11,40 @@
     if (on) S.config.signatures.forEach((x) => { if (x !== s && x[flag] && audienceText(x) === audienceText(s)) x[flag] = false; });
     s[flag] = on; changed();
   }
+  // The panels of When and Who gets it: one at a time, closed by a click elsewhere or Esc.
+  const propPanels = () => document.querySelectorAll('.sig-props > details');
+  // Kept inside the page's area (not under the sidebar): as wide as fits, moved left as far as it
+  // would stick out on the right. Again when the chips move (a longer summary, another row).
+  function placePop(d) {
+    const pop = d.querySelector('.pop'), box = d.closest('main').getBoundingClientRect();
+    pop.style.left = '0px'; pop.style.maxWidth = Math.max(240, box.width - 32) + 'px';
+    const over = pop.getBoundingClientRect().right - (box.right - 16);
+    if (over > 0) pop.style.left = -Math.max(0, Math.min(over, d.getBoundingClientRect().left - box.left - 16)) + 'px';
+  }
+  const placeOpen = () => propPanels().forEach((d) => { if (d.open) placePop(d); });
+  propPanels().forEach((d) => d.addEventListener('toggle', () => {
+    if (!d.open) return;
+    propPanels().forEach((o) => { if (o !== d) o.open = false; });
+    placePop(d);
+  }));
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(placeOpen);
+    ro.observe(document.querySelector('.sig-props'));
+    propPanels().forEach((d) => ro.observe(d.querySelector('summary')));
+  }
+  addEventListener('resize', placeOpen);
+  document.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.sig-props > details') || e.target.closest('.suggest')) return;
+    propPanels().forEach((d) => { d.open = false; });
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') propPanels().forEach((d) => { if (d.open) { d.open = false; d.querySelector('summary').focus(); } }); });
   $('sigNew').addEventListener('change', () => setDefault('defaultNew', $('sigNew').checked));
   $('sigReply').addEventListener('change', () => setDefault('defaultReply', $('sigReply').checked));
   // A campaign: from / until.
   ['sigFrom', 'sigUntil'].forEach((id) => $(id).addEventListener('change', () => {
     const s = sig(); if (!s) return;
     s.validFrom = $('sigFrom').value; s.validUntil = $('sigUntil').value;
-    $('campaignSummary').textContent = campaignText(s) || t('always');
+    $('campaignSummary').textContent = campaignText(s) || t('always'); placeOpen();
     changed({ list: true });
   }));
   $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
@@ -31,7 +58,7 @@
   };
   function audienceShow(s) {
     const a = s.audience || (s.audience = { groups: [], departments: [], domains: [] }), mode = audMode(s);
-    $('audienceSummary').textContent = audienceText(s);
+    $('audienceSummary').textContent = audienceText(s); placeOpen();
     $('audienceSummary').classList.toggle('warn', core.forNobody(s));
     document.querySelectorAll('input[name=audMode]').forEach((r) => { r.checked = r.value === mode; });
     $('audSome').hidden = mode !== 'some';
@@ -170,8 +197,28 @@
   addEventListener('resize', () => closeMenu());
   document.addEventListener('scroll', () => closeMenu(), true);
 
-  $('btnNew').addEventListener('click', () => addSig());
-  $('btnNew2').addEventListener('click', () => addSig());
+  // New signature: first the layout, each shown with the sample values.
+  function openTemplates() {
+    const silhouette = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="100"><rect width="80" height="100" fill="#e3e7ee"/><circle cx="40" cy="38" r="17" fill="#b9c2d0"/><path d="M8 100c2-24 16-34 32-34s30 10 32 34z" fill="#b9c2d0"/></svg>');
+    const values = {};
+    S.config.fields.forEach((f) => { values[f.key] = f.sample || ''; });
+    $('tplList').replaceChildren(...TEMPLATES.map((tp) => {
+      const keys = core.placeholdersIn(tp.html);
+      keys.forEach((k) => { if (!(k in values)) values[k] = core.fieldFor(k).sample || ''; });
+      const html = core.render(core.compile(sanitize(tp.html.replace(/photos\/@@sAMAccountName\.jpg/g, silhouette)), scratchDoc), values, { assetBase: '/' });
+      const frame = el('iframe', { tabindex: '-1', 'aria-hidden': 'true', sandbox: '' });
+      frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:14px 16px;font-family:Arial,sans-serif;font-size:10pt;color:#222}p{margin:0}table{border-collapse:collapse}</style></head><body>' + html + '</body></html>';
+      const b = el('button', { type: 'button', class: 'tpl-card', 'data-tpl': tp.key },
+        frame, el('span', { class: 'tpl-name' }, t(tp.name)), el('span', { class: 'tpl-text' }, t(tp.text)));
+      b.addEventListener('click', () => { $('dlgTpl').close(); addSig(null, tp.html); });
+      return b;
+    }));
+    $('dlgTpl').showModal();
+    $('tplList').querySelector('.tpl-card').focus();
+  }
+  $('btnNew').addEventListener('click', openTemplates);
+  $('btnNew2').addEventListener('click', openTemplates);
+  $('btnImport2').addEventListener('click', () => $('btnImportOpen').click());
   $('btnDup').addEventListener('click', () => { flushSource(); const s = sig(); if (s) addSig(s); });
   $('btnDel').addEventListener('click', async () => {
     const s = sig(); if (!s || !(await ask(t('Delete the signature "{0}"? It goes from Outlook with the next publish.', s.name), t('Delete'), true))) return;

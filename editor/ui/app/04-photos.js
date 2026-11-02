@@ -67,7 +67,7 @@
         if (!(await ask(t('Remove the photo {0}? The person\'s signature goes without one from now on.', p.name), t('Remove'), true))) return;
         try { await api('photos/delete', { name: p.name }); toast(t('Photo {0} removed.', p.name)); renderPhotos(); } catch (e) { $('photoErr').textContent = t(e.message); }
       } }, '✕')))));
-    if (!photoItems.length) $('photoList').replaceChildren(el('li', { class: 'empty' }, t('No photos yet.')));
+    if (!photoItems.length) $('photoList').replaceChildren(el('li', { class: 'wide' }, emptyState('photo', t('No photos yet.'), t('Upload a person\'s photo above, or take it from an address on the web.'))));
   }
   $('photosFilter').addEventListener('input', () => photosShow(!$('photoFile').disabled));
   // The file name for the person typed: their value of the field, with the signatures' extension.

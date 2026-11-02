@@ -355,9 +355,11 @@
     try { wizConn = await api('connections/get'); } catch (e) { wizConn = null; }
     wizConnRender();
   }
+  // Back from the connections (Settings closed): the step says how they are now.
+  $('dlgSettings').addEventListener('close', () => { if ($('dlgWizard').open && WIZ.includes('connect')) wizConnLoad(); });
   $('wizConnOpen').addEventListener('click', async () => {
     $('wizErr').textContent = '';
-    try { renderConnections(await api('connections/get')); connTab('ad'); connTestsClear(); $('dlgConn').showModal(); } catch (err) { $('wizErr').textContent = t(err.message); }
+    try { await openConn('ad'); } catch (err) { $('wizErr').textContent = t(err.message); }
   });
   // The setup script (server/setup.js): made for the folder and the add-in's address as saved,
   // downloaded, run on a Windows PC; its result comes back to the server, and here by asking.
