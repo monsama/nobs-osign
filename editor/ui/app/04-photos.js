@@ -3,15 +3,19 @@
   // ---------------------------------------------------------------------------------------------
   // How the signatures name a photo: the field and the extension ('sAMAccountName', 'jpg').
   function photoRule() {
+    let rule = null;
     for (const s of (S.config && S.config.signatures) || []) {
-      const m = /<img[^>]+src="photos\/@@([A-Za-z][A-Za-z0-9_]*)\.(png|jpe?g|gif)"[^>]*>/i.exec(s.html || '');
-      if (m) {
-        // Its shape, from the size it is shown at (for the neutral placeholder): 1:1 when not given.
+      const re = /<img[^>]+src="photos\/@@([A-Za-z][A-Za-z0-9_]*)\.(png|jpe?g|gif)"[^>]*>/gi;
+      let m;
+      while ((m = re.exec(s.html || ''))) {
+        // Its shape, from the size it is shown at: the first one shown at a width and a height
+        // (one with a width only keeps the photo's own shape).
         const w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0, h = Number((/\sheight\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0;
-        return { key: m[1], ext: m[2].toLowerCase(), sig: s.name, ratio: w && h ? h / w : 1 };
+        if (!rule) rule = { key: m[1], ext: m[2].toLowerCase(), sig: s.name, ratio: null, w: 0, h: 0 };
+        if (!rule.ratio && w && h) Object.assign(rule, { ratio: h / w, w, h });
       }
     }
-    return null;
+    return rule;
   }
   const isDefaultPhoto = (n) => n.toLowerCase().startsWith(core.PHOTO_DEFAULT + '.');
   const PHOTO_W = 400;
@@ -39,8 +43,23 @@
     const q = $('photosFilter').value.trim().toLowerCase();
     const list = photoItems.filter((p) => !q || p.name.toLowerCase().includes(q));
     $('photosInfo').textContent = t('{0} photo(s)', photoItems.length) + (q ? ' · ' + t('{0} shown', list.length) : '');
+    const rule = photoRule();
+    // A photo of another shape than the signature shows it in: Outlook stretches it. Said, and
+    // made to fit with one click.
+    const shapeCheck = (img, li, p) => {
+      if (!rule || !rule.ratio || !img.naturalWidth) return;
+      if (Math.abs(img.naturalHeight / img.naturalWidth - rule.ratio) < 0.02 || li.querySelector('.pwarn')) return;
+      const fix = mayChange === false ? null : el('button', { type: 'button', class: 'small', onclick: async () => {
+        fix.disabled = true;
+        try {
+          const res = await fetch('/photos/' + encodeURIComponent(p.name), { credentials: 'same-origin' });
+          await photoSave(await res.blob(), p.name, { replace: true, saved: t('{0} made to fit ({1} × {2}).', p.name, rule.w, rule.h) });
+        } finally { fix.disabled = false; }
+      } }, t('Fit'));
+      li.append(el('div', { class: 'pwarn', title: t('{0} × {1} pixels; the signature shows it at {2} × {3}: Outlook stretches it.', img.naturalWidth, img.naturalHeight, rule.w, rule.h) }, t('Gets stretched'), fix));
+    };
     $('photoList').replaceChildren(...list.slice(0, 300).map((p) => el('li', null,
-      el('img', { src: '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || ''), alt: '', loading: 'lazy' }),
+      el('img', { src: '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || ''), alt: '', loading: 'lazy', onload: (e) => shapeCheck(e.target, e.target.parentNode, p) }),
       el('div', { class: 'pf' }, el('span', { class: 'pn' }, p.name),
       mayChange === false ? null : el('button', { type: 'button', class: 'ghost small pd-use', 'aria-label': t('Use {0} as the placeholder photo', p.name), title: t('As the placeholder photo, for whoever has none'), onclick: () => useAsDefault('/photos/' + encodeURIComponent(p.name), p.name) },
         el('span', { 'aria-hidden': 'true' }, '☆')),
@@ -172,29 +191,40 @@
     try { await api('photos/delete', { name: photoDefault.name }); toast(t('Placeholder photo removed.')); photoDefault = null; renderPhotos(); schedulePreview(); phRefresh(); return true; } catch (e) { errBox().textContent = t(e.message); return false; }
   }
   // Any image, as the photo: at most 400 pixels wide, in the signatures' format (a JPEG for .jpg).
-  async function photoSave(blob, fixedName) {
+  // The part of an image of w × h with the shape (height / width) the signatures show photos in:
+  // the middle across, a little above the middle down (where a face is).
+  function cropTo(w, h, ratio) {
+    if (!ratio || Math.abs(h / w - ratio) < 0.02) return { sx: 0, sy: 0, sw: w, sh: h };
+    if (h / w > ratio) { const sh = Math.round(w * ratio); return { sx: 0, sy: Math.round((h - sh) * 0.3), sw: w, sh }; }
+    const sw = Math.round(h / ratio); return { sx: Math.round((w - sw) / 2), sy: 0, sw, sh: h };
+  }
+  // opts.replace: no question when it is there already (made to fit again); opts.saved: the note.
+  async function photoSave(blob, fixedName, opts) {
+    opts = opts || {};
     const name = fixedName || photoFileName();
     if (!name) { errBox().textContent = t('Enter whose photo it is first.'); return; }
     errBox().textContent = '';
     let bmp;
     try { bmp = await createImageBitmap(blob); } catch (e) { errBox().textContent = t('This is not an image the browser can read.'); return; }
-    const scale = Math.min(1, PHOTO_W / bmp.width);
-    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    // In the shape the signature shows it (its width and height): else Outlook stretches it.
+    const rule = photoRule(), cut = cropTo(bmp.width, bmp.height, rule && rule.ratio);
+    const scale = Math.min(1, PHOTO_W / cut.sw);
+    const c = document.createElement('canvas'); c.width = Math.round(cut.sw * scale); c.height = Math.round(cut.sh * scale);
     const g = c.getContext('2d');
     if (/\.gif$/i.test(name) && blob.type !== 'image/gif') { errBox().textContent = t('The signatures take GIF photos: choose a GIF.'); return; }
     const type = /\.png$/i.test(name) ? 'image/png' : 'image/jpeg';
     // A JPEG has no transparency: white behind it, as in a mail.
     if (type === 'image/jpeg') { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); }
-    g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
+    g.imageSmoothingQuality = 'high'; g.drawImage(bmp, cut.sx, cut.sy, cut.sw, cut.sh, 0, 0, c.width, c.height);
     const out = await new Promise((res) => c.toBlob(res, type, 0.86));
     // A GIF stays as it came (the canvas makes none).
     const data = /\.gif$/i.test(name) ? blob : out;
     const b64 = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.readAsDataURL(data); });
     if (!fixedName && isDefaultPhoto(name)) { errBox().textContent = t('That name is the placeholder photo\'s.'); return; }
-    if (photoItems.some((p) => p.name.toLowerCase() === name.toLowerCase()) && !(await ask(t('{0} is there already. Replace it?', name), t('Replace'), true))) return;
+    if (!opts.replace && photoItems.some((p) => p.name.toLowerCase() === name.toLowerCase()) && !(await ask(t('{0} is there already. Replace it?', name), t('Replace'), true))) return;
     try {
       await api('photos/upload', { name, data: b64 });
-      toast(fixedName ? t('Placeholder photo saved ({0}).', kb(data.size)) : t('Photo {0} saved ({1}).', name, kb(data.size)));
+      toast(opts.saved || (fixedName ? t('Placeholder photo saved ({0}).', kb(data.size)) : t('Photo {0} saved ({1}).', name, kb(data.size))));
       if (!fixedName) { $('photoWho').value = ''; $('photoUrl').value = ''; photoNameShow(); }
       renderPhotos(); schedulePreview();
       if (fixedName) await phRefresh();

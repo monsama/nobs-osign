@@ -788,3 +788,5 @@ button.danger-btn { background: #c62828; border-color: #c62828; color: #fff; }
 #dlgPlaceholder { width: min(760px, 94vw); }
 #audienceSummary.warn { color: var(--warn); }
 .badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.photo-list .pwarn { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; font-size: 12px; color: var(--warn); }
+.photo-list .pwarn button { height: 24px; }
