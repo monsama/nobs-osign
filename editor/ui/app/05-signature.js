@@ -212,7 +212,15 @@
         frame, el('span', { class: 'tpl-name' }, t(tp.name)), el('span', { class: 'tpl-text' }, t(tp.text)));
       b.addEventListener('click', () => { $('dlgTpl').close(); addSig(null, tp.html); });
       return b;
-    }));
+    }), (() => {
+      // Or what there is already: templates from CI-Sign or classic Outlook.
+      const art = el('span', { class: 'tpl-art', 'aria-hidden': 'true' });
+      art.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 19h14"/></svg>';
+      const b = el('button', { type: 'button', class: 'tpl-card', 'data-tpl': 'import' }, art,
+        el('span', { class: 'tpl-name' }, t('Import templates')), el('span', { class: 'tpl-text' }, t('From CI-Sign or classic Outlook (.htm with its images).')));
+      b.addEventListener('click', () => { $('dlgTpl').close(); $('btnImportOpen').click(); });
+      return b;
+    })());
     $('dlgTpl').showModal();
     $('tplList').querySelector('.tpl-card').focus();
   }

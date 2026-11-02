@@ -55,11 +55,22 @@
           S.config.fields.splice(Math.min(i, S.config.fields.length), 0, f); changed({ list: false }); renderFields();
         } });
       } }, '✕');
+      // Where the value comes from: in one line, opened to change it (rarely needed).
+      const src = el('td', { class: 'src' + (f.graph ? '' : ' nograph') });
+      const sum = el('button', { type: 'button', class: 'src-sum', 'aria-expanded': 'false', title: t('Change where the value comes from') });
+      const sumText = () => { sum.textContent = (f.ad ? 'AD ' + f.ad : t('no AD attribute')) + ' · ' + (f.graph ? 'Graph ' + f.graph : t('not in Entra ID')); src.classList.toggle('nograph', !f.graph); };
+      sumText();
+      sum.addEventListener('click', () => { const on = !src.classList.contains('open'); src.classList.toggle('open', on); sum.setAttribute('aria-expanded', String(on)); if (on) src.querySelector('.src-edit input').focus(); });
+      const adI = inp('ad', { list: 'adAttrs', 'aria-label': t('AD attribute') }), grI = inp('graph', { list: 'graphProps', placeholder: t('not available'), 'aria-label': t('Graph source') });
+      [adI, grI].forEach((x) => x.addEventListener('input', () => { sumText(); sum.classList.toggle('bad', adI.classList.contains('bad')); }));
+      src.append(sum, el('div', { class: 'src-edit' },
+        el('label', null, el('span', null, t('AD attribute')), adInput(f, adI)),
+        el('label', null, el('span', null, t('Graph source')), grI)));
+      sum.classList.toggle('bad', adI.classList.contains('bad'));
       tb.append(el('tr', null,
         el('td', null, inp('label', { 'aria-label': t('Field') })),
         el('td', null, el('div', { class: 'ph' }, el('span', null, '@@'), key)),
-        el('td', null, adInput(f, inp('ad', { list: 'adAttrs', 'aria-label': t('AD attribute') }))),
-        el('td', { class: f.graph ? '' : 'nograph' }, inp('graph', { list: 'graphProps', placeholder: t('not available'), 'aria-label': t('Graph source') })),
+        src,
         el('td', null, inp('sample', { 'aria-label': t('Sample value') })),
         el('td', { class: 'center' }, editable(f)),
         el('td', null, del)));
@@ -88,12 +99,15 @@
   // Add-in options
   // ---------------------------------------------------------------------------------------------
   const OPTS = { optDisable: 'disableOutlookSignature', optChoice: 'allowUserChoice', optMeetings: 'meetings', optNoProfile: 'insertWithoutProfile', optOwn: 'allowOwnSignatures' };
-  function renderOptions() {
-    Object.entries(OPTS).forEach(([id, k]) => { $(id).checked = !!S.config.options[k]; });
-    // The manifest's address, as the add-in's files were made for it.
+  // The manifest's address, as the add-in's files were made for it (Settings → Outlook add-in).
+  function installShow() {
     const base = S.settings && S.settings.addinUrl ? S.settings.addinUrl.replace(/\/+$/, '') + '/' : '';
     $('installManifest').textContent = base ? base + 'manifest.xml' : '';
     $('installLink').hidden = !base; $('installNone').hidden = !!base;
+  }
+  function renderOptions() {
+    Object.entries(OPTS).forEach(([id, k]) => { $(id).checked = !!S.config.options[k]; });
+    installShow();
     const mode = core.valueSource(S.config);
     document.querySelectorAll('input[name=vsrc]').forEach((r) => { r.checked = r.value === mode; });
     // The server version: it exports the users itself, every day at the time set on it.

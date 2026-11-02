@@ -207,6 +207,9 @@
   }
 
   function renderList() {
+    // Users (the values read from AD, to check before they go out): only where values come from AD.
+    const nu = document.querySelector('.nav-list a[data-view=users]');
+    if (nu) nu.parentNode.hidden = !core.usesAdExport(S.config) && S.view !== 'users';
     const ul = $('sigList'); ul.textContent = '';
     if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, t('None yet')));
     S.config.signatures.forEach((s) => {

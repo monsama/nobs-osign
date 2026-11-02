@@ -64,11 +64,12 @@
     const view = (v) => () => document.querySelector('.nav-list a[data-view="' + v + '"]').click();
     const items = [];
     S.config.signatures.forEach((s) => items.push({ kind: t('Signature'), label: s.name || t('(no name)'), go: () => openSig(s.id) }));
-    [[t('Fields'), view('fields')], [t('Add-in'), view('options')], [t('Users'), view('users')], [t('Photos'), view('photos')],
+    [[t('Fields'), view('fields')], [t('Add-in'), view('options')], core.usesAdExport(S.config) ? [t('Users'), view('users')] : null, [t('Photos'), view('photos')],
       [t('History'), () => $('navHistory').click()], [t('Settings'), () => $('btnSettings').click()], [t('New signature'), () => $('btnNew').click()],
       [t('Import templates'), () => $('btnImportOpen').click()], [t('Publish…'), () => $('btnPublish').click()], [t('Keyboard shortcuts'), () => $('dlgKeys').showModal()]]
-      .forEach(([label, go]) => items.push({ kind: t('Go to'), label, go }));
-    if (!$('btnWizard').hidden) items.push({ kind: t('Go to'), label: t('Setup assistant'), go: () => $('btnWizard').click() });
+      .filter(Boolean).forEach(([label, go]) => items.push({ kind: t('Go to'), label, go }));
+    if (!$('setWizRow').hidden) items.push({ kind: t('Go to'), label: t('Setup assistant'), go: () => wizOpen(0) });
+    items.push({ kind: t('Go to'), label: t('Load published'), go: () => $('btnLoad').click() });
     S.config.fields.forEach((f) => items.push({ kind: t('Field'), label: (f.label || f.key) + (f.label && f.label !== f.key ? ' · @@' + f.key : ''), go: () => { view('fields')(); setTimeout(() => {
       const row = [...document.querySelectorAll('#viewFields tr')].find((tr) => [...tr.querySelectorAll('input')].some((i) => i.value === f.key));
       if (row) { row.scrollIntoView({ block: 'center' }); const i = row.querySelector('input'); if (i) i.focus(); }
@@ -361,7 +362,7 @@
   $('navHistory').addEventListener('click', (e) => { e.preventDefault(); $('dlgHistory').showModal(); renderHistory(); });
   $('btnLoad').addEventListener('click', async () => {
     if (S.dirty && !(await ask(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'), t('Replace'), true))) return;
-    try { applyDraft(await api('load-published')); toast(t('Loaded the published signatures.')); }
+    try { applyDraft(await api('load-published')); $('dlgHistory').close(); toast(t('Loaded the published signatures.')); }
     catch (e) { toast(t(e.message), true); }
   });
 
