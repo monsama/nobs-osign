@@ -1076,3 +1076,28 @@ test('the image bar on a person\'s photo: the placeholder for all signatures, ch
   await page.click('#btnDel');
   await page.click('#askOk');
 });
+
+test('who gets it: a new signature is not assigned until the entire organization (or a group…) is given; one can be set to not assigned again', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  assert.equal(await page.textContent('#audienceSummary'), 'not assigned');
+  assert.match(await page.textContent('#sigList li a.active'), /Not assigned/);
+  await page.click('#audienceSummary');
+  await page.check('#sigEveryone');
+  assert.equal(await page.textContent('#audienceSummary'), 'entire organization');
+  assert.doesNotMatch(await page.textContent('#sigList li a.active'), /Not assigned/);
+  // A group given: the box does not count, and cannot be changed.
+  await page.fill('#sigGroups', 'SG-X'); await page.dispatchEvent('#sigGroups', 'input');
+  assert.equal(await page.isDisabled('#sigEveryone'), true);
+  await page.fill('#sigGroups', ''); await page.dispatchEvent('#sigGroups', 'input');
+  // Back to not assigned: the publish check says so.
+  await page.uncheck('#sigEveryone');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  assert.match(await page.textContent('#pubChecks'), /Not assigned, nobody gets: /);
+  await page.click('#dlgPublish button[value=cancel]');
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});

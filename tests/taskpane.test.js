@@ -8,6 +8,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
 const core = require('../shared/signature-core.js');
+// A signature for the entire organization (a new one is not assigned to anybody).
+const sigAll = (id, name) => { const s = core.newSignature(id, name); s.audience.everyone = true; return s; };
 const buildTestAddin = require('./support/build-test-addin.js');
 const fakeGraph = require('./support/fake-graph.js');
 
@@ -21,9 +23,9 @@ const doc = new JSDOM('').window.document;
 const cfg = core.defaultConfig();
 cfg.updated = '2026-10-30T13:02:00Z';
 cfg.signatures = [
-  Object.assign(core.newSignature('std', 'Standard'), { defaultNew: true, defaultReply: true, html: '<p><b>@@givenName @@sn</b></p><p>Mobile @@mobile</p><p><img src="assets/logo.png"></p>' }),
-  Object.assign(core.newSignature('short', 'Short'), { html: '<p>@@givenName</p>' }),
-  Object.assign(core.newSignature('it', 'IT only'), { audience: { departments: ['IT'], domains: [], groups: [] }, html: '<p>IT</p>' })
+  Object.assign(sigAll('std', 'Standard'), { defaultNew: true, defaultReply: true, html: '<p><b>@@givenName @@sn</b></p><p>Mobile @@mobile</p><p><img src="assets/logo.png"></p>' }),
+  Object.assign(sigAll('short', 'Short'), { html: '<p>@@givenName</p>' }),
+  Object.assign(sigAll('it', 'IT only'), { audience: { departments: ['IT'], domains: [], groups: [] }, html: '<p>IT</p>' })
 ];
 cfg.signatures.forEach((s) => { s.compiled = core.compile(s.html, doc); });
 
@@ -207,7 +209,7 @@ test('classic Outlook: the pane keeps what goes in by itself in the mailbox, its
     assert.ok(all < 32 * 1024, all);
     // A campaign running now: kept with what goes in once it ends.
     const withCampaign = JSON.parse(JSON.stringify(cfg));
-    withCampaign.signatures.push(Object.assign(core.newSignature('camp', 'Campaign'), { defaultNew: true, validFrom: '2020-01-01', validUntil: '2099-12-31', html: '<p>Fair</p>', compiled: core.compile('<p>Fair</p>', doc) }));
+    withCampaign.signatures.push(Object.assign(sigAll('camp', 'Campaign'), { defaultNew: true, validFrom: '2020-01-01', validUntil: '2099-12-31', html: '<p>Fair</p>', compiled: core.compile('<p>Fair</p>', doc) }));
     const graph2 = fakeGraph({ files: { 'signatures.json': JSON.stringify(withCampaign), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
     const page3 = await openPane(browser, dir, graph2, 'en-US', 'PC');
     await page3.waitForFunction(() => !!window.__roaming['osign.classic'], null, { timeout: 8000 });

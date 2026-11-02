@@ -3,6 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
 const core = require('../shared/signature-core.js');
+// A signature for the entire organization (a new one is not assigned to anybody).
+const sigAll = (id, name) => { const s = core.newSignature(id, name); s.audience.everyone = true; return s; };
 
 const doc = new JSDOM('<!doctype html><body></body>').window.document;
 const run = (html, values, opts) => core.render(core.compile(html, doc), values, opts);
@@ -98,10 +100,10 @@ test('plain text version', () => {
 test('pick: user choice, then the default, filtered by audience', () => {
   const cfg = core.defaultConfig();
   cfg.signatures = [
-    Object.assign(core.newSignature('std', 'Standard'), { defaultNew: true }),
-    Object.assign(core.newSignature('short', 'Short'), { defaultReply: true }),
-    Object.assign(core.newSignature('it', 'IT'), { audience: { departments: ['Informatik'], domains: [] } }),
-    Object.assign(core.newSignature('other', 'Other firm'), { defaultNew: true, audience: { departments: [], domains: ['other.ch'] } })
+    Object.assign(sigAll('std', 'Standard'), { defaultNew: true }),
+    Object.assign(sigAll('short', 'Short'), { defaultReply: true }),
+    Object.assign(sigAll('it', 'IT'), { audience: { departments: ['Informatik'], domains: [] } }),
+    Object.assign(sigAll('other', 'Other firm'), { defaultNew: true, audience: { departments: [], domains: ['other.ch'] } })
   ];
   const me = { department: 'informatik ' };
   assert.equal(core.pick(cfg, me, 'a@monsama.ch', 'new', null).id, 'std');
@@ -140,8 +142,8 @@ test('validate', () => {
 test('groups: a signature for groups is open to their members only, and wins as default', () => {
   const cfg = core.defaultConfig();
   cfg.signatures = [
-    Object.assign(core.newSignature('std', 'Standard'), { defaultNew: true }),
-    Object.assign(core.newSignature('sales', 'Sales'), { defaultNew: true, audience: { departments: [], domains: [], groups: ['SG-Sales', 'SG-Field'] } })
+    Object.assign(sigAll('std', 'Standard'), { defaultNew: true }),
+    Object.assign(sigAll('sales', 'Sales'), { defaultNew: true, audience: { departments: [], domains: [], groups: ['SG-Sales', 'SG-Field'] } })
   ];
   assert.deepEqual(core.groupsUsed(cfg), ['sg-sales', 'sg-field']);
   assert.equal(core.pick(cfg, {}, 'a@x.ch', 'new', null, ['sg-field']).id, 'sales');
@@ -227,7 +229,7 @@ test('campaigns: only on their days, and then they win as default; before and af
 test('variants: the user\'s own text only in editable fields, only of signatures still open', () => {
   const c = core.defaultConfig();
   c.fields.push({ key: 'greeting', label: 'Grussformel', ad: '', graph: '', sample: '', userEditable: true });
-  c.signatures = [Object.assign(core.newSignature('std', 'Standard'), { defaultNew: true, html: '<p>@@greeting</p><p>@@givenName</p>' })];
+  c.signatures = [Object.assign(sigAll('std', 'Standard'), { defaultNew: true, html: '<p>@@greeting</p><p>@@givenName</p>' })];
   const variants = [
     { id: 'my-a', name: 'Herzlich', base: 'std', values: { greeting: 'Herzliche Grüsse', givenName: 'Hacker' } },
     { id: 'my-b', name: 'Gone', base: 'old', values: { greeting: 'x' } },
@@ -272,7 +274,7 @@ test('lines: a label row with several empty values goes whole; a label stays wit
 
 test('a signature of one\'s own: only while the editor allows it, and not too long', () => {
   const c = core.defaultConfig();
-  c.signatures = [Object.assign(core.newSignature('std', 'Standard'), { html: '<p>@@givenName</p>', compiled: '<p>@@givenName</p>' })];
+  c.signatures = [Object.assign(sigAll('std', 'Standard'), { html: '<p>@@givenName</p>', compiled: '<p>@@givenName</p>' })];
   const v = [{ id: 'my-1', name: 'Mine', base: 'std', own: '<p>Anna, Team Lead</p>' }];
   assert.equal(core.withVariants(c, v).signatures.length, 1, 'off: not there');
   c.options.allowOwnSignatures = true;
@@ -283,4 +285,18 @@ test('a signature of one\'s own: only while the editor allows it, and not too lo
   // Users may not choose: none of their own either.
   c.options.allowUserChoice = false;
   assert.equal(core.ownAllowed(c), false);
+});
+
+test('who gets a signature: a new one is not assigned (nobody), the entire organization when ticked, one from before as it was (everyone)', () => {
+  const s = core.newSignature('n', 'New');
+  assert.equal(core.isAvailable(s, {}, 'a@b.ch', []), false);
+  assert.equal(core.forNobody(s), true);
+  s.audience.everyone = true;
+  assert.equal(core.isAvailable(s, {}, 'a@b.ch', []), true);
+  // From before the flag: everyone, as it was.
+  assert.equal(core.isAvailable({ id: 'o', audience: { departments: [], domains: [], groups: [] } }, {}, 'a@b.ch', []), true);
+  // A group given: the flag says nothing.
+  const g = Object.assign(core.newSignature('g', 'G'), { audience: { departments: [], domains: [], groups: ['SG'], everyone: false } });
+  assert.equal(core.isAvailable(g, {}, 'a@b.ch', ['sg']), true);
+  assert.equal(core.forNobody(g), false);
 });

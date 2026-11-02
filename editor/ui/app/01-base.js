@@ -183,7 +183,7 @@
     if ((a.groups || []).length) parts.push(a.groups.join(', '));
     if ((a.departments || []).length) parts.push(a.departments.join(', '));
     if ((a.domains || []).length) parts.push('@' + a.domains.join(', @'));
-    return parts.length ? parts.join(' · ') : t('everyone');
+    return parts.length ? parts.join(' · ') : a.everyone === false ? t('not assigned') : t('entire organization');
   }
 
   // A campaign's days, as words; '' when it has none.
@@ -201,7 +201,8 @@
         el('div', { class: 'badges' },
           s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
           s.defaultReply ? el('span', { class: 'badge on' }, t('Reply')) : null,
-          audienceText(s) !== t('everyone') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
+          core.forNobody(s) ? el('span', { class: 'badge warn', title: t('Not assigned: nobody gets it. Give it groups, departments or domains, or the entire organization (Who gets it).') }, t('Not assigned')) :
+          audienceText(s) !== t('entire organization') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
           core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' on' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
       a.addEventListener('contextmenu', (e) => { e.preventDefault(); sigMenu(s, e.clientX, e.clientY); });
       a.addEventListener('keydown', (e) => {
@@ -342,7 +343,7 @@
     $('sigGroups').value = (s.audience.groups || []).join(', ');
     $('sigDeps').value = (s.audience.departments || []).join(', ');
     $('sigDoms').value = (s.audience.domains || []).join(', ');
-    $('audienceSummary').textContent = audienceText(s);
+    audienceShow(s);
     $('sigFrom').value = s.validFrom || '';
     $('sigUntil').value = s.validUntil || '';
     $('campaignSummary').textContent = campaignText(s) || t('always');

@@ -89,13 +89,14 @@
             the usual signatures again, by themselves.</p>
         </details>
         <details class="audience">
-          <summary>Who gets it: <span id="audienceSummary">everyone</span></summary>
+          <summary>Who gets it: <span id="audienceSummary">not assigned</span></summary>
           <div class="grid3">
             <label>AD groups <button type="button" class="help" data-help="hGroups" aria-label="Help">?</button> <small>(any of them; nested groups count)</small><input id="sigGroups" placeholder="SG-Signatur-Verkauf" autocomplete="off"></label>
             <label>Departments <button type="button" class="help" data-help="hDeps" aria-label="Help">?</button> <small>(comma separated)</small><input id="sigDeps" placeholder="Informatik, Verkauf" autocomplete="off"></label>
             <label>Sender domains <button type="button" class="help" data-help="hDoms" aria-label="Help">?</button> <small>(the From address)</small><input id="sigDoms" placeholder="example.com"></label>
           </div>
-          <p class="hint">Empty means everyone. When several are filled in, a user has to match each of them.</p>
+          <label class="check block"><input type="checkbox" id="sigEveryone"> Entire organization (no groups, departments or domains needed)</label>
+          <p class="hint">Nothing filled in and not for the entire organization: not assigned, nobody gets it (a new signature, until you choose; take the tick away to stop one for now). When several are filled in, a user has to match each of them.</p>
         </details>
       </div>
 
