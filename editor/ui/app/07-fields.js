@@ -87,7 +87,7 @@
   // ---------------------------------------------------------------------------------------------
   // Add-in options
   // ---------------------------------------------------------------------------------------------
-  const OPTS = { optDisable: 'disableOutlookSignature', optChoice: 'allowUserChoice', optMeetings: 'meetings', optNoProfile: 'insertWithoutProfile' };
+  const OPTS = { optDisable: 'disableOutlookSignature', optChoice: 'allowUserChoice', optMeetings: 'meetings', optNoProfile: 'insertWithoutProfile', optOwn: 'allowOwnSignatures' };
   function renderOptions() {
     Object.entries(OPTS).forEach(([id, k]) => { $(id).checked = !!S.config.options[k]; });
     // The manifest's address, as the add-in's files were made for it.

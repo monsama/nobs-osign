@@ -42,3 +42,11 @@ select { appearance: none; -webkit-appearance: none; padding-right: 28px; cursor
   .msg { background: #3a2e17; color: #f3c27a; }
   .msg.error { background: #3b1f1c; color: #f2a59c; }
 }
+
+/* A signature of one's own: edited right there, as it will look. */
+.own-edit { background: #fff; color: #222; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 120px; max-height: 360px; overflow: auto; font-family: Aptos, Calibri, Arial, sans-serif; font-size: 11pt; zoom: .85; outline: none; }
+.own-edit:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.own-edit p { margin: 0; }
+.own-edit img { max-width: 100%; }
+.own-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.own-tools button { min-width: 30px; padding: 0 8px; }

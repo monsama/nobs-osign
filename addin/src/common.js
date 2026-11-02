@@ -450,6 +450,20 @@ export async function previewHtml(sig, values) {
   return placeImages(html, images, 'data');
 }
 
+// For a signature of one's own: the signature filled in, its images shown (data:) but each
+// remembering where it is from (data-osign-src), so that is what is kept.
+export async function editableHtml(sig, values) {
+  const html = renderHtml(sig, values);
+  let images = {};
+  try { images = await loadImages(core.localImages(html), false); } catch (e) { /* shown without */ }
+  return core.localImages(html).reduce((h, r) => {
+    const img = images[r.dir + '/' + r.name];
+    if (!img) return h;
+    const tag = r.tag.replace(r.src, 'data:' + img.type + ';base64,' + img.b64).replace(/^<img\b/i, '<img data-osign-src="' + r.src.replace(/"/g, '&quot;') + '"');
+    return h.split(r.tag).join(tag);
+  }, html);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Classic Outlook on Windows: its event runtime is refused the sign-in, and shares with the pane
 // nothing but the add-in's settings in the mailbox (roaming settings, 32 KB in all). So the pane

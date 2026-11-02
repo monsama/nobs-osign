@@ -96,6 +96,9 @@
         // Users may pick, in the add-in's pane, which of the signatures open to them is used for
         // new mail and which for replies. Off: the central defaults always apply.
         allowUserChoice: true,
+        // Users may make a signature of their own from a company one, all of it theirs to change
+        // (in the add-in's pane, kept in their mailbox). Off: only the fields marked as editable.
+        allowOwnSignatures: false,
         // Without the user's details (Graph not set up, or not reachable and nothing cached) a
         // signature would go out with no name in it. Off by default: nothing is inserted then.
         insertWithoutProfile: false,
@@ -434,14 +437,18 @@
   // text in the fields the editor marked "editable in the add-in" (a greeting, a line of their
   // own). Layout, images and every other field stay the company's. Kept in the user's mailbox.
   // ---------------------------------------------------------------------------------------------
-  var VARIANT_MAX = 20, VARIANT_VALUE_MAX = 300, VARIANT_NAME_MAX = 60;
+  var VARIANT_MAX = 20, VARIANT_VALUE_MAX = 300, VARIANT_NAME_MAX = 60, VARIANT_OWN_MAX = 12000;
+  // Signatures of their own (all of it): only when the editor allows it.
+  function ownAllowed(config) {
+    return !!config && !(config.options && config.options.allowUserChoice === false) && !!(config.options && config.options.allowOwnSignatures);
+  }
 
   function editableKeys(config) {
     return ((config && config.fields) || []).filter(function (f) { return f && f.userEditable; }).map(function (f) { return f.key; });
   }
   // Variants are open when users may choose and at least one field may be changed.
   function variantsAllowed(config) {
-    return !!config && !(config.options && config.options.allowUserChoice === false) && editableKeys(config).length > 0;
+    return !!config && !(config.options && config.options.allowUserChoice === false) && (editableKeys(config).length > 0 || ownAllowed(config));
   }
   // The editable fields a signature uses: only for those can a variant say something.
   function editableIn(config, sig) {
@@ -460,6 +467,17 @@
       if (!base) return;
       var vals = {};
       keys.forEach(function (k) { if (v.values && typeof v.values[k] === 'string') vals[k] = v.values[k].slice(0, VARIANT_VALUE_MAX); });
+      // All of it their own (the pane compiled it): only while the editor allows it; else the
+      // variant is not there (nor what it held), and comes back when it is allowed again.
+      if (typeof v.own === 'string') {
+        if (!ownAllowed(config) || v.own.length > VARIANT_OWN_MAX) return;
+        extra.push(Object.assign({}, base, {
+          id: v.id, name: String(v.name || base.name).slice(0, VARIANT_NAME_MAX), variantOf: base.id,
+          defaultNew: false, defaultReply: false, own: true, html: v.own, compiled: v.own, userValues: undefined
+        }));
+        return;
+      }
+      if (!keys.length) return;
       extra.push(Object.assign({}, base, {
         id: v.id, name: String(v.name || base.name).slice(0, VARIANT_NAME_MAX), variantOf: base.id,
         defaultNew: false, defaultReply: false, userValues: vals
@@ -621,6 +639,8 @@
     editableKeys: editableKeys,
     editableIn: editableIn,
     variantsAllowed: variantsAllowed,
+    ownAllowed: ownAllowed,
+    VARIANT_OWN_MAX: VARIANT_OWN_MAX,
     withVariants: withVariants,
     valuesFor: valuesFor,
     VARIANT_MAX: VARIANT_MAX,

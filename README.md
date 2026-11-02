@@ -128,6 +128,14 @@ usual default; before and after, the usual one comes back by itself.
 Outlook's own signature is switched off for messages the add-in signs (an option in the editor), so
 a mail never gets two.
 
+**Users' own signatures.** In the pane (*OSign → Signatures*), a user can make a variant of a company
+signature, kept in their mailbox and offered for new mail and replies:
+- with the fields the editor marks *Editable in the add-in* only (a greeting, a line of their own):
+  layout, images and every other field stay the company's, and follow its changes;
+- or, when the editor allows *own signatures* (Add-in options), all of it, edited right in the pane:
+  filled in with their details as they were then, the company's images kept, no images of their own,
+  12 000 characters at most. Turned off again, those are not used (they come back when it is on).
+
 ## Importing existing templates
 
 **⤓** next to *Signatures* imports `.htm` templates with their images: from CI-Sign (it keeps them
