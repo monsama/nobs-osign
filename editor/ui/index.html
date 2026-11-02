@@ -25,7 +25,6 @@
   <!-- As in NOBS SQL Editor: the main action first, then the tools, then, always at the right,
        Settings, the coffee and who is signed in. -->
   <button id="btnPublish" class="primary">Publish…</button>
-  <button id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button>
   <span id="wizSep" class="tbsep" aria-hidden="true"></span>
   <button id="btnWizard" class="ghost" title="Step by step through the SharePoint folder, the app registration and the add-in">Setup assistant</button>
   <span class="tbsep" aria-hidden="true"></span>
@@ -43,7 +42,7 @@
     <div class="side-head">
       <span id="sideSigs"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M6 15c2.5-6 4.5-9 6-9s1 4-1 7 1 3 3 1 3-3 4-2"/></svg>Signatures</span>
       <span class="side-btns">
-        <button id="btnImportOpen" class="icon-btn" title="Import templates (.htm, e.g. from CI-Sign or classic Outlook)" aria-label="Import templates">⤓</button>
+        <button id="btnImportOpen" type="button" hidden>Import templates</button>
         <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
       </span>
     </div>
@@ -54,7 +53,7 @@
     <div class="side-head"><span id="sideManage"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Manage</span></div>
     <ul class="nav-list">
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
-      <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; sign-in</small></a></li>
+      <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; values</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
       <li><a href="#" data-view="photos" class="nav">Photos <small>one per person</small></a></li>
     </ul>
@@ -77,9 +76,10 @@
         <button id="btnDel" class="ghost danger">Delete</button>
       </div>
       <div class="sig-props">
-        <label class="check"><input type="checkbox" id="sigNew"> Default for new mail</label>
-        <label class="check"><input type="checkbox" id="sigReply"> Default for replies &amp; forwards</label>
-        <label class="check"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines <button type="button" class="help" data-help="hRemoveEmpty" aria-label="Help">?</button></label>
+        <div class="pills" role="group" aria-label="Default for"><span class="chip-k">Default for:</span>
+          <label class="pill"><input type="checkbox" id="sigNew"> New mail</label>
+          <label class="pill"><input type="checkbox" id="sigReply"> Replies &amp; forwards</label>
+        </div>
 <span class="props-sep" aria-hidden="true"></span>
         <details class="audience campaign" id="sigCampaign">
           <summary><span class="chip-k">When:</span> <span id="campaignSummary">always</span></summary>
@@ -105,6 +105,13 @@
             <p class="hint">Any one of a kind is enough (nested groups count); with several kinds, a user has to match each kind.</p>
           </div>
           <p id="audNone" class="hint" hidden>Nobody gets it until you choose: kept, but not used (a new or imported signature starts so).</p>
+          </div>
+        </details>
+        <details class="audience" id="sigMore">
+          <summary><span class="chip-k">Options</span></summary>
+          <div class="pop pop-s">
+            <label class="check"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines <button type="button" class="help" data-help="hRemoveEmpty" aria-label="Help">?</button></label>
+            <p class="hint">On for nearly every signature: a line whose fields are all empty for someone (e.g. «Mobile» without a mobile number) is left out.</p>
           </div>
         </details>
       </div>
@@ -165,7 +172,7 @@
         profile in Entra ID. <b>AD attribute</b> is for the preview here, read from Active Directory.</p>
       <div class="table-wrap">
         <table class="fields">
-          <thead><tr><th>Field</th><th>Placeholder</th><th>AD attribute <button type="button" class="help" data-help="hAdAttr" aria-label="Help">?</button></th><th>Graph source <button type="button" class="help" data-help="hGraph" aria-label="Help">?</button></th><th>Sample value</th><th class="center">Editable in the add-in <button type="button" class="help" data-help="hEditable" aria-label="Help">?</button></th><th></th></tr></thead>
+          <thead><tr><th>Field</th><th>Placeholder</th><th>Source <small>(AD <button type="button" class="help" data-help="hAdAttr" aria-label="Help">?</button> · Graph <button type="button" class="help" data-help="hGraph" aria-label="Help">?</button>)</small></th><th>Sample value</th><th class="center">Editable in the add-in <button type="button" class="help" data-help="hEditable" aria-label="Help">?</button></th><th></th></tr></thead>
           <tbody id="fieldRows"></tbody>
         </table>
       </div>
@@ -200,15 +207,6 @@
         <label class="check block"><input type="radio" name="vsrc" value="ad"> <span data-th="vsrcAd"><b>Active Directory</b>: every field by its AD attribute. Groups from AD.</span></label>
       </fieldset>
       <p class="lead" id="vsrcServerNote" hidden></p>
-      <h2>Sign-in and permissions</h2>
-      <p class="lead" data-th="signinLead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
-        details and groups from Entra ID and the signatures from the OSign folder in SharePoint. It uses one app registration,
-        set in Settings → Outlook add-in, when the add-in's files are made - not in the signatures. <a href="#" id="lnkSetup">How to register it</a></p>
-      <h2>Install</h2>
-      <p class="lead" data-th="installLead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
-        is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://osign.contoso.com/manifest.xml</code>. Settings → Outlook add-in makes the files.</p>
-      <p id="installLink" class="copyline" hidden><span>Manifest:</span> <code id="installManifest"></code><button type="button" class="copy" data-copy="installManifest">Copy</button></p>
-      <p id="installNone" class="hint" hidden>No address for the add-in yet: set it in the setup assistant (Where the add-in is served).</p>
     </section>
 
     <!-- users from AD -->
@@ -294,7 +292,7 @@
     <div class="table-wrap"><table class="fields history"><thead><tr><th>Published</th><th>By</th><th>What changed</th><th>Signatures</th><th></th></tr></thead>
       <tbody id="historyRows"></tbody></table></div>
     <p id="historyErr" class="err"></p>
-    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+    <div class="dlg-foot"><button type="button" id="btnLoad" class="ghost" title="Replace the draft with what is published">Load published</button><span class="spacer"></span><button value="cancel" class="primary">Close</button></div>
   </form>
 </dialog>
 
@@ -393,6 +391,10 @@
         <div class="setrow">
           <div class="setrow-text"><b>Language</b><small>The language of this interface. Signatures are not affected.</small></div>
           <select id="setLang" aria-label="Language"></select>
+        </div>
+        <div class="setrow" id="setWizRow" hidden>
+          <div class="setrow-text"><b>Setup assistant</b><small>Step by step through the connections, the app registration and the add-in, again.</small></div>
+          <button type="button" id="setWizard">Open the assistant</button>
         </div>
       </div>
       <p id="setServerWhere" class="lead" hidden></p>
@@ -506,6 +508,17 @@
       <a id="setAddinZip" href="/addin.zip" download hidden>Download as ZIP</a>
       <a id="setAddinManifest" class="btnlike" href="/addin/manifest.xml" download hidden>Download manifest.xml</a></p>
     <p id="setAddinOk" class="ok"></p>
+    <div class="addin-info">
+      <h3>Sign-in and permissions</h3>
+      <p class="lead" data-th="signinLead">The add-in signs in through Outlook (no password asked) and reads, with each user's own rights, their
+        details and groups from Entra ID and the signatures from the OSign folder in SharePoint. It uses one app registration,
+        set here, when the add-in's files are made - not in the signatures. <a href="#" id="lnkSetup">How to register it</a></p>
+      <h3>Install</h3>
+      <p class="lead" data-th="installLead">The add-in's manifest, for the Microsoft 365 admin center (Settings → Integrated apps → Upload custom apps),
+        is <code>manifest.xml</code> where the add-in is served, e.g. <code>https://osign.contoso.com/manifest.xml</code>.</p>
+      <p id="installLink" class="copyline" hidden><span>Manifest:</span> <code id="installManifest"></code><button type="button" class="copy" data-copy="installManifest">Copy</button></p>
+      <p id="installNone" class="hint" hidden>No address for the add-in yet: set it in the setup assistant (Where the add-in is served).</p>
+    </div>
     </section>
 
     <p id="setErr" class="err"></p>

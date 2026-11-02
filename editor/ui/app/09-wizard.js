@@ -513,4 +513,5 @@
   $('wizImport').addEventListener('click', wizFinishThen('btnImportOpen'));
   $('wizNewSig').addEventListener('click', wizFinishThen('btnNew'));
   $('btnWizard').addEventListener('click', () => wizOpen(0));
+  $('setWizard').addEventListener('click', () => { $('dlgSettings').close(); wizOpen(0); });
 

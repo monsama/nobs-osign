@@ -32,6 +32,7 @@
     return s;
   }
   $('btnSettings').addEventListener('click', () => {
+    installShow();
     $('setFolder').value = S.settings.folder || '';
     $('setPhotos').value = S.settings.photosFolder || '';
     for (const [id, k] of ADDIN_FIELDS) $(id).value = S.settings[k] || '';

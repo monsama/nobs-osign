@@ -207,7 +207,7 @@ table.fields tr:last-child td { border-bottom: 0; }
 table.fields input { padding: 4px 6px !important; }
 table.fields .ph { display: flex; align-items: center; gap: 2px; font-family: ui-monospace, Consolas, monospace; }
 table.fields .ph span { color: var(--muted); }
-table.fields .nograph input { border-color: var(--warn) !important; }
+table.fields .nograph input[list=graphProps] { border-color: var(--warn) !important; }
 table.fields input.bad { border-color: var(--danger) !important; }
 .toast.act { pointer-events: auto; }
 .toast button { margin-left: 8px; background: transparent; color: inherit; border-color: rgba(255,255,255,.5); }
@@ -860,14 +860,18 @@ table.fields .ph { gap: 4px; }
 .sig-props > details.audience > summary { color: var(--text); }
 
 /* New signature: the layouts to start from */
-.tpl-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 6px 0 4px; }
+.tpl-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 6px 0 4px; }
 .tpl-card { display: flex; flex-direction: column; align-items: stretch; gap: 2px; height: auto; padding: 0 0 12px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); overflow: hidden; cursor: pointer; font-weight: normal; }
 .tpl-card:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
 .tpl-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tpl-card iframe { width: 100%; height: 170px; border: 0; border-bottom: 1px solid var(--line); background: #fff; pointer-events: none; margin-bottom: 8px; }
+.tpl-art { display: grid; place-items: center; height: 170px; border-bottom: 1px solid var(--line); margin-bottom: 8px; color: var(--accent); background: var(--bg); }
+.tpl-art svg { width: 40px; height: 40px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .tpl-name { padding: 0 14px; font-weight: 600; }
-.tpl-text { padding: 0 14px; color: var(--muted); font-size: 12px; }
-@media (max-width: 640px) { .tpl-list { grid-template-columns: 1fr; } }
+.tpl-text { white-space: normal; padding: 0 14px; color: var(--muted); font-size: 12px; }
+@media (max-width: 900px) { .tpl-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .tpl-list { grid-template-columns: 1fr; } }
+dialog:has(#tplList) { width: min(980px, 94vw); }
 
 /* Nothing there yet: the same everywhere */
 .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 48px 16px; color: var(--muted); }
@@ -894,3 +898,28 @@ dialog.find .dlg { padding: 0; display: flex; flex-direction: column; max-height
 .find-list li.none { display: block; cursor: default; padding: 0; }
 .find-list .fk { flex: 0 0 92px; color: var(--muted); font-size: 12px; }
 .find-list .fl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Default for: two toggles side by side, as one control */
+.sig-props .pills { display: inline-flex; align-items: center; gap: 0; }
+.sig-props .pills .chip-k { margin-right: 8px; color: var(--muted); }
+.sig-props .pill { display: inline-flex; align-items: center; height: var(--h); padding: 0 12px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; user-select: none; margin: 0; }
+.sig-props .pill + .pill { margin-left: -1px; }
+.sig-props .pill:first-of-type { border-radius: 14px 0 0 14px; }
+.sig-props .pill:last-of-type { border-radius: 0 14px 14px 0; }
+.sig-props .pill input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.sig-props .pill:has(input:checked) { background: var(--accent-soft, #eaf1fb); border-color: var(--accent); color: var(--accent); position: relative; z-index: 1; font-weight: 600; }
+.sig-props .pill:has(input:checked)::before { content: '✓'; margin-right: 6px; }
+.sig-props .pill:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sig-props .pop.pop-s { width: min(420px, 72vw); }
+
+/* Fields: where the value comes from, in one line; opened to change it */
+.fields td.src { min-width: 260px; }
+.fields .src-sum { width: 100%; justify-content: flex-start; text-align: left; font-weight: normal; color: var(--muted); background: transparent; border-color: transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.fields .src-sum:hover { border-color: var(--line); background: var(--panel); }
+.fields .src-sum::after { content: ' ▾'; }
+.fields td.src.open .src-sum::after { content: ' ▴'; }
+.fields td.src.nograph .src-sum { color: var(--warn, #b45309); }
+.fields .src-edit { display: none; gap: 6px; flex-direction: column; margin-top: 6px; }
+.fields td.src.open .src-edit { display: flex; }
+.fields .src-edit label { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--muted); }
+.fields .src-sum.bad { color: var(--danger, #c62828); }

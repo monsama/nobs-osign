@@ -153,7 +153,7 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
     '<td><img src="images/logo.png" width="90" /><br /><img src="images/@@sAMAccountName.jpg" width="100" /></td>' +
     '<td><strong>@@givenName @@sn</strong><br />@@title<br />Mobile @@mobile</td></tr></tbody></table>@@info{##notice}{##legal}{##old}</body></html>';
   const blocks = '<html><body>{##notice}{dats 01.01.2099}{date 31.01.2099}<p>Closed in January</p>{end ##notice}{##legal}<p>Contoso AG</p>{end ##legal}{##old}{dats 01.01.2020}{date 31.01.2020}<p>Fair 2020</p>{end ##old}</body></html>';
-  await page.click('#btnImportOpen');
+  await page.click('#btnNew'); await page.click('[data-tpl=import]');
   await page.waitForSelector('#dlgImport[open]');
   await page.setInputFiles('#impFiles', [
     { name: 'Vertrieb.htm', mimeType: 'text/html', buffer: utf16(tpl) },
@@ -362,8 +362,11 @@ test('setup assistant: opens by itself until NOBS OSign is set up, and walks thr
   await page.reload();
   await page.waitForSelector('html[data-ready]');
   assert.equal(await page.isVisible('#dlgWizard'), false);
-  // Set up: any step can be jumped to; going forward keeps what the step asks for.
-  await page.click('#btnWizard');
+  // Set up: no longer in the top bar, but in Settings → General.
+  assert.equal(await page.isVisible('#btnWizard'), false);
+  await page.click('#btnSettings');
+  await page.click('#setWizard');
+  // Any step can be jumped to; going forward keeps what the step asks for.
   await page.click('#wizNav button[data-step=host]');
   await page.waitForFunction(() => document.querySelector('#wizTitle').textContent === 'Where the add-in is served');
   assert.equal(await page.getAttribute('#wizNav button[data-step=host]', 'aria-current'), 'step');
@@ -1159,7 +1162,7 @@ test('new signature: picked from the layouts, the fields it uses are added; the 
   await page.waitForSelector('#sigList');
   await page.click('#btnNew');
   await page.waitForSelector('#dlgTpl[open] .tpl-card');
-  assert.equal(await page.locator('#dlgTpl .tpl-card').count(), 4);
+  assert.equal(await page.locator('#dlgTpl .tpl-card').count(), 5);
   await page.click('[data-tpl=photo]');
   await page.waitForSelector('#viewSig:not([hidden])');
   const html = await page.inputValue('#source');

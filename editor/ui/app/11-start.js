@@ -147,16 +147,19 @@
       b.title = on ? t('Restore') : t('Maximise'); b.setAttribute('aria-label', b.title);
       place(d);
     }
+    const BIG_DIALOGS = ['dlgWizard', 'dlgSettings', 'dlgHistory', 'dlgDiff', 'dlgAudit', 'dlgImport'];
     document.querySelectorAll('dialog').forEach((d) => {
       const bar = d.querySelector('.dlg > h2:first-child, .wiz-head');
       if (!bar) return;
       const btn = (cls, icon, label, fn) => { const b = el('button', { type: 'button', class: cls, title: label, 'aria-label': label, onclick: fn }); b.innerHTML = icon; return b; };
+      // Minimise and maximise only where there is much to read or work through; the others just close.
+      const big = BIG_DIALOGS.includes(d.id);
       d.append(el('div', { class: 'wctl' },
-        btn('wc-min', WIN_ICON.min, t('Minimise'), minimize),
-        btn('wc-max', WIN_ICON.max, t('Maximise'), () => maximize(d, !d.classList.contains('maxed'))),
+        big ? btn('wc-min', WIN_ICON.min, t('Minimise'), minimize) : null,
+        big ? btn('wc-max', WIN_ICON.max, t('Maximise'), () => maximize(d, !d.classList.contains('maxed'))) : null,
         btn('wc-close', WIN_ICON.close, t('Close'), () => d.close())));
       bar.classList.add('movable');
-      bar.addEventListener('dblclick', (e) => { if (!narrow() && !e.target.closest('button, input, select, a')) maximize(d, !d.classList.contains('maxed')); });
+      bar.addEventListener('dblclick', (e) => { if (big && !narrow() && !e.target.closest('button, input, select, a')) maximize(d, !d.classList.contains('maxed')); });
       bar.addEventListener('pointerdown', (e) => {
         if (e.button !== 0 || narrow() || d.classList.contains('maxed') || e.target.closest('button, input, select, a, label')) return;
         const start = pos[d.id] || { x: 0, y: 0 };
@@ -233,8 +236,10 @@
       // until what it sets up is there anyway (the app registration and the add-in's address).
       // On the server the setup is the local account admin's: the others neither get nor see it.
       const mayWizard = !onServer() || !!(info.user && info.user.local);
-      $('btnWizard').hidden = !mayWizard; $('wizSep').hidden = !mayWizard;
       const setUp = S.settings.setupDone === '1' || (onServer() ? !!(S.settings.clientId && S.settings.addinUrl) : !!(S.settings.folder && S.settings.clientId));
+      // In the top bar only until it is set up; then in Settings → General.
+      $('btnWizard').hidden = !mayWizard || setUp; $('wizSep').hidden = $('btnWizard').hidden;
+      $('setWizRow').hidden = !mayWizard;
       if (mayWizard && (resume !== null || !setUp)) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
       // Loaded: what waits for the editor (the tests) can go on.
