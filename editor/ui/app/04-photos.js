@@ -41,6 +41,8 @@
     $('photoList').replaceChildren(...list.slice(0, 300).map((p) => el('li', null,
       el('img', { src: '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || ''), alt: '', loading: 'lazy' }),
       el('div', { class: 'pf' }, el('span', { class: 'pn' }, p.name),
+      mayChange === false ? null : el('button', { type: 'button', class: 'ghost small pd-use', 'aria-label': t('Use {0} as the placeholder photo', p.name), title: t('As the placeholder photo, for whoever has none'), onclick: () => useAsDefault('/photos/' + encodeURIComponent(p.name), p.name) },
+        el('span', { 'aria-hidden': 'true' }, '☆')),
       mayChange === false ? null : el('button', { type: 'button', class: 'ghost small danger', 'aria-label': t('Remove photo {0}', p.name), title: t('Remove'), onclick: async () => {
         if (!(await ask(t('Remove the photo {0}? The person\'s signature goes without one from now on.', p.name), t('Remove'), true))) return;
         try { await api('photos/delete', { name: p.name }); toast(t('Photo {0} removed.', p.name)); renderPhotos(); } catch (e) { $('photoErr').textContent = t(e.message); }
@@ -73,11 +75,33 @@
     if (p) $('photoDefaultImg').src = '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || '');
     $('photoDefaultNote').textContent = p ? t('People without a photo get this one ({0}).', p.name) : t('People without a photo get the signature without one.');
     $('photoDefaultOff').hidden = !p;
-    $('photoDefaultMake').disabled = $('photoDefaultFile').disabled = $('photoDefaultOff').disabled = mayChange === false;
+    $('photoDefaultMake').disabled = $('photoDefaultFile').disabled = $('photoDefaultOff').disabled = $('photoDefaultAsset').disabled = mayChange === false;
+    photoDefaultAssets();
     // A neutral one is drawn, and a drawing is no GIF: for signatures that take GIF photos, an image of your own.
     if (/\.gif$/i.test(defaultName())) { $('photoDefaultMake').disabled = true; $('photoDefaultMake').title = t('The signatures take GIF photos: choose a GIF of your own.'); }
     else $('photoDefaultMake').title = '';
   }
+  // An image there is already as the placeholder: a person's photo, or one of the signatures'
+  // images (the logo); made into the placeholder's format and size like any photo.
+  async function useAsDefault(src, label) {
+    $('photoErr').textContent = '';
+    if (photoDefault && !(await ask(t('Use {0} as the placeholder photo instead of the one there is?', label), t('Use it')))) return;
+    try {
+      const res = await fetch(src, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error(t('{0} could not be read.', label));
+      await photoSave(await res.blob(), defaultName());
+    } catch (e) { $('photoErr').textContent = t(e.message); }
+  }
+  // The signatures' images, offered as the placeholder.
+  function photoDefaultAssets() {
+    const sel = $('photoDefaultAsset');
+    sel.replaceChildren(el('option', { value: '' }, t('An image of the signatures…')), ...(S.assets || []).map((a) => el('option', { value: a.name }, a.name)));
+    sel.hidden = !(S.assets || []).length;
+  }
+  $('photoDefaultAsset').addEventListener('change', () => {
+    const n = $('photoDefaultAsset').value; $('photoDefaultAsset').value = '';
+    if (n) useAsDefault('/assets/' + encodeURIComponent(n), n);
+  });
   const defaultName = () => core.PHOTO_DEFAULT + '.' + ((photoRule() || {}).ext || 'jpg');
   // A neutral one: a grey figure on a light ground, in the shape the signature shows photos.
   $('photoDefaultMake').addEventListener('click', async () => {
