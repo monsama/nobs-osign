@@ -33,7 +33,7 @@ const DE = {
   'signatures published {0}': 'Signaturen veröffentlicht {0}',
   'Own variant': 'Eigene Variante',
   'Yours to change: {0}': 'Änderbar: {0}',
-  'Yours to change: {0} (marked in the preview). The rest stays the company signature.': 'Änderbar: {0} (in der Vorschau markiert). Alles andere bleibt die Firmensignatur.',
+  'Yours to change: {0}: in the boxes below, or right in the signature underneath (marked). The rest stays the company signature.': 'Änderbar: {0} – in den Feldern unten oder direkt in der Signatur darunter (markiert). Alles andere bleibt die Firmensignatur.',
   'Your signature from {0}': 'Ihre Signatur aus {0}',
   'Your own signature from {0}': 'Ihre eigene Signatur aus {0}',
   "Change it as you like right here: click into it and type. Ctrl+B, Ctrl+I and Ctrl+U format; the company's images stay.": 'Ändern Sie sie direkt hier, wie Sie möchten: hineinklicken und schreiben. Strg+B, Strg+I und Strg+U formatieren; die Bilder der Firma bleiben.',
@@ -122,6 +122,8 @@ function previewFrame(sig, title) {
     return previewHtml(shown, user.values).then((h) => {
       if (mark && mark.length) {
         const labels = {}; (cfg.fields || []).forEach((f) => { labels[f.key] = f.label || f.key; });
+        // In a tag (href="mailto:@@mail"): the value only; in the text: marked.
+        h = h.replace(/<[^>]*>/g, (tag) => tag.replace(/\u2063([^\u2064]*)\u2064[^\u2065]*\u2065/g, '$1'));
         h = h.replace(/\u2063([^\u2064]*)\u2064([^\u2065]*)\u2065/g, (all, v, k) =>
           '<span style="background:#fff3bf;outline:1px dashed #d4a017;border-radius:2px;padding:0 1px" title="' + (labels[k] || k).replace(/"/g, '&quot;') + '">' + (v || '<i style="color:#8a6d00">' + (labels[k] || k).replace(/</g, '&lt;') + '</i>') + '</span>');
       }
@@ -251,7 +253,7 @@ function editVariant(card, sig, existing) {
   const labels = {}; (cfg.fields || []).forEach((f) => { labels[f.key] = f.label || f.key; });
   const form = document.createElement('form'); form.className = 'variant';
   const title = document.createElement('b'); title.textContent = existing ? t('Variant of {0}', base.name) : t('New variant of {0}', base.name);
-  const hint = document.createElement('small'); hint.textContent = t('Yours to change: {0} (marked in the preview). The rest stays the company signature.', core.editableIn(cfg, base).map((k) => labels[k] || k).join(', '));
+  const hint = document.createElement('small'); hint.textContent = t('Yours to change: {0}: in the boxes below, or right in the signature underneath (marked). The rest stays the company signature.', core.editableIn(cfg, base).map((k) => labels[k] || k).join(', '));
   const field = (label, value, max) => {
     const l = document.createElement('label'); l.append(label);
     const i = document.createElement('input'); i.value = value || ''; i.maxLength = max;
@@ -268,11 +270,35 @@ function editVariant(card, sig, existing) {
     const values = {}; Object.keys(inputs).forEach((k) => { values[k] = inputs[k].value; });
     return { id: existing ? existing.id : 'my-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: nameIn.value.trim(), base: base.id, values };
   };
+  // The signature as it will look, the fields that are the user's marked and written in right
+  // there (or in the boxes above: the two stay the same).
   const marked = core.editableIn(cfg, base);
-  const frame = previewFrame(base, base.name);
-  frame.show(core.withVariants(cfg, [draft()]).signatures.slice(-1)[0] || base, marked);
-  let timer = null;
-  form.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { const v = core.withVariants(cfg, [draft()]).signatures.slice(-1)[0]; if (v) frame.show(v, marked); }, 250); };
+  const live = document.createElement('div'); live.className = 'own-edit live';
+  const spans = (k) => [...live.querySelectorAll('.fld')].filter((x) => x.dataset.k === k);
+  (async () => {
+    const s0 = core.withVariants(cfg, [draft()]).signatures.slice(-1)[0] || base;
+    const vals = Object.assign({}, user.values, s0.userValues || {}), uv = {};
+    marked.forEach((k) => { uv[k] = '\u2063' + (vals[k] || '') + '\u2064' + k + '\u2065'; });
+    let h = await editableHtml(Object.assign({}, s0, { userValues: Object.assign({}, s0.userValues || {}, uv) }), user.values);
+    h = h.replace(/<[^>]*>/g, (tag) => tag.replace(/\u2063([^\u2064]*)\u2064[^\u2065]*\u2065/g, '$1'));
+    h = h.replace(/\u2063([^\u2064]*)\u2064([^\u2065]*)\u2065/g, (all, v, k) => '<span class="fld" data-k="' + k + '">' + v + '</span>');
+    live.innerHTML = h;
+    live.querySelectorAll('a[href]').forEach((a) => a.removeAttribute('href'));
+    live.querySelectorAll('.fld').forEach((sp) => {
+      const k = sp.dataset.k;
+      sp.contentEditable = 'plaintext-only';
+      if (sp.contentEditable !== 'plaintext-only') sp.contentEditable = 'true';
+      sp.spellcheck = true; sp.title = labels[k] || k; sp.dataset.ph = labels[k] || k;
+      sp.setAttribute('role', 'textbox'); sp.setAttribute('aria-label', labels[k] || k);
+      sp.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+      sp.addEventListener('input', () => {
+        const v = sp.textContent.replace(/\s+/g, ' ').slice(0, core.VARIANT_VALUE_MAX);
+        if (inputs[k]) inputs[k].value = v;
+        spans(k).forEach((o) => { if (o !== sp) o.textContent = v; });
+      });
+    });
+  })().catch((e) => message(e.message || String(e), true));
+  form.oninput = (e) => { const k = Object.keys(inputs).find((x) => inputs[x] === e.target); if (k) spans(k).forEach((o) => { o.textContent = inputs[k].value; }); };
   const row = document.createElement('div'); row.className = 'actions';
   row.append(button(t('Cancel'), () => render(), true), button(t('Save'), () => form.requestSubmit()));
   form.append(row);
@@ -291,7 +317,7 @@ function editVariant(card, sig, existing) {
     message(t('Variant saved. Pick it above for new mail or replies, or insert it here.'));
     render();
   };
-  card.replaceChildren(form, frame);
+  card.replaceChildren(form, live);
   form.scrollIntoView({ block: 'nearest' });
   nameIn.focus();
 }
