@@ -1044,3 +1044,35 @@ test('a photo there is already, or an image of the signatures, as the placeholde
   await page.waitForFunction(() => document.querySelector('#photoDefaultImg').hidden);
   fs.rmSync(path.join(folder, 'photos', 'echt.png'));
 });
+
+test('the image bar on a person\'s photo: the placeholder for all signatures, changed there', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>@@givenName</p><p><img src="photos/@@sAMAccountName.jpg" width="100" height="80"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await page.frameLocator('#design').locator('img').click();
+  await page.waitForSelector('#imgPh:not([hidden])');
+  assert.equal(await page.textContent('#imgKind'), 'Photo per person (@@sAMAccountName)');
+  assert.equal(await page.isVisible('#imgPhNone'), true);
+  await page.click('#imgPhChange');
+  await page.waitForSelector('#dlgPlaceholder[open] #phList button:has-text("Grey figure")');
+  await page.click('#phList button:has-text("Grey figure")');
+  await page.waitForSelector('#dlgPlaceholder', { state: 'hidden' });
+  await page.waitForSelector('#imgPhThumb:not([hidden])');
+  assert.ok(fs.existsSync(path.join(folder, 'photos', '_default.jpg')));
+  // The design view shows it in place of each person's photo.
+  assert.match(await page.evaluate(() => document.querySelector('#design').contentDocument.documentElement.style.getPropertyValue('--osign-ph')), /_default\.jpg/);
+  // None again.
+  await page.click('#imgPhChange');
+  await page.click('#phList button:has-text("No placeholder")');
+  await page.click('#askOk');
+  await page.waitForSelector('#imgPhNone:not([hidden])');
+  assert.equal(fs.existsSync(path.join(folder, 'photos', '_default.jpg')), false);
+  await page.click('#imgDone');
+  await page.click('#btnDel');
+  await page.click('#askOk');
+});

@@ -29,6 +29,7 @@
       photoItems = r.photos.filter((p) => !isDefaultPhoto(p.name));
       // The one the signatures take: _default with their extension (a _default of another kind is not used).
       photoDefaultShow(r.photos.find((p) => p.name.toLowerCase() === defaultName().toLowerCase()), r.mayChange);
+      phRefresh();
       $('photoFile').disabled = $('photoUrlGo').disabled = !r.mayChange;
       if (!r.mayChange) $('photoErr').textContent = t('With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.');
       photosShow(r.mayChange);
@@ -83,15 +84,59 @@
   }
   // An image there is already as the placeholder: a person's photo, or one of the signatures'
   // images (the logo); made into the placeholder's format and size like any photo.
+  // Where a problem is said: in the placeholder dialog when it is open, else on the Photos page.
+  const errBox = () => ($('dlgPlaceholder').open ? $('phErr') : $('photoErr'));
   async function useAsDefault(src, label) {
-    $('photoErr').textContent = '';
+    errBox().textContent = '';
     if (photoDefault && !(await ask(t('Use {0} as the placeholder photo instead of the one there is?', label), t('Use it')))) return;
     try {
       const res = await fetch(src, { credentials: 'same-origin' });
       if (!res.ok) throw new Error(t('{0} could not be read.', label));
-      await photoSave(await res.blob(), defaultName());
-    } catch (e) { $('photoErr').textContent = t(e.message); }
+      return await photoSave(await res.blob(), defaultName());
+    } catch (e) { errBox().textContent = t(e.message); return false; }
   }
+  // The placeholder as it is now (and the photos there), for the design view, the image bar and
+  // the placeholder dialog.
+  async function placeholderInfo() {
+    const r = await api('photos/list');
+    photoDefault = r.photos.find((p) => p.name.toLowerCase() === defaultName().toLowerCase()) || null;
+    return { def: photoDefault, photos: r.photos.filter((p) => !isDefaultPhoto(p.name)), mayChange: r.mayChange };
+  }
+  const phUrl = (p) => '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || '');
+  // The design view shows each person's photo as the placeholder that is set (the grey figure
+  // when none is), and the image bar its small picture.
+  async function phRefresh() {
+    let def = null;
+    try { def = (await placeholderInfo()).def; } catch (e) { return; }
+    if (ddoc) {
+      if (def) ddoc.documentElement.style.setProperty('--osign-ph', 'url("' + phUrl(def) + '")');
+      else ddoc.documentElement.style.removeProperty('--osign-ph');
+    }
+    $('imgPhThumb').hidden = !def; $('imgPhNone').hidden = !!def;
+    if (def) $('imgPhThumb').src = phUrl(def);
+  }
+  // The placeholder chosen from what is there: the grey figure, none, a person's photo, an image
+  // of the signatures.
+  async function openPlaceholderDialog() {
+    $('phErr').textContent = '';
+    $('phList').replaceChildren(el('p', { class: 'lead' }, t('Loading…')));
+    $('dlgPlaceholder').showModal();
+    let info;
+    try { info = await placeholderInfo(); } catch (e) { $('phList').replaceChildren(); $('phErr').textContent = t(e.message); return; }
+    const done = (ok) => { if (ok) $('dlgPlaceholder').close(); };
+    const card = (img, name, run, cur) => el('button', { type: 'button', class: cur ? 'cur' : '', disabled: info.mayChange === false ? '' : null, onclick: async () => done(await run()) }, img, el('span', { class: 'nm', title: name }, name));
+    const pic = (src) => el('img', { src, alt: '' });
+    const neutral = el('img', { src: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80"><rect width="100" height="80" fill="#e9ecef"/><circle cx="50" cy="31" r="14" fill="#b8bec6"/><ellipse cx="50" cy="82" rx="30" ry="26" fill="#b8bec6"/></svg>'), alt: '' });
+    $('phList').replaceChildren(
+      card(neutral, t('Grey figure'), () => makeNeutral()),
+      card(el('span', { class: 'ph-none' }, '–'), t('No placeholder'), () => (photoDefault ? removeDefault() : true), !info.def),
+      ...(info.def ? [card(pic(phUrl(info.def)), t('As it is now'), async () => true, true)] : []),
+      ...info.photos.map((p) => card(pic(phUrl(p)), p.name, () => useAsDefault('/photos/' + encodeURIComponent(p.name), p.name))),
+      ...(S.assets || []).map((a) => card(pic('/assets/' + encodeURIComponent(a.name)), a.name, () => useAsDefault('/assets/' + encodeURIComponent(a.name), a.name))));
+    if (info.mayChange === false) $('phErr').textContent = t('With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.');
+  }
+  $('imgPhChange').addEventListener('click', () => openPlaceholderDialog());
+  $('phManage').addEventListener('click', (e) => { e.preventDefault(); $('dlgPlaceholder').close(); hideImgBar(); goView('photos'); });
   // The signatures' images, offered as the placeholder.
   function photoDefaultAssets() {
     const sel = $('photoDefaultAsset');
@@ -104,7 +149,8 @@
   });
   const defaultName = () => core.PHOTO_DEFAULT + '.' + ((photoRule() || {}).ext || 'jpg');
   // A neutral one: a grey figure on a light ground, in the shape the signature shows photos.
-  $('photoDefaultMake').addEventListener('click', async () => {
+  $('photoDefaultMake').addEventListener('click', () => makeNeutral());
+  async function makeNeutral() {
     const ratio = (photoRule() || {}).ratio || 1, w = PHOTO_W, h = Math.round(PHOTO_W * ratio);
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const g = c.getContext('2d');
@@ -114,27 +160,28 @@
     g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
     g.beginPath(); g.ellipse(cx, h + r * 0.35, r * 2.1, r * 1.9, 0, Math.PI, 0); g.fill();
     const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
-    await photoSave(blob, defaultName());
-  });
+    return photoSave(blob, defaultName());
+  }
   $('photoDefaultFile').addEventListener('change', async () => {
     const f = $('photoDefaultFile').files[0]; $('photoDefaultFile').value = '';
     if (f) await photoSave(f, defaultName());
   });
-  $('photoDefaultOff').addEventListener('click', async () => {
-    if (!photoDefault || !(await ask(t('Remove the placeholder photo? People without a photo then get the signature without one.'), t('Remove'), true))) return;
-    try { await api('photos/delete', { name: photoDefault.name }); toast(t('Placeholder photo removed.')); renderPhotos(); schedulePreview(); } catch (e) { $('photoErr').textContent = t(e.message); }
-  });
+  $('photoDefaultOff').addEventListener('click', () => removeDefault());
+  async function removeDefault() {
+    if (!photoDefault || !(await ask(t('Remove the placeholder photo? People without a photo then get the signature without one.'), t('Remove'), true))) return false;
+    try { await api('photos/delete', { name: photoDefault.name }); toast(t('Placeholder photo removed.')); photoDefault = null; renderPhotos(); schedulePreview(); phRefresh(); return true; } catch (e) { errBox().textContent = t(e.message); return false; }
+  }
   // Any image, as the photo: at most 400 pixels wide, in the signatures' format (a JPEG for .jpg).
   async function photoSave(blob, fixedName) {
     const name = fixedName || photoFileName();
-    if (!name) { $('photoErr').textContent = t('Enter whose photo it is first.'); return; }
-    $('photoErr').textContent = '';
+    if (!name) { errBox().textContent = t('Enter whose photo it is first.'); return; }
+    errBox().textContent = '';
     let bmp;
-    try { bmp = await createImageBitmap(blob); } catch (e) { $('photoErr').textContent = t('This is not an image the browser can read.'); return; }
+    try { bmp = await createImageBitmap(blob); } catch (e) { errBox().textContent = t('This is not an image the browser can read.'); return; }
     const scale = Math.min(1, PHOTO_W / bmp.width);
     const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
     const g = c.getContext('2d');
-    if (/\.gif$/i.test(name) && blob.type !== 'image/gif') { $('photoErr').textContent = t('The signatures take GIF photos: choose a GIF.'); return; }
+    if (/\.gif$/i.test(name) && blob.type !== 'image/gif') { errBox().textContent = t('The signatures take GIF photos: choose a GIF.'); return; }
     const type = /\.png$/i.test(name) ? 'image/png' : 'image/jpeg';
     // A JPEG has no transparency: white behind it, as in a mail.
     if (type === 'image/jpeg') { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); }
@@ -143,14 +190,16 @@
     // A GIF stays as it came (the canvas makes none).
     const data = /\.gif$/i.test(name) ? blob : out;
     const b64 = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.readAsDataURL(data); });
-    if (!fixedName && isDefaultPhoto(name)) { $('photoErr').textContent = t('That name is the placeholder photo\'s.'); return; }
+    if (!fixedName && isDefaultPhoto(name)) { errBox().textContent = t('That name is the placeholder photo\'s.'); return; }
     if (photoItems.some((p) => p.name.toLowerCase() === name.toLowerCase()) && !(await ask(t('{0} is there already. Replace it?', name), t('Replace'), true))) return;
     try {
       await api('photos/upload', { name, data: b64 });
       toast(fixedName ? t('Placeholder photo saved ({0}).', kb(data.size)) : t('Photo {0} saved ({1}).', name, kb(data.size)));
       if (!fixedName) { $('photoWho').value = ''; $('photoUrl').value = ''; photoNameShow(); }
       renderPhotos(); schedulePreview();
-    } catch (e) { $('photoErr').textContent = t(e.message); }
+      if (fixedName) await phRefresh();
+      return true;
+    } catch (e) { errBox().textContent = t(e.message); return false; }
   }
   $('photoFile').addEventListener('change', async () => {
     const f = $('photoFile').files[0]; $('photoFile').value = '';

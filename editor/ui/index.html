@@ -109,10 +109,11 @@
           </div>
           <div id="toolbar" class="toolbar"></div>
           <div id="imgBar" class="imgbar" hidden>
-            <span>Image</span>
+            <span id="imgKind">Image</span>
             <label>Width <input id="imgW" type="number" min="16" max="800" step="1"> px</label>
             <label>Alt text <input id="imgAlt"></label>
             <label>Link <input id="imgHref" placeholder="https://"></label>
+            <span id="imgPh" class="img-ph" hidden><span class="img-ph-l">Placeholder (all signatures):</span><img id="imgPhThumb" alt="" hidden><span id="imgPhNone" class="ph-none">–</span><button type="button" id="imgPhChange" class="small">Change…</button></span>
             <button id="imgDone" class="ghost small">Done</button>
           </div>
           <iframe id="design" class="design" title="Signature editor"></iframe>
@@ -923,6 +924,15 @@
   </form>
 </dialog>
 
+<dialog id="dlgPlaceholder">
+  <form method="dialog" class="dlg">
+    <h2>Placeholder photo</h2>
+    <p class="lead">For whoever has no photo of their own, in every signature that shows a photo per person. It counts at once, without publishing.</p>
+    <div id="phList" class="img-list"></div>
+    <p id="phErr" class="err"></p>
+    <div class="dlg-foot"><a href="#" id="phManage">Manage photos</a><span class="spacer"></span><button value="cancel" class="ghost">Cancel</button></div>
+  </form>
+</dialog>
 <dialog id="dlgAsk" class="ask" aria-labelledby="askText">
   <form method="dialog" class="dlg">
     <p id="askText" class="ask-text"></p>
