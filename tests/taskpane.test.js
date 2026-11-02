@@ -152,7 +152,11 @@ test('own variants: made from a signature with editable fields, chosen, inserted
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     // Only "Short" uses an editable field.
     assert.deepEqual(await page.$$eval('.card .actions', (a) => a.map((x) => x.textContent)), ['Insert', 'Own variantInsert']);
+    // Which fields are the user's to change: on the card, in the form, marked in its preview.
+    assert.match(await page.textContent('.card:nth-child(2) .card-head'), /Yours to change: Greeting/);
     await page.click('.card:nth-child(2) button.secondary');
+    assert.match(await page.textContent('.variant small'), /Yours to change: Greeting \(marked in the preview\)/);
+    await page.waitForFunction(() => /background:#fff3bf/.test(document.querySelector('.card:nth-child(2) iframe').srcdoc));
     await page.fill('.variant label:nth-of-type(1) input', 'Warm');
     await page.fill('.variant label:nth-of-type(2) input', 'Kind regards');
     await page.click('.variant button:not(.secondary)');
