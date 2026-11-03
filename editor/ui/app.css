@@ -956,3 +956,11 @@ table.users td.none { color: var(--warn, #b45309); font-style: italic; }
 .all-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 dialog:has(#allList) { width: min(1200px, 96vw); }
 .all-list .tpl-card iframe { height: 200px; }
+
+/* Narrow: the signature's settings one under the other, without the separator. */
+@media (max-width: 700px) {
+  .sig-props .props-sep { display: none; }
+  .sig-props .pills { flex-wrap: wrap; gap: 4px; }
+  .sig-props .pill, .sig-props .pill:first-of-type, .sig-props .pill:last-of-type { border-radius: 14px; margin-left: 0; }
+  .sig-props .pills .chip-k { white-space: nowrap; }
+}

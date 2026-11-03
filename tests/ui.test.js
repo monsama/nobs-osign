@@ -1208,7 +1208,7 @@ test('building blocks: made once, put into a signature as a chip, published put 
   await page.waitForSelector('html[data-ready="1"]');
   await page.click('.nav-list a[data-view=blocks]');
   await page.waitForSelector('#viewBlocks .empty-state');
-  await page.click('#btnAddBlock');
+  await page.click('#viewBlocks .empty-state button');
   await page.waitForSelector('#blockList .block-card[data-block=disclaimer]');
   await page.fill('#blockList .block-card textarea', '<p>Confidential: @@mail</p>');
   // Into a new signature, from the field list's building blocks.
