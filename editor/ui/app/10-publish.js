@@ -309,6 +309,8 @@
       // The server version: whether the folder is there now (it is made on the first publish).
       if (onServer()) { try { lastSettings = await api('settings/get'); } catch (e2) { /* as it was */ } }
       $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
+      // The users written now: their marks (new, changed) go on the Users page.
+      if (core.usesAdExport(S.config)) loadSnapshot().then(() => { if (S.view === 'users') renderUsers(); });
       // Done: only Close is left.
       $('pubGo').hidden = true;
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }

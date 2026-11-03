@@ -97,6 +97,8 @@
       const [info, st, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
       S.info = info; S.settings = st.settings; lastSettings = st;
       applyDraft(draft);
+      // The users as last read (and whether they were written since), where values come from AD.
+      if (core.usesAdExport(S.config)) await loadSnapshot();
       if (JSON.stringify(S.config) === before) { gh.stack = keep.stack; gh.pos = keep.pos; ghButtons(); }
       if (where.view === 'sig' && where.block && S.config.blocks.some((x) => x.key === where.block)) openBlock(where.block);
       else if (where.view === 'sig' && where.sigId && S.config.signatures.some((s) => s.id === where.sigId)) openSig(where.sigId);
