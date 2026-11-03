@@ -72,7 +72,7 @@
     revertShow();
     loadDesign(s.html);
     document.querySelectorAll('.field-pick').forEach(fillFieldSelect);
-    $('source').value = prettyHtml(s.html);
+    showSource(s.html);
     histReset(s);
     schedulePreview();
     $('sigName').focus();

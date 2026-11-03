@@ -1330,12 +1330,28 @@ test('changes not published yet: marked in the list, and discarded back to what 
   assert.match(await page.textContent('#cmpRules'), /NameRevert meRevert me \(edited\)/);
   await page.waitForFunction(() => /Anna Muster/.test(document.querySelector('#cmpAfter').srcdoc) && /Anna Muster/.test(document.querySelector('#cmpBefore').srcdoc));
   await page.click('#dlgCompare button[value=cancel]');
-  await page.click('#btnRevert'); await page.click('#askOk');
+  // Discarded without a question (Undo is there).
+  await page.click('#btnRevert');
   await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me');
+  assert.equal(await page.isVisible('#dlgAsk[open]'), false);
   assert.equal(await page.isVisible('#btnRevert'), false);
   // Undo: the change is back.
   await page.click('#toast button');
   await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me (edited)');
+  // In the HTML tab, from the list of changes: discarded too, and stays so (the HTML shown
+  // indented for reading is not a change of its own).
+  await page.click('.tab[data-mode=html]');
+  await page.click('#stPub');
+  await page.waitForSelector('#dlgChanges[open]');
+  await page.click('#chgList li:has-text("Revert me (edited)") button:has-text("Discard changes")');
+  await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me');
+  await page.waitForSelector('#dlgChanges[open]');
+  await page.waitForFunction(() => !/Revert me/.test(document.querySelector('#chgList').textContent));
+  await page.click('#dlgChanges button[value=cancel]');
+  await page.click('#source'); await page.click('#sigName');
+  await page.waitForTimeout(900);
+  assert.doesNotMatch(await page.textContent('#sigList li a.active'), /Changed/);
+  await page.click('.tab[data-mode=design]');
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });

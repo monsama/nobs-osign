@@ -341,7 +341,7 @@
   let fromChanges = false;
   $('btnRevert').addEventListener('click', async () => {
     const s = sig(); if (!s) return;
-    if (!(await ask(t('Discard the changes to «{0}» since it was published? It goes back to what Outlook has.', s.name), t('Discard changes'), true))) { fromChanges = false; return; }
+    // No question first: undone with the toast's Undo (or ↶).
     flushSource();
     try {
       const r = await api('published/revert', { id: s.id });
