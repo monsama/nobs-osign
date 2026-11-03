@@ -6,7 +6,7 @@
   function normalize(c) {
     const d = core.defaultConfig();
     c = c && typeof c === 'object' ? c : d;
-    // Published with a pilot (loaded or brought back from History): the pilot's, the newer version.
+    // Published with a pilot by 0.9.57–0.9.60 (loaded or brought back from History): its newer version.
     if (c.pilot && c.pilot.config && typeof c.pilot.config === 'object') c = c.pilot.config;
     delete c.pilot;
     // One made before the value source could be chosen took its values from Entra ID: it stays so
@@ -33,6 +33,7 @@
     S.config = normalize(c);
     S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = +r.publishedAt || 0;
     renderStatus();
+    loadPublishedCopy();
     // The logos looked at for dark mode, for the checks before publishing.
     setTimeout(() => (S.assets || []).forEach((a) => { if (/\.png$/i.test(a.name)) darkCheck(a.name); }), 500);
     if (S.config.signatures.length) openSig(S.sigId && S.config.signatures.some((s) => s.id === S.sigId) ? S.sigId : S.config.signatures[0].id);

@@ -2,6 +2,8 @@
 # Restores NOBS OSign's data from a backup of scripts/backup.sh. .env and the secrets only with
 # RESTORE_SECRETS=yes.
 #   sudo ./scripts/restore.sh backup/nobs-osign-<time>.tar.gz[.enc]
+# Run it, never source it: its exit would end your own shell (and an SSH session with it).
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then echo "[ERROR] Run it as a command, not with . or source" >&2; return 1; fi
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck source=scripts/osign-lib.sh

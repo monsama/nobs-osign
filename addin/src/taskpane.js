@@ -63,7 +63,6 @@ const DE = {
   'You have {0} variants, the most there can be.': 'Sie haben {0} Varianten, mehr sind nicht möglich.',
   'Only the fields below are yours to change; the rest stays the company signature.': 'Nur die Felder unten können Sie ändern; der Rest bleibt die Firmensignatur.',
   'How it works': 'So funktioniert es',
-  'pilot version ({0})': 'Pilotversion ({0})',
   'Your signature goes into new mail and replies by itself, with your details from the company directory. If they are wrong, IT changes them there; "Read my details again" fetches them anew.': 'Ihre Signatur kommt von selbst in neue Mails und Antworten, mit Ihren Angaben aus dem Firmenverzeichnis. Stimmen sie nicht, ändert die IT sie dort; «Meine Angaben neu lesen» holt sie neu.',
   'Above, choose which signature goes into new mail and which into replies. "Company default" follows what the company sets.': 'Oben wählen Sie, welche Signatur in neue Mails und welche in Antworten kommt. «Firmenstandard» folgt dem, was die Firma festlegt.',
   'Insert puts a signature into the message open now, e.g. another one than usual.': 'Einfügen setzt eine Signatur in die gerade offene Mail, z. B. eine andere als sonst.',
@@ -83,7 +82,7 @@ function translatePage() {
     el.childNodes.forEach((n) => { if (n.nodeType === 3 && n.nodeValue.trim() && DE[n.nodeValue.trim()] && german) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), DE[n.nodeValue.trim()]); });
   });
 }
-let cfg = null, full = null, user = null, from = '', info = { kind: 'new', html: true }, pilotNote = '';
+let cfg = null, full = null, user = null, from = '', info = { kind: 'new', html: true };
 
 function message(text, isError) {
   const m = $('msg');
@@ -413,11 +412,6 @@ async function load(refresh) {
   const item = Office.context.mailbox.item;
   if (item) { info = await composeInfo(item); from = await fromAddress(item); }
   user = await loadUserValues(cfg, { interactive: true, refresh });
-  // In the pilot's group: its version (shown in the version line below).
-  const base = cfg;
-  cfg = core.forUser(base, user.groups);
-  pilotNote = core.pilotOf(base) && user.groups && user.groups.indexOf(String(base.pilot.group).toLowerCase()) >= 0 ? base.pilot.group : '';
-  showVersion();
   if (!user.values) {
     message(user.error ? t('Your details could not be read: {0}', user.error.message) : t('Your details could not be read.'), true);
     return;
@@ -434,7 +428,7 @@ async function load(refresh) {
 function showVersion() {
   const at = cfg && cfg.updated ? new Date(cfg.updated) : null;
   const when = at && !isNaN(at) ? at.toLocaleString(german ? 'de-CH' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '';
-  $('ver').textContent = 'OSign ' + OSIGN_VERSION + (when ? ' · ' + t('signatures published {0}', when) : '') + (pilotNote ? ' · ' + t('pilot version ({0})', pilotNote) : '');
+  $('ver').textContent = 'OSign ' + OSIGN_VERSION + (when ? ' · ' + t('signatures published {0}', when) : '');
 }
 
 Office.onReady(() => {

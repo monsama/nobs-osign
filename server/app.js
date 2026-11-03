@@ -8,7 +8,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { createStore, ASSET_TYPES } = require('./store');
+const { createStore, ASSET_TYPES, safeAssetName } = require('./store');
 const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
@@ -276,7 +276,7 @@ function createApp(opts) {
   // with their next sign-in: asked again of AD (with the service account) before what publishes,
   // at most once a minute per session. AD not reachable: as it was at sign-in.
   const RECHECK = new Set(['info', 'approval/get', 'publish', 'approval/request', 'approval/approve', 'ad/export', 'photos/upload', 'photos/delete', 'photos/list',
-    'pilot/start', 'pilot/promote', 'pilot/end', 'schedule/set', 'schedule/cancel']);
+    'schedule/set', 'schedule/cancel']);
   const cnOf = (g) => { const m = /^CN=((?:\\,|[^,])+)/i.exec(String(g || '')); return (m ? m[1].replace(/\\,/g, ',') : String(g || '')).trim().toLowerCase(); };
   // What AD says of a login now: { signIn, publisher } (in the sign-in group, in the publishing
   // group); signIn false for an account that is gone; null when AD cannot be asked.
@@ -332,8 +332,7 @@ function createApp(opts) {
   // what was looked at (and approved) is what goes out.
   function compiledProblem(configJson) {
     let c; try { c = JSON.parse(configJson); } catch (e) { return ''; }
-    const all = [c].concat(c && c.pilot && c.pilot.config ? [c.pilot.config] : []);
-    for (const x of all) for (const s of (x && x.signatures) || []) {
+    for (const s of (c && c.signatures) || []) {
       if (s && !core.compiledMatches(s.html, s.compiled)) return 'The signature "' + (s.name || s.id) + '" is not as its HTML says (compiled). Open it in the editor and publish again.';
     }
     return '';
@@ -371,8 +370,8 @@ function createApp(opts) {
     });
   }
 
-  // A version in steps: a pilot group first, or at a time set beforehand (server/routes-release.js).
-  const release = createReleaseRoutes({ dataDir, history, store, publishNow, publisher, needsApproval, compiledProblem, stillPublisher, audit, log });
+  // Publishing at a time set beforehand (server/routes-release.js).
+  const release = createReleaseRoutes({ dataDir, store, publishNow, publisher, needsApproval, compiledProblem, stillPublisher, audit, log });
   const routes = {
     ping: () => ({}),
     info: (data, s) => ({
@@ -585,6 +584,24 @@ function createApp(opts) {
       const saved = store.saveDraft(r.configJson);
       if (saved && saved.error) return saved;
       return { at: r.at };
+    },
+    // What is published, to see what the draft changed: the configuration as it went out.
+    'published/get': () => ({ configJson: history.latest() || '' }),
+    // One signature back as it is published (its changes in the draft dropped), with the images it
+    // needs that the draft no longer has.
+    'published/revert': (d) => {
+      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
+      let c = null; try { c = JSON.parse(history.latest() || 'null'); } catch (e) { c = null; }
+      const sig = c && (c.signatures || []).find((x) => x && x.id === String(d.id || ''));
+      if (!sig) return { error: 'This signature is not published yet: there is nothing to go back to.' };
+      const have = new Set(store.draftImages().keys());
+      for (const m of String((sig.source || '') + (sig.html || '')).matchAll(/assets\/([^"'\s)?#]+)/g)) {
+        let n = m[1]; try { n = decodeURIComponent(n); } catch (e) { /* as it is */ }
+        if (have.has(n) || safeAssetName(n) !== n) continue;
+        const bytes = history.latestImage(n);
+        if (bytes) { writeAtomic(path.join(store.assetDir, n), bytes); have.add(n); }
+      }
+      return { signature: sig, assets: store.getDraft().assets };
     },
     'load-published': async () => {
       if (publishing) return { error: 'Publishing right now: try again in a moment.' };

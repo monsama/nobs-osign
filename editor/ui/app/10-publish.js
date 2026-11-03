@@ -171,43 +171,25 @@
     await loadRelease();
     $('dlgPublish').showModal();
   });
-  // In steps: a pilot group first, or later at a set time (server/routes-release.js). The server's,
-  // for whoever publishes without approval.
-  const pilotKey = 'osign.pilotGroup';
+  // Later, at a set time (server/routes-release.js): the server's, for whoever publishes without approval.
   async function loadRelease() {
     const can = onServer() && !(S.info.features && S.info.features.requireApproval);
     $('pubSteps').hidden = !can;
-    $('pubPilot').checked = false; $('pubLater').checked = false; $('pubPilotGroup').hidden = true; $('pubAt').hidden = true;
-    try { $('pubPilotGroup').value = localStorage.getItem(pilotKey) || ''; } catch (e) { /* none kept */ }
-    let p = null, x = null;
-    if (onServer()) {
-      try { p = (await api('pilot/get')).pilot; } catch (e) { p = null; }
-      try { x = (await api('schedule/get')).schedule; } catch (e) { x = null; }
-    }
-    S.pilot = p;
+    $('pubLater').checked = false; $('pubAt').hidden = true;
+    let x = null;
+    if (onServer()) { try { x = (await api('schedule/get')).schedule; } catch (e) { x = null; } }
     const when = (v) => new Date(v).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB');
-    $('pubPilotNow').hidden = !p;
-    if (p) $('pubPilotWho').textContent = t('A pilot runs since {0} for the group {1} ({2}): they have the new version, everyone else the one before. Publishing for everyone ends it.', when(p.at), p.group, p.by);
-    $('pubPromote').disabled = $('pubPilotEnd').disabled = !can;
     $('pubSchedNow').hidden = !x;
-    if (x) $('pubSchedWho').textContent = t('Set to go out on {0} ({1}){2}: the draft as it was then.', when(x.at), x.by, x.pilot ? ' ' + t('for the pilot group {0}', x.pilot) : '') +
+    if (x) $('pubSchedWho').textContent = t('Set to go out on {0} ({1}): the draft as it was then.', when(x.at), x.by) +
       (x.error ? ' ' + t('It did not go out: {0}', t(x.error)) : '');
     $('pubSchedWho').classList.toggle('warn', !!(x && x.error));
   }
-  $('pubPilot').addEventListener('change', () => { $('pubPilotGroup').hidden = !$('pubPilot').checked; if ($('pubPilot').checked) $('pubPilotGroup').focus(); $('pubGo').textContent = pubGoText(); });
   $('pubLater').addEventListener('change', () => {
     $('pubAt').hidden = !$('pubLater').checked;
     if ($('pubLater').checked && !$('pubAt').value) { const d = new Date(Date.now() + 86400000); d.setHours(6, 0, 0, 0); $('pubAt').value = new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
     $('pubGo').textContent = pubGoText();
   });
-  const pubGoText = () => ($('pubLater').checked ? t('Set the time') : $('pubPilot').checked ? t('Publish for the pilot') : t('Publish'));
-  async function releaseStep(route, done) {
-    $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
-    try { const r = await api(route, { message: pubNote() }); S.dirty = false; S.publishedAt = Date.now(); renderStatus(); $('pubOk').textContent = done + (r.changed === false ? ' ' + t('Nothing had changed.') : ''); await loadRelease(); }
-    catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }
-  }
-  $('pubPromote').addEventListener('click', () => releaseStep('pilot/promote', t('The pilot\'s version is now everyone\'s.')));
-  $('pubPilotEnd').addEventListener('click', async () => { if (await ask(t('Stop the pilot? The pilot group gets the version for everyone again.'), t('Stop'), true)) releaseStep('pilot/end', t('Pilot stopped: everyone has the version before.')); });
+  const pubGoText = () => ($('pubLater').checked ? t('Set the time') : t('Publish'));
   $('pubSchedCancel').addEventListener('click', async () => { try { await api('schedule/cancel'); await loadRelease(); $('pubOk').textContent = t('The set time is cancelled.'); } catch (err) { $('pubErr').textContent = t(err.message); } });
   // The note for History: what was typed, or the placeholder's words.
   const pubNote = () => $('pubMsg').value.trim() || $('pubMsg').placeholder;
@@ -240,25 +222,16 @@
         $('pubGo').hidden = true;
         return;
       }
-      if ($('pubLater').checked || $('pubPilot').checked) {
-        const group = $('pubPilot').checked ? $('pubPilotGroup').value.trim() : '';
-        if ($('pubPilot').checked && !group) throw new Error('Name the pilot group (as in AD), like OSign-Pilot.');
-        try { if (group) localStorage.setItem(pilotKey, group); } catch (e2) { /* this time only */ }
-        if ($('pubLater').checked) {
-          const at = new Date($('pubAt').value);
-          if (isNaN(at)) throw new Error('The time is in the future, a minute from now at least.');
-          await api('schedule/set', { configJson: JSON.stringify(c), at: at.toISOString(), message: pubNote(), group });
-          $('pubOk').textContent = t('Set: it goes out on {0}, as the draft is now. Changes after that wait for the next publish.', at.toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) + exported;
-        } else {
-          const r = await api('pilot/start', { configJson: JSON.stringify(c), group, message: pubNote() });
-          S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
-          $('pubOk').textContent = t('Published for the pilot group {0}; everyone else keeps the version before. Give it to everyone here once it is fine.', group) + (r.changed ? '' : ' ' + t('Nothing had changed.')) + exported;
-        }
+      if ($('pubLater').checked) {
+        const at = new Date($('pubAt').value);
+        if (isNaN(at)) throw new Error('The time is in the future, a minute from now at least.');
+        await api('schedule/set', { configJson: JSON.stringify(c), at: at.toISOString(), message: pubNote() });
+        $('pubOk').textContent = t('Set: it goes out on {0}, as the draft is now. Changes after that wait for the next publish.', at.toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) + exported;
         $('pubGo').hidden = true; await loadRelease();
         return;
       }
       const r = await api('publish', { configJson: JSON.stringify(c), message: pubNote() });
-      S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
+      S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus(); loadPublishedCopy();
       // The server version: whether the folder is there now (it is made on the first publish).
       if (onServer()) { try { lastSettings = await api('settings/get'); } catch (e2) { /* as it was */ } }
       $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
@@ -459,7 +432,7 @@
     $('pubApprove').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
       const r = await api('approval/approve', { hash: (S.approval && S.approval.pending && S.approval.pending.hash) || '' });
-      S.dirty = false; S.publishedAt = Date.now(); renderStatus();
+      S.dirty = false; S.publishedAt = Date.now(); renderStatus(); loadPublishedCopy();
       $('pubOk').textContent = r.changed ? t('Approved and published to {0}.', r.folder) : t('Nothing had changed.');
       await loadApproval(); renderApproval();
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }

@@ -18,14 +18,13 @@ Parts many signatures share (a disclaimer, a banner, the address) are **building
 
 ## Releasing a change carefully
 
-- **A pilot group first:** *Publish… → First only for a pilot group*, with an AD group of a few
-  people. They get the new version, everyone else keeps the one before. When it is fine:
-  *Publish… → Give it to everyone*; if not, *Stop the pilot*. Publishing normally (for everyone)
-  also ends a pilot.
-- **At a set time:** *Publish… → Later, at*: the draft as it is now goes out then (also for a pilot
-  group). Changes made afterwards wait for the next publish. Cancel it in the same dialog.
+- **Try it on a few people first:** *Duplicate* the signature, give the copy *Who gets it → Specific
+  groups* with a small AD group, make it their default and publish. When it is fine, change the
+  original and remove the copy.
+- **At a set time:** *Publish… → Later, at*: the draft as it is now goes out then, with its images
+  as they are now. Changes made afterwards wait for the next publish. Cancel it in the same dialog.
 - **Four eyes** (*Settings → Server → Four eyes*): one person asks for approval, another one
-  publishes. A pilot or a set time is not offered then.
+  publishes. A set time is not offered then.
 - **Back to a version before:** *History* → *Load into the draft* → publish.
 
 ## Who may do what
@@ -33,7 +32,7 @@ Parts many signatures share (a disclaimer, a banner, the address) are **building
 | | Members of the sign-in group | … also in the publishing group | Local account `admin` |
 |---|---|---|---|
 | Edit signatures, fields, building blocks | ✓ | ✓ | ✓ |
-| Publish, pilot, set time, write users, change photos | asks for approval | ✓ | ✓ |
+| Publish, set time, write users, change photos | asks for approval | ✓ | ✓ |
 | Approve someone else's publish | – | ✓ | ✓ |
 | Server connections, add-in files, backups, audit log, four eyes | – | – | ✓ |
 
@@ -75,7 +74,7 @@ Outlook add-in → Create the add-in files* (and upload them); a new `manifest.x
 | A photo is missing | *Photos*: named after the person's field (`mustera.jpg`); otherwise the placeholder photo |
 | Publishing fails | *Settings → Server* (Status): SharePoint, the certificate, the connections; the audit log for the error |
 | An old signature in Outlook | the add-in's pane (*OSign*) shows the version and when it was published; *Read my details again* |
-| The pilot group still has the old one | the group's name as in AD, and whether the add-in can read groups (`GroupMember.Read.All`) |
+| A signature for a group does not reach it | the group's name as in AD, and whether the add-in can read groups (`GroupMember.Read.All`) |
 
 The **audit log** (*Settings → Server*, local `admin`) has every sign-in, publish, approval and
 change of the connections, with who and from where.

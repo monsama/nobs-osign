@@ -63,7 +63,9 @@
       } }, '✕');
       const card = el('div', { class: 'block-card', 'data-block': b.key },
         el('div', { class: 'block-head' }, name, el('span', { class: 'block-key' }, '{{', key, '}}'), el('span', { class: 'spacer' }), del),
-        el('div', { class: 'block-body' }, el('div', { class: 'block-edit' }, el('div', { class: 'block-tools' }, ed.tools, el('span', { class: 'spacer' }), modeBtn), ed.box, src), frame), used);
+        // The tools over both: the design view (or its HTML) and the preview side by side, as high.
+        el('div', { class: 'block-tools' }, ed.tools, el('span', { class: 'spacer' }), modeBtn),
+        el('div', { class: 'block-body' }, el('div', { class: 'block-edit' }, ed.box, src), frame), used);
       blockPreview(frame, b);
       return card;
     }));
@@ -103,11 +105,11 @@
     fillFieldSelect(fields);
     [...fields.querySelectorAll('optgroup')].filter((g) => g.label === t('Building blocks')).forEach((g) => g.remove());
     fields.addEventListener('focus', () => { fillFieldSelect(fields); [...fields.querySelectorAll('optgroup')].filter((g) => g.label === t('Building blocks')).forEach((g) => g.remove()); });
-    fields.addEventListener('change', () => { const k = fields.value; fields.value = ''; if (k) run('insertHTML', fieldChip(doc, k).outerHTML); });
+    fields.addEventListener('change', () => { const k = fields.value; fields.value = ''; if (k) put(fieldChip(doc, k).outerHTML); });
     const images = el('select', { 'aria-label': t('Image'), title: t('Image') });
     const fillImages = () => images.replaceChildren(el('option', { value: '' }, t('Image')), ...S.assets.map((a) => el('option', { value: a.name }, a.name)));
     fillImages(); images.addEventListener('focus', fillImages);
-    images.addEventListener('change', () => { const n = images.value; images.value = ''; if (n) run('insertHTML', '<img src="assets/' + encodeURIComponent(n).replace(/%2F/gi, '/') + '" alt="" style="border:0">'); });
+    images.addEventListener('change', () => { const n = images.value; images.value = ''; if (n) put('<img src="assets/' + encodeURIComponent(n).replace(/%2F/gi, '/') + '" alt="" style="border:0">'); });
     const link = async () => {
       const sel = doc && doc.getSelection(), range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
       const url = await askFor(t('Link address (https://…, mailto:…, tel:…). Fields work here too: mailto:@@mail'), 'https://', t('Link'));
@@ -117,9 +119,36 @@
       if (range) { const s2 = doc.getSelection(); s2.removeAllRanges(); s2.addRange(range); }
       run('createLink', url.trim());
     };
-    const tools = el('div', { class: 'block-btns' }, fields, images,
+    // Put in as written (insertHTML would copy the editor's own font onto what it puts in).
+    const put = (html) => {
+      if (!doc) return;
+      frame.contentWindow.focus();
+      const frag = doc.createRange().createContextualFragment(html), last = frag.lastChild, sel = doc.getSelection();
+      if (!sel.rangeCount || !doc.body.contains(sel.getRangeAt(0).commonAncestorContainer)) doc.body.append(frag);
+      else { const r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(frag); if (last) { r.setStartAfter(last); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); } }
+      chipify(doc.body); input();
+    };
+    const fonts = ['Arial', 'Aptos', 'Calibri', 'Segoe UI', 'Verdana', 'Tahoma', 'Helvetica', 'Georgia', 'Times New Roman'];
+    const fontSel = el('select', { title: t('Font'), 'aria-label': t('Font') }, el('option', { value: '' }, t('Font')), fonts.map((f) => el('option', { value: f }, f)));
+    fontSel.addEventListener('change', () => { const f = fontSel.value; fontSel.value = ''; if (f) run('fontName', f + (f === 'Georgia' || f === 'Times New Roman' ? ', serif' : ', sans-serif')); });
+    const sizeSel = el('select', { title: t('Size'), 'aria-label': t('Size') }, el('option', { value: '' }, t('Size')), [7, 7.5, 8, 9, 10, 11, 12, 14, 16, 18, 24].map((n) => el('option', { value: n }, n + ' pt')));
+    sizeSel.addEventListener('change', () => {
+      const pt = sizeSel.value; sizeSel.value = '';
+      if (!pt || !doc) return;
+      frame.contentWindow.focus(); doc.execCommand('fontSize', false, '7');
+      doc.querySelectorAll('font[size="7"]').forEach((f) => { const sp = doc.createElement('span'); sp.style.fontSize = pt + 'pt'; sp.append(...f.childNodes); f.replaceWith(sp); });
+      doc.querySelectorAll('[style*="xxx-large"]').forEach((n) => { n.style.fontSize = pt + 'pt'; });
+      input();
+    });
+    const color = el('input', { type: 'color', value: '#222222', title: t('Text colour'), 'aria-label': t('Text colour') });
+    color.addEventListener('input', () => run('foreColor', color.value));
+    const table = () => put('<table cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' +
+      '<td style="padding:0 14px 0 0;vertical-align:top">&nbsp;</td><td style="vertical-align:top;font-family:Arial,sans-serif;font-size:10pt">&nbsp;</td></tr></table><p><br></p>');
+    const tools = el('div', { class: 'block-btns' }, fields, images, fontSel, sizeSel, color,
       tbtn('bold', 'Bold (Ctrl+B)', () => run('bold')), tbtn('italic', 'Italic (Ctrl+I)', () => run('italic')), tbtn('underline', 'Underline (Ctrl+U)', () => run('underline')),
-      tbtn('link', 'Link', link), tbtn('unlink', 'Remove link', () => run('unlink')), tbtn('clear', 'Clear formatting', () => run('removeFormat')));
+      tbtn('left', 'Align left', () => run('justifyLeft')), tbtn('center', 'Centre', () => run('justifyCenter')), tbtn('right', 'Align right', () => run('justifyRight')),
+      tbtn('link', 'Link', link), tbtn('unlink', 'Remove link', () => run('unlink')), tbtn('table', 'Two columns (logo beside the text)', table), tbtn('hr', 'Line', () => run('insertHorizontalRule')),
+      tbtn('clear', 'Clear formatting', () => run('removeFormat')));
     return { box, tools, load };
   }
   $('btnAddBlock').addEventListener('click', () => {

@@ -19,6 +19,8 @@
 #   OSIGN_PROXY_DIR=/opt/nobs-inventory/proxy   the shared proxy's folder (found from the running proxy)
 #   INSTALL_BACKUP_CRON=true         daily backup at 03:25 (default: true)
 # ============================================================
+# Run it, never source it: its exit would end your own shell (and an SSH session with it).
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then echo "[ERROR] Run it as a command, not with . or source" >&2; return 1; fi
 set -Eeuo pipefail
 trap 'echo "[ERROR] Failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 cd "$(dirname "$0")"

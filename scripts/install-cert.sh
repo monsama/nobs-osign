@@ -7,6 +7,8 @@
 #   sudo ./scripts/install-cert.sh --remove            back to the proxy's own
 # Checked before it goes in: the key belongs to the certificate, it holds now and for OSIGN_HOST.
 # Kept in the proxy's folder (certificates/sites/nobs-osign.crt and .key); updates keep it.
+# Run it, never source it: its exit would end your own shell (and an SSH session with it).
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then echo "[ERROR] Run it as a command, not with . or source" >&2; return 1; fi
 set -Eeuo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/osign-lib.sh

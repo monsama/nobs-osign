@@ -130,7 +130,7 @@ function createStore(dataDir) {
     return m;
   }
   // opts.images: the images to publish (name → bytes) in place of the draft's, for a version that
-  // is not the draft (a pilot given to all, one set for later); opts.draft false: the draft stays
+  // is not the draft (one set for later); opts.draft false: the draft stays
   // as it is, and is not marked published.
   async function publish(target, text, opts) {
     opts = opts || {};

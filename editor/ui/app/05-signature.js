@@ -209,6 +209,44 @@
   addEventListener('resize', () => closeMenu());
   document.addEventListener('scroll', () => closeMenu(), true);
 
+  // What is published (S.pub: id → signature as it went out), to see what the draft changed and to
+  // go back to it, one signature at a time. Nothing published yet: no marks.
+  S.pub = null;
+  async function loadPublishedCopy() {
+    let c = null;
+    try { const r = await api('published/get'); c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { c = null; }
+    S.pub = c && Array.isArray(c.signatures) ? new Map(c.signatures.map((x) => [x.id, x])) : null;
+    renderList(); revertShow();
+  }
+  // What a signature is made of, as one text: its HTML as written and the rules who gets it.
+  const sigKey = (s, html) => JSON.stringify([s.name || '', (html || '').replace(/\s+/g, ' ').trim(), !!s.defaultNew, !!s.defaultReply, s.validFrom || '', s.validUntil || '',
+    s.language || '', s.removeEmptyLines !== false, !!(s.audience && s.audience.everyone !== false),
+    ...['groups', 'departments', 'domains'].map((k) => ((s.audience && s.audience[k]) || []).map((x) => String(x).trim().toLowerCase()).sort().join(','))]);
+  // 'same', 'changed', 'new' (not published), or '' (nothing published at all).
+  function sigState(s) {
+    if (!S.pub || !s) return '';
+    const p = S.pub.get(s.id);
+    if (!p) return 'new';
+    return sigKey(s, sanitize(s.html)) === sigKey(p, sanitize(typeof p.source === 'string' ? p.source : p.html)) ? 'same' : 'changed';
+  }
+  function revertShow() { const s = sig(); $('btnRevert').hidden = sigState(s) !== 'changed'; }
+  $('btnRevert').addEventListener('click', async () => {
+    const s = sig(); if (!s) return;
+    if (!(await ask(t('Discard the changes to «{0}» since it was published? It goes back to what Outlook has.', s.name), t('Discard changes'), true))) return;
+    flushSource();
+    try {
+      const r = await api('published/revert', { id: s.id });
+      const before = JSON.parse(JSON.stringify(s)), i = S.config.signatures.indexOf(s);
+      const back = Object.assign(core.newSignature(r.signature.id, r.signature.name), r.signature);
+      if (typeof back.source === 'string') back.html = back.source;
+      delete back.source; delete back.compiled;
+      back.audience = Object.assign({ departments: [], domains: [], groups: [] }, back.audience || {});
+      S.config.signatures[i] = back; S.assets = r.assets || S.assets;
+      changed(); openSig(back.id);
+      toast(t('«{0}» is as published again.', back.name), false, { label: t('Undo'), run: () => { const j = S.config.signatures.findIndex((x) => x.id === before.id); if (j >= 0) { S.config.signatures[j] = before; changed(); openSig(before.id); } } });
+    } catch (e) { toast(t(e.message), true); }
+  });
+
   // New signature: first the layout, each shown with the sample values.
   function openTemplates() {
     const silhouette = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="100"><rect width="80" height="100" fill="#e3e7ee"/><circle cx="40" cy="38" r="17" fill="#b9c2d0"/><path d="M8 100c2-24 16-34 32-34s30 10 32 34z" fill="#b9c2d0"/></svg>');

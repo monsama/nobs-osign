@@ -1254,7 +1254,7 @@ test('building blocks: made once, put into a signature as a chip, published put 
   assert.deepEqual(errors, []);
 });
 
-test('all signatures side by side, and the publish dialog offers a pilot group and a later time', { skip }, async () => {
+test('all signatures side by side, and the publish dialog offers a later time', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
   if (!(await page.$('#sigList li a'))) { await page.click('#btnNew'); await page.click('[data-tpl=classic]'); }
@@ -1267,12 +1267,37 @@ test('all signatures side by side, and the publish dialog offers a pilot group a
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
   assert.equal(await page.isVisible('#pubSteps'), true);
-  await page.check('#pubPilot');
-  assert.equal(await page.isVisible('#pubPilotGroup'), true);
-  assert.equal(await page.textContent('#pubGo'), 'Publish for the pilot');
   await page.check('#pubLater');
   assert.equal(await page.textContent('#pubGo'), 'Set the time');
   assert.match(await page.inputValue('#pubAt'), /^\d{4}-\d{2}-\d{2}T06:00$/);
   await page.click('#dlgPublish button[value=cancel]');
+  assert.deepEqual(errors, []);
+});
+
+test('changes not published yet: marked in the list, and discarded back to what Outlook has (undo too)', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.fill('#sigName', 'Revert me'); await page.dispatchEvent('#sigName', 'input');
+  await page.keyboard.press('Control+s');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  await page.click('#pubGo');
+  await page.waitForFunction(() => /Published|Nothing had changed/.test(document.querySelector('#pubOk').textContent));
+  await page.click('#dlgPublish button[value=cancel]');
+  await page.waitForFunction(() => !/Changed|Not published/.test(document.querySelector('#sigList li a.active').textContent));
+  assert.equal(await page.isVisible('#btnRevert'), false);
+  // A change: marked, and the button there.
+  await page.fill('#sigName', 'Revert me (edited)'); await page.dispatchEvent('#sigName', 'input');
+  await page.waitForFunction(() => /Changed/.test(document.querySelector('#sigList li a.active').textContent));
+  assert.equal(await page.isVisible('#btnRevert'), true);
+  await page.click('#btnRevert'); await page.click('#askOk');
+  await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me');
+  assert.equal(await page.isVisible('#btnRevert'), false);
+  // Undo: the change is back.
+  await page.click('#toast button');
+  await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me (edited)');
+  await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });

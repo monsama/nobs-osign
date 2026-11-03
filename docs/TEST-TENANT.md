@@ -30,10 +30,8 @@ Tick each line; note what differs.
 - [ ] A language variant: a user with `preferredLanguage` en-US gets it, one with de-CH the other.
 - [ ] A campaign with today's dates wins; one in the past does not.
 
-## Release in steps
+## Publishing
 
-- [ ] Pilot: a test user in the pilot group gets the new version, one outside the old one; the
-      pane's version line says *pilot version*. *Give it to everyone*: both get the new one.
 - [ ] A set time a few minutes ahead: published by itself then (History shows it).
 - [ ] Four eyes on: one user asks, another approves; the first cannot approve their own.
 - [ ] With a publishing group set: a member of the sign-in group outside it can only ask for

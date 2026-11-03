@@ -74,6 +74,7 @@
       <div class="sig-head">
         <input id="sigName" class="title-input" placeholder="Signature name" maxlength="80" aria-label="Signature name">
         <div class="spacer"></div>
+        <button id="btnRevert" class="ghost" hidden title="Back to the signature as it is published: the changes made since go (Outlook has not seen them)">Discard changes</button>
         <button id="btnDup" class="ghost">Duplicate</button>
         <button id="btnDel" class="ghost danger">Delete</button>
       </div>
@@ -708,18 +709,11 @@
       <p class="btn-row"><button type="button" id="pubApprove" class="primary">Approve and publish</button>
         <button type="button" id="pubWithdraw" class="ghost">Withdraw</button></p>
     </div>
-    <div id="pubPilotNow" class="approval" hidden>
-      <p id="pubPilotWho" class="lead"></p>
-      <p class="btn-row"><button type="button" id="pubPromote" class="primary">Give it to everyone</button>
-        <button type="button" id="pubPilotEnd" class="ghost">Stop the pilot</button></p>
-    </div>
     <div id="pubSchedNow" class="approval" hidden>
       <p id="pubSchedWho" class="lead"></p>
       <p class="btn-row"><button type="button" id="pubSchedCancel" class="ghost">Cancel it</button></p>
     </div>
     <div id="pubSteps" class="pub-steps" hidden>
-      <label class="check"><input type="checkbox" id="pubPilot"> First only for a pilot group</label>
-      <input id="pubPilotGroup" placeholder="OSign-Pilot" aria-label="Pilot group" autocomplete="off" hidden>
       <label class="check"><input type="checkbox" id="pubLater"> Later, at</label>
       <input id="pubAt" type="datetime-local" aria-label="When" hidden>
     </div>
