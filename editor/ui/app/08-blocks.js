@@ -22,6 +22,8 @@
   }
   function renderBlocks() {
     const list = $('blockList');
+    // Empty: the button in the empty state is the one; below the list otherwise.
+    $('btnAddBlock').parentNode.hidden = !S.config.blocks.length;
     if (!S.config.blocks.length) {
       list.replaceChildren(emptyState('blocks', t('No building blocks yet.'), t('A disclaimer or a banner in many signatures: made once here, changed in one place.'), [t('+ Add building block'), () => $('btnAddBlock').click()]));
       return;

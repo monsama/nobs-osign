@@ -167,6 +167,8 @@
     const snap = S.snap;
     const head = $('usersHead'), body = $('usersRows');
     head.textContent = ''; body.textContent = ''; $('usersMore').textContent = '';
+    // Nothing read yet: no empty table, the button says what to do.
+    $('usersRows').closest('.table-wrap').hidden = off || !snap;
     if (off || !snap) { $('usersInfo').textContent = off ? '' : t('Not read yet.'); return; }
     const c = snap.counts;
     $('usersInfo').textContent = t('Read {0}: {1} users - {2} new, {3} changed, {4} removed.', when(snap.readAt), snap.users.length, c.new, c.changed, c.removed) +

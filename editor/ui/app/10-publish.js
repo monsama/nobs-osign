@@ -190,7 +190,9 @@
     if (p) $('pubPilotWho').textContent = t('A pilot runs since {0} for the group {1} ({2}): they have the new version, everyone else the one before. Publishing for everyone ends it.', when(p.at), p.group, p.by);
     $('pubPromote').disabled = $('pubPilotEnd').disabled = !can;
     $('pubSchedNow').hidden = !x;
-    if (x) $('pubSchedWho').textContent = t('Set to go out on {0} ({1}){2}: the draft as it was then.', when(x.at), x.by, x.pilot ? ' ' + t('for the pilot group {0}', x.pilot) : '');
+    if (x) $('pubSchedWho').textContent = t('Set to go out on {0} ({1}){2}: the draft as it was then.', when(x.at), x.by, x.pilot ? ' ' + t('for the pilot group {0}', x.pilot) : '') +
+      (x.error ? ' ' + t('It did not go out: {0}', t(x.error)) : '');
+    $('pubSchedWho').classList.toggle('warn', !!(x && x.error));
   }
   $('pubPilot').addEventListener('change', () => { $('pubPilotGroup').hidden = !$('pubPilot').checked; if ($('pubPilot').checked) $('pubPilotGroup').focus(); $('pubGo').textContent = pubGoText(); });
   $('pubLater').addEventListener('change', () => {
@@ -367,6 +369,7 @@
     $('abAt').value = r.at || ''; $('abKeep').value = r.keep || 30;
     $('abWhere').textContent = t('Locked with a passphrase of yours and kept in {0}. Last: {1}.', r.where,
       r.last ? new Date(r.last.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' ' + (r.last.ok ? '✓' : '✕ ' + t(r.last.error || '')) : t('none yet'));
+    if (r.warning) $('abWhere').textContent += ' ' + t(r.warning);
     $('abPassNote').textContent = r.passLost ? t('The one set cannot be opened any more (another server key): set it again.') : r.passSet ? t('(set; type a new one to change it)') : t('(at least 12 characters; needed to open them)');
     $('abRun').disabled = !r.passSet;
     $('abList').replaceChildren(...(r.backups || []).slice(0, 10).map((b) => el('li', null,

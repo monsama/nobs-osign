@@ -369,6 +369,28 @@ test('a pilot: the new version for its group, the one before for everyone else; 
     assert.equal(core.pick(core.forUser(pub, ['osign-pilot']), {}, 'x@example.ch', 'new').name, 'New');
     assert.equal(core.pick(core.forUser(pub, ['someone-else']), {}, 'x@example.ch', 'new').name, 'Old');
     assert.equal((await admin('pilot/get')).pilot.group, 'OSign-Pilot');
+    // Its images: the version for all keeps its own while the pilot runs (and the draft dropped it).
+    const PNG64 = PNG.toString('base64');
+    await admin('assets/upload', { name: 'old.png', data: PNG64 });
+    const withOld = cfg([{ id: 'a', name: 'Old', html: '<p>Old<img src="assets/old.png" alt="o"></p>', defaultNew: true, audience: { everyone: true } }], {});
+    const f1 = JSON.parse(withOld); f1.fields = [{ key: 'title', label: 'Title', graph: 'jobTitle' }];
+    assert.equal((await admin('pilot/end')).error, undefined);
+    assert.equal((await admin('publish', { configJson: JSON.stringify(f1) })).error, undefined);
+    await admin('assets/delete', { name: 'old.png' });
+    await admin('assets/upload', { name: 'new.png', data: PNG64 });
+    const withNew = JSON.parse(cfg([{ id: 'a', name: 'New', html: '<p>New<img src="assets/new.png" alt="n"></p>', defaultNew: true, audience: { everyone: true } }]));
+    withNew.fields = [{ key: 'title', label: 'Title', graph: 'companyName' }];
+    assert.equal((await admin('pilot/start', { configJson: JSON.stringify(withNew), group: 'OSign-Pilot' })).error, undefined);
+    const there = () => fs.readdirSync(path.join(s.dataDir, 'publish', 'assets')).sort();
+    assert.deepEqual(there(), ['new.png', 'old.png']);
+    // Stopped: everyone on the version before, with its image and its fields; the draft as it was.
+    const draftBefore = (await admin('draft/get')).configJson;
+    assert.equal((await admin('pilot/end')).error, undefined);
+    assert.deepEqual(there(), ['old.png']);
+    const back = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'publish', 'signatures.json'), 'utf8'));
+    assert.deepEqual([back.signatures[0].name, back.fields[0].graph, back.pilot], ['Old', 'jobTitle', undefined]);
+    assert.equal((await admin('draft/get')).configJson, draftBefore, 'the draft stays');
+    assert.equal((await admin('pilot/start', { configJson: JSON.stringify(withNew), group: 'OSign-Pilot' })).error, undefined);
     assert.equal((await admin('pilot/promote')).error, undefined);
     const all = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'publish', 'signatures.json'), 'utf8'));
     assert.deepEqual([all.signatures[0].name, all.pilot], ['New', undefined]);
@@ -381,4 +403,24 @@ test('a pilot: the new version for its group, the one before for everyone else; 
     assert.equal((await admin('schedule/get')).schedule.message, 'later');
     assert.equal((await admin('schedule/cancel')).schedule, null);
   } finally { s.srv.close(); }
+});
+
+test('roles: taken out of the publishing group, publishing stops at once (asked of AD again), not at the next sign-in', async () => {
+  const roles = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [], 'OSign-Publish': [] }, people: {
+    paul: { pw: 'paul-pw', name: 'Paul Publisher', mail: 'paul@example.ch', groups: ['NOBS-OSign-Admins', 'OSign-Publish'] }
+  } });
+  const url = await roles.listen();
+  const s = await server({ OSIGN_LDAP_URL: url, OSIGN_LDAP_PUBLISH_GROUP: 'OSign-Publish', OSIGN_LDAP_SERVICE_DN: SERVICE.dn, OSIGN_LDAP_SERVICE_PASSWORD: SERVICE.pw, OSIGN_LDAP_DIRECTORY_BASE: BASE });
+  try {
+    const paul = s.as(await s.signIn('paul', 'paul-pw'));
+    const c = cfg([{ id: 'a', name: 'A', html: '<p>A</p>', defaultNew: true, audience: { everyone: true } }]);
+    assert.equal((await paul('publish', { configJson: c })).error, undefined);
+    roles.set('paul', 'memberOf', 'CN=NOBS-OSign-Admins,OU=Groups,' + BASE);
+    // Asked again at most once a minute: a minute on.
+    const realNow = Date.now; Date.now = () => realNow() + 61000;
+    try {
+      assert.match((await paul('publish', { configJson: c })).error, /publishing group/);
+      assert.equal((await paul('info')).user.publisher, false);
+    } finally { Date.now = realNow; }
+  } finally { s.srv.close(); roles.close(); }
 });

@@ -9,7 +9,7 @@ const path = require('node:path');
 const { exportBackup, openBackup, restoreFiles } = require('./backup');
 const { createAutoBackup } = require('./autobackup');
 
-function createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version, log }) {
+function createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version, log, busy }) {
   const VERSION = version;
   // Backups by themselves, every day.
   const autoBackup = createAutoBackup({ dataDir, dir: env.OSIGN_BACKUP_DIR || '', seal: connections.seal, open: connections.open, rawKey: connections.rawKey, version, log });
@@ -22,6 +22,7 @@ function createBackupRoutes({ dataDir, env, connections, store, configure, admin
     },
     'backup/restore': (d, s) => {
       if (adminOnly(s)) return { error: 'Only the local account admin can bring back a backup.' };
+      if (busy && busy()) return { error: 'Publishing right now: try again in a moment.' };
       const b = openBackup(d.data, d.passphrase);
       if (b.error) return b;
       const r = restoreFiles(dataDir, b.files);

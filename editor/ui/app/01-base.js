@@ -108,7 +108,9 @@
     saving = saving.then(() => api('draft/save', { configJson: json }, opts))
       // The answer to an older save says nothing about changes made since: those are still coming.
       .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; S.savedAt = Date.now(); renderStatus(); } })
-      .catch((e) => { renderStatus(t('Not saved')); toast(t(e.message), true); });
+      // Not taken (publishing right now, the network gone): tried again a moment later, and kept
+      // for when the page closes, unless something newer is on its way already.
+      .catch((e) => { renderStatus(t('Not saved')); toast(t(e.message), true); if (seq === changeSeq && !saveTimer) saveTimer = setTimeout(save, 3000); });
     return saving;
   }
   window.addEventListener('beforeunload', () => { if (saveTimer) save({ keepalive: true }); });

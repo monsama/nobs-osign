@@ -23,12 +23,14 @@ function createHistory({ dataDir, assetDir }) {
   const load = (id) => { try { return JSON.parse(readText(path.join(dir, id + '.json')) || 'null'); } catch (e) { return null; } };
 
   // After a publish: the version as it went out.
-  function add({ by, message, configJson }) {
+  // images: what went out (name → bytes), when that was not the draft's images.
+  function add({ by, message, configJson, images }) {
     const assets = [];
-    for (const name of fs.readdirSync(assetDir).sort()) {
+    const list = images ? [...images.keys()].sort() : fs.readdirSync(assetDir).sort();
+    for (const name of list) {
       const file = path.join(assetDir, name);
-      if (!fs.statSync(file).isFile()) continue;
-      const data = fs.readFileSync(file);
+      if (!images && !fs.statSync(file).isFile()) continue;
+      const data = images ? images.get(name) : fs.readFileSync(file);
       const blob = sha256(data) + path.extname(name).toLowerCase();
       if (!fs.existsSync(path.join(blobs, blob))) writeAtomic(path.join(blobs, blob), data);
       assets.push({ name, blob });
@@ -78,6 +80,12 @@ function createHistory({ dataDir, assetDir }) {
   }
   // The last one published ('' before the first).
   function latest() { const id = ids()[0]; const h = id ? load(id) : null; return h ? h.configJson : ''; }
+  // Its images, as bytes (name → Buffer): for a version made from the one published (a pilot).
+  function latestImageBytes() {
+    const id = ids()[0]; const h = id ? load(id) : null; const out = new Map();
+    for (const a of (h && h.assets) || []) { try { out.set(a.name, fs.readFileSync(path.join(blobs, a.blob))); } catch (e) { /* gone */ } }
+    return out;
+  }
   // Its images: name → sha256 of the content.
   function latestImages() {
     const id = ids()[0]; const h = id ? load(id) : null; const out = {};
@@ -85,7 +93,7 @@ function createHistory({ dataDir, assetDir }) {
     return out;
   }
 
-  return { add, list, restore, get, latest, latestImages };
+  return { add, list, restore, get, latest, latestImages, latestImageBytes };
 }
 
 module.exports = { createHistory };
