@@ -103,7 +103,7 @@ Install the server ([docs/SETUP.md](docs/SETUP.md), "The editor on a server"), s
 and the **setup assistant** walks through the rest:
 
 1. **The server's connections:** Active Directory for the sign-in and the users' values, Cloudflare
-   Pages for the add-in's files (Settings → Server connections, each with *Save and test*).
+   Pages for the add-in's files (Settings → Server: a part's button in the status list; *Save* checks them all again).
 2. **SharePoint:** a folder `OSign` in a site everyone can read; paste its address (or a sharing
    link). Photos go into `OSign/photos` (`<username>.jpg`).
 3. **Microsoft 365:** download the **setup script** and run it once on a Windows PC as SharePoint
@@ -156,7 +156,7 @@ to do (images not picked, fields added, and *Who gets it*: CI-Sign's rules are n
 
 ## Who may do what
 
-- **Editors** (members of the AD group set under *Server connections → Active Directory*, signed
+- **Editors** (members of the AD group set under *Settings → Server → Active Directory*, signed
   in with their AD account): make, change, import and publish signatures, edit fields, building
   blocks and the add-in's behaviour, look at users from AD, and approve someone else's publish when
   four eyes is on.
@@ -167,7 +167,7 @@ to do (images not picked, fields added, and *Who gets it*: CI-Sign's rules are n
 
 Fields read only contact details from AD (names, title, department, company, office, phone numbers,
 mail, address, web page): what they read shows in the preview and is exported into SharePoint, where
-every employee can read it. Only the local `admin` allows more attributes (*Server connections →
+every employee can read it. Only the local `admin` allows more attributes (*Settings → Server →
 Active Directory*, `OSIGN_AD_ATTRIBUTES`); passwords and recovery keys never.
 
 ## Where the add-in is deployed

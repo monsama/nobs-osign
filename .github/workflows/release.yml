@@ -56,6 +56,22 @@ jobs:
         run: |
           t="v${{ steps.v.outputs.version }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$t" > /dev/null; then echo "$t is already released. Raise the version first."; exit 1; fi
+      # Whether the add-in changed since the release before (addin/, shared/): said at the top of the
+      # release notes, so whoever updates knows whether to make the add-in files again.
+      - name: Whether the add-in changed
+        id: addin
+        run: |
+          git fetch --quiet --unshallow --tags origin 2>/dev/null || git fetch --quiet --tags origin || true
+          v="${{ steps.v.outputs.version }}"
+          prev="$(git tag -l 'v*' --sort=-v:refname | grep -vx "v$v" | head -1)"
+          if [ -z "$prev" ]; then
+            note="**Outlook add-in:** first release: make the add-in files (Settings → Outlook add-in)."
+          elif git diff --quiet "$prev" HEAD -- addin shared; then
+            note="**Outlook add-in:** unchanged since $prev: no need to make the add-in files again."
+          else
+            note="**Outlook add-in:** changed since $prev: make the add-in files again (status bar or Settings → Outlook add-in). A new manifest.xml in the admin center only if the notes below say so."
+          fi
+          { echo "note<<EOF"; echo "$note"; echo; echo "Update: \`sudo ./scripts/update.sh $v\`"; echo "EOF"; } >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
@@ -141,4 +157,5 @@ jobs:
             out/nobs-osign-server-${{ steps.v.outputs.version }}.tar.gz
             out/nobs-osign-server-${{ steps.v.outputs.version }}.tar.gz.sha256
             out/SHA256SUMS.txt
+          body: ${{ steps.addin.outputs.note }}
           generate_release_notes: true

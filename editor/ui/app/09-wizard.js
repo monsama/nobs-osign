@@ -67,7 +67,7 @@
     $('wizManifest').textContent = base ? base + 'manifest.xml' : '';
     // No address yet: what to do instead of an empty line to copy.
     $('wizManifest').parentNode.hidden = !base; $('wizNoUrl').hidden = !!base;
-    $('wizCheck').disabled = !base;
+    offFor($('wizCheck'), base ? '' : t('Enter the add-in\'s address first (step Add-in address).'));
     const perms = ['User.Read', 'Sites.Read.All'];
     if (radio('wvsrc') === 'graph') perms.push('GroupMember.Read.All');
     $('wizPerms').textContent = perms.join(', ');
@@ -125,6 +125,7 @@
         el('span', { class: 'wn-n', 'aria-hidden': 'true' }, done ? '✓' : String(i + 1)), t(WIZ_SHORT[n] || n));
       if (i === wiz.step) b.setAttribute('aria-current', 'step');
       b.disabled = i !== wiz.step && !any && i > wiz.reached;
+      if (b.disabled) b.title = t('Reached through the steps before (Next).');
       b.addEventListener('click', () => wizGo(i));
       return b;
     }));

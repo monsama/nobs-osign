@@ -476,7 +476,7 @@ function createApp(opts) {
     const s = open ? null : auth.session(req);
     if (!open && !s) return fail(res, 'Not signed in.', 401);
     let data = {};
-    try { const body = await readBody(req, name === 'backup/restore' && s && s.user.local ? MAX_BACKUP_BODY : MAX_BODY); data = body ? JSON.parse(body) : {}; } catch (e) {
+    try { const body = await readBody(req, (name === 'backup/restore' || name === 'backup/check') && s && s.user.local ? MAX_BACKUP_BODY : MAX_BODY); data = body ? JSON.parse(body) : {}; } catch (e) {
       if (e.status === 413) return fail(res, 'The request is too large.', 413);
       return fail(res, 'The request is not valid JSON.');
     }

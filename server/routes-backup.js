@@ -35,6 +35,17 @@ function createBackupRoutes({ dataDir, env, connections, store, configure, admin
       log.info('backup: brought back the backup of ' + b.at + ' (version ' + b.version + ', ' + r.files + ' files) by ' + s.user.login);
       return { at: b.at, version: b.version, files: r.files };
     },
+    // Whether a backup opens with its passphrase, and what it holds, without bringing it back.
+    'backup/check': (d, s) => {
+      if (adminOnly(s)) return { error: 'Only the local account admin can bring back a backup.' };
+      const b = openBackup(d.data, d.passphrase);
+      if (b.error) return b;
+      const names = Object.keys(b.files);
+      let signatures = null;
+      try { const c = JSON.parse(Buffer.from(b.files['draft.json'] || '', 'base64').toString('utf8')); signatures = Array.isArray(c.signatures) ? c.signatures.length : null; } catch (e) { /* no draft in it */ }
+      return { at: b.at, version: b.version, files: names.length, signatures,
+        versions: names.filter((n) => /^history\/\d{13}\.json$/.test(n)).length, key: !!b.appKey };
+    },
     // Backups by themselves: set, made now, downloaded. The local account admin's.
     'backup/auto/get': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the automatic backups.' } : autoBackup.answer()),
     'backup/auto/save': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the automatic backups.' } : autoBackup.save(d)),
@@ -47,6 +58,7 @@ function createBackupRoutes({ dataDir, env, connections, store, configure, admin
   const audit = {
     'backup/export': () => 'backup downloaded',
     'backup/restore': () => 'backup restored',
+    'backup/check': () => 'backup checked (not brought back)',
     'backup/auto/save': (d) => 'automatic backups ' + (d.at ? 'daily at ' + d.at + ', kept ' + (d.keep || 30) + ' days' : 'off') + (d.passphrase ? ', passphrase set' : ''),
     'backup/auto/run': (d, r) => 'automatic backup made now' + (r && r.last && r.last.name ? ': ' + r.last.name : ''),
     'backup/auto/download': (d) => 'backup downloaded: ' + String(d.name || '').slice(0, 80)

@@ -49,7 +49,7 @@
     $('setAddinMore').open = !onServer();
     document.querySelector('#dlgSettings [data-th=addinMoreHint]').hidden = !onServer();
     for (const id of ['setSpSite', 'setSpFolder']) $(id).closest('label').hidden = onServer();
-    $('setAddinBuild').disabled = !(S.info.features && S.info.features.addinFiles);
+    offFor($('setAddinBuild'), S.info.features && S.info.features.addinFiles ? '' : t('The add-in\'s source files are not on this server (addin/ in the image).'));
     // The server version: where publishing goes is the site and folder below; no folders on a PC.
     $('setServerWhere').hidden = !onServer();
     for (const id of ['setFolder', 'setPhotos', 'setAddinFolder']) $(id).closest('label').hidden = onServer();
@@ -92,7 +92,7 @@
     document.querySelector('#dlgSettings .dlg-foot').hidden = name === 'conn';
     document.querySelector('#dlgSettings .dlg-foot button[value=cancel]').textContent = view ? t('Close') : t('Cancel');
   }
-  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', async () => { if (!(await connMayLeave())) return; setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
 
   // Status: every part the server depends on, tried now, in one list ("Check everything"); a part
   // to set up opens its page of the connections. Saving them comes back here and checks again.
@@ -431,13 +431,23 @@
     try {
       renderConnections(await api('connections/get'));
       if (!$('dlgSettings').open) $('btnSettings').click();
-      setTab('conn'); connTab(tab || 'ad'); connTestsClear();
+      setTab('conn'); connTab(tab || 'ad'); connTestsClear(); connDirty = false;
     } catch (err) { $('setErr').textContent = t(err.message); }
   }
+  // Changed and not saved: asked before it is left (Status, Cancel, another tab, Escape).
+  let connDirty = false;
+  $('connHost').addEventListener('input', (e) => { if (e.target.matches('input, select, textarea') && !e.target.closest('#connSpUrl')) connDirty = true; });
+  $('connHost').addEventListener('change', (e) => { if (e.target.matches('input[type=file]')) connDirty = true; });
+  async function connMayLeave() {
+    if (!connShown() || !connDirty) return true;
+    if (!(await ask(t('The changes to the connections are not saved. Discard them?'), t('Discard'), true))) return false;
+    connDirty = false; return true;
+  }
   // Back from the connections to Status: checked again, with what was just changed.
-  function connBack() { setTab('server'); runHealth(); }
+  async function connBack() { if (!(await connMayLeave())) return; setTab('server'); runHealth(); }
   $('connCancel').addEventListener('click', connBack);
   $('connBackTop').addEventListener('click', connBack);
+  $('dlgSettings').addEventListener('cancel', async (e) => { if (connShown() && connDirty) { e.preventDefault(); if (await connMayLeave()) $('dlgSettings').close(); } });
   $('connHost').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
     if (!b) return;
@@ -485,7 +495,7 @@
   $('connSave').addEventListener('click', async (e) => {
     e.preventDefault();
     $('connErr').textContent = '';
-    try { await connSaveNow(); connBack(); toast(t('Server connections saved.')); }
+    try { await connSaveNow(); connDirty = false; connBack(); toast(t('Server connections saved.')); }
     catch (err) { $('connErr').textContent = t(err.message); }
   });
   // Detect: the domain from the domain controller (saved first, with its CA), into the field.
