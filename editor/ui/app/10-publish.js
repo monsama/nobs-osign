@@ -367,6 +367,7 @@
     $('abAt').value = r.at || ''; $('abKeep').value = r.keep || 30;
     $('abWhere').textContent = t('Locked with a passphrase of yours and kept in {0}. Last: {1}.', r.where,
       r.last ? new Date(r.last.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' ' + (r.last.ok ? '✓' : '✕ ' + t(r.last.error || '')) : t('none yet'));
+    if (r.warning) $('abWhere').textContent += ' ' + t(r.warning);
     $('abPassNote').textContent = r.passLost ? t('The one set cannot be opened any more (another server key): set it again.') : r.passSet ? t('(set; type a new one to change it)') : t('(at least 12 characters; needed to open them)');
     $('abRun').disabled = !r.passSet;
     $('abList').replaceChildren(...(r.backups || []).slice(0, 10).map((b) => el('li', null,

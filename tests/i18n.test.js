@@ -62,3 +62,24 @@ test('German: every text of the page has its German', () => {
   doc.querySelectorAll('[data-th]').forEach((el) => { if (!DE.html[el.getAttribute('data-th')]) missing.add('data-th=' + el.getAttribute('data-th')); });
   assert.deepEqual([...missing], []);
 });
+
+test('German in the add-in: every t(\'…\') of the pane has its German, none twice', () => {
+  const pane = fs.readFileSync(path.join(__dirname, '..', 'addin', 'src', 'taskpane.js'), 'utf8');
+  const block = pane.slice(pane.indexOf('const DE = {'), pane.indexOf('};', pane.indexOf('const DE = {')));
+  const keys = [...block.matchAll(/^ {2}(['"])((?:(?!\1)[^\\]|\\.)*)\1:/gm)].map((m) => m[2].replace(/\\(['"])/g, '$1'));
+  const seen = new Set(), twice = [];
+  keys.forEach((k) => { if (seen.has(k)) twice.push(k); seen.add(k); });
+  assert.deepEqual(twice, []);
+  const missing = new Set();
+  for (const m of pane.matchAll(/\bt\((['"])((?:(?!\1)[^\\]|\\.)*)\1/g)) {
+    const s = m[2].replace(/\\(['"])/g, '$1');
+    if (!SAME(s) && !seen.has(s)) missing.add(s);
+  }
+  const html = fs.readFileSync(path.join(__dirname, '..', 'addin', 'taskpane.html'), 'utf8');
+  const dom = new JSDOM(html).window.document;
+  dom.querySelectorAll('h1 .sub, label, #refresh, #help summary').forEach((el) => el.childNodes.forEach((n) => {
+    const v = n.nodeType === 3 ? n.nodeValue.trim() : '';
+    if (v && !SAME(v) && !seen.has(v)) missing.add(v);
+  }));
+  assert.deepEqual([...missing], []);
+});

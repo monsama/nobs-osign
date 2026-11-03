@@ -18,7 +18,13 @@ const NAME = /^nobs-osign-backup-\d{4}-\d{2}-\d{2}(?:-\d{4})?\.osignbak$/;
 
 function createAutoBackup({ dataDir, dir, seal, open, rawKey, version, log }) {
   const file = path.join(dataDir, 'autobackup.json');
-  const where = dir || path.join(dataDir, 'backups');
+  // A folder of its own inside the data volume would go into every backup and be emptied when one
+  // is brought back: then the usual backups/ (left out of both), and said.
+  const inside = (d) => { const r = path.relative(path.resolve(dataDir), path.resolve(d)); return !r.startsWith('..') && !path.isAbsolute(r); };
+  const warning = dir && inside(dir) && path.resolve(dir) !== path.resolve(dataDir, 'backups')
+    ? 'OSIGN_BACKUP_DIR is inside the data volume (' + dir + '): the backups go into backups/ of the data volume instead. Set a folder outside it, best on another disk.' : '';
+  if (warning && log) log.warn('automatic backup: ' + warning);
+  const where = dir && !warning ? dir : path.join(dataDir, 'backups');
   let timer = null;
   const read = () => { try { const s = JSON.parse(fs.readFileSync(file, 'utf8')); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; } };
   const write = (s) => writeAtomic(file, JSON.stringify(s, null, 2));
@@ -32,7 +38,7 @@ function createAutoBackup({ dataDir, dir, seal, open, rawKey, version, log }) {
   }
   function answer() {
     const s = read();
-    return { on: !!(s.at && s.pass), at: s.at || '', keep: s.keep || 30, passSet: !!passphrase(s), passLost: !!s.pass && !passphrase(s), where, last: s.last || null, backups: list() };
+    return { on: !!(s.at && s.pass), at: s.at || '', keep: s.keep || 30, passSet: !!passphrase(s), passLost: !!s.pass && !passphrase(s), where, warning, last: s.last || null, backups: list() };
   }
   // Older ones than the days kept go; the newest always stays.
   function prune(keep) {

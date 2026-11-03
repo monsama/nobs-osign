@@ -13,7 +13,7 @@ const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
 const { ldapConfig, ldapProblem, testSignIn, detect } = require('./ldap');
-const { directoryConfig, directoryEnabled, directoryProblem, allowedAttrs, lookup, groupsStartingWith, usersMatching, departmentsMatching, testService } = require('./directory');
+const { directoryConfig, directoryEnabled, directoryProblem, allowedAttrs, lookup, testService } = require('./directory');
 const { createUsers, nextAt } = require('./users');
 const { createConnections } = require('./connections');
 const { createSetup } = require('./setup');
@@ -23,13 +23,14 @@ const { createCerts } = require('./cert');
 const { createAudit } = require('./audit');
 const { createReleaseRoutes } = require('./routes-release');
 const { createBackupRoutes } = require('./routes-backup');
+const { createPhotoRoutes } = require('./routes-photos');
+const { createDirectoryRoutes } = require('./routes-directory');
 const { createUpdates } = require('./updates');
 const { diffConfigs } = require('./diff');
 const tlsInfo = require('./tls');
 const { writeAtomic, readText } = require('./store');
 const core = require('../shared/signature-core.js');
 const addin = require('./addin');
-const { fetchPhoto } = require('./photofetch');
 
 const VERSION = require('../package.json').version;
 const ROOT = path.resolve(__dirname, '..');
@@ -271,6 +272,24 @@ function createApp(opts) {
   const publisher = (s) => !!(s && s.user && (s.user.local || s.user.publisher !== false));
   // Approval needed for this person: four eyes on, or not one who publishes.
   const needsApprovalFor = (s) => needsApproval() || !publisher(s);
+  // Taken out of the publishing group (or the sign-in group), someone loses publishing at once, not
+  // with their next sign-in: asked again of AD (with the service account) before what publishes,
+  // at most once a minute per session. AD not reachable: as it was at sign-in.
+  const RECHECK = new Set(['info', 'approval/get', 'publish', 'approval/request', 'approval/approve', 'ad/export', 'photos/upload', 'photos/delete', 'photos/list',
+    'pilot/start', 'pilot/promote', 'pilot/end', 'schedule/set', 'schedule/cancel']);
+  const cnOf = (g) => { const m = /^CN=((?:\\,|[^,])+)/i.exec(String(g || '')); return (m ? m[1].replace(/\\,/g, ',') : String(g || '')).trim().toLowerCase(); };
+  async function recheckPublisher(s) {
+    if (!s || !s.user || s.user.local || !ldapCfg.publishGroup || !adOn) return;
+    if (s.user.publisherAt && Date.now() - s.user.publisherAt < 60000) return;
+    try {
+      const r = await lookup(dir, s.user.login, []);
+      const mine = r.groups.map((g) => g.toLowerCase());
+      const was = s.user.publisher;
+      s.user.publisher = mine.includes(cnOf(ldapCfg.publishGroup)) && mine.includes(cnOf(ldapCfg.group));
+      s.user.publisherAt = Date.now();
+      if (was !== s.user.publisher) log.info('roles: ' + s.user.login + (s.user.publisher ? ' publishes again' : ' no longer publishes'));
+    } catch (e) { log.warn('roles: could not ask AD about ' + s.user.login + ': ' + e.message); }
+  }
   // The same person, however they typed their login (AD does not mind the case).
   const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
   function approvalAnswer(s) {
@@ -379,48 +398,6 @@ function createApp(opts) {
     'draft/save': (d) => (publishing ? { error: 'Publishing right now: saved in a moment.' } : store.saveDraft(typeof d.configJson === 'string' ? d.configJson : '')),
     'assets/upload': (d) => (publishing ? { error: 'Publishing right now: try again in a moment.' } : store.uploadAsset(d.name, d.data)),
     'assets/delete': (d) => (publishing ? { error: 'Publishing right now: try again in a moment.' } : store.deleteAsset(d.name)),
-    // A person's photo (photos/<username>.jpg in the OSign folder), e.g. brought over from CI-Sign.
-    'photos/upload': async (d, s) => {
-      // A photo counts at once, without publishing: a publisher's, and with four eyes only the local admin's.
-      if (!publisher(s)) return { error: 'A photo counts at once, without publishing: only the publishing group changes photos.' };
-      if (needsApproval() && !s.user.local) return { error: 'With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.' };
-      const name = String(d.name || '');
-      if (!PHOTO_NAME.test(name) || name !== path.basename(name)) return { error: 'A photo is a PNG, JPG or GIF named after the user, like mustera.jpg.' };
-      const data = String(d.data || '');
-      const bytes = Buffer.from(data, 'base64');
-      if (!bytes.length || bytes.toString('base64').replace(/=+$/, '') !== data.replace(/\s+/g, '').replace(/=+$/, '')) return { error: 'The image did not arrive whole.' };
-      if (bytes.length > 1024 * 1024) return { error: 'The image is larger than 1 MB. A signature image is best well under 100 KB.' };
-      const magic = { png: '89504e47', jpg: 'ffd8ff', jpeg: 'ffd8ff', gif: '47494638' }[name.split('.').pop().toLowerCase()];
-      if (!bytes.subarray(0, 8).toString('hex').startsWith(magic)) return { error: 'The file is not the image its name says.' };
-      await settings.target().write('photos/' + name, bytes, 'image/' + (/png$/i.test(name) ? 'png' : /gif$/i.test(name) ? 'gif' : 'jpeg'));
-      photos.clear();
-      return { name, size: bytes.length };
-    },
-    // The photos there, for the Photos page: name and a tag that changes with the file.
-    'photos/list': async (d, s) => {
-      const t = settings.target();
-      try {
-        const list = (await t.listInfo('photos')).filter((f) => PHOTO_NAME.test(f.name) && !f.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
-        return { photos: list.map((f) => ({ name: f.name, tag: f.tag })), where: t.describe() + '/photos', mayChange: publisher(s) && (!needsApproval() || !!s.user.local) };
-      } catch (e) { return { error: e.message }; }
-    },
-    'photos/delete': async (d, s) => {
-      if (!publisher(s)) return { error: 'A photo counts at once, without publishing: only the publishing group changes photos.' };
-      if (needsApproval() && !s.user.local) return { error: 'With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.' };
-      const name = String(d.name || '');
-      if (!PHOTO_NAME.test(name) || name !== path.basename(name) || name.startsWith('.')) return { error: 'There is no such photo.' };
-      await settings.target().remove('photos/' + name);
-      photos.clear();
-      return { name };
-    },
-    // A photo from a web address (the team page, say): fetched here, as the browser may not fetch
-    // it from another site; the editor makes it small and keeps it with photos/upload.
-    'photos/fetch': async (d) => {
-      try {
-        const r = await ((opts && opts.photoFetch) || fetchPhoto)(d.url);
-        return { type: r.type, data: r.bytes.toString('base64') };
-      } catch (e) { return { error: e.message }; }
-    },
     'settings/get': () => settings.answer(),
     // Where the server publishes and what the add-in is made with: the local account admin's, like
     // the connections (the site goes into the setup script, the add-in's address is fetched).
@@ -626,50 +603,6 @@ function createApp(opts) {
         return r;
       } catch (e) { return { error: e.message }; }
     },
-    // Active Directory, with the service account.
-    'ad/lookup': async (d, s) => {
-      if (!adOn) return { error: directoryProblem(dir) };
-      // Nothing typed: the one signed in, as OSign.ps1 takes the Windows user.
-      const q = String(d.query || '').trim() || (s.user.local ? '' : s.user.login);
-      try { return await lookup(dir, q, Array.isArray(d.fields) ? d.fields : []); } catch (e) { return { error: e.message }; }
-    },
-    // A person from Entra ID, for the preview: the fields with a Graph source, and the groups.
-    'entra/lookup': async (d) => {
-      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
-      const fields = (Array.isArray(d.fields) ? d.fields : []).filter((f) => f && f.key && f.graph).map((f) => ({ key: String(f.key), graph: String(f.graph) }));
-      try {
-        const r = await graph.user(d.query, core.graphSelect(fields));
-        return { values: core.valuesFromGraph(fields, r.user), displayName: r.user.displayName || d.query, groups: r.groups };
-      } catch (e) { return { error: e.message }; }
-    },
-    'ad/groups': async (d) => {
-      if (!adOn) return { error: directoryProblem(dir) };
-      try { return { groups: await groupsStartingWith(dir, d.query) }; } catch (e) { return { error: e.message }; }
-    },
-    // Suggestions while typing: people (for the preview) and departments (for the audience).
-    'ad/users': async (d) => {
-      if (!adOn) return { error: directoryProblem(dir) };
-      try { return { users: await usersMatching(dir, d.query) }; } catch (e) { return { error: e.message }; }
-    },
-    'ad/departments': async (d) => {
-      if (!adOn) return { error: directoryProblem(dir) };
-      try { return { departments: await departmentsMatching(dir, d.query) }; } catch (e) { return { error: e.message }; }
-    },
-    'entra/users': async (d) => {
-      if (!graph) return { error: graphProblem(graphCfg) || 'Publishing to SharePoint is not set up.' };
-      try { return { users: await graph.users(d.query) }; } catch (e) { return { error: e.message }; }
-    },
-    'ad/read': async (d) => {
-      if (!adOn) return { error: directoryProblem(dir) };
-      try { return await users.apiRead(settings.target(), d); } catch (e) { return { error: 'Active Directory: ' + e.message }; }
-    },
-    'ad/snapshot': (d) => users.apiSnapshot(d),
-    'ad/export': async (d, s) => {
-      if (!publisher(s)) return { error: 'Only the publishing group writes the users.' };
-      // With four eyes, the users are written when the publish is approved, as it was approved.
-      if (needsApproval()) return { error: 'With approval on, the users are written when the publish is approved.' };
-      try { return await users.apiExport(settings.target(), d); } catch (e) { return { error: 'Writing the users: ' + e.message }; }
-    },
     // A sharing link: the folder it leads to (its own address), for the setup assistant.
     'sp/share': async (d) => {
       const link = String(d.url || '').trim();
@@ -705,6 +638,9 @@ function createApp(opts) {
   // The backups (server/routes-backup.js).
   const backups = createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version: VERSION, log });
   Object.assign(routes, backups.routes);
+  // Photos (server/routes-photos.js) and the directory, AD and Entra ID (server/routes-directory.js).
+  Object.assign(routes, createPhotoRoutes({ settings, photos, publisher, needsApproval, opts }).routes);
+  Object.assign(routes, createDirectoryRoutes({ live: () => ({ adOn, graph }), dir, graphCfg, users, settings, store, history, publisher, needsApproval }).routes);
   // What goes into the audit log, by request: the words for it, from what was sent and answered.
   const AUDIT = {
     publish: (d, r) => (r.changed ? 'changed' : 'nothing changed') + (d.message ? ': ' + d.message : ''),
@@ -787,6 +723,8 @@ function createApp(opts) {
     const fn = Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
     if (!fn) return fail(res, 'unknown', 404);
     let r;
+    // What publishes or goes live at once: whether they are still in the publishing group, asked now.
+    if (RECHECK.has(name)) await recheckPublisher(s);
     const logged = Object.prototype.hasOwnProperty.call(AUDIT, name);
     try { r = await fn(data, s, ip); } catch (e) {
       log.error('api ' + name + ': ' + (e && e.stack || e));

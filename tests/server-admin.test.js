@@ -382,3 +382,23 @@ test('a pilot: the new version for its group, the one before for everyone else; 
     assert.equal((await admin('schedule/cancel')).schedule, null);
   } finally { s.srv.close(); }
 });
+
+test('roles: taken out of the publishing group, publishing stops at once (asked of AD again), not at the next sign-in', async () => {
+  const roles = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [], 'OSign-Publish': [] }, people: {
+    paul: { pw: 'paul-pw', name: 'Paul Publisher', mail: 'paul@example.ch', groups: ['NOBS-OSign-Admins', 'OSign-Publish'] }
+  } });
+  const url = await roles.listen();
+  const s = await server({ OSIGN_LDAP_URL: url, OSIGN_LDAP_PUBLISH_GROUP: 'OSign-Publish', OSIGN_LDAP_SERVICE_DN: SERVICE.dn, OSIGN_LDAP_SERVICE_PASSWORD: SERVICE.pw, OSIGN_LDAP_DIRECTORY_BASE: BASE });
+  try {
+    const paul = s.as(await s.signIn('paul', 'paul-pw'));
+    const c = cfg([{ id: 'a', name: 'A', html: '<p>A</p>', defaultNew: true, audience: { everyone: true } }]);
+    assert.equal((await paul('publish', { configJson: c })).error, undefined);
+    roles.set('paul', 'memberOf', 'CN=NOBS-OSign-Admins,OU=Groups,' + BASE);
+    // Asked again at most once a minute: a minute on.
+    const realNow = Date.now; Date.now = () => realNow() + 61000;
+    try {
+      assert.match((await paul('publish', { configJson: c })).error, /publishing group/);
+      assert.equal((await paul('info')).user.publisher, false);
+    } finally { Date.now = realNow; }
+  } finally { s.srv.close(); roles.close(); }
+});

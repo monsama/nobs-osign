@@ -182,7 +182,9 @@ test('sp/share: a sharing link becomes the folder\'s own address; what it cannot
 test('entra/lookup: a real person for the preview, values from Graph and the groups; refused said as that', async () => {
   const anna = { id: 'u-1', userPrincipalName: 'anna@contoso.com', mail: 'Anna.Muster@contoso.com', displayName: 'Anna Muster', jobTitle: 'Projektleiterin', groups: ['SG-Signatur-Verkauf'] };
   sp.users['anna@contoso.com'] = anna; sp.users['u-1'] = anna;
-  const fields = [{ key: 'title', graph: 'jobTitle' }, { key: 'description', graph: '' }];
+  const fields = [{ key: 'title', graph: 'jobTitle' }, { key: 'description', graph: '' }, { key: 'x', graph: 'onPremisesSecurityIdentifier' }];
+  // Only what the draft's fields read is asked of Graph (not any property someone names).
+  await api('draft/save', { configJson: JSON.stringify({ schemaVersion: 1, options: {}, fields: [{ key: 'title', label: 'Title', graph: 'jobTitle' }], signatures: [] }) });
   let r = await api('entra/lookup', { query: 'anna@contoso.com', fields });
   assert.equal(r.ok, true, r.error);
   assert.deepEqual(r.values, { title: 'Projektleiterin' });
