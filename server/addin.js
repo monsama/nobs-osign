@@ -57,6 +57,7 @@ async function build(env, settings, outDir) {
 function zip(dir) {
   const parts = [], central = [];
   let offset = 0;
+  // A date as a ZIP file's time and date fields (MS-DOS format).
   const dosTime = (() => { const d = new Date(); return { time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), date: ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() }; })();
   for (const rel of walk(dir)) {
     const data = fs.readFileSync(path.join(dir, rel)), name = Buffer.from(rel, 'utf8'), crc = zlib.crc32(data);
@@ -112,6 +113,7 @@ function pagesConfig(env) {
   return { account: String(env.OSIGN_CF_ACCOUNT_ID || '').trim(), project: String(env.OSIGN_CF_PROJECT || '').trim(), token, api: env.OSIGN_CF_API_URL || 'https://api.cloudflare.com/client/v4' };
 }
 const pagesEnabled = (c) => !!(c.account || c.project);
+// What is missing to upload to Cloudflare Pages, or '' when it can.
 function pagesProblem(c) {
   if (!pagesEnabled(c)) return 'Uploading to Cloudflare Pages is not set up on the server (Settings → Server connections).';
   if (!/^[0-9a-f]{32}$/i.test(c.account)) return "The Cloudflare account ID is 32 letters and digits, on the account's overview page.";
@@ -126,8 +128,10 @@ function pagesHash(data, rel) { return bytesToHex(blake3(Buffer.from(data.toStri
 // Files Pages reads as settings, not serves: they go with the deployment itself.
 const SPECIAL = new Set(['_headers', '_redirects', '_routes.json', '_worker.js']);
 
+// The add-in's files uploaded to the Pages project: only the files not there yet, then a deployment of all.
 async function pagesDeploy(c, dir, fetchFn) {
   const problem = pagesProblem(c); if (problem) throw new Error(problem);
+  // One call to the Cloudflare API, its answer or the error it says.
   async function cf(method, url, { token, json, form } = {}) {
     const headers = { Authorization: 'Bearer ' + (token || c.token) };
     let body;
@@ -192,4 +196,4 @@ async function pagesTest(c, fetchFn) {
   return { project: true, url: 'https://' + ((j.result && j.result.subdomain) || c.project + '.pages.dev') };
 }
 
-module.exports = { pagesTest, templateDir, build, zip, check, pagesConfig, pagesEnabled, pagesProblem, pagesDeploy, pagesHash, walk };
+module.exports = { pagesTest, templateDir, build, zip, check, pagesConfig, pagesEnabled, pagesProblem, pagesDeploy, walk };

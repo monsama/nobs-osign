@@ -13,6 +13,7 @@ const path = require('node:path');
 const MAX = 2 * 1024 * 1024;
 const clip = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').slice(0, n);
 
+// The audit log: one JSON line per entry in audit.log, the older ones moved to audit.1.log.
 function createAudit({ dataDir, now = Date.now }) {
   const file = path.join(dataDir, 'audit.log');
   const older = path.join(dataDir, 'audit.1.log');

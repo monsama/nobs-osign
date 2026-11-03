@@ -78,6 +78,7 @@ function t(s, ...args) {
   const out = d && d[s] ? d[s] : s;
   return out.replace(/\{(\d+)\}/g, (all, i) => (args[i] !== undefined ? String(args[i]) : all));
 }
+// The pane in Outlook's language: German, French or Italian, else as written (English).
 function translatePage() {
   lang = langOf((Office.context && Office.context.displayLanguage) || navigator.language || '');
   document.documentElement.lang = lang;
@@ -96,6 +97,7 @@ function option(value, text, selected) {
   const o = document.createElement('option'); o.value = value; o.textContent = text; o.selected = !!selected; return o;
 }
 
+// The two choices, for new mail and for replies, with what the company sets as default.
 function renderChoice(list) {
   if (!cfg.options || cfg.options.allowUserChoice === false) { $('choice').hidden = true; return; }
   const prefs = getPrefs();
@@ -115,6 +117,7 @@ function renderChoice(list) {
 }
 
 const PAGE = (body) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}a{pointer-events:none;cursor:default}</style></head><body>' + body + '</body></html>';
+// A signature shown as it goes in, in a frame of its own (nothing in it runs).
 function previewFrame(sig, title) {
   const frame = document.createElement('iframe');
   frame.setAttribute('sandbox', '');
@@ -149,6 +152,7 @@ function button(text, onclick, secondary) {
   return b;
 }
 
+// The signatures open to this user, each with its preview, Insert and, where allowed, an own variant.
 function renderList(list) {
   const box = $('list'); box.textContent = '';
   if (!list.length) { box.textContent = t('No signature is set up for you.'); return; }
@@ -363,6 +367,7 @@ function renderHelp() {
   $('help').hidden = false;
 }
 
+// The whole pane again, after the details or the choices changed.
 function render() {
   renderHelp();
   full = core.withVariants(cfg, getVariants());
@@ -408,6 +413,7 @@ async function keepClassic() {
   } catch (e) { console.log('OSign: classic copy: ' + (e && e.message ? e.message : e)); } finally { classicBusy = false; }
 }
 
+// Everything the pane shows: the signatures, the user's details and groups, the choices; then shown.
 async function load(refresh) {
   message('');
   try { cfg = await loadConfig({ interactive: true }); } catch (e) { message(e.message, true); showVersion(); return; }

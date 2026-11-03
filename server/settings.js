@@ -36,6 +36,7 @@ function check(s) {
 function createSettings(dataDir, targetFor) {
   const file = path.join(dataDir, 'settings.json');
   let found = null;
+  // The settings as saved, with the defaults for what is not set.
   function get() {
     const s = Object.assign({}, DEFAULTS);
     try {

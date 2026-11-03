@@ -23,6 +23,7 @@ const { clientAssertion } = require('./cert');
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// How the server reaches Microsoft Graph: tenant, app, certificate or secret, site and folder.
 function graphConfig(env, cert) {
   let secret = '';
   if (env.OSIGN_GRAPH_CLIENT_SECRET_FILE) { try { secret = fs.readFileSync(env.OSIGN_GRAPH_CLIENT_SECRET_FILE, 'utf8').trim(); } catch (e) { secret = ''; } }
@@ -41,6 +42,7 @@ function graphConfig(env, cert) {
   };
 }
 const graphEnabled = (c) => !!(c.tenantId || c.clientId);
+// What is missing to publish through Graph, or '' when it can.
 function graphProblem(c) {
   if (!graphEnabled(c)) return '';
   if (!GUID.test(c.tenantId)) return 'The tenant ID is the Directory (tenant) ID, a GUID.';
@@ -57,9 +59,11 @@ function graphError(status, what, detail) {
   return what + ': Microsoft Graph answered ' + status + '.' + (detail ? ' ' + detail : '');
 }
 
+// Microsoft Graph for the server: a token by certificate (or secret), and the folder of the signatures.
 function createGraph(c, opts) {
   const fetchFn = (opts && opts.fetch) || fetch;
   let tok = null, lastNextTry = 0;
+  // An app token for Graph, kept until shortly before it runs out.
   async function token() {
     if (tok && tok.until > Date.now()) return tok.value;
     const url = c.loginUrl + '/' + encodeURIComponent(c.tenantId) + '/oauth2/v2.0/token';
@@ -132,6 +136,7 @@ function createGraph(c, opts) {
   // A site by its id: Graph takes a site's path, or a path in its drive, but not both in one URL
   // ("Resource not found for the segment 'root:'"), so the path is asked for the id once.
   const siteIds = new Map();
+  // The Graph address of the site's drive, found once.
   function siteBase(site) {
     if (!site || site === 'root') return Promise.resolve(c.graphUrl + '/sites/root');
     if (!siteIds.has(site)) {
@@ -143,6 +148,7 @@ function createGraph(c, opts) {
     return siteIds.get(site);
   }
 
+  // The folder of the signatures as a place to write, read and remove files in (as store.js does locally).
   function target(site, folder) {
     const baseOf = async () => (await siteBase(site)) + '/drive/root';
     const parts = (rel) => (String(folder || '') + '/' + String(rel || '')).split('/').filter(Boolean);
@@ -241,6 +247,7 @@ function createGraph(c, opts) {
       throw e;
     }
   }
+  // A user and their groups from Entra ID, for the preview of a real person.
   async function user(query, select) {
     const q = String(query || '').trim();
     if (!q) throw new Error('Enter a user name or mail address.');

@@ -28,6 +28,7 @@ const psq = (s) => "'" + String(s).replace(/['\u2018\u2019\u201A\u201B]/g, '$&$&
 const same = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
 const line = (v, max) => typeof v === 'string' && v.trim() && v.length <= max && !/[\u0000-\u001f]/.test(v.trim());
 
+// The setup script: made with a one-time token, and its result taken (the app IDs, the certificate on the app, the site).
 function createSetup({ now = Date.now } = {}) {
   // One setup at a time: the last one made.
   let pending = null, last = null;

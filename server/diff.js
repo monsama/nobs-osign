@@ -57,4 +57,4 @@ function diffConfigs(beforeJson, afterJson) {
   return out;
 }
 
-module.exports = { diffConfigs, lineDiff };
+module.exports = { diffConfigs };

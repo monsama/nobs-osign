@@ -94,6 +94,7 @@ function editorScript() {
   return appJs.body;
 }
 
+// The body of a request, at most max bytes: a larger one is refused before it is all read.
 function readBody(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     const parts = []; let size = 0;
@@ -121,6 +122,7 @@ function clientAddress(req) {
   return fwd.length ? fwd[fwd.length - 1] : String(req.socket.remoteAddress || '');
 }
 
+// The server: its parts made from the environment, and the one handler for every request.
 function createApp(opts) {
   const env = (opts && opts.env) || process.env;
   const log = (opts && opts.log) || console;
@@ -184,6 +186,7 @@ function createApp(opts) {
   // signatures ask for, so the values stay as current as AD without anyone publishing.
   let exportAt = '';
   let lastExport = null, exportTimer = null;
+  // The daily export of the users from AD: read and written in one go, the outcome kept for the status.
   async function runExport() {
     const at = Date.now();
     try {
@@ -196,6 +199,7 @@ function createApp(opts) {
     }
     return lastExport;
   }
+  // The next daily export armed at its time of day (OSIGN_AD_EXPORT_AT); none without one.
   function scheduleExport() {
     const next = nextAt(exportAt, Date.now());
     if (!next) return;
@@ -307,6 +311,7 @@ function createApp(opts) {
     const r = await adRoles(login);
     return r ? r.publisher : null;
   }
+  // Whether someone signed in with AD still publishes, and may still sign in: asked of AD at most once a minute.
   async function recheckPublisher(s) {
     if (!s || !s.user || s.user.local || !ldapCfg.publishGroup || !adOn) return;
     if (s.user.publisherAt && Date.now() - s.user.publisherAt < 60000) return;
@@ -346,6 +351,7 @@ function createApp(opts) {
     if (!r.error && r.changed) history.add({ by, message, configJson, images: r.images });
     return r.error ? r : { changed: r.changed, folder: t.describe() };
   }
+  // The server's connections for the editor: what is set, where from (GUI or .env), never a secret.
   function connectionsAnswer() {
     const cert = certs.active();
     return Object.assign(connections.answer(), {
@@ -500,6 +506,7 @@ function createApp(opts) {
     quit: 'The server keeps running; sign out instead.'
   };
 
+  // One API request: signed in, from this site, allowed for this account; answered as JSON, written to the audit log.
   async function api(req, res, name) {
     if (req.method !== 'POST' || !/^application\/json\b/i.test(String(req.headers['content-type'] || '')) || !sameSite(req)) return send(res, 403, 'text/plain; charset=utf-8', '403 Forbidden');
     // Signed in first, then the body is read: nobody who is not signed in makes the server hold a
@@ -567,6 +574,7 @@ function createApp(opts) {
     return ok(res, r || {});
   }
 
+  // Every request: the API, the editor's files, the published images and photos, the add-in's files.
   async function handle(req, res) {
     let pathname;
     try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch (e) { return send(res, 400, 'text/plain; charset=utf-8', '400 Bad Request'); }

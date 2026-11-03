@@ -76,4 +76,4 @@ function createDirectoryRoutes({ live, dir, graphCfg, users, settings, store, hi
   return { routes };
 }
 
-module.exports = { createDirectoryRoutes, graphOk };
+module.exports = { createDirectoryRoutes };

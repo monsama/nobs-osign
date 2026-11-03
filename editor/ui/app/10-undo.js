@@ -12,7 +12,9 @@
     gh.stack = S.config ? [Object.assign({ json: JSON.stringify(S.config), what: '' }, ghWhere())] : []; gh.pos = gh.stack.length - 1;
     ghButtons();
   }
+  // A change noted: kept as a step half a second after the last one (typing taken together).
   function ghNote() { if (gh.applying || !gh.stack.length) return; clearTimeout(gh.timer); gh.timer = setTimeout(ghRecord, 500); }
+  // A step kept when the draft is not as at the last step; the oldest go past 100.
   function ghRecord() {
     clearTimeout(gh.timer); gh.timer = null;
     if (!gh.stack.length) return;
@@ -60,6 +62,7 @@
     if (JSON.stringify(x.blocks || []) !== JSON.stringify(y.blocks || [])) return t('building blocks');
     return t('options of the add-in');
   }
+  // ↶ and ↷: on or off, their tooltip naming the step.
   function ghButtons() {
     const u = $('ghUndo'), r = $('ghRedo'); if (!u) return;
     const back = gh.pos > 0 ? gh.stack[gh.pos] : null, fwd = gh.pos < gh.stack.length - 1 ? gh.stack[gh.pos + 1] : null;
@@ -68,6 +71,7 @@
     if (back) u.setAttribute('title', t('Undo: {0} (Ctrl+Z)', back.what));
     if (fwd) r.setAttribute('title', t('Redo: {0} (Ctrl+Y)', fwd.what));
   }
+  // One step back or forward: the draft as it was then, the page where the change was.
   function ghStep(dir) {
     flushSource();
     if (gh.timer) ghRecord();

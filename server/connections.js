@@ -96,13 +96,16 @@ function parseCa(base64) {
   };
 }
 
+// The server's connections: the values and secrets set in the editor, sealed with the server's key, over .env.
 function createConnections({ dataDir, env }) {
   const file = path.join(dataDir, 'connections.json');
   const caFile = path.join(dataDir, 'ldap-ca.pem');
   // The key: whatever secrets/app_key holds, made into 32 bytes.
   const rawKey = () => (env.OSIGN_APP_KEY_FILE ? readFileValue(env.OSIGN_APP_KEY_FILE) : String(env.OSIGN_APP_KEY || '').trim());
   const keyFrom = (raw) => (String(raw || '').length >= 16 ? crypto.createHash('sha256').update(String(raw)).digest() : null);
+  // The server's key for sealing (secrets/app_key), read once.
   function key() { return keyFrom(rawKey()); }
+  // A secret sealed with the server's key (AES-256-GCM), with what it is for bound into it.
   function seal(name, value) {
     const iv = crypto.randomBytes(12);
     const c = crypto.createCipheriv('aes-256-gcm', key(), iv);
@@ -119,6 +122,7 @@ function createConnections({ dataDir, env }) {
       return Buffer.concat([d.update(Buffer.from(s.data, 'base64')), d.final()]).toString('utf8');
     } catch (e) { return ''; }
   }
+  // The connections as saved (connections.json), or none.
   function load() {
     let saved = {};
     try { saved = JSON.parse(readText(file) || '{}') || {}; } catch (e) { saved = {}; }
@@ -232,4 +236,4 @@ function createConnections({ dataDir, env }) {
   return { effectiveEnv, answer, save, seal, open, reseal, rawKey, keyOk: () => !!key() };
 }
 
-module.exports = { createConnections, parseCa, FIELDS, SECRETS };
+module.exports = { createConnections, parseCa, FIELDS };

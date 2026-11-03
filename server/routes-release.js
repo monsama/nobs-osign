@@ -46,7 +46,9 @@ function createReleaseRoutes({ dataDir, store, publishNow, publisher, needsAppro
     try { for (const n of fs.readdirSync(scheduleImages)) if (IMG.test(n)) m.set(n, fs.readFileSync(path.join(scheduleImages, n))); } catch (e) { /* none */ }
     return m;
   }
+  // The time set and its images removed.
   function dropSchedule() { fs.rmSync(scheduleFile, { force: true }); fs.rmSync(scheduleImages, { recursive: true, force: true }); }
+  // The publish set for now: as it was set, with its own images, unless four eyes or the setter's rights changed.
   async function runSchedule() {
     const x = readSchedule();
     if (!x) return;
@@ -64,6 +66,7 @@ function createReleaseRoutes({ dataDir, store, publishNow, publisher, needsAppro
     log.info('scheduled publish of ' + x.at + ' done');
     audit.add({ who: x.login || x.by, ip: 'server', what: 'schedule/run', ok: true, detail: 'published as set for ' + x.at });
   }
+  // The timer for the time set (in steps of a day at most, as setTimeout allows).
   function arm() {
     if (timer) { clearTimeout(timer); timer = null; }
     const x = readSchedule();

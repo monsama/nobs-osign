@@ -17,6 +17,7 @@
     'span.osb{display:inline-block;padding:2px .6em;margin:1px 0;border-radius:4px;background:#eaf1fb;color:#1d4ed8;font:600 9pt Arial,sans-serif;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #b6cdf5}' +
     'span.osb::before{content:"\\25A4  "}span.osb.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}';
 
+  // The design editor: a frame of its own, editable, with the app's styles for fields and building blocks.
   function initDesign() {
     designReady = new Promise((resolve) => {
       design.addEventListener('load', () => {
@@ -52,6 +53,7 @@
   // A field as people read it: its name (Vorname), or @@key for what is not a field.
   const fieldName = (k) => { const f = S.config.fields.find((x) => x.key === k); return f ? (f.label || f.key) : '@@' + k; };
   const FIELD_RE = /@@([A-Za-z0-9_]+)/g;
+  // A field shown in the design as a chip (@@key under it).
   function fieldChip(doc, key) {
     const f = S.config.fields.find((x) => x.key === key);
     const c = doc.createElement('span');
@@ -62,6 +64,7 @@
     c.textContent = f ? (f.label || f.key) : '@@' + key;
     return c;
   }
+  // A building block shown in the design as a chip ({{key}} under it).
   function blockChip(doc, key) {
     const b = S.config.blocks.find((x) => x.key.toLowerCase() === key.toLowerCase());
     const c = doc.createElement('span');
@@ -108,6 +111,7 @@
     return copy.innerHTML;
   }
 
+  // Typing in the design: back into the signature's HTML, made safe.
   function onDesignInput() {
     const s = sig(); if (!s) return;
     // A placeholder typed by hand becomes a chip once it is complete (a space or punctuation after it).
@@ -122,6 +126,7 @@
     changed({ list: false });
   }
 
+  // Pasting into the design: only the pasted HTML's body, made safe, its fields shown as chips.
   function onPaste(e) {
     const html = e.clipboardData && e.clipboardData.getData('text/html');
     if (!html) return;
@@ -133,6 +138,7 @@
     onDesignInput();
   }
 
+  // A formatting command on what is selected in the design.
   function exec(cmd, val) {
     if (cmd === 'undo' || cmd === 'redo') { histStep(cmd === 'undo' ? -1 : 1); return; }
     if (S.mode !== 'design') return;
@@ -188,6 +194,7 @@
   };
   const svg = (name) => '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICON[name] + '</svg>';
 
+  // The toolbar above the editor, in groups that wrap as a whole.
   function buildToolbar() {
     const tb = $('toolbar');
     const btn = (name, title, fn, cmd) => { title = t(title); const b = el('button', { type: 'button', title, 'aria-label': title, 'data-cmd': cmd || '' }); b.innerHTML = svg(name); b.addEventListener('mousedown', (e) => e.preventDefault()); b.addEventListener('click', fn); return b; };
@@ -260,6 +267,7 @@
     });
   }
   if (window.ResizeObserver) new ResizeObserver(() => tidySeps($('toolbar'))).observe($('toolbar'));
+  // «Insert field»: the fields in groups (person, contact, company, own), then the building blocks.
   function fillFieldSelect(sel) {
     sel.textContent = '';
     sel.append(el('option', { value: '' }, t('+ Insert field')));
@@ -288,6 +296,7 @@
     ta.setRangeText(text, a, b, 'end'); ta.focus(); ta.dispatchEvent(new Event('input'));
   }
 
+  // Bold, italic, … marked as on where the caret is.
   function updateToolbarState() {
     if (!ddoc) return;
     document.querySelectorAll('#toolbar button[data-cmd]').forEach((b) => {
@@ -297,6 +306,7 @@
     });
   }
 
+  // A link on what is selected (https, mailto: or tel:).
   async function makeLink() {
     // Where the link goes: the selection in the design view, kept while the question is open.
     const sel = ddoc && ddoc.getSelection(), range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
@@ -317,6 +327,7 @@
 
   // Selected image: width, alt text and a link, in a bar above the editor.
   let selImg = null;
+  // A click in the design: an image selected shows its bar (width, alt text, link).
   function onDesignClick(e) {
     if (e.target && e.target.nodeName === 'IMG') {
       hideImgBar(); selImg = e.target; selImg.classList.add('sel');
@@ -335,6 +346,7 @@
     if (selImg) { selImg.classList.remove('sel'); if (!selImg.className) selImg.removeAttribute('class'); }
     selImg = null; $('imgBar').hidden = true;
   }
+  // The image bar's values onto the image selected.
   function applyImg() {
     if (!selImg) return;
     const w = parseInt($('imgW').value, 10);
@@ -356,6 +368,7 @@
     renderImageList();
     $('dlgImage').showModal();
   }
+  // The draft's images in the image dialog, to insert or remove.
   function renderImageList() {
     const box = $('imgList'); box.textContent = '';
     if (!S.assets.length) box.append(el('p', { class: 'lead' }, t('No images yet.')));
@@ -389,6 +402,7 @@
   const IMG_MAX_W = 1200;
   // A person's photo is shown small (about 100 pixels): 400 wide is plenty.
   const PHOTO_MAX_W = 400;
+  // An image made as small as a signature needs before it is uploaded.
   async function shrinkUpload(f, maxW) {
     if (!/^image\/(png|jpeg)$/.test(f.type) || typeof createImageBitmap !== 'function') return f;
     let bmp;
@@ -426,7 +440,9 @@
   // time), up to 100 steps back. Everything counts: typing, a field put in, an image's width, the
   // HTML tab; the browser's own undo knows only some of it, and nothing once the focus left.
   const hist = { id: null, stack: [], pos: 0, timer: null };
+  // The editor's own undo started anew for a signature.
   function histReset(s) { clearTimeout(hist.timer); hist.id = s ? s.id : null; hist.stack = s ? [s.html || ''] : []; hist.pos = 0; histButtons(); }
+  // The editor's undo: a step kept when the HTML changed.
   function histRecord() {
     clearTimeout(hist.timer); hist.timer = null;
     const s = sig(); if (!s || s.id !== hist.id) return;
@@ -442,6 +458,7 @@
   // Whether the editor's own undo has a step that way (typing in the signature open now).
   function histCan(dir) { const s = sig(); if (!s || s.id !== hist.id) return false; if (hist.timer) return true; return dir < 0 ? hist.pos > 0 : hist.pos < hist.stack.length - 1; }
   function histNote() { if (S.view === 'sig' && hist.id) { clearTimeout(hist.timer); hist.timer = setTimeout(histRecord, 500); } }
+  // The editor's undo or redo one step.
   function histStep(dir) {
     if (hist.timer) histRecord();
     const s = sig(); if (!s || s.id !== hist.id) return;
@@ -470,6 +487,7 @@
   const zoom = { design: ZOOM_START, preview: ZOOM_START };
   const zoomKept = (k, v) => { try { if (v === undefined) return localStorage.getItem('osign.zoom.' + k); if (v === null) localStorage.removeItem('osign.zoom.' + k); else localStorage.setItem('osign.zoom.' + k, v); } catch (e) { /* no storage */ } return null; };
   for (const k of Object.keys(zoom)) { const v = Number(zoomKept(k)); if (v >= ZOOM_MIN && v <= ZOOM_MAX) zoom[k] = v; }
+  // The zoom of the editor or the preview.
   function zoomApply(k) {
     const doc = k === 'design' ? ddoc : $('preview').contentDocument;
     if (doc && doc.documentElement) doc.documentElement.style.zoom = String(zoom[k] / 100);
@@ -506,6 +524,7 @@
   // Line breaks (and the indent after them) next to a block or a <br>: they show nothing.
   const NLWS = '[ \\t]*(?:\\r?\\n[ \\t]*)+';
   const unwrap = (h) => String(h || '').replace(new RegExp(NLWS + '(?=</?(?:' + BLOCKS + '|br)\\b)', 'gi'), '').replace(new RegExp('(</?(?:' + BLOCKS + '|br)\\b[^>]*>)' + NLWS, 'gi'), '$1');
+  // HTML indented for reading in the HTML tab (only whitespace changes).
   function prettyHtml(html) {
     const src = unwrap(html);
     const parts = src.split(/(<!--[\s\S]*?-->|<[^>]+>)/);
@@ -571,6 +590,7 @@
   // open next (or the other way round).
   let sourceShown = null, sourceFor = null;
   function showSource(html) { const v = html ? prettyHtml(html) : ''; $('source').value = v; sourceShown = v; const s = sig(); sourceFor = s ? s.id : null; }
+  // What was typed in the HTML tab into its signature or building block, made safe.
   function flushSource() {
     if (S.mode !== 'html') return;
     const s = sig(); if (!s || s.id !== sourceFor) return;

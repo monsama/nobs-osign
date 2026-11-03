@@ -81,6 +81,29 @@ the text is JSON with `schemaVersion` 1. All other meaning lives in the UI and i
    (`server/backup.js`), four eyes before publishing (`approval.json`), what changed between
    versions (`server/diff.js`), and asks GitHub twice a day whether a newer release is out
    (`server/updates.js`, `OSIGN_UPDATE_CHECK`).
+9. It makes backups by itself every day (`server/autobackup.js`), publishes at a time set
+   beforehand (`server/routes-release.js`), tells a webhook (Teams, Power Automate) when something
+   needs doing (`server/notify.js`: outgoing only, https, the address sealed), and lists who is
+   signed in for the local account `admin` (`server/auth.js`, sessions by a hash reference only).
+
+`server/app.js` makes the parts and answers every request; the API's routes are in modules by
+topic, each given what it needs from it: `routes-publish.js` (publishing, four eyes),
+`routes-release.js` (a time set), `routes-connections.js` (the connections, the setup script),
+`routes-addin.js` (the add-in's files), `routes-history.js`, `routes-photos.js`,
+`routes-directory.js` (AD and Entra ID) and `routes-backup.js`.
+
+## The editor
+
+`editor/ui/app/NN-*.js` are one script by topic, put together in order and served as
+`/ui/app.js` (one IIFE: `01-base.js` opens it, `11-start.js` closes it): the state, saving and the
+list (`01`), the design editor and its undo (`02`), the preview (`03`), photos (`04`), signatures
+and what is published (`05`), import (`06`), fields, options and users (`07`), building blocks and
+Settings (`08`), the setup assistant (`09`), publishing, search and the dialogs (`10-publish.js`),
+replace in all signatures (`10-replace.js`), undo for the whole draft and ⟳ (`10-undo.js`), and
+the start (`11`). `editor/ui/i18n.js` holds the German; the page is written in English.
+
+The add-in's pane and notice speak German (`addin/src/taskpane.js`, `addin/src/common.js`),
+French and Italian (`addin/src/lang.js`), else English, as Outlook's display language says.
 
 The Docker setup is `Dockerfile`, `docker-compose.yml` and `deploy-nobs-osign.sh`; updates,
 backups and restores are `scripts/*.sh`.

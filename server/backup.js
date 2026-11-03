@@ -23,6 +23,7 @@ const MIN_PASS = 12;
 const KDF = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const key = (pass, salt) => crypto.scryptSync(String(pass), salt, 32, KDF);
 
+// Every file of the data volume (but the ones left out), as path → base64.
 function files(dir, rel = '') {
   const out = {};
   for (const e of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {

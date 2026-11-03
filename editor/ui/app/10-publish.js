@@ -37,6 +37,7 @@
   }
   // "3 signatures", or the name when it is one.
   const count = (list) => (list.length === 1 ? String(list[0].name || list[0]) : t('{0} signatures', list.length));
+  // What a recipient would see go wrong in the signatures (images, width, links, dark mode).
   function signatureChecks(c) {
     const out = [], names = (f) => [...new Set(c.signatures.filter(f).map((s) => s.name))];
     const imgs = (s) => [...(s.html || '').matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
@@ -77,6 +78,7 @@
     img.onerror = () => { dark[name] = false; };
     img.src = '/assets/' + encodeURIComponent(name);
   }
+  // Everything to look at before publishing: what stops it, then the notes.
   function publishChecks() {
     (S.assets || []).forEach((a) => { if (/\.png$/i.test(a.name)) darkCheck(a.name); });
     // As it goes out: the building blocks put in.
@@ -185,6 +187,7 @@
     const on = $('findList').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
   }
   function findGo(i) { const x = findItems[i]; if (!x) return; $('dlgFind').close(); x.go(); }
+  // The quick search (Ctrl+K), under its field.
   function openFind() {
     if ($('dlgFind').open) { $('findInput').select(); return; }
     $('findInput').value = ''; findAt = 0; findShow();
@@ -319,6 +322,7 @@
 
   // The web certificate the proxy serves for this address: what it is, and whether PCs trust it.
   let tlsLast = null;
+  // The web certificate of this address, for the status and the status bar.
   async function loadTls() {
     if (!onServer() || location.protocol !== 'https:') return null;
     try { tlsLast = await api('server/tls', { host: location.hostname }); } catch (e) { tlsLast = { error: e.message }; }
@@ -392,6 +396,7 @@
         el('td', { class: 'detail' }, e.detail ? t(e.detail) : ''));
     }));
   }
+  // The audit log as the filter asks, loaded anew.
   async function renderAudit() {
     $('auditErr').textContent = '';
     const v = $('auditWhat').value;
@@ -631,6 +636,7 @@
     catch (err) { $('diffChanges').replaceChildren(); $('diffErr').textContent = t(err.message); }
   }
   document.querySelectorAll('#dlgDiff input[name=diffAgainst]').forEach((r) => r.addEventListener('change', () => historyDiff()));
+  // A published version brought back into the draft (asked first).
   async function historyRestore(v) {
     if (!(await ask(t('Replace the draft and its images with the version of {0}? What is not published is lost.', new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')), t('Bring back'), true))) return;
     try {

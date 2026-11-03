@@ -17,6 +17,7 @@ const { writeAtomic } = require('./store');
 const DAY = 86400000;
 const EVERY = 60 * 60 * 1000;
 
+// Notifications to a webhook: its address (sealed), the problems told once a day, the timer.
 function createNotify({ dataDir, seal, open, problems, log, fetchImpl, title = 'NOBS OSign' }) {
   const file = path.join(dataDir, 'notify.json');
   let timer = null;
@@ -37,6 +38,7 @@ function createNotify({ dataDir, seal, open, problems, log, fetchImpl, title = '
       } }]
     };
   }
+  // One message to the webhook, at most 10 seconds, no redirects: '' or why it did not go.
   async function send(url, lines) {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);
     try {
@@ -46,7 +48,9 @@ function createNotify({ dataDir, seal, open, problems, log, fetchImpl, title = '
     } catch (e) { return 'The webhook could not be reached: ' + (e.name === 'AbortError' ? 'no answer within 10 seconds' : e.message); }
     finally { clearTimeout(t); }
   }
+  // The settings for the editor: on or off, the last message, never the address.
   function answer() { const s = read(); return { on: !!urlOf(s), lost: !!s.url && !urlOf(s), last: s.last || null }; }
+  // What is wrong with a webhook address, or ''.
   function check(u) {
     const x = String(u || '').trim();
     if (!x) return '';
@@ -91,6 +95,7 @@ function createNotify({ dataDir, seal, open, problems, log, fetchImpl, title = '
     s.sent = keep; write(s);
     return { sent: due.length };
   }
+  // The hourly check armed (and one a minute after the start), none while it is off.
   function schedule() {
     if (timer) { clearInterval(timer); timer = null; }
     if (!read().url) return;

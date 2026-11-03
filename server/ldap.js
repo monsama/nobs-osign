@@ -36,6 +36,7 @@ const dnOfDomain = (d) => (String(d || '').trim() ? String(d).trim().split('.').
 // DC=example,DC=ch (the DC= parts of any DN) → example.ch
 const domainOfDn = (dn) => String(dn || '').split(',').map((x) => x.trim()).filter((x) => /^DC=/i.test(x)).map((x) => x.slice(3)).join('.');
 
+// How people sign in with AD: domain controller, domain, groups, CA, from the environment.
 function ldapConfig(env) {
   const domain = String(env.OSIGN_AD_DOMAIN || '').trim().toLowerCase();
   const searchBase = env.OSIGN_LDAP_BASE || dnOfDomain(domain);
@@ -71,6 +72,7 @@ function ldapProblem(c) {
   return '';
 }
 
+// One LDAPS connection to the domain controller, with the CA trusted when one is set.
 async function connect(c) {
   // The CA named, on top of the public ones Node trusts; an empty file (no CA given) adds none.
   const extra = c.caFile ? fs.readFileSync(c.caFile, 'utf8').trim() : '';
@@ -200,4 +202,4 @@ async function testSignIn(c, lookWith) {
   } finally { close(client); }
 }
 
-module.exports = { testSignIn, detect, dnOfDomain, domainOfDn, ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf, connect, close, bind, search, chain };
+module.exports = { testSignIn, detect, ldapConfig, ldapProblem, ldapLogin, escapeFilter, cnOf, connect, close, bind, search, chain };

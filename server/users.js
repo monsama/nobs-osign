@@ -32,6 +32,7 @@ function requestFor(config) {
   return exportRequest({ fields: core.adFields(config).map((f) => ({ key: f.key, ad: f.ad })), groups: core.groupsUsed(config) });
 }
 
+// The users' values from AD for the add-in: read into a snapshot, looked at, then written exactly so (users/<mail>.json).
 function createUsers({ dataDir, directory, log }) {
   const snapFile = path.join(dataDir, 'users-snapshot.json');
   const mirrorFile = path.join(dataDir, 'users-mirror.json');
@@ -158,4 +159,4 @@ function nextAt(hhmm, now) {
   return t.getTime();
 }
 
-module.exports = { createUsers, exportRequest, requestFor, nextAt };
+module.exports = { createUsers, nextAt };
