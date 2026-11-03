@@ -81,3 +81,30 @@
   }
   $('ghUndo').addEventListener('click', () => ghStep(-1));
   $('ghRedo').addEventListener('click', () => ghStep(1));
+
+  // Load again (⟳ in the top bar): what was typed saved first, then the draft, what is published,
+  // the state and the server's info read anew, without reloading the page. The page stays where it
+  // is; the undo steps too, as long as the draft on the server is the one here.
+  async function refreshAll() {
+    const b = $('btnRefresh');
+    if (b.classList.contains('busy')) return;
+    b.classList.add('busy'); b.disabled = true;
+    try {
+      flushSource();
+      if (saveTimer) await save();
+      await saving;
+      const where = ghWhere(), before = JSON.stringify(S.config), keep = { stack: gh.stack, pos: gh.pos };
+      const [info, st, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
+      S.info = info; S.settings = st.settings; lastSettings = st;
+      applyDraft(draft);
+      if (JSON.stringify(S.config) === before) { gh.stack = keep.stack; gh.pos = keep.pos; ghButtons(); }
+      if (where.view === 'sig' && where.block && S.config.blocks.some((x) => x.key === where.block)) openBlock(where.block);
+      else if (where.view === 'sig' && where.sigId && S.config.signatures.some((s) => s.id === where.sigId)) openSig(where.sigId);
+      else if (where.view !== 'sig' && where.view !== 'empty') goView(where.view);
+      renderStatusBar();
+      loadApproval().catch(() => {});
+      toast(JSON.stringify(S.config) === before ? t('Loaded again: as it was.') : t('Loaded again: the draft on the server was changed (by someone else, or in another window).'));
+    } catch (e) { toast(t(e.message), true); }
+    finally { b.classList.remove('busy'); b.disabled = false; }
+  }
+  $('btnRefresh').addEventListener('click', refreshAll);
