@@ -1494,3 +1494,24 @@ test('unpublished changes: a version published by an older editor (no block name
   await api('draft/save', { configJson: keep });
   assert.deepEqual(errors, []);
 });
+
+test('a change undone: the status says published again, also when the draft is saved another way', { skip }, async () => {
+  const keep = (await api('draft/get')).configJson;
+  const c = JSON.parse((await api('published/get')).configJson);
+  // Published as an older editor would have it: options in another order, a block without a name.
+  c.blocks = [{ key: 'old-block', html: '<p>Old block</p>' }];
+  c.options = Object.fromEntries(Object.entries(c.options || {}).reverse());
+  await page.goto('about:blank');
+  assert.ok(!(await api('publish', { configJson: JSON.stringify(c), message: 'older' })).error);
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('.nav-list a[data-view=options]');
+  const box = '#viewOptions input[type=checkbox] >> nth=3';
+  await page.click(box);
+  await page.waitForFunction(() => /Unpublished changes/.test(document.querySelector('#stPub').textContent));
+  await page.click('#ghUndo');
+  await page.waitForFunction(() => /^Published$/.test(document.querySelector('#stPub').textContent.trim()));
+  await page.goto('about:blank');
+  await api('draft/save', { configJson: keep });
+  assert.deepEqual(errors, []);
+});
