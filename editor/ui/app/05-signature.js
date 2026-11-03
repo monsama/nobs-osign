@@ -229,6 +229,55 @@
     if (!p) return 'new';
     return sigKey(s, sanitize(s.html)) === sigKey(p, sanitize(typeof p.source === 'string' ? p.source : p.html)) ? 'same' : 'changed';
   }
+  // What changed in a signature against what is published, in words: its parts that differ.
+  function sigDiff(s, p) {
+    const out = [], same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const aud = (x) => [!!(x.audience && x.audience.everyone !== false), ...['groups', 'departments', 'domains'].map((k) => ((x.audience && x.audience[k]) || []).map((v) => String(v).trim().toLowerCase()).sort().join(','))];
+    if ((s.name || '') !== (p.name || '')) out.push(t('name'));
+    if (sanitize(s.html).replace(/\s+/g, ' ').trim() !== sanitize(typeof p.source === 'string' ? p.source : p.html).replace(/\s+/g, ' ').trim()) out.push(t('text and layout'));
+    if (!same(aud(s), aud(p))) out.push(t('who gets it'));
+    if ((s.validFrom || '') !== (p.validFrom || '') || (s.validUntil || '') !== (p.validUntil || '')) out.push(t('when'));
+    if (!!s.defaultNew !== !!p.defaultNew || !!s.defaultReply !== !!p.defaultReply) out.push(t('default for'));
+    if ((s.language || '') !== (p.language || '')) out.push(t('language'));
+    if ((s.removeEmptyLines !== false) !== (p.removeEmptyLines !== false)) out.push(t('empty lines'));
+    return out;
+  }
+  async function openChanges() {
+    flushSource();
+    let pubCfg = null;
+    try { const r = await api('published/get'); pubCfg = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { pubCfg = null; }
+    const pub = new Map(((pubCfg && pubCfg.signatures) || []).map((x) => [x.id, x]));
+    const rows = [];
+    const row = (cls, name, what, ...btns) => el('li', { class: cls }, el('div', { class: 'chg-text' }, el('b', null, name), el('small', null, what)), el('div', { class: 'chg-btns' }, ...btns));
+    const btn = (label, fn, danger) => el('button', { type: 'button', class: 'small' + (danger ? ' ghost danger' : ' ghost'), onclick: fn }, label);
+    const open = (id) => () => { $('dlgChanges').close(); openSig(id); };
+    const revert = (id) => async () => { $('dlgChanges').close(); openSig(id); $('btnRevert').click(); };
+    for (const s of S.config.signatures) {
+      const p = pub.get(s.id);
+      if (!p) rows.push(row('new', s.name, t('New, not published yet.'), btn(t('Open'), open(s.id)), btn(t('Delete…'), () => { $('dlgChanges').close(); openSig(s.id); $('btnDel').click(); }, true)));
+      else { const d = sigDiff(s, p); if (d.length) rows.push(row('chg', s.name, t('Changed: {0}.', d.join(', ')), btn(t('Open'), open(s.id)), btn(t('Discard changes'), revert(s.id), true))); }
+    }
+    for (const [id, p] of pub) if (!S.config.signatures.some((x) => x.id === id)) {
+      rows.push(row('gone', p.name, t('Removed: still in Outlook until you publish.'), btn(t('Bring back'), async () => {
+        try {
+          const r = await api('published/revert', { id });
+          const back = Object.assign(core.newSignature(r.signature.id, r.signature.name), r.signature);
+          if (typeof back.source === 'string') back.html = back.source;
+          delete back.source; delete back.compiled;
+          back.audience = Object.assign({ departments: [], domains: [], groups: [] }, back.audience || {});
+          S.config.signatures.push(back); S.assets = r.assets || S.assets; changed(); openChanges();
+        } catch (e) { toast(t(e.message), true); }
+      })));
+    }
+    // The rest of the configuration: said, discarded only with all of it.
+    const part = (k) => JSON.stringify((S.config || {})[k] || null) !== JSON.stringify((pubCfg || {})[k] || null);
+    const other = [part('fields') && t('Fields'), part('blocks') && t('Building blocks'), part('options') && t('Add-in')].filter(Boolean);
+    if (other.length) rows.push(row('chg', other.join(', '), t('Changed too: they go out with the next publish.')));
+    $('chgList').replaceChildren(...(rows.length ? rows : [el('li', { class: 'none' }, t('Nothing: the draft is as published.'))]));
+    $('dlgChanges').showModal();
+  }
+  $('chgAll').addEventListener('click', () => { $('dlgChanges').close(); $('btnLoad').click(); });
+  $('chgPublish').addEventListener('click', () => { $('dlgChanges').close(); $('btnPublish').click(); });
   function revertShow() { const s = sig(); $('btnRevert').hidden = sigState(s) !== 'changed'; }
   $('btnRevert').addEventListener('click', async () => {
     const s = sig(); if (!s) return;

@@ -4,8 +4,9 @@
  * OSIGN_ADMIN_PASSWORD_FILE (a Docker secret, made by the deploy script); without one there is no
  * local account.
  *
- * A session is a random id in an HttpOnly, SameSite=Strict cookie, kept in memory: a restart signs
- * everyone out. It ends 2 hours after the last request, and after 12 hours at the latest.
+ * A session is a random id in an HttpOnly, SameSite=Strict cookie. It ends 2 hours after the last
+ * request, and after 12 hours at the latest. Kept (given store: sealed with the server's key, in the
+ * data volume), so an update or a restart does not sign anyone out.
  */
 'use strict';
 const crypto = require('node:crypto');
@@ -34,8 +35,21 @@ function cookieOf(req) {
   return m ? m[1] : null;
 }
 
-function createAuth({ env, ldap, now = Date.now, log = console }) {
+// store: { load() → [session], save([session]) }, or none (in memory only).
+function createAuth({ env, ldap, now = Date.now, log = console, store }) {
   const sessions = new Map();
+  if (store) {
+    try {
+      const t = now();
+      for (const s of store.load() || []) {
+        if (s && typeof s.id === 'string' && /^[A-Za-z0-9_-]{43}$/.test(s.id) && s.user && t - s.last <= IDLE_MS && t - s.started <= MAX_MS) sessions.set(s.id, s);
+      }
+    } catch (e) { log.warn('sessions: the kept ones could not be read: ' + (e && e.message)); }
+  }
+  // Written at once when one starts or ends, otherwise at most every half minute (the last request).
+  let saveTimer = null;
+  const saveNow = () => { if (!store) return; clearTimeout(saveTimer); saveTimer = null; try { store.save([...sessions.values()]); } catch (e) { log.warn('sessions: not kept: ' + (e && e.message)); } };
+  const saveSoon = () => { if (!store || saveTimer) return; saveTimer = setTimeout(saveNow, 30000); if (saveTimer.unref) saveTimer.unref(); };
   const fails = new Map();
   const adminPassword = () => readSecret(env.OSIGN_ADMIN_PASSWORD_FILE, env.OSIGN_ADMIN_PASSWORD);
   const secure = env.OSIGN_SECURE_COOKIE !== '0';
@@ -45,8 +59,8 @@ function createAuth({ env, ldap, now = Date.now, log = console }) {
     const s = id && sessions.get(id);
     if (!s) return null;
     const t = now();
-    if (t - s.last > IDLE_MS || t - s.started > MAX_MS) { sessions.delete(id); return null; }
-    s.last = t;
+    if (t - s.last > IDLE_MS || t - s.started > MAX_MS) { sessions.delete(id); saveNow(); return null; }
+    s.last = t; saveSoon();
     return s;
   }
   function cookie(id, maxAgeSeconds) {
@@ -68,7 +82,9 @@ function createAuth({ env, ldap, now = Date.now, log = console }) {
   // Ended sessions and old failures go, so nobody can fill the memory with made-up names.
   function sweep() {
     const t = now();
-    for (const [id, s] of sessions) if (t - s.last > IDLE_MS || t - s.started > MAX_MS) sessions.delete(id);
+    let gone = false;
+    for (const [id, s] of sessions) if (t - s.last > IDLE_MS || t - s.started > MAX_MS) { sessions.delete(id); gone = true; }
+    if (gone) saveNow();
     for (const [k, f] of fails) if (t - f.first > FAIL_WINDOW_MS) fails.delete(k);
   }
 
@@ -100,17 +116,18 @@ function createAuth({ env, ldap, now = Date.now, log = console }) {
     fails.delete(key);
     const id = crypto.randomBytes(32).toString('base64url');
     sessions.set(id, { id, user, started: now(), last: now() });
+    saveNow();
     log.info('sign-in: ' + user.login);
     return { cookie: cookie(id, MAX_MS / 1000), user };
   }
   function logout(req) {
     const id = cookieOf(req);
-    if (id) sessions.delete(id);
+    if (id && sessions.delete(id)) saveNow();
     return cookie('', 0);
   }
   // What the sign-in page offers.
   const methods = () => ({ local: !!adminPassword(), ad: !!ldap.url });
-  return { session, login, logout, methods };
+  return { session, login, logout, methods, flush: saveNow };
 }
 
 module.exports = { createAuth, COOKIE };

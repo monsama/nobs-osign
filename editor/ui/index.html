@@ -72,7 +72,9 @@
     <!-- one signature -->
     <section id="viewSig" class="view" hidden>
       <div class="sig-head">
+        <button type="button" id="blockBack" class="ghost block-only" title="Back to the building blocks">← Building blocks</button>
         <input id="sigName" class="title-input" placeholder="Signature name" maxlength="80" aria-label="Signature name">
+        <code id="blockEditKey" class="block-only"></code>
         <div class="spacer"></div>
         <button id="btnRevert" class="ghost" hidden title="Back to the signature as it is published: the changes made since go (Outlook has not seen them)">Discard changes</button>
         <button id="btnDup" class="ghost">Duplicate</button>
@@ -1027,6 +1029,14 @@
     <p class="lead" id="allLead"></p>
     <div id="allList" class="all-list"></div>
     <div class="dlg-foot"><span class="spacer"></span><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+<dialog id="dlgChanges">
+  <form method="dialog" class="dlg wide">
+    <h2>Unpublished changes</h2>
+    <p class="lead">What the draft has that Outlook does not have yet. Each can be discarded on its own, or all of it.</p>
+    <ul id="chgList" class="chg-list"></ul>
+    <div class="dlg-foot"><button type="button" id="chgAll" class="ghost danger">Discard all changes…</button><span class="spacer"></span><button value="cancel" class="ghost">Close</button><button type="button" id="chgPublish" class="primary">Publish…</button></div>
   </form>
 </dialog>
 <dialog id="dlgImpReport">

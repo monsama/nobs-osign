@@ -8,7 +8,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { createStore, ASSET_TYPES, safeAssetName } = require('./store');
+const { createStore, ASSET_TYPES } = require('./store');
 const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
@@ -23,6 +23,8 @@ const { createCerts } = require('./cert');
 const { createAudit } = require('./audit');
 const { createReleaseRoutes } = require('./routes-release');
 const { createBackupRoutes } = require('./routes-backup');
+const { createHistoryRoutes } = require('./routes-history');
+const { createAddinRoutes } = require('./routes-addin');
 const { createPhotoRoutes } = require('./routes-photos');
 const { createDirectoryRoutes } = require('./routes-directory');
 const { createUpdates } = require('./updates');
@@ -159,7 +161,12 @@ function createApp(opts) {
     photos.set(key, { at: Date.now(), bytes });
     return bytes;
   }
-  const auth = createAuth({ env, ldap: ldapCfg, log });
+  // The sessions, kept sealed with the server's key (secrets/app_key): an update signs nobody out.
+  const sessionsFile = path.join(dataDir, 'sessions.json');
+  const auth = createAuth({ env, ldap: ldapCfg, log, store: {
+    load: () => { if (!connections.keyOk()) return []; const s = JSON.parse(readText(sessionsFile) || 'null'); const v = s ? connections.open('sessions', s) : ''; return v ? JSON.parse(v) : []; },
+    save: (list) => { if (connections.keyOk()) writeAtomic(sessionsFile, JSON.stringify(connections.seal('sessions', JSON.stringify(list)))); }
+  } });
   // Active Directory with the service account (dir): the preview's users and groups, and the
   // users' values for signatures that take them from AD.
   let adOn = false;
@@ -564,84 +571,10 @@ function createApp(opts) {
       fs.rmSync(approvalFile, { force: true });
       return {};
     },
-    // What changed: a version against the one before it, or against the draft.
-    'history/diff': (d) => {
-      const v = history.get(String(d.id || ''));
-      if (!v) return { error: 'There is no such version.' };
-      const draft = store.getDraft().configJson || '';
-      return d.against === 'draft' ? { changes: diffConfigs(v.configJson, draft) } : { changes: diffConfigs(v.previous, v.configJson) };
-    },
     // The web certificate the proxy serves for the editor's address (as the browser asked for it).
     'server/tls': (d) => tlsInfo.inspect({ addr: env.OSIGN_PROXY_ADDR || 'nobs-proxy:443', host: String(d.host || ''), caFile: ldapCfg.caFile }),
     // The audit log, for the local account admin.
     'audit/list': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin can read the audit log.' } : { entries: audit.list({ limit: d.limit, what: String(d.what || ''), failed: !!d.failed }) }),
-    // The versions published, and one of them back into the draft (with its images).
-    'history/list': () => ({ versions: history.list() }),
-    'history/restore': (d) => {
-      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
-      const r = history.restore(String(d.id || ''));
-      if (r.error) return r;
-      const saved = store.saveDraft(r.configJson);
-      if (saved && saved.error) return saved;
-      return { at: r.at };
-    },
-    // What is published, to see what the draft changed: the configuration as it went out.
-    'published/get': () => ({ configJson: history.latest() || '' }),
-    // One signature back as it is published (its changes in the draft dropped), with the images it
-    // needs that the draft no longer has.
-    'published/revert': (d) => {
-      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
-      let c = null; try { c = JSON.parse(history.latest() || 'null'); } catch (e) { c = null; }
-      const sig = c && (c.signatures || []).find((x) => x && x.id === String(d.id || ''));
-      if (!sig) return { error: 'This signature is not published yet: there is nothing to go back to.' };
-      const have = new Set(store.draftImages().keys());
-      for (const m of String((sig.source || '') + (sig.html || '')).matchAll(/assets\/([^"'\s)?#]+)/g)) {
-        let n = m[1]; try { n = decodeURIComponent(n); } catch (e) { /* as it is */ }
-        if (have.has(n) || safeAssetName(n) !== n) continue;
-        const bytes = history.latestImage(n);
-        if (bytes) { writeAtomic(path.join(store.assetDir, n), bytes); have.add(n); }
-      }
-      return { signature: sig, assets: store.getDraft().assets };
-    },
-    'load-published': async () => {
-      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
-      try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }
-    },
-    // The add-in's files: made into the data volume, then uploaded or downloaded.
-    'addin/build': async (d, s) => {
-      if (adminOnly(s)) return { error: adminOnly(s) };
-      // With Cloudflare Pages and no web server chosen: Cloudflare's caching file goes with them.
-      const st = settings.get();
-      if (!st.addinHost && addin.pagesEnabled(pages)) st.addinHost = 'cloudflare';
-      // The folder by its ids, when the server publishes to SharePoint: the add-in then reads it
-      // without looking up the site (which a user who may only read the folder cannot).
-      // Not reachable yet (before the site is granted, say): made without them; the add-in then
-      // finds the folder through its site, and making the files again later adds them.
-      let note = '';
-      if (graph) {
-        try { const at = await settings.target().locate(); st.spDrive = at.driveId; st.spItem = at.itemId; }
-        catch (e) { note = 'The SharePoint folder could not be reached (' + e.message + '): make the files again once it can, so the add-in reads it directly.'; log.warn('addin/build: ' + note); }
-      }
-      const r = await addin.build(env, st, addinDir);
-      if (!r.error && note) r.note = note;
-      return r.error ? r : Object.assign({ folder: '' }, r);
-    },
-    'addin/check': async () => {
-      const s = settings.get();
-      if (!s.addinUrl) return { error: 'Enter the address the add-in will be served from.' };
-      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
-      return addin.check(s.addinUrl, addinDir, fetchFn);
-    },
-    'addin/upload': async (d, s) => {
-      if (adminOnly(s)) return { error: adminOnly(s) };
-      if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
-      try {
-        const r = await addin.pagesDeploy(pages, addinDir, fetchFn);
-        // Which version went up, and when: Status compares it with this server's.
-        writeAtomic(addinUploadFile, JSON.stringify({ version: addinMade().version, at: Date.now(), url: r.url }));
-        return r;
-      } catch (e) { return { error: e.message }; }
-    },
     // A sharing link: the folder it leads to (its own address), for the setup assistant.
     'sp/share': async (d) => {
       const link = String(d.url || '').trim();
@@ -677,6 +610,10 @@ function createApp(opts) {
   // The backups (server/routes-backup.js).
   const backups = createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version: VERSION, log, busy: () => publishing });
   Object.assign(routes, backups.routes);
+  // The add-in's files (server/routes-addin.js).
+  Object.assign(routes, createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, fetchFn, adminOnly, live: () => ({ graph }), log }).routes);
+  // What was published (server/routes-history.js).
+  Object.assign(routes, createHistoryRoutes({ history, store, settings, busy: () => publishing }).routes);
   // Photos (server/routes-photos.js) and the directory, AD and Entra ID (server/routes-directory.js).
   Object.assign(routes, createPhotoRoutes({ settings, photos, publisher, needsApproval, opts }).routes);
   Object.assign(routes, createDirectoryRoutes({ live: () => ({ adOn, graph }), dir, graphCfg, users, settings, store, history, publisher, needsApproval }).routes);

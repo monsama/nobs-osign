@@ -394,3 +394,27 @@ test('roles: taken out of the publishing group, publishing stops at once (asked 
     } finally { Date.now = realNow; }
   } finally { s.srv.close(); roles.close(); }
 });
+
+test('signed in stays signed in across a restart (an update): the sessions kept sealed, not as they are', async () => {
+  const s = await server();
+  try {
+    const cookie = await s.signIn('admin', 'admin-pw');
+    assert.equal((await s.as(cookie)('info')).user.login, 'admin');
+    const kept = fs.readFileSync(path.join(s.dataDir, 'sessions.json'), 'utf8');
+    assert.doesNotMatch(kept, new RegExp(cookie.split('=')[1]), 'the session id is not readable on the disk');
+    // The same data, a new server (as after an update).
+    const env = { OSIGN_DATA: s.dataDir, OSIGN_SECURE_COOKIE: '0', OSIGN_ADMIN_PASSWORD: 'admin-pw', OSIGN_APP_KEY: 'the-first-servers-key' };
+    const srv2 = http.createServer(createApp({ log, env }));
+    await new Promise((r) => srv2.listen(0, '127.0.0.1', r));
+    try {
+      const r = await fetch('http://127.0.0.1:' + srv2.address().port + '/api/info', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{}' }).then((x) => x.json());
+      assert.equal(r.user.login, 'admin');
+      // Another key (another server): nothing to open, signed out.
+      const srv3 = http.createServer(createApp({ log, env: Object.assign({}, env, { OSIGN_APP_KEY: 'another-servers-key-x' }) }));
+      await new Promise((rr) => srv3.listen(0, '127.0.0.1', rr));
+      const r3 = await fetch('http://127.0.0.1:' + srv3.address().port + '/api/info', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{}' });
+      assert.equal(r3.status, 401);
+      srv3.close();
+    } finally { srv2.close(); }
+  } finally { s.srv.close(); }
+});

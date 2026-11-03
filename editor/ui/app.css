@@ -932,10 +932,7 @@ dialog.find .dlg { padding: 0; display: flex; flex-direction: column; max-height
 .block-head > input { font-weight: 600; max-width: 280px; }
 .block-key { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
 .block-key input { width: 180px; }
-.block-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-.block-body textarea { width: 100%; min-height: 120px; resize: vertical; font-size: 12px; }
 .block-pv { width: 100%; min-height: 120px; border: 1px solid var(--line); border-radius: var(--r-m); background: #fff; }
-@media (max-width: 800px) { .block-body { grid-template-columns: 1fr; } }
 table.users td.none { color: var(--warn, #b45309); font-style: italic; }
 .ab-list { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .ab-list li { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
@@ -977,25 +974,8 @@ dialog.settings .dlg-body { display: flex; flex-direction: column; }
 #connHost .conn-foot { position: sticky; bottom: 0; z-index: 2; background: var(--panel); margin: 16px -16px 0; padding: 10px 16px; }
 #dlgSettings .dlg-body:has(#connHost:not([hidden])) > :last-child { margin-bottom: 0; }
 
-/* A building block's own design view */
-.block-edit { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.block-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.block-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.block-btns select { width: auto; max-width: 160px; }
-.block-btns .ghost.small { width: var(--h); padding: 0; }
-.block-btns svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.block-btns .ghost.small { color: var(--text); }
-.block-ed-box { border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; background: #fff; }
-.block-ed { display: block; width: 100%; height: 150px; border: 0; }
-.block-body textarea { min-height: 150px; }
 
-/* Building blocks: the design view and its preview start and end level; room above the add button. */
-.block-body { align-items: stretch; }
-.block-edit, .block-pv { height: 170px; }
-.block-ed-box, .block-edit textarea { flex: 1; min-height: 0; height: 100%; }
-.block-ed { height: 100%; }
-.block-pv { min-height: 0; }
-.block-tools .block-btns { flex: 1; min-width: 0; }
+/* Building blocks: room above the add button. */
 #viewBlocks .field-actions { margin-top: 18px; }
 
 /* Nothing there yet, inside a page or a window: in line with what is around it (left, framed),
@@ -1012,3 +992,21 @@ dialog.settings .dlg-body { display: flex; flex-direction: column; }
 .empty-state .es-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .photo-list > li.wide { align-items: stretch; padding: 0; }
 .badge.chg { color: var(--accent); border-color: var(--accent); }
+
+/* Unpublished changes */
+.chg-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.chg-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); border-left: 3px solid var(--accent); }
+.chg-list li.new { border-left-color: var(--ok, #2e7d32); }
+.chg-list li.gone { border-left-color: var(--danger); }
+.chg-list li.none { border-left-color: var(--line); color: var(--muted); }
+.chg-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.chg-text small { color: var(--muted); }
+.chg-btns { display: flex; gap: 6px; flex: none; }
+
+/* A building block in the signature editor: its name, nothing of who gets it. */
+.block-only { display: none; }
+body.editing-block .block-only { display: inline-flex; }
+body.editing-block .sig-props, body.editing-block #btnDup, body.editing-block #btnDel, body.editing-block #btnRevert { display: none !important; }
+body.editing-block #blockEditKey { align-items: center; color: var(--muted); }
+.block-card .block-pv { width: 100%; height: 150px; }
+body.editing-block .sig-head { margin-bottom: 14px; }

@@ -156,7 +156,8 @@
   });
   $('dlgFind').addEventListener('click', (e) => { if (e.target === $('dlgFind')) $('dlgFind').close(); });
   $('keysBtn').addEventListener('click', () => $('dlgKeys').showModal());
-  $('stPub').addEventListener('click', () => $('btnPublish').click());
+  // What is not published yet: the list of it (when something was published), else Publish….
+  $('stPub').addEventListener('click', () => { if (S.pub) openChanges(); else $('btnPublish').click(); });
   $('btnPublish').addEventListener('click', async () => {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
