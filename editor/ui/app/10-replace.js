@@ -18,7 +18,8 @@
       }
     };
     walk(tpl.content);
-    return { n, html: n ? tpl.innerHTML : html };
+    // Made safe as anything typed is (a link target replaced with javascript: does not stay).
+    return { n, html: n ? sanitize(tpl.innerHTML) : html };
   }
   const repTargets = () => S.config.signatures.map((s) => ({ kind: 'sig', obj: s, name: s.name || t('(no name)') }))
     .concat((S.config.blocks || []).map((b) => ({ kind: 'block', obj: b, name: '{{' + b.key + '}} ' + (b.name || '') })));
