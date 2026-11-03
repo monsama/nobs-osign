@@ -1210,12 +1210,17 @@ test('building blocks: made once, put into a signature as a chip, published put 
   await page.waitForSelector('#viewBlocks .empty-state');
   await page.click('#viewBlocks .empty-state button');
   await page.waitForSelector('#blockList .block-card[data-block=disclaimer]');
-  // Its own design view, as a signature's (the field as a chip); and its HTML.
-  await page.waitForFunction(() => { const f = document.querySelector('#blockList .block-ed'); return f && f.contentDocument && f.contentDocument.body && f.contentDocument.body.isContentEditable; });
-  await page.click('#blockList .block-mode');
-  await page.fill('#blockList .block-card textarea', '<p>Confidential: @@mail</p>');
-  await page.click('#blockList .block-mode');
-  await page.waitForFunction(() => document.querySelector('#blockList .block-ed').contentDocument.querySelector('span.osf[data-f=mail]'));
+  // Edited in the signature editor, as a signature is (no who-gets-it there), and back.
+  await page.click('#blockList .block-card[data-block=disclaimer] .block-edit-btn');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  assert.equal(await page.isVisible('#sigCampaign'), false);
+  assert.equal(await page.textContent('#blockEditKey'), '{{disclaimer}}');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Confidential: @@mail</p>');
+  await page.click('.tab[data-mode=design]');
+  await page.waitForFunction(() => document.querySelector('#design').contentDocument.querySelector('span.osf[data-f=mail]'));
+  await page.click('#blockBack');
+  await page.waitForSelector('#viewBlocks:not([hidden])');
   // Into a new signature, from the field list's building blocks.
   await page.click('#btnNew'); await page.click('[data-tpl=compact]');
   await page.waitForSelector('#viewSig:not([hidden])');
@@ -1292,6 +1297,11 @@ test('changes not published yet: marked in the list, and discarded back to what 
   await page.fill('#sigName', 'Revert me (edited)'); await page.dispatchEvent('#sigName', 'input');
   await page.waitForFunction(() => /Changed/.test(document.querySelector('#sigList li a.active').textContent));
   assert.equal(await page.isVisible('#btnRevert'), true);
+  // The list of what is not published yet, from the status at the top: what changed, in words.
+  await page.click('#stPub');
+  await page.waitForSelector('#dlgChanges[open]');
+  assert.match(await page.textContent('#chgList'), /Revert me \(edited\)Changed: name/);
+  await page.click('#dlgChanges button[value=cancel]');
   await page.click('#btnRevert'); await page.click('#askOk');
   await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me');
   assert.equal(await page.isVisible('#btnRevert'), false);

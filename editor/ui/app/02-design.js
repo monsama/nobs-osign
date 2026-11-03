@@ -258,7 +258,8 @@
       fs.forEach((f) => { placed.add(f); g.append(el('option', { value: f.key }, f.label || f.key)); });
       sel.append(g);
     }
-    if (S.config.blocks.length) {
+    // Building blocks: not into a building block (one inside another is not put in).
+    if (S.config.blocks.length && !S.blockEdit) {
       const g = el('optgroup', { label: t('Building blocks') });
       S.config.blocks.forEach((b) => g.append(el('option', { value: 'block:' + b.key }, b.name)));
       sel.append(g);

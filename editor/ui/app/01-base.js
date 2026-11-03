@@ -57,7 +57,19 @@
     config: null, settings: null, info: null, assets: [], dirty: false, publishedAt: 0,
     view: 'sig', sigId: null, mode: 'design', adValues: null, adName: '', 
   };
-  const sig = () => (S.config.signatures || []).find((s) => s.id === S.sigId) || null;
+  // The signature open in the editor; or, while a building block is edited there, the block as one
+  // (its name and HTML, nothing of who gets it), so the same editor serves both.
+  const sig = () => (S.blockEdit ? blockSig(S.blockEdit) : (S.config.signatures || []).find((s) => s.id === S.sigId) || null);
+  let blockSigCache = null;
+  function blockSig(key) {
+    const b = (S.config.blocks || []).find((x) => x.key === key);
+    if (!b) return null;
+    if (blockSigCache && blockSigCache.__block === b) return blockSigCache;
+    blockSigCache = { __block: b, id: 'block:' + b.key, audience: { everyone: true }, removeEmptyLines: true,
+      get name() { return b.name; }, set name(v) { b.name = v; },
+      get html() { return b.html; }, set html(v) { b.html = v; } };
+    return blockSigCache;
+  }
   // The server version (server/): publishing goes to SharePoint through Graph, or, without it, into
   // the server's own folder. No synced folder, no Windows.
   const onServer = () => !!(S.info && S.info.backend === 'node');
@@ -229,7 +241,7 @@
     const ul = $('sigList'); ul.textContent = '';
     if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, t('None yet')));
     S.config.signatures.forEach((s) => {
-      const a = el('a', { href: '#', class: (S.view === 'sig' && s.id === S.sigId ? 'active' : '') + (picked.has(s.id) ? ' picked' : ''), 'aria-current': S.view === 'sig' && s.id === S.sigId ? 'page' : null, 'aria-selected': picked.size ? String(picked.has(s.id)) : null, onclick: (e) => { e.preventDefault(); sigClick(s, e); } },
+      const a = el('a', { href: '#', class: (S.view === 'sig' && !S.blockEdit && s.id === S.sigId ? 'active' : '') + (picked.has(s.id) ? ' picked' : ''), 'aria-current': S.view === 'sig' && s.id === S.sigId ? 'page' : null, 'aria-selected': picked.size ? String(picked.has(s.id)) : null, onclick: (e) => { e.preventDefault(); sigClick(s, e); } },
         s.name || t('(no name)'),
         el('div', { class: 'badges' },
           s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
@@ -249,7 +261,8 @@
       });
       ul.append(el('li', null, a));
     });
-    document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === S.view));
+    // A building block in the editor: Building blocks is where one is.
+    document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === (S.blockEdit ? 'blocks' : S.view)));
     // Several picked: what can be done with them, above the list.
     $('sigPicked').hidden = picked.size < 2;
     if (picked.size >= 2) $('sigPickedN').textContent = t('{0} selected', picked.size);
@@ -356,6 +369,8 @@
 
   function show(view) {
     S.view = view;
+    // Away from the editor: no building block edited in it any more.
+    if (view !== 'sig') { S.blockEdit = null; document.body.classList.remove('editing-block'); }
     $('viewSig').hidden = view !== 'sig';
     $('viewFields').hidden = view !== 'fields';
     $('viewOptions').hidden = view !== 'options';
@@ -369,6 +384,7 @@
 
   function openSig(id) {
     flushSource();
+    S.blockEdit = null; document.body.classList.remove('editing-block');
     S.sigId = id;
     if (!sig()) { show(S.config.signatures.length ? 'sig' : 'empty'); if (S.config.signatures.length) openSig(S.config.signatures[0].id); return; }
     show('sig');
