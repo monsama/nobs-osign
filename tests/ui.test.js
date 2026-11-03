@@ -1210,7 +1210,12 @@ test('building blocks: made once, put into a signature as a chip, published put 
   await page.waitForSelector('#viewBlocks .empty-state');
   await page.click('#viewBlocks .empty-state button');
   await page.waitForSelector('#blockList .block-card[data-block=disclaimer]');
+  // Its own design view, as a signature's (the field as a chip); and its HTML.
+  await page.waitForFunction(() => { const f = document.querySelector('#blockList .block-ed'); return f && f.contentDocument && f.contentDocument.body && f.contentDocument.body.isContentEditable; });
+  await page.click('#blockList .block-mode');
   await page.fill('#blockList .block-card textarea', '<p>Confidential: @@mail</p>');
+  await page.click('#blockList .block-mode');
+  await page.waitForFunction(() => document.querySelector('#blockList .block-ed').contentDocument.querySelector('span.osf[data-f=mail]'));
   // Into a new signature, from the field list's building blocks.
   await page.click('#btnNew'); await page.click('[data-tpl=compact]');
   await page.waitForSelector('#viewSig:not([hidden])');

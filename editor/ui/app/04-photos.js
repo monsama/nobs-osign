@@ -46,9 +46,26 @@
     const rule = photoRule();
     // A photo of another shape than the signature shows it in: Outlook stretches it. Said, and
     // made to fit with one click.
+    const stretched = new Set();
+    $('photosFitAll').hidden = true;
     const shapeCheck = (img, li, p) => {
       if (!rule || !rule.ratio || !img.naturalWidth) return;
       if (Math.abs(img.naturalHeight / img.naturalWidth - rule.ratio) < 0.02 || li.querySelector('.pwarn')) return;
+      // Several of them: all made to fit with one click.
+      stretched.add(p.name);
+      if (mayChange !== false && stretched.size > 1) {
+        $('photosFitAll').hidden = false;
+        $('photosFitAll').textContent = t('Fit all {0}', stretched.size);
+        $('photosFitAll').onclick = async () => {
+          $('photosFitAll').disabled = true;
+          try {
+            for (const n of [...stretched]) {
+              const res = await fetch('/photos/' + encodeURIComponent(n), { credentials: 'same-origin' });
+              await photoSave(await res.blob(), n, { replace: true, saved: t('{0} photo(s) made to fit ({1} × {2}).', stretched.size, rule.w, rule.h) });
+            }
+          } finally { $('photosFitAll').disabled = false; }
+        };
+      }
       const fix = mayChange === false ? null : el('button', { type: 'button', class: 'small', onclick: async () => {
         fix.disabled = true;
         try {
@@ -60,7 +77,7 @@
     };
     $('photoList').replaceChildren(...list.slice(0, 300).map((p) => el('li', null,
       el('img', { src: '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || ''), alt: '', loading: 'lazy', onload: (e) => shapeCheck(e.target, e.target.parentNode, p) }),
-      el('div', { class: 'pf' }, el('span', { class: 'pn' }, p.name),
+      el('div', { class: 'pf' }, el('span', { class: 'pn', title: p.name }, p.name),
       mayChange === false ? null : el('button', { type: 'button', class: 'ghost small pd-use', 'aria-label': t('Use {0} as the placeholder photo', p.name), title: t('As the placeholder photo, for whoever has none'), onclick: () => useAsDefault('/photos/' + encodeURIComponent(p.name), p.name) },
         el('span', { 'aria-hidden': 'true' }, '☆')),
       mayChange === false ? null : el('button', { type: 'button', class: 'ghost small danger', 'aria-label': t('Remove photo {0}', p.name), title: t('Remove'), onclick: async () => {

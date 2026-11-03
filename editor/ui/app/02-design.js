@@ -320,7 +320,10 @@
   function applyImg() {
     if (!selImg) return;
     const w = parseInt($('imgW').value, 10);
-    if (w > 0) { selImg.setAttribute('width', w); selImg.removeAttribute('height'); selImg.style.width = ''; selImg.style.height = ''; if (!selImg.getAttribute('style')) selImg.removeAttribute('style'); }
+    // A height set too (a person's photo in its shape): it goes along, so nothing gets stretched.
+    const ow = parseInt(selImg.getAttribute('width'), 10), oh = parseInt(selImg.getAttribute('height'), 10);
+    if (w > 0 && ow > 0 && oh > 0) { selImg.setAttribute('width', w); selImg.setAttribute('height', Math.round(oh * w / ow)); selImg.style.width = ''; selImg.style.height = ''; if (!selImg.getAttribute('style')) selImg.removeAttribute('style'); }
+    else if (w > 0) { selImg.setAttribute('width', w); selImg.removeAttribute('height'); selImg.style.width = ''; selImg.style.height = ''; if (!selImg.getAttribute('style')) selImg.removeAttribute('style'); }
     selImg.setAttribute('alt', $('imgAlt').value);
     const href = $('imgHref').value.trim(), a = selImg.closest('a');
     if (href && /^(https?:|mailto:|tel:)/i.test(href)) {
