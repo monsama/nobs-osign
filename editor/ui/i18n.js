@@ -276,7 +276,6 @@
     'Changed since it was published: Outlook still has the published one.': 'Seit dem Veröffentlichen geändert: Outlook hat noch die veröffentlichte.',
     'Not published': 'Nicht veröffentlicht',
     'Not published yet: Outlook does not have it.': 'Noch nicht veröffentlicht: Outlook hat sie nicht.',
-    'Discard the changes to «{0}» since it was published? It goes back to what Outlook has.': 'Die Änderungen an «{0}» seit dem Veröffentlichen verwerfen? Sie wird wieder so, wie Outlook sie hat.',
     '«{0}» is as published again.': '«{0}» ist wieder wie veröffentlicht.',
     'This signature is not published yet: there is nothing to go back to.': 'Diese Signatur ist noch nicht veröffentlicht: Es gibt nichts, wohin man zurückkann.',
     'Set to go out on {0} ({1}): the draft as it was then.': 'Geplant für {0} ({1}): der Entwurf, wie er damals war.',

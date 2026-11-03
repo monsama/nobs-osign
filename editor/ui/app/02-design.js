@@ -452,7 +452,7 @@
     hist.pos = to;
     s.html = hist.stack[to];
     loadDesign(s.html).then(() => { if (S.mode === 'design') { design.contentWindow.focus(); const r = ddoc.createRange(); r.selectNodeContents(ddoc.body); r.collapse(false); const sel = ddoc.getSelection(); sel.removeAllRanges(); sel.addRange(r); } });
-    $('source').value = prettyHtml(s.html);
+    showSource(s.html);
     changed({ list: false });
     clearTimeout(hist.timer); hist.timer = null;
     histButtons();
@@ -550,7 +550,7 @@
   function setMode(mode) {
     if (mode === S.mode) return;
     const s = sig();
-    if (mode === 'html') { $('source').value = s ? prettyHtml(s.html) : ''; }
+    if (mode === 'html') showSource(s ? s.html : '');
     else { flushSource(); loadDesign(s ? s.html : ''); }
     // What was done in the other tab is a step of its own.
     histRecord();
@@ -565,9 +565,14 @@
     hideImgBar();
   }
   // What was typed in the HTML tab, made safe, once the tab is left.
+  // The HTML tab shows a signature indented for reading: what was put there is kept, so leaving it
+  // without typing changes nothing (the indenting alone is no change to the signature).
+  let sourceShown = null;
+  function showSource(html) { const v = html ? prettyHtml(html) : ''; $('source').value = v; sourceShown = v; }
   function flushSource() {
     if (S.mode !== 'html') return;
     const s = sig(); if (!s) return;
+    if ($('source').value === sourceShown) return;
     const clean = sanitize(plainHtml($('source').value));
     if (clean !== s.html) { s.html = clean; changed({ list: false }); }
   }
