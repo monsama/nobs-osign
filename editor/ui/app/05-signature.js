@@ -162,7 +162,8 @@
       return;
     }
     closeMenu.back = document.activeElement;
-    const m = $('ctxMenu'), i = S.config.signatures.indexOf(s), n = S.config.signatures.length;
+    const g0 = sigGroups(), grp = core.forNobody(s) && g0.assigned.length ? g0.unassigned : core.forNobody(s) ? g0.unassigned : g0.assigned;
+    const m = $('ctxMenu'), i = grp.indexOf(s), n = grp.length;
     const item = (label, run, opts) => {
       opts = opts || {};
       const b = el('button', { type: 'button', role: opts.check === undefined ? 'menuitem' : 'menuitemcheckbox', class: opts.danger ? 'danger' : '' },
@@ -173,9 +174,12 @@
       return b;
     };
     const asDefault = (flag, id) => () => { openSig(s.id); $(id).checked = !s[flag]; $(id).dispatchEvent(new Event('change')); };
+    // Up and down as the list shows them: within its group (assigned, or nobody's).
     const move = (by) => () => {
-      const list = S.config.signatures, j = list.indexOf(s);
-      list.splice(j, 1); list.splice(j + by, 0, s); changed({ list: true });
+      const list = S.config.signatures, k = grp.indexOf(s), other = grp[k + by];
+      if (!other) return;
+      const a = list.indexOf(s), b = list.indexOf(other);
+      list[a] = other; list[b] = s; changed({ list: true });
     };
     m.replaceChildren(
       item(t('Open'), () => openSig(s.id)),

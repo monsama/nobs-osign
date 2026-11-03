@@ -254,7 +254,9 @@
   async function loadTls() {
     if (!onServer() || location.protocol !== 'https:') return null;
     try { tlsLast = await api('server/tls', { host: location.hostname }); } catch (e) { tlsLast = { error: e.message }; }
-    const c = tlsLast, warn = c.error ? '' : !c.trusted ? t('The web certificate is not trusted by PCs: issue one from your CA (Settings).') : c.daysLeft <= 30 ? t('The web certificate runs out on {0}.', day(c.validTo)) : '';
+    // Not trusted by the PCs is a setup matter: said in Settings → Server, not on every page. Running
+    // out soon is the one that needs doing in time, so that stays in the status bar.
+    const c = tlsLast, warn = !c.error && c.trusted && c.daysLeft <= 30 ? t('The web certificate runs out on {0}.', day(c.validTo)) : '';
     $('stTls').hidden = !warn; $('stTls').textContent = warn;
     return c;
   }

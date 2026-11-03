@@ -1136,3 +1136,22 @@ a#coffeeBtn.btnlike.icon:hover, .side-btns .icon-btn:hover { background: var(--p
 .preview-head .icon-btn, .preview-head label.tgl { border-color: transparent; background: transparent; color: var(--muted); }
 .preview-head .icon-btn:hover, .preview-head label.tgl:hover { background: var(--panel-2); color: var(--text); }
 .preview-head label.tgl:has(input:checked) { background: var(--info-soft); border-color: var(--info-line); color: var(--accent); }
+
+/* Not assigned: a group of its own in the list, folded away. */
+.sig-list .sig-group-li { margin-top: 6px; }
+.sig-list .sig-group { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 10px; border: 0; border-top: 1px solid var(--line-2); border-radius: 0; background: transparent;
+  color: var(--muted); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; text-align: left; cursor: pointer; }
+.sig-list .sig-group:hover { color: var(--text); background: transparent; filter: none; }
+.sig-list .sig-group .chev { width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; flex: none; margin-right: 2px; }
+.sig-list .sig-group.open .chev { transform: rotate(45deg); }
+.sig-list .sig-group-n { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: var(--r-s); background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-size: 11px; text-align: center; letter-spacing: 0; }
+.sig-list .sig-group-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
+
+/* The pages use their whole width: text, notes, cards and empty states end at the same edge as the
+   tables (the dialogs keep their own widths). */
+.view .lead, .view .callout, .view .empty-state, .view .photo-default, .view .block-list,
+.view .wiz-note, .view .tokens, .view .grid2.narrow, #vsrcServerNote { max-width: none; }
+.view .photo-add { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); margin: 14px 0 6px; }
+.view .photo-add > label:first-child { flex: 0 1 280px; }
+.view .photo-add > label:first-child input { width: 100%; }
+.view:not(#viewEmpty) .empty-state { max-width: none; }

@@ -26,6 +26,9 @@ const errors = [], notFound = [];
 async function signedIn(opts) {
   const ctx = await browser.newContext(Object.assign({ viewport: { width: 1400, height: 900 } }, opts || {}));
   await ctx.addCookies([{ name: 'osign_session', value: cookie, url: base }]);
+  // The group of signatures nobody gets open, as the tests find them by their place in the list
+  // (its own test folds it).
+  await ctx.addInitScript(() => { try { if (!localStorage.getItem('osign.unassigned')) localStorage.setItem('osign.unassigned', 'open'); } catch (e) { /* none */ } });
   return ctx;
 }
 
@@ -436,7 +439,7 @@ test('help: a ? opens a short explanation, above dialogs too, and closes again',
 test('fields: chips with their names in the design view, @@key in the signature', { skip }, async () => {
   await page.goto(url); await page.reload();
   await page.waitForSelector('#sigList a');
-  await page.click('#sigList a');
+  await page.click('#sigList a:has-text("Main signature")');
   await page.waitForSelector('#viewSig:not([hidden])');
   const dd = () => page.frameLocator('#design');
   // The starter template's placeholders, shown by name; a link's mailto:@@mail stays as it is.
@@ -644,7 +647,7 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
 test('suggestions while typing: AD groups anywhere in their name, people for the preview; Enter takes one', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('#sigList a');
-  await page.click('#sigList a');
+  await page.click('#sigList a:has-text("Main signature")');
   await page.waitForSelector('#viewSig:not([hidden])');
   // A group by a part of its name; ↓ and Enter take it, as a token.
   await page.click('.audience:not(.campaign) summary');
@@ -737,10 +740,13 @@ test('right-click on a signature: a menu with what its page offers, by mouse and
   await page.click('#ctxMenu button:has-text("Duplicate")');
   await page.waitForFunction((n) => document.querySelectorAll('#sigList li a').length === n + 1, before.length);
   const after = await names();
-  await page.click('#sigList li:last-child a', { button: 'right' });
+  // The copy goes last in its group (the list shows the ones nobody gets below the others).
+  const copy = after.find((x) => !before.includes(x)) || after[after.length - 1];
+  const at = after.lastIndexOf(copy);
+  await page.click(`#sigList li a:has-text("${copy}") >> nth=-1`, { button: 'right' });
   await page.click('#ctxMenu button:has-text("Move up")');
   const moved = await names();
-  assert.equal(moved[moved.length - 2], after[after.length - 1]);
+  assert.equal(moved[at - 1], copy, 'one up');
   // By keyboard: Shift+F10 on the focused entry, arrows, Enter.
   await page.focus('#sigList li:last-child a');
   await page.keyboard.press('Shift+F10');
@@ -750,7 +756,7 @@ test('right-click on a signature: a menu with what its page offers, by mouse and
   assert.equal(await page.evaluate(() => document.activeElement.textContent.trim()), 'Delete…');
   await page.keyboard.press('Escape');
   // Delete the copy again (the dialog asks first; these tests answer yes).
-  const copyName = after[after.length - 1];
+  const copyName = copy;
   await page.click(`#sigList li a:has-text("${copyName}") >> nth=-1`, { button: 'right' });
   await page.click('#ctxMenu button:has-text("Delete…")');
   await page.click('#askOk');
@@ -1114,7 +1120,8 @@ test('who gets it: a new signature is not assigned until the entire organization
   await page.click('#btnNew'); await page.click('[data-tpl=classic]');
   await page.waitForSelector('#viewSig:not([hidden])');
   assert.equal(await page.textContent('#audienceSummary'), 'not assigned');
-  assert.match(await page.textContent('#sigList li a.active'), /Not assigned/);
+  // Not assigned: said on it, or (with assigned ones there) by the group it is in, which keeps it in sight.
+  assert.ok(await page.evaluate(() => { const a = document.querySelector('#sigList li a.active'); if (/Not assigned/.test(a.textContent)) return true; let li = a.closest('li').previousElementSibling; while (li && !li.classList.contains('sig-group-li')) li = li.previousElementSibling; return !!li; }));
   await page.click('#audienceSummary');
   assert.equal(await page.isChecked('input[name=audMode][value=none]'), true);
   await page.click('.seg label:has(input[value=all])');
@@ -1323,5 +1330,33 @@ test('changes not published yet: marked in the list, and discarded back to what 
   await page.click('#toast button');
   await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me (edited)');
   await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});
+
+test('not assigned ones: a group below the others, folded away (the one open stays in sight), opened and folded by a click', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.evaluate(() => { try { localStorage.setItem('osign.unassigned', 'closed'); } catch (e) { /* none */ } });
+  // One for everyone, one for nobody.
+  await page.click('#btnNew'); await page.click('[data-tpl=classic]');
+  await page.fill('#sigName', 'For all'); await page.dispatchEvent('#sigName', 'input');
+  await page.click('#audienceSummary'); await page.click('.seg label:has(input[value=all])'); await page.keyboard.press('Escape');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.fill('#sigName', 'For nobody'); await page.dispatchEvent('#sigName', 'input');
+  await page.waitForSelector('#sigGroupUnassigned');
+  // Folded, but the one open is in sight.
+  await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList a:has-text("For all")');
+  await page.click('#sigGroupUnassigned').catch(() => {});
+  if (await page.getAttribute('#sigGroupUnassigned', 'aria-expanded') === 'true') await page.click('#sigGroupUnassigned');
+  await page.click('#sigGroupUnassigned'); await page.click('#sigList a:has-text("For nobody")'); await page.click('#sigGroupUnassigned');
+  assert.equal(await page.getAttribute('#sigGroupUnassigned', 'aria-expanded'), 'false');
+  assert.match(await page.textContent('#sigList'), /For nobody/);
+  await page.click('#sigList a:has-text("For all")');
+  await page.waitForFunction(() => !/For nobody/.test(document.querySelector('#sigList').textContent));
+  await page.click('#sigGroupUnassigned');
+  await page.waitForFunction(() => /For nobody/.test(document.querySelector('#sigList').textContent));
+  assert.equal(await page.getAttribute('#sigGroupUnassigned', 'aria-expanded'), 'true');
+  for (const n of ['For nobody', 'For all']) { await page.click('#sigList a:has-text("' + n + '")'); await page.click('#btnDel'); await page.click('#askOk'); }
   assert.deepEqual(errors, []);
 });

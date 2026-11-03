@@ -240,7 +240,11 @@
     if (nu) nu.parentNode.hidden = !core.usesAdExport(S.config) && S.view !== 'users';
     const ul = $('sigList'); ul.textContent = '';
     if (!S.config.signatures.length) ul.append(el('li', { class: 'none' }, t('None yet')));
-    S.config.signatures.forEach((s) => {
+    // The ones nobody gets, below the others in a group of their own, folded away (the one open,
+    // and the ones picked, stay in sight); a dot on the group when one of them is not published.
+    const { assigned, unassigned } = sigGroups();
+    const open = unassignedOpen(assigned.length);
+    const item = (s, inGroup) => {
       const a = el('a', { href: '#', class: (S.view === 'sig' && !S.blockEdit && s.id === S.sigId ? 'active' : '') + (picked.has(s.id) ? ' picked' : ''), 'aria-current': S.view === 'sig' && s.id === S.sigId ? 'page' : null, 'aria-selected': picked.size ? String(picked.has(s.id)) : null, onclick: (e) => { e.preventDefault(); sigClick(s, e); } },
         s.name || t('(no name)'),
         el('div', { class: 'badges' },
@@ -249,7 +253,7 @@
           s.language ? el('span', { class: 'badge on', title: t('Language variant') }, s.language.toUpperCase()) : null,
           sigState(s) === 'changed' ? el('span', { class: 'badge warn', title: t('Changed since it was published: Outlook still has the published one.') }, t('Changed')) :
           sigState(s) === 'new' ? el('span', { class: 'badge warn', title: t('Not published yet: Outlook does not have it.') }, t('Not published')) : null,
-          core.forNobody(s) ? el('span', { class: 'badge warn', title: t('Not assigned: nobody gets it. Give it groups, departments or domains, or the entire organization (Who gets it).') }, t('Not assigned')) :
+          core.forNobody(s) ? (inGroup ? null : el('span', { class: 'badge warn', title: t('Not assigned: nobody gets it. Give it groups, departments or domains, or the entire organization (Who gets it).') }, t('Not assigned'))) :
           audienceText(s) !== t('entire organization') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
           core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' ok' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
       a.addEventListener('contextmenu', (e) => { e.preventDefault(); sigMenu(s, e.clientX, e.clientY); });
@@ -259,8 +263,23 @@
         else if (e.key === 'Delete') { e.preventDefault(); if (picked.size > 1 && picked.has(s.id)) deletePicked(); else { openSig(s.id); $('btnDel').click(); } }
         else if (e.key === 'Escape' && picked.size) { e.preventDefault(); pickClear(); }
       });
-      ul.append(el('li', null, a));
-    });
+      return el('li', null, a);
+    };
+    assigned.forEach((s) => ul.append(item(s, false)));
+    // Only both kinds make a group worth folding: else the list as it is.
+    if (!assigned.length) unassigned.forEach((s) => ul.append(item(s, false)));
+    else if (unassigned.length) {
+      const pending = unassigned.some((s) => sigState(s) === 'changed' || sigState(s) === 'new');
+      const head = el('button', { type: 'button', class: 'sig-group' + (open ? ' open' : ''), 'aria-expanded': String(open), id: 'sigGroupUnassigned',
+        title: t('Signatures nobody gets yet: shown or folded away'), onclick: () => { setUnassignedOpen(!open); renderList(); } },
+        el('span', { class: 'chev', 'aria-hidden': 'true' }), el('span', null, t('Not assigned')), el('span', { class: 'sig-group-n' }, String(unassigned.length)),
+        pending ? el('span', { class: 'sig-group-dot', title: t('One of them is not published yet') }) : null);
+      ul.append(el('li', { class: 'sig-group-li' }, head));
+      unassigned.forEach((s) => {
+        const keep = open || (S.view === 'sig' && !S.blockEdit && s.id === S.sigId) || picked.has(s.id);
+        if (keep) ul.append(item(s, true));
+      });
+    }
     // A building block in the editor: Building blocks is where one is.
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === (S.blockEdit ? 'blocks' : S.view)));
     // Several picked: what can be done with them, above the list.
@@ -272,8 +291,19 @@
   // between; a plain click opens one and lets go of the others.
   const picked = new Set();
   let pickAnchor = null;
+  // The list as shown: the assigned ones, then the ones nobody gets.
+  function sigGroups() {
+    const all = S.config.signatures || [];
+    return { assigned: all.filter((s) => !core.forNobody(s)), unassigned: all.filter((s) => core.forNobody(s)) };
+  }
+  // Folded away unless opened (kept in this browser); open while there is nothing else to show.
+  function unassignedOpen(nAssigned) {
+    let v = null; try { v = localStorage.getItem('osign.unassigned'); } catch (e) { v = null; }
+    return v ? v === 'open' : nAssigned === 0;
+  }
+  function setUnassignedOpen(on) { try { localStorage.setItem('osign.unassigned', on ? 'open' : 'closed'); } catch (e) { /* this time only */ } }
   function sigClick(s, e) {
-    const list = S.config.signatures;
+    const g = sigGroups(), list = g.assigned.concat(g.unassigned);
     if (e.ctrlKey || e.metaKey) {
       if (!picked.size && S.view === 'sig' && S.sigId && S.sigId !== s.id) picked.add(S.sigId);
       if (picked.has(s.id)) picked.delete(s.id); else picked.add(s.id);
