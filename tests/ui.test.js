@@ -581,6 +581,8 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   await page.waitForSelector('html[data-ready="1"]');
   await page.click('#btnSettings');
   await page.click('#dlgSettings [data-stab=server]');
+  await page.waitForFunction(() => document.querySelectorAll('#healthRows .setrow').length >= 8 && !document.querySelector('#healthRows .hdot.run'));
+  await page.evaluate(() => document.querySelectorAll('#healthRows details').forEach((d) => { d.open = true; }));
   await page.click('#setConn');
   await page.waitForSelector('#connHost:not([hidden])');
   await page.click('#connHost [data-ctab=graph]');
@@ -593,6 +595,7 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   await page.waitForSelector('#connHost', { state: 'hidden' });
   await page.waitForFunction(() => document.querySelectorAll('#healthRows .setrow').length >= 8 && !document.querySelector('#healthRows .hdot.run'));
   assert.equal(await page.textContent('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) small'), lead);
+  await page.evaluate(() => document.querySelectorAll('#healthRows details').forEach((d) => { d.open = true; }));
   assert.equal(await page.getAttribute('#dlgSettings [data-stab=server]', 'aria-selected'), 'true');
   await page.click('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) button');
   await page.waitForSelector('#connHost:not([hidden])');
@@ -636,7 +639,13 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
   assert.deepEqual(rows.find((r) => r[0] === 'Active Directory'), ['Active Directory', 'good']);
   assert.deepEqual(rows.find((r) => r[0] === 'Key for passwords'), ['Key for passwords', 'good']);
   assert.equal(rows.find((r) => r[0] === 'Cloudflare Pages')[1], 'off');
-  assert.match(await page.textContent('#healthSum'), /not working|to look at|works/);
+  // What does not work or is to look at first; the rest folded below.
+  const order = rows.map((r) => r[1]);
+  const firstRest = order.findIndex((x) => !/bad|warn/.test(x));
+  assert.ok(firstRest < 0 || order.slice(firstRest).every((x) => !/bad|warn/.test(x)), order.join());
+  assert.match(await page.textContent('#healthRows details.health-rest summary'), /work|not set up/);
+  assert.equal(await page.textContent('#healthSum'), '');
+  await page.evaluate(() => document.querySelectorAll('#healthRows details').forEach((d) => { d.open = true; }));
   // Its button: Server connections on that tab; closed, Status is checked again.
   await page.click('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) button');
   await page.waitForSelector('#connHost:not([hidden])');
@@ -646,6 +655,9 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
   assert.equal(await page.isVisible('#healthRun'), true);
   // The Server tab names Active Directory itself.
   await page.click('#dlgSettings [data-stab=server]');
+  await page.waitForFunction(() => document.querySelectorAll('#healthRows .setrow').length >= 8 && !document.querySelector('#healthRows .hdot.run'));
+  await page.evaluate(() => document.querySelectorAll('#healthRows details').forEach((d) => { d.open = true; }));
+
   assert.equal((await page.textContent('#setConn')).trim(), 'Active Directory…');
   await page.click('#dlgSettings button[value=cancel]');
   assert.deepEqual(errors, []);

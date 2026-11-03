@@ -35,25 +35,27 @@
     if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
     toast(n ? t('{0} images made smaller: {1} → {2}.', n, kb(from), kb(to)) : t('The images are as small as they are shown already.'));
   }
+  // "3 signatures", or the name when it is one.
+  const count = (list) => (list.length === 1 ? String(list[0].name || list[0]) : t('{0} signatures', list.length));
   function signatureChecks(c) {
     const out = [], names = (f) => [...new Set(c.signatures.filter(f).map((s) => s.name))];
     const imgs = (s) => [...(s.html || '').matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
     const attr = (tag, a) => (new RegExp('\\s' + a + '\\s*=\\s*["\']?([^"\'\\s>]*)', 'i').exec(tag) || [])[1] || '';
     const size = (n) => { const a = S.assets.find((x) => x.name === n); return a ? a.size || 0 : 0; };
     const big = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && size(n) > 100 * 1024)))];
-    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }]);
+    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }, t('Large images: {0}', big.length)]);
     const noAlt = names((s) => imgs(s).some((i) => !/photos\//.test(attr(i, 'src')) && !/\salt\s*=\s*["'][^"']+["']/i.test(i)));
-    if (noAlt.length) out.push(['warn', t('Images without a text for when images are blocked (alt): {0}. Image bar → alt text, e.g. the company name for the logo.', noAlt.join(', '))]);
+    if (noAlt.length) out.push(['warn', t('Images without a text for when images are blocked (alt): {0}. Image bar → alt text, e.g. the company name for the logo.', noAlt.join(', ')), null, t('Images without alt text: {0}', count(noAlt))]);
     const tooWide = (s) => imgs(s).some((i) => Number(attr(i, 'width')) > 600) ||
       [...(s.html || '').replace(/<img\b[^>]*>/gi, '').matchAll(/[\s;"']width\s*[=:]\s*["']?(\d+)(?:px)?(?![\d%])/gi)].some((m) => Number(m[1]) > 600);
     const wide = names(tooWide);
-    if (wide.length) out.push(['warn', t('Wider than 600 pixels (too wide on phones): {0}.', wide.join(', '))]);
+    if (wide.length) out.push(['warn', t('Wider than 600 pixels (too wide on phones): {0}.', wide.join(', ')), null, t('Wider than 600 pixels: {0}', count(wide))]);
     const http = names((s) => /href\s*=\s*["']http:\/\//i.test(s.html || '') || /src\s*=\s*["']http:\/\//i.test(s.html || ''));
-    if (http.length) out.push(['warn', t('Links or images with http:// (not encrypted, some mail programs warn): {0}. Use https://.', http.join(', '))]);
+    if (http.length) out.push(['warn', t('Links or images with http:// (not encrypted, some mail programs warn): {0}. Use https://.', http.join(', ')), null, t('Links with http://: {0}', count(http))]);
     const heavy = c.signatures.map((s) => ({ s, kb: Math.round(((s.html || '').length + [...new Set(imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter(Boolean))].reduce((n, x) => n + size(x), 0)) / 1024) })).filter((x) => x.kb > 250);
-    if (heavy.length) out.push(['warn', t('Heavy signatures (text and images over 250 KB): {0}.', heavy.map((x) => x.s.name + ' (' + x.kb + ' KB)').join(', '))]);
+    if (heavy.length) out.push(['warn', t('Heavy signatures (text and images over 250 KB): {0}.', heavy.map((x) => x.s.name + ' (' + x.kb + ' KB)').join(', ')), null, t('Heavy signatures: {0}', count(heavy.map((x) => x.s)))]);
     const gone = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && dark[n] === true)))];
-    if (gone.length) out.push(['warn', t('Dark image on a transparent background, hard to see in dark mode: {0}. A light edge, or a background of its own, helps.', gone.join(', '))]);
+    if (gone.length) out.push(['warn', t('Dark image on a transparent background, hard to see in dark mode: {0}. A light edge, or a background of its own, helps.', gone.join(', ')), null, t('Hard to see in dark mode: {0}', gone.length === 1 ? gone[0] : t('{0} images', gone.length))]);
     return out;
   }
   // Whether an image is dark lines on nothing (a logo that disappears on a dark background):
@@ -84,40 +86,40 @@
     if (!c.signatures.length) out.push(['bad', t('There is no signature.')]);
     const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length && s.audience.everyone !== false);
     const nobody = c.signatures.filter((s) => core.forNobody(s));
-    if (nobody.length) out.push(['warn', t('Not assigned, nobody gets: {0} (Who gets it).', nobody.map((s) => s.name).join(', '))]);
-    if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', t('No signature is the default for new mail: users get none unless they pick one.')]);
-    else if (!plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.')]);
+    if (nobody.length) out.push(['warn', t('Not assigned, nobody gets: {0} (Who gets it).', nobody.map((s) => s.name).join(', ')), null, t('Not assigned: {0}', count(nobody))]);
+    if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', t('No signature is the default for new mail: users get none unless they pick one.'), null, t('No default for new mail')]);
+    else if (!plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.'), null, t('The default for new mail is for some only')]);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
     if (onServer()) {
-      if (!toSharePoint()) out.push(['warn', t("Publishing goes into the server's own folder, not to SharePoint: Microsoft Graph is not set up on the server.")]);
-      else if (lastSettings.folderError) out.push(['warn', t('SharePoint cannot be reached: {0}', t(lastSettings.folderError))]);
+      if (!toSharePoint()) out.push(['warn', t("Publishing goes into the server's own folder, not to SharePoint: Microsoft Graph is not set up on the server."), null, t('Into the server\'s folder, not SharePoint')]);
+      else if (lastSettings.folderError) out.push(['warn', t('SharePoint cannot be reached: {0}', t(lastSettings.folderError)), null, t('SharePoint cannot be reached')]);
     } else if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
-    if (core.groupsUsed(c).length && core.valueSource(c) === 'graph') out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.')]);
+    if (core.groupsUsed(c).length && core.valueSource(c) === 'graph') out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.'), null, t('Groups need GroupMember.Read.All')]);
     const perPerson = c.signatures.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
-    if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; users without a photo get the signature without one.', perPerson.join(', '))]);
+    if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; users without a photo get the signature without one.', perPerson.join(', ')), null, t('Photos per person')]);
     const lost = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/|photos\/|https:)[^"]*"/i.test(s.html || '')).map((s) => s.name);
-    if (lost.length) out.push(['warn', t('Images not stored with the signatures are left out in: {0}.', lost.join(', '))]);
+    if (lost.length) out.push(['warn', t('Images not stored with the signatures are left out in: {0}.', lost.join(', ')), null, t('Images left out: {0}', count(lost))]);
     const keys = fieldKeys();
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
-    if (unknown.length) out.push(['warn', t('Unknown placeholders, left as typed: {0}', unknown.map((k) => '@@' + k).join(', '))]);
+    if (unknown.length) out.push(['warn', t('Unknown placeholders, left as typed: {0}', unknown.map((k) => '@@' + k).join(', ')), null, t('Unknown placeholders: {0}', unknown.length)]);
     const noBlock = [...new Set(c.signatures.flatMap((s) => core.blocksIn(s.html)))];
-    if (noBlock.length) out.push(['warn', t('Unknown building blocks, left as typed: {0}', noBlock.map((k) => '{{' + k + '}}').join(', '))]);
+    if (noBlock.length) out.push(['warn', t('Unknown building blocks, left as typed: {0}', noBlock.map((k) => '{{' + k + '}}').join(', ')), null, t('Unknown building blocks: {0}', noBlock.length)]);
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
-    if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map(fieldName).join(', '))]);
+    if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map(fieldName).join(', ')), null, t('Fields empty in Outlook: {0}', noGraph.length)]);
     if (core.usesAdExport(c)) {
       const sn = S.snap;
-      if (sn && S.snapMatches && !sn.written) out.push(['good', t('The users as read {0} are written: {1} new, {2} changed, {3} removed.', when(sn.readAt), sn.counts.new, sn.counts.changed, sn.counts.removed)]);
-      else if (sn && S.snapMatches && sn.written) out.push(['warn', t('The users stay as published {0}. To update them, read and check them under Users first.', when(sn.readAt))]);
-      else out.push(['warn', t('The users are not written: read and check them under Users first. Until then they stay as they are in the folder.')]);
+      if (sn && S.snapMatches && !sn.written) out.push(['good', t('The users as read {0} are written: {1} new, {2} changed, {3} removed.', when(sn.readAt), sn.counts.new, sn.counts.changed, sn.counts.removed), null, t('Users: {0} new, {1} changed', sn.counts.new, sn.counts.changed)]);
+      else if (sn && S.snapMatches && sn.written) out.push(['warn', t('The users stay as published {0}. To update them, read and check them under Users first.', when(sn.readAt)), null, t('The users stay as published')]);
+      else out.push(['warn', t('The users are not written: read and check them under Users first. Until then they stay as they are in the folder.'), null, t('The users are not written')]);
     }
     const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
-    if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', '))]);
+    if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', ')), null, t('Images missing in the draft: {0}', missing.length)]);
     signatureChecks(c).forEach((x) => out.push(x));
     // Who would get nothing, as read from AD under Users.
     if (S.snap && S.snap.users && S.snap.users.length) {
       const g = whoGets(S.snap.users), none = S.snap.users.filter((u) => !g.get(u).new).length;
-      if (none) out.push(['warn', t('{0} of the {1} users read from AD get no signature for new mail (Users → Only without a signature).', none, S.snap.users.length)]);
+      if (none) out.push(['warn', t('{0} of the {1} users read from AD get no signature for new mail (Users → Only without a signature).', none, S.snap.users.length), null, t('{0} users without a signature', none)]);
     }
     if (!out.some((x) => x[0] !== 'good')) out.push(['good', t('{0} signature(s), ready.', c.signatures.length)]);
     return out;
@@ -206,6 +208,29 @@
   $('keysBtn').addEventListener('click', () => $('dlgKeys').showModal());
   // What is not published yet: the list of it (when something was published), else Publish….
   $('stPub').addEventListener('click', () => { if (S.pub) openChanges(); else $('btnPublish').click(); });
+  // What to look at before publishing, short: what stops it first (red), then the notes (one line
+  // each, a click for the names and what to do), what is fine in one grey line at the end. With
+  // nothing red, the notes are folded under one line.
+  function renderChecks(checks) {
+    const order = { bad: 0, warn: 1, good: 2 };
+    const list = checks.slice().sort((a, b) => order[a[0]] - order[b[0]]);
+    const bad = list.filter((c) => c[0] === 'bad'), warn = list.filter((c) => c[0] === 'warn'), good = list.filter((c) => c[0] === 'good');
+    const actBtn = (act) => el('button', { type: 'button', class: 'small', onclick: async (e) => { e.currentTarget.disabled = true; await act.fn(); $('dlgPublish').close(); $('btnPublish').click(); } }, act.label);
+    const item = ([k, text, act, short]) => el('li', { class: k }, short
+      ? el('details', { class: 'chk' }, el('summary', null, short), el('p', null, text), act ? actBtn(act) : null)
+      : el('span', null, text, act ? actBtn(act) : null));
+    const out = bad.map(item);
+    if (warn.length) {
+      const items = warn.map(item);
+      if (bad.length) out.push(...items);
+      else out.push(el('li', { class: 'chk-head' }, el('details', { class: 'chk-all' },
+        el('summary', null, el('b', null, t('Ready to publish.')), ' ', warn.length === 1 ? t('1 note') : t('{0} notes', warn.length)),
+        el('ul', { class: 'checks chk-sub' }, ...items))));
+    } else if (!bad.length) out.push(el('li', { class: 'good' }, el('b', null, t('Ready to publish.'))));
+    if (good.length) out.push(el('li', { class: 'good chk-ok' }, good.map((g) => g[3] || g[1]).join(' · '),
+      el('details', { class: 'chk' }, el('summary', null, t('details')), ...good.map((g) => el('p', null, g[1])))));
+    $('pubChecks').replaceChildren(...out);
+  }
   $('btnPublish').addEventListener('click', async () => {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
@@ -213,8 +238,7 @@
       : S.settings.folder ? t('To {0}. OneDrive uploads it to SharePoint; new messages use it a minute or two later.', S.settings.folder)
       : t('No folder set yet (Settings).');
     const checks = publishChecks();
-    $('pubChecks').replaceChildren(...checks.map(([k, text, act]) => el('li', { class: k }, text,
-      act ? el('button', { type: 'button', class: 'small', style: 'margin-left:8px', onclick: async (e) => { e.currentTarget.disabled = true; await act.fn(); $('dlgPublish').close(); $('btnPublish').click(); } }, act.label) : null)));
+    renderChecks(checks);
     offFor($('pubGo'), checks.some((c) => c[0] === 'bad') ? t('First fix what is marked red above.') : '');
     $('pubErr').textContent = ''; $('pubOk').textContent = ''; $('pubMsg').value = ''; $('pubGo').hidden = false;
     await loadApproval(); renderApproval();
