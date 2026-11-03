@@ -159,6 +159,19 @@
     document.querySelectorAll('dialog').forEach((d) => {
       const bar = d.querySelector('.dlg > h2:first-child, .wiz-head');
       if (!bar) return;
+      // What scrolls is the content only: the title (with these buttons), the tabs and the buttons
+      // at the bottom stay where they are, and the scrollbar runs between them.
+      const form = bar.matches('.dlg > h2') ? bar.parentNode : null;
+      if (form) {
+        const body = el('div', { class: 'dlg-body' });
+        const fixed = (n) => n === bar || (n.nodeType === 1 && (n.classList.contains('dlg-foot') || n.classList.contains('dtabs') || (d.id === 'dlgAudit' && n.classList.contains('dlg-toolbar'))));
+        const kids = [...form.childNodes];
+        const firstFoot = kids.findIndex((n) => n.nodeType === 1 && n.classList.contains('dlg-foot'));
+        const top = kids.filter((n, i) => fixed(n) && (firstFoot < 0 || i < firstFoot) && !(n.nodeType === 1 && n.classList.contains('dlg-foot')));
+        body.append(...kids.filter((n) => !fixed(n)));
+        const lastTop = top[top.length - 1] || bar;
+        lastTop.after(body);
+      }
       const btn = (cls, icon, label, fn) => { const b = el('button', { type: 'button', class: cls, title: label, 'aria-label': label, onclick: fn }); b.innerHTML = icon; return b; };
       // Minimise and maximise only where there is much to read or work through; the others just close.
       const big = BIG_DIALOGS.includes(d.id);
