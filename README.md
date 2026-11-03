@@ -160,8 +160,7 @@ to do (images not picked, fields added, and *Who gets it*: CI-Sign's rules are n
   in with their AD account): make, change, import and publish signatures, edit fields, building
   blocks and the add-in's behaviour, look at users from AD, and approve someone else's publish when
   four eyes is on.
-- With a **publishing group** set there, only its members publish (also to a pilot group or at a set
-  time), approve, write the users and change photos; the other editors ask for approval.
+- With a **publishing group** set there, only its members publish (also at a set time), approve, write the users and change photos; the other editors ask for approval.
 - **The local account `admin`** besides: the server connections, the setup script, the add-in's
   files (make, upload), backups, the audit log, four eyes, and the check where the add-in is
   deployed.

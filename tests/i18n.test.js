@@ -21,7 +21,7 @@ function dictionary() {
 }
 const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
 // What needs no German: the same in both, names, codes, symbols.
-const SAME = (s) => !/[a-z]{3}/i.test(s) || /^[\w.+-]+@[\w.-]+$|^[\w.-]+\.(xml|json|png|jpg|htm)$|^· /.test(s) || /^(NOBS OSign|OSign|Outlook|HTML|OK|Info|Server|Name|Status|Graph|Entra ID|Active Directory|SharePoint|Cloudflare Pages|Azure Static Web Apps|IIS|StartTLS|Microsoft Graph|Add-in|admin|Deutsch|English|Français|Italiano|Disclaimer|Mail|Logo|Backup|Audit-Log|Tenant|Buy me a coffee|Manifest:|root|OSign-Pilot)$/i.test(s);
+const SAME = (s) => !/[a-z]{3}/i.test(s) || /^[\w.+-]+@[\w.-]+$|^[\w.-]+\.(xml|json|png|jpg|htm)$|^· /.test(s) || /^(NOBS OSign|OSign|Outlook|HTML|OK|Info|Server|Name|Status|Graph|Entra ID|Active Directory|SharePoint|Cloudflare Pages|Azure Static Web Apps|IIS|StartTLS|Microsoft Graph|Add-in|admin|Deutsch|English|Français|Italiano|Disclaimer|Mail|Logo|Backup|Audit-Log|Tenant|Buy me a coffee|Manifest:|root)$/i.test(s);
 
 test('German: no text twice in the dictionary', () => {
   const keys = [...src.slice(0, src.indexOf('  DE.html = {')).matchAll(/^ {4}'((?:[^'\\]|\\.)*)':/gm)].map((m) => m[1]);

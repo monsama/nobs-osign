@@ -47,9 +47,8 @@ async function sign(event, what) {
     if (!isMessage(item) && !(base.options && base.options.meetings)) { log('a meeting, and meetings are off.'); return; }
     const info = await composeInfo(item);
     const user = await loadUserValues(base, { interactive: false });
-    // The pilot's version for its group, the one for all otherwise; then the user's own variants.
-    const cfg = core.withVariants(core.forUser(base, user.groups), getVariants());
-    if (core.pilotOf(base) && cfg !== base) log(user.groups && user.groups.indexOf(String(base.pilot.group).toLowerCase()) >= 0 ? 'the pilot version (' + base.pilot.group + ').' : 'the version for all (not in the pilot).');
+    // With the user's own variants.
+    const cfg = core.withVariants(base, getVariants());
     if (!user.values) {
       const why = user.error ? user.error.message : 'your details could not be read.';
       log('no user details, no signature. ' + why);

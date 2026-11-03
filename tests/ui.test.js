@@ -1254,7 +1254,7 @@ test('building blocks: made once, put into a signature as a chip, published put 
   assert.deepEqual(errors, []);
 });
 
-test('all signatures side by side, and the publish dialog offers a pilot group and a later time', { skip }, async () => {
+test('all signatures side by side, and the publish dialog offers a later time', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
   if (!(await page.$('#sigList li a'))) { await page.click('#btnNew'); await page.click('[data-tpl=classic]'); }
@@ -1267,9 +1267,6 @@ test('all signatures side by side, and the publish dialog offers a pilot group a
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
   assert.equal(await page.isVisible('#pubSteps'), true);
-  await page.check('#pubPilot');
-  assert.equal(await page.isVisible('#pubPilotGroup'), true);
-  assert.equal(await page.textContent('#pubGo'), 'Publish for the pilot');
   await page.check('#pubLater');
   assert.equal(await page.textContent('#pubGo'), 'Set the time');
   assert.match(await page.inputValue('#pubAt'), /^\d{4}-\d{2}-\d{2}T06:00$/);

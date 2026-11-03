@@ -354,54 +354,24 @@ test('automatic backups: set by the local admin with a passphrase, made, kept, d
   } finally { s.srv.close(); }
 });
 
-test('a pilot: the new version for its group, the one before for everyone else; given to all or stopped; and publishing at a set time', async () => {
-  const core = require('../shared/signature-core.js');
+test('publishing at a set time: kept with its own images, the draft left alone; refused in the past; cancelled', async () => {
   const s = await server();
   try {
     const admin = s.as(await s.signIn('admin', 'admin-pw'));
-    const v1 = cfg([{ id: 'a', name: 'Old', html: '<p>Old</p>', defaultNew: true, audience: { everyone: true } }]);
-    const v2 = cfg([{ id: 'a', name: 'New', html: '<p>New</p>', defaultNew: true, audience: { everyone: true } }]);
-    assert.match((await admin('pilot/start', { configJson: v2, group: 'OSign-Pilot' })).error, /Publish once for everyone first/);
-    assert.equal((await admin('publish', { configJson: v1 })).error, undefined);
-    assert.equal((await admin('pilot/start', { configJson: v2, group: 'OSign-Pilot', message: 'try' })).error, undefined);
-    const pub = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'publish', 'signatures.json'), 'utf8'));
-    assert.equal(pub.signatures[0].name, 'Old');
-    assert.equal(core.pick(core.forUser(pub, ['osign-pilot']), {}, 'x@example.ch', 'new').name, 'New');
-    assert.equal(core.pick(core.forUser(pub, ['someone-else']), {}, 'x@example.ch', 'new').name, 'Old');
-    assert.equal((await admin('pilot/get')).pilot.group, 'OSign-Pilot');
-    // Its images: the version for all keeps its own while the pilot runs (and the draft dropped it).
     const PNG64 = PNG.toString('base64');
-    await admin('assets/upload', { name: 'old.png', data: PNG64 });
-    const withOld = cfg([{ id: 'a', name: 'Old', html: '<p>Old<img src="assets/old.png" alt="o"></p>', defaultNew: true, audience: { everyone: true } }], {});
-    const f1 = JSON.parse(withOld); f1.fields = [{ key: 'title', label: 'Title', graph: 'jobTitle' }];
-    assert.equal((await admin('pilot/end')).error, undefined);
-    assert.equal((await admin('publish', { configJson: JSON.stringify(f1) })).error, undefined);
-    await admin('assets/delete', { name: 'old.png' });
-    await admin('assets/upload', { name: 'new.png', data: PNG64 });
-    const withNew = JSON.parse(cfg([{ id: 'a', name: 'New', html: '<p>New<img src="assets/new.png" alt="n"></p>', defaultNew: true, audience: { everyone: true } }]));
-    withNew.fields = [{ key: 'title', label: 'Title', graph: 'companyName' }];
-    assert.equal((await admin('pilot/start', { configJson: JSON.stringify(withNew), group: 'OSign-Pilot' })).error, undefined);
-    const there = () => fs.readdirSync(path.join(s.dataDir, 'publish', 'assets')).sort();
-    assert.deepEqual(there(), ['new.png', 'old.png']);
-    // Stopped: everyone on the version before, with its image and its fields; the draft as it was.
-    const draftBefore = (await admin('draft/get')).configJson;
-    assert.equal((await admin('pilot/end')).error, undefined);
-    assert.deepEqual(there(), ['old.png']);
-    const back = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'publish', 'signatures.json'), 'utf8'));
-    assert.deepEqual([back.signatures[0].name, back.fields[0].graph, back.pilot], ['Old', 'jobTitle', undefined]);
-    assert.equal((await admin('draft/get')).configJson, draftBefore, 'the draft stays');
-    assert.equal((await admin('pilot/start', { configJson: JSON.stringify(withNew), group: 'OSign-Pilot' })).error, undefined);
-    assert.equal((await admin('pilot/promote')).error, undefined);
-    const all = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'publish', 'signatures.json'), 'utf8'));
-    assert.deepEqual([all.signatures[0].name, all.pilot], ['New', undefined]);
-    assert.equal((await admin('pilot/get')).pilot, null);
-    assert.match((await admin('pilot/end')).error, /No pilot/);
-    // At a set time: kept, shown, cancelled; in the past refused; run when it is due.
-    assert.match((await admin('schedule/set', { configJson: v1, at: new Date(Date.now() - 1000).toISOString() })).error, /future/);
+    await admin('assets/upload', { name: 'logo.png', data: PNG64 });
+    const later = cfg([{ id: 'a', name: 'Later', html: '<p>Later<img src="assets/logo.png" alt="l"></p>', defaultNew: true, audience: { everyone: true } }]);
+    assert.match((await admin('schedule/set', { configJson: later, at: new Date(Date.now() - 1000).toISOString() })).error, /future/);
+    assert.match((await admin('schedule/set', { configJson: later, at: new Date(Date.now() + 100 * 86400000).toISOString() })).error, /90 days/);
     const at = new Date(Date.now() + 3600000).toISOString();
-    assert.equal((await admin('schedule/set', { configJson: v1, at, message: 'later' })).schedule.at, at);
+    assert.equal((await admin('schedule/set', { configJson: later, at, message: 'later' })).schedule.at, at);
     assert.equal((await admin('schedule/get')).schedule.message, 'later');
+    // Its image as it was: kept apart, whatever the draft does after.
+    assert.deepEqual(fs.readdirSync(path.join(s.dataDir, 'schedule-assets')), ['logo.png']);
+    await admin('assets/delete', { name: 'logo.png' });
+    assert.deepEqual(fs.readdirSync(path.join(s.dataDir, 'schedule-assets')), ['logo.png']);
     assert.equal((await admin('schedule/cancel')).schedule, null);
+    assert.equal(fs.existsSync(path.join(s.dataDir, 'schedule-assets')), false);
   } finally { s.srv.close(); }
 });
 

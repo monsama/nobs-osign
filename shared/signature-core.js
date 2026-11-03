@@ -458,51 +458,14 @@
   }
 
   // The group names the configuration limits signatures to: the add-in only needs to know these.
-  // A pilot's group, and its signatures' groups, too.
   function groupsUsed(config) {
     var out = [];
-    var add = function (c) {
-      ((c && c.signatures) || []).forEach(function (s) {
-        lowerList((s.audience || {}).groups).forEach(function (g) { if (out.indexOf(g) < 0) out.push(g); });
-      });
-    };
-    add(config);
-    var p = pilotOf(config);
-    if (p) { lowerList([p.group]).forEach(function (g) { if (out.indexOf(g) < 0) out.push(g); }); add(p.config); }
+    ((config && config.signatures) || []).forEach(function (s) {
+      lowerList((s.audience || {}).groups).forEach(function (g) { if (out.indexOf(g) < 0) out.push(g); });
+    });
     return out;
   }
 
-  // A pilot: a new version published first for one group ({ group, at, by, config }), the version
-  // before for everyone else, until it is given to all. null when there is none (or it is broken).
-  function pilotOf(config) {
-    var p = config && config.pilot;
-    return p && typeof p === 'object' && String(p.group || '').trim() && p.config && typeof p.config === 'object' && Array.isArray(p.config.signatures) ? p : null;
-  }
-  // The configuration this person gets: the pilot's when they are in its group (their groups known),
-  // the one for everyone otherwise. Both read the same fields (union), so one read of the values serves.
-  function forUser(config, groups) {
-    var p = pilotOf(config);
-    if (!p) return config;
-    var mine = lowerList(groups), inPilot = groups && mine.indexOf(String(p.group).trim().toLowerCase()) >= 0;
-    var out = Object.assign({}, inPilot ? p.config : config);
-    delete out.pilot;
-    return out;
-  }
-  // The fields of both, for reading the values once (the pilot's win where both have one).
-  function withPilotFields(config) {
-    var p = pilotOf(config);
-    if (!p) return config;
-    var byKey = {}, list = [];
-    (config.fields || []).concat(p.config.fields || []).forEach(function (f) {
-      if (!f || !f.key) return;
-      if (!(f.key in byKey)) list.push(f.key);
-      byKey[f.key] = f;
-    });
-    var fields = list.map(function (k) { return byKey[k]; });
-    var c = Object.assign({}, config, { fields: fields });
-    c.pilot = Object.assign({}, p, { config: Object.assign({}, p.config, { fields: fields }) });
-    return c;
-  }
 
   // The language of a person (or a signature) as two letters: de-CH, de_CH and DE are 'de'.
   function langOf(values) { return String((values || {}).preferredLanguage || '').trim().split(/[-_]/)[0].toLowerCase(); }
@@ -729,9 +692,6 @@
     placeholdersIn: placeholdersIn,
     blocksIn: blocksIn,
     compiledMatches: compiledMatches,
-    pilotOf: pilotOf,
-    forUser: forUser,
-    withPilotFields: withPilotFields,
     langOf: langOf,
     expandBlocks: expandBlocks,
     escapeHtml: escapeHtml,
