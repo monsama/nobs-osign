@@ -890,8 +890,8 @@ dialog:has(#tplList) { width: min(980px, 94vw); }
 .find-btn .find-label { flex: 1; text-align: left; }
 .find-btn kbd { font: 11px/1 inherit; padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
 @media (max-width: 1600px) { .find-btn { min-width: 0; padding: 0 8px; } .find-btn .find-label, .find-btn kbd { display: none; } }
-dialog.find { width: min(620px, 94vw); margin-top: 12vh; padding: 0; }
-dialog.find .dlg { padding: 0; display: flex; flex-direction: column; max-height: 66vh; }
+dialog.find { width: min(620px, 94vw); margin: 0; padding: 0; position: fixed; inset: auto; box-shadow: 0 16px 40px rgba(0,0,0,.28); }
+dialog.find .dlg { padding: 0; display: flex; flex-direction: column; max-height: min(66vh, var(--find-max, 66vh)); }
 #findInput { height: 48px; border: 0 !important; border-bottom: 1px solid var(--line) !important; border-radius: 0 !important; padding: 0 18px !important; font-size: 15px; box-shadow: none !important; background: transparent; }
 .find-list { list-style: none; margin: 0; padding: 6px; overflow: auto; }
 .find-list li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--r-m); cursor: pointer; }
@@ -1099,3 +1099,7 @@ table.users td.none { color: var(--warn); }
 .sig-props .pill:last-of-type { border-radius: 0 var(--r-s) var(--r-s) 0; }
 @media (max-width: 700px) { .sig-props .pill, .sig-props .pill:first-of-type, .sig-props .pill:last-of-type { border-radius: var(--r-s); } }
 .sig-list .badges { align-items: flex-start; } .sig-list .badge { line-height: 16px; }
+
+/* The coffee: a square button, the cup in its middle (its handle makes it look off by itself). */
+a#coffeeBtn.btnlike.icon { width: var(--h); padding: 0; justify-content: center; }
+#coffeeBtn svg { margin: 0; transform: translateX(-0.5px); }
