@@ -1229,3 +1229,8 @@ dialog.fit { width: min(1080px, 96vw); }
    both sit on one line whatever font the system has. */
 .top .who { display: inline-flex; align-items: center; height: var(--h); line-height: 1; }
 .top .who[hidden] { display: none; }
+/* Less moving about: a signature's line of labels is there also before it has one (the first
+   «Changed» while typing does not push the list down); the draft's state, whose text changes most,
+   last in its group, so nothing after it shifts. */
+.sig-list .badges { min-height: 18px; }
+.top .status-wrap { margin-left: 4px; }

@@ -220,7 +220,9 @@
     let c = null;
     try { const r = await api('published/get'); c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { c = null; }
     S.pub = c && Array.isArray(c.signatures) ? new Map(c.signatures.map((x) => [x.id, x])) : null;
-    renderList(); revertShow();
+    // As the editor reads it, for comparing the rest (fields, building blocks, options).
+    S.pubCfg = c ? normalize(JSON.parse(JSON.stringify(c))) : null;
+    renderList(); revertShow(); renderStatus();
   }
   // What a signature is made of, as one text: its HTML as written and the rules who gets it.
   const sigKey = (s, html) => JSON.stringify([s.name || '', (html || '').replace(/\s+/g, ' ').trim(), !!s.defaultNew, !!s.defaultReply, s.validFrom || '', s.validUntil || '',
@@ -245,6 +247,20 @@
     if ((s.language || '') !== (p.language || '')) out.push(t('language'));
     if ((s.removeEmptyLines !== false) !== (p.removeEmptyLines !== false)) out.push(t('empty lines'));
     return out;
+  }
+  // A part of the configuration other than the signatures, against what is published: both as the
+  // editor reads them, objects whatever the order of their keys, HTML as it shows.
+  const stableJson = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => { if (x[key] !== undefined && x[key] !== '') o[key] = x[key]; return o; }, {}) : x));
+  const CFG_VIEW = { blocks: (c) => (c.blocks || []).map((b) => [b.key, b.name, sanitize(b.html || '').replace(/\s+/g, ' ').trim()]), fields: (c) => c.fields || [], options: (c) => c.options || {} };
+  function cfgPartChanged(k, pubN) { return !!pubN && stableJson(CFG_VIEW[k](S.config || {})) !== stableJson(CFG_VIEW[k](pubN)); }
+  // The draft the same in content as what is published (whatever way it is saved): then nothing
+  // waits to go out, also after undoing a change.
+  function sameAsPublished() {
+    if (!S.pub || !S.pubCfg || !S.config) return false;
+    const sigs = S.config.signatures || [];
+    if (sigs.length !== S.pub.size || sigs.map((s) => s.id).join() !== [...S.pub.keys()].join()) return false;
+    if (sigs.some((s) => sigState(s) !== 'same')) return false;
+    return !['fields', 'blocks', 'options'].some((k) => cfgPartChanged(k, S.pubCfg));
   }
   async function openChanges() {
     flushSource();
@@ -277,9 +293,7 @@
     // reads them (a version published by an older editor has other defaults, no names on its
     // building blocks, its options in another order), the HTML as it shows: only a real change counts.
     const pubN = pubCfg ? normalize(JSON.parse(JSON.stringify(pubCfg))) : null;
-    const stable = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => { if (x[key] !== undefined && x[key] !== '') o[key] = x[key]; return o; }, {}) : x));
-    const view = { blocks: (c) => (c.blocks || []).map((b) => [b.key, b.name, sanitize(b.html || '').replace(/\s+/g, ' ').trim()]), fields: (c) => c.fields || [], options: (c) => c.options || {} };
-    const part = (k) => !!pubN && stable(view[k](S.config || {})) !== stable(view[k](pubN));
+    const part = (k) => cfgPartChanged(k, pubN);
     const other = [part('fields') && t('Fields'), part('blocks') && t('Building blocks'), part('options') && t('Add-in')].filter(Boolean);
     if (other.length) rows.push(row('chg', other.join(', '), t('Changed too: they go out with the next publish.')));
     // Nothing to show while the status says otherwise: the same in content, saved another way.

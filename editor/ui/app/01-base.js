@@ -140,7 +140,9 @@
     else { d.textContent = S.savedAt ? t('Draft saved {0}', time(S.savedAt)) : t('Draft saved'); d.className = 'status clean'; }
     d.title = t('Every change is saved on the server by itself (Ctrl+S: at once). Outlook gets it only when you publish.');
     const when = S.publishedAt ? new Date(S.publishedAt).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : '';
-    if (S.dirty) {
+    // The server compares the saved text; the same content saved another way (by a newer version,
+    // or a change undone) is no change for Outlook.
+    if (S.dirty && !(S.publishedAt && sameAsPublished())) {
       p.textContent = S.publishedAt ? t('Unpublished changes') : t('Not published yet'); p.className = 'status pub dirty'; p.disabled = false;
       p.title = (S.publishedAt ? t('Outlook still uses what was published {0}.', when) : t('Outlook gets no signatures from here yet.')) + ' ' + t('Click to publish.');
     } else {
