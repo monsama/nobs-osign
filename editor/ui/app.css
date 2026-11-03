@@ -1092,3 +1092,10 @@ table.users td.none { color: var(--warn); }
 .badge { white-space: nowrap; }
 .sig-list .badges { flex-wrap: wrap; row-gap: 3px; }
 .statusbar .sb-action:disabled { opacity: 1; }
+
+/* Labels, chips and pills: square-cornered like the buttons' smaller sister (one radius for all). */
+.wiz-nav button, .tok, .sig-props > details > summary, .statusbar .sb-action { border-radius: var(--r-s); }
+.sig-props .pill:first-of-type { border-radius: var(--r-s) 0 0 var(--r-s); }
+.sig-props .pill:last-of-type { border-radius: 0 var(--r-s) var(--r-s) 0; }
+@media (max-width: 700px) { .sig-props .pill, .sig-props .pill:first-of-type, .sig-props .pill:last-of-type { border-radius: var(--r-s); } }
+.sig-list .badges { align-items: flex-start; } .sig-list .badge { line-height: 16px; }
