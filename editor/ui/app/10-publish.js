@@ -1,9 +1,54 @@
   // ---------------------------------------------------------------------------------------------
   // Publish and load
   // ---------------------------------------------------------------------------------------------
+  // What a recipient would see go wrong: images too large, without a text when images are blocked,
+  // too wide, unencrypted links, a signature too heavy, a dark logo gone in dark mode.
+  const dark = {};
+  function signatureChecks(c) {
+    const out = [], names = (f) => [...new Set(c.signatures.filter(f).map((s) => s.name))];
+    const imgs = (s) => [...(s.html || '').matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+    const attr = (tag, a) => (new RegExp('\\s' + a + '\\s*=\\s*["\']?([^"\'\\s>]*)', 'i').exec(tag) || [])[1] || '';
+    const size = (n) => { const a = S.assets.find((x) => x.name === n); return a ? a.size || 0 : 0; };
+    const big = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && size(n) > 100 * 1024)))];
+    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', '))]);
+    const noAlt = names((s) => imgs(s).some((i) => !/photos\//.test(attr(i, 'src')) && !/\salt\s*=\s*["'][^"']+["']/i.test(i)));
+    if (noAlt.length) out.push(['warn', t('Images without a text for when images are blocked (alt): {0}. Image bar → alt text, e.g. the company name for the logo.', noAlt.join(', '))]);
+    const tooWide = (s) => imgs(s).some((i) => Number(attr(i, 'width')) > 600) ||
+      [...(s.html || '').replace(/<img\b[^>]*>/gi, '').matchAll(/[\s;"']width\s*[=:]\s*["']?(\d+)(?:px)?(?![\d%])/gi)].some((m) => Number(m[1]) > 600);
+    const wide = names(tooWide);
+    if (wide.length) out.push(['warn', t('Wider than 600 pixels (too wide on phones): {0}.', wide.join(', '))]);
+    const http = names((s) => /href\s*=\s*["']http:\/\//i.test(s.html || '') || /src\s*=\s*["']http:\/\//i.test(s.html || ''));
+    if (http.length) out.push(['warn', t('Links or images with http:// (not encrypted, some mail programs warn): {0}. Use https://.', http.join(', '))]);
+    const heavy = c.signatures.map((s) => ({ s, kb: Math.round(((s.html || '').length + [...new Set(imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter(Boolean))].reduce((n, x) => n + size(x), 0)) / 1024) })).filter((x) => x.kb > 250);
+    if (heavy.length) out.push(['warn', t('Heavy signatures (text and images over 250 KB): {0}.', heavy.map((x) => x.s.name + ' (' + x.kb + ' KB)').join(', '))]);
+    const gone = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && dark[n] === true)))];
+    if (gone.length) out.push(['warn', t('Dark image on a transparent background, hard to see in dark mode: {0}. A light edge, or a background of its own, helps.', gone.join(', '))]);
+    return out;
+  }
+  // Whether an image is dark lines on nothing (a logo that disappears on a dark background):
+  // looked at once, in the background; the check above says it the next time it is shown.
+  function darkCheck(name) {
+    if (name in dark) return; dark[name] = null;
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = Math.min(120, img.naturalWidth), h = Math.max(1, Math.round(img.naturalHeight * w / Math.max(1, img.naturalWidth)));
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const g = cv.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+        const d = g.getImageData(0, 0, w, h).data;
+        let clear = 0, seen = 0, lum = 0;
+        for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 40) { clear++; continue; } seen++; lum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; }
+        dark[name] = clear > d.length / 4 * 0.2 && seen > 0 && lum / seen < 70;
+      } catch (e) { dark[name] = false; }
+    };
+    img.onerror = () => { dark[name] = false; };
+    img.src = '/assets/' + encodeURIComponent(name);
+  }
   function publishChecks() {
-    const c = S.config, out = [];
-    const errs = core.validate(prepared());
+    (S.assets || []).forEach((a) => { if (/\.png$/i.test(a.name)) darkCheck(a.name); });
+    // As it goes out: the building blocks put in.
+    const c = prepared(), out = [];
+    const errs = core.validate(c);
     errs.forEach((e) => out.push(['bad', t(e)]));
     if (!c.signatures.length) out.push(['bad', t('There is no signature.')]);
     const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length && s.audience.everyone !== false);
@@ -25,6 +70,8 @@
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     if (unknown.length) out.push(['warn', t('Unknown placeholders, left as typed: {0}', unknown.map((k) => '@@' + k).join(', '))]);
+    const noBlock = [...new Set(c.signatures.flatMap((s) => core.blocksIn(s.html)))];
+    if (noBlock.length) out.push(['warn', t('Unknown building blocks, left as typed: {0}', noBlock.map((k) => '{{' + k + '}}').join(', '))]);
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
     if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map(fieldName).join(', '))]);
     if (core.usesAdExport(c)) {
@@ -35,6 +82,12 @@
     }
     const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
     if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', '))]);
+    signatureChecks(c).forEach((x) => out.push(x));
+    // Who would get nothing, as read from AD under Users.
+    if (S.snap && S.snap.users && S.snap.users.length) {
+      const g = whoGets(S.snap.users), none = S.snap.users.filter((u) => !g.get(u).new).length;
+      if (none) out.push(['warn', t('{0} of the {1} users read from AD get no signature for new mail (Users → Only without a signature).', none, S.snap.users.length)]);
+    }
     if (!out.some((x) => x[0] !== 'good')) out.push(['good', t('{0} signature(s), ready.', c.signatures.length)]);
     return out;
   }
@@ -64,7 +117,7 @@
     const view = (v) => () => document.querySelector('.nav-list a[data-view="' + v + '"]').click();
     const items = [];
     S.config.signatures.forEach((s) => items.push({ kind: t('Signature'), label: s.name || t('(no name)'), go: () => openSig(s.id) }));
-    [[t('Fields'), view('fields')], [t('Add-in'), view('options')], core.usesAdExport(S.config) ? [t('Users'), view('users')] : null, [t('Photos'), view('photos')],
+    [[t('Fields'), view('fields')], [t('Building blocks'), view('blocks')], [t('Add-in'), view('options')], core.usesAdExport(S.config) ? [t('Users'), view('users')] : null, [t('Photos'), view('photos')],
       [t('History'), () => $('navHistory').click()], [t('Settings'), () => $('btnSettings').click()], [t('New signature'), () => $('btnNew').click()],
       [t('Import templates'), () => $('btnImportOpen').click()], [t('Publish…'), () => $('btnPublish').click()], [t('Keyboard shortcuts'), () => $('dlgKeys').showModal()]]
       .filter(Boolean).forEach(([label, go]) => items.push({ kind: t('Go to'), label, go }));
@@ -250,8 +303,46 @@
   $('setBackup').addEventListener('click', () => {
     for (const id of ['bakPass', 'bakPass2', 'bakRestorePass', 'bakFile']) $(id).value = '';
     fileName('bakFile');
-    for (const id of ['bakErr', 'bakExportOk', 'bakRestoreOk']) $(id).textContent = '';
+    for (const id of ['bakErr', 'bakExportOk', 'bakRestoreOk', 'abOk']) $(id).textContent = '';
+    $('abPass').value = '';
     $('dlgBackup').showModal();
+    abLoad();
+  });
+  // Automatic backups (server/autobackup.js).
+  function abShow(r) {
+    $('abAt').value = r.at || ''; $('abKeep').value = r.keep || 30;
+    $('abWhere').textContent = t('Locked with a passphrase of yours and kept in {0}. Last: {1}.', r.where,
+      r.last ? new Date(r.last.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' ' + (r.last.ok ? '✓' : '✕ ' + t(r.last.error || '')) : t('none yet'));
+    $('abPassNote').textContent = r.passLost ? t('The one set cannot be opened any more (another server key): set it again.') : r.passSet ? t('(set; type a new one to change it)') : t('(at least 12 characters; needed to open them)');
+    $('abRun').disabled = !r.passSet;
+    $('abList').replaceChildren(...(r.backups || []).slice(0, 10).map((b) => el('li', null,
+      el('span', null, b.name), el('small', { class: 'where' }, Math.round(b.size / 1024) + ' KB'),
+      el('button', { type: 'button', class: 'small ghost', onclick: () => abDownload(b.name) }, t('Download')))));
+  }
+  async function abLoad() {
+    try { abShow(await api('backup/auto/get')); } catch (e) { $('abWhere').textContent = t(e.message); }
+  }
+  async function abDownload(name) {
+    try {
+      const r = await api('backup/auto/download', { name });
+      const bytes = Uint8Array.from(atob(r.data), (c) => c.charCodeAt(0));
+      const a = el('a', { href: URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' })), download: r.name });
+      document.body.append(a); a.click(); a.remove();
+    } catch (e) { $('bakErr').textContent = t(e.message); }
+  }
+  $('abSave').addEventListener('click', async () => {
+    $('bakErr').textContent = ''; $('abOk').textContent = '';
+    try {
+      const d = { at: $('abAt').value, keep: Number($('abKeep').value) };
+      if ($('abPass').value) d.passphrase = $('abPass').value;
+      abShow(await api('backup/auto/save', d)); $('abPass').value = '';
+      $('abOk').textContent = d.at ? t('Saved: every day at {0}.', d.at) : t('Saved: off.');
+    } catch (e) { $('bakErr').textContent = t(e.message); }
+  });
+  $('abRun').addEventListener('click', async () => {
+    $('bakErr').textContent = ''; $('abOk').textContent = t('Making the backup…'); $('abRun').disabled = true;
+    try { abShow(await api('backup/auto/run')); $('abOk').textContent = t('Made.'); }
+    catch (e) { $('abOk').textContent = ''; $('bakErr').textContent = t(e.message); $('abRun').disabled = false; }
   });
   $('bakExport').addEventListener('click', async () => {
     $('bakErr').textContent = ''; $('bakExportOk').textContent = '';

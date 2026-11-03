@@ -68,7 +68,9 @@
     { key: 'co', label: 'Land', ad: 'co', graph: 'country', sample: 'Schweiz' },
     { key: 'c', label: 'Land (Kürzel)', ad: 'c', graph: '', sample: 'CH' },
     { key: 'wWWHomePage', label: 'Webseite', ad: 'wWWHomePage', graph: '', sample: 'www.contoso.ch' },
-    { key: 'userPrincipalName', label: 'Anmeldename', ad: 'userPrincipalName', graph: 'userPrincipalName', sample: 'anna.muster@contoso.ch' }
+    { key: 'userPrincipalName', label: 'Anmeldename', ad: 'userPrincipalName', graph: 'userPrincipalName', sample: 'anna.muster@contoso.ch' },
+    // The person's language (de-CH, en-US …): picks a signature's language variant.
+    { key: 'preferredLanguage', label: 'Sprache', ad: 'preferredLanguage', graph: 'preferredLanguage', sample: 'de-CH' }
   ];
   // The field for a placeholder no field has yet: as it is known, or one of its own name (read
   // from the AD attribute of that name, which the server reads only if it is allowed).
@@ -273,6 +275,26 @@
   // ---------------------------------------------------------------------------------------------
   var IF_BLOCK = /<!--sig-if:([A-Za-z0-9_,]*)-->((?:(?!<!--sig-if:)[\s\S])*?)<!--\/sig-if-->/;
 
+  // Building blocks (a disclaimer, a banner, the address): kept once in config.blocks as
+  // { key, name, html } and put into a signature as {{key}}, on a line of its own or in the text.
+  // Expanded before a signature is compiled; a block's own {{…}} are not (no loops).
+  var BLOCK_RE = /\{\{([A-Za-z][A-Za-z0-9_-]{0,39})\}\}/g;
+  function blocksIn(html) {
+    var out = [], m;
+    BLOCK_RE.lastIndex = 0;
+    while ((m = BLOCK_RE.exec(String(html || '')))) if (out.indexOf(m[1]) < 0) out.push(m[1]);
+    return out;
+  }
+  function expandBlocks(html, blocks) {
+    var map = {};
+    (blocks || []).forEach(function (b) { if (b && b.key) map[String(b.key).toLowerCase()] = String(b.html || ''); });
+    var get = function (k) { return Object.prototype.hasOwnProperty.call(map, k.toLowerCase()) ? map[k.toLowerCase()] : null; };
+    var out = String(html || '');
+    // On a line of its own (a paragraph or div holding only the block): the block in its place.
+    out = out.replace(/<(p|div)\b[^>]*>\s*\{\{([A-Za-z][A-Za-z0-9_-]{0,39})\}\}\s*<\/\1>/gi, function (all, tag, k) { var b = get(k); return b === null ? all : b; });
+    return out.replace(BLOCK_RE, function (all, k) { var b = get(k); return b === null ? all : b; });
+  }
+
   function isEmpty(v) { return v === undefined || v === null || String(v).trim() === ''; }
 
   // opts.assetBase: where the images live. Templates keep them as "assets/logo.png"; the add-in
@@ -421,6 +443,9 @@
     return out;
   }
 
+  // The language of a person (or a signature) as two letters: de-CH, de_CH and DE are 'de'.
+  function langOf(values) { return String((values || {}).preferredLanguage || '').trim().slice(0, 2).toLowerCase(); }
+
   // kind: 'new' or 'reply'. prefs: what the user picked in the add-in, { new: id|'none', reply: id|'none' }.
   // Returns the signature, or null for none.
   function pick(config, values, from, kind, prefs, groups, now) {
@@ -431,11 +456,14 @@
     if (want) { for (var i = 0; i < list.length; i++) if (list[i].id === want) return list[i]; }
     // Of the defaults open to the user, a campaign running now wins; then the one meant for fewer
     // people: a default for one sender domain, group or department beats the default for everyone.
-    var flag = kind === 'reply' ? 'defaultReply' : 'defaultNew', best = null, bestScore = -1;
+    // A signature in a language (its language variant): the one in the person's own language wins;
+    // one in another language only when there is no other default for them.
+    var flag = kind === 'reply' ? 'defaultReply' : 'defaultNew', best = null, bestScore = -Infinity, lang = langOf(values);
     for (var j = 0; j < list.length; j++) {
       if (!list[j][flag]) continue;
-      var a = list[j].audience || {};
-      var score = (isCampaign(list[j]) ? 8 : 0) + (lowerList(a.domains).length ? 4 : 0) + (lowerList(a.groups).length ? 2 : 0) + (lowerList(a.departments).length ? 1 : 0);
+      var a = list[j].audience || {}, sl = langOf({ preferredLanguage: list[j].language });
+      var score = (sl ? (sl === lang ? 16 : -100) : 0) +
+        (isCampaign(list[j]) ? 8 : 0) + (lowerList(a.domains).length ? 4 : 0) + (lowerList(a.groups).length ? 2 : 0) + (lowerList(a.departments).length ? 1 : 0);
       if (score > bestScore) { best = list[j]; bestScore = score; }
     }
     return best;
@@ -584,6 +612,12 @@
       else if (keys[f.key]) errors.push('Field @@' + f.key + ' is there twice.');
       else keys[f.key] = 1;
     });
+    var bkeys = {};
+    (config.blocks || []).forEach(function (b, i) {
+      if (!b || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(b.key || '')) errors.push('Building block ' + (i + 1) + ': its name in a signature ({{name}}) holds letters, digits, - and _, starting with a letter.');
+      else if (bkeys[String(b.key).toLowerCase()]) errors.push('The building block {{' + b.key + '}} is there twice.');
+      else bkeys[String(b.key).toLowerCase()] = 1;
+    });
     var ids = {};
     (config.signatures || []).forEach(function (s, i) {
       if (!s || !/^[A-Za-z0-9_-]{1,64}$/.test(s.id || '')) errors.push('Signature ' + (i + 1) + ' has no valid id.');
@@ -632,6 +666,9 @@
     defaultConfig: defaultConfig,
     newSignature: newSignature,
     placeholdersIn: placeholdersIn,
+    blocksIn: blocksIn,
+    langOf: langOf,
+    expandBlocks: expandBlocks,
     escapeHtml: escapeHtml,
     compile: compile,
     render: render,

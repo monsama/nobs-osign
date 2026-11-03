@@ -270,9 +270,14 @@ test('users from AD: read, look, and publish exactly that', { skip }, async () =
   assert.match(await page.textContent('#usersInfo'), /Not read yet/);
   await page.click('#btnAdRead');
   await page.waitForFunction(() => /Read .*2 users - 2 new/.test(document.querySelector('#usersInfo').textContent));
+  // Who gets what: the signature for new mail and for replies, per person.
+  assert.match(await page.textContent('#usersHead'), /New mail.*Replies/);
+  assert.match(await page.textContent('#usersInfo'), /get no signature for new mail|Everyone gets a signature/);
+  await page.check('#usersNone'); await page.uncheck('#usersNone'); await page.check('#usersChanges');
   const rows = await page.$$eval('#usersRows tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
   // The last column: groups (an earlier test made a signature for groups).
-  assert.deepEqual(rows[0], ['new', 'Anna Muster', 'anna@example.com', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
+  // Then the signature for new mail and for replies (none here: the one there is for a group she is not in).
+  assert.deepEqual(rows[0], ['new', 'Anna Muster', 'anna@example.com', 'none', 'none', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
   assert.ok(!fs.existsSync(path.join(folder, 'users')), 'reading writes nothing');
 
   await page.click('#btnPublish');
@@ -1189,4 +1194,50 @@ test('Ctrl+K: a search over signatures, views and fields goes where it is picked
   await page.fill('#findInput', 'zzzz-nothing');
   await page.waitForSelector('#findList .empty-state');
   await page.keyboard.press('Escape');
+});
+
+test('building blocks: made once, put into a signature as a chip, published put in (and kept as {{key}} in the draft); the checks and the language', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('.nav-list a[data-view=blocks]');
+  await page.waitForSelector('#viewBlocks .empty-state');
+  await page.click('#btnAddBlock');
+  await page.waitForSelector('#blockList .block-card[data-block=disclaimer]');
+  await page.fill('#blockList .block-card textarea', '<p>Confidential: @@mail</p>');
+  // Into a new signature, from the field list's building blocks.
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.waitForSelector('#viewSig:not([hidden])');
+  await page.selectOption('#viewSig .field-pick', 'block:disclaimer');
+  await page.waitForFunction(() => document.querySelector('#design').contentDocument.querySelector('span.osb[data-b=disclaimer]'));
+  await page.waitForFunction(() => /Confidential: anna\.muster@example\.com/.test(document.querySelector('#preview').srcdoc));
+  // A language: the field it is read from comes with it.
+  await page.click('#sigMore summary');
+  await page.selectOption('#sigLang', 'en');
+  await page.keyboard.press('Escape');
+  assert.match(await page.textContent('#sigList li a.active'), /EN/);
+  // Before publishing: an image too wide and a link without https are said.
+  let c, mine;
+  for (let i = 0; i < 40 && !mine; i++) {
+    c = JSON.parse((await api('draft/get')).configJson || '{"signatures":[]}');
+    mine = c.signatures.find((x) => x.language === 'en' && /disclaimer/.test(x.source || ''));
+    if (!mine) await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.ok(mine, 'saved');
+  assert.match(mine.source, /\{\{disclaimer\}\}/, 'the draft keeps the block as written');
+  assert.match(mine.html, /Confidential: @@mail/, 'what Outlook gets has it put in');
+  assert.ok(c.fields.some((f) => f.key === 'preferredLanguage'));
+  // Download as .htm: the signature with these values.
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#pvSave')]);
+  const body = fs.readFileSync(await dl.path(), 'utf8');
+  assert.match(body, /Confidential: anna\.muster@example\.com/);
+  // The checks: an http:// link.
+  await page.evaluate(() => { const d = document.querySelector('#design').contentDocument; const p = d.createElement('p'); p.innerHTML = '<a href="http://example.com">x</a>'; d.body.append(p); d.body.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  assert.match(await page.textContent('#pubChecks'), /http:\/\//);
+  await page.click('#dlgPublish button[value=cancel]');
+  await page.click('#btnDel'); await page.click('#askOk');
+  await page.click('.nav-list a[data-view=blocks]');
+  await page.click('#blockList button[aria-label^="Remove the building block"]');
+  assert.deepEqual(errors, []);
 });

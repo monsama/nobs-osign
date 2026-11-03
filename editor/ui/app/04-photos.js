@@ -7,7 +7,7 @@
     for (const s of (S.config && S.config.signatures) || []) {
       const re = /<img[^>]+src="photos\/@@([A-Za-z][A-Za-z0-9_]*)\.(png|jpe?g|gif)"[^>]*>/gi;
       let m;
-      while ((m = re.exec(s.html || ''))) {
+      while ((m = re.exec(sigFull(s)))) {
         // Its shape, from the size it is shown at: the first one shown at a width and a height
         // (one with a width only keeps the photo's own shape).
         const w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0, h = Number((/\sheight\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0;

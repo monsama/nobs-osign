@@ -303,3 +303,53 @@ test('the web certificate the proxy serves: names, issuer, end, and whether it i
     assert.match((await a('server/tls', { host: 'osign.example.ch' })).error, /could not be asked|did not answer/);
   } finally { plain.srv.close(); withCa.srv.close(); proxy.close(); }
 });
+
+test('roles: with a publishing group, the others edit and ask for approval; only a publisher approves', async () => {
+  const roles = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [], 'OSign-Publish': [] }, people: {
+    edda: { pw: 'edda-pw', name: 'Edda Editor', mail: 'edda@example.ch', groups: ['NOBS-OSign-Admins'] },
+    paul: { pw: 'paul-pw', name: 'Paul Publisher', mail: 'paul@example.ch', groups: ['NOBS-OSign-Admins', 'OSign-Publish'] }
+  } });
+  const url = await roles.listen();
+  const s = await server({ OSIGN_LDAP_URL: url, OSIGN_LDAP_PUBLISH_GROUP: 'OSign-Publish' });
+  try {
+    const edda = s.as(await s.signIn('edda', 'edda-pw')), paul = s.as(await s.signIn('paul', 'paul-pw'));
+    const c = cfg([{ id: 'a', name: 'A', html: '<p>A</p>', defaultNew: true, audience: { everyone: true } }]);
+    assert.equal((await edda('info')).user.publisher, false);
+    assert.equal((await edda('info')).features.requireApproval, true, 'for her, publishing is asking');
+    assert.equal((await paul('info')).features.requireApproval, false);
+    assert.match((await edda('publish', { configJson: c })).error, /publishing group/);
+    assert.equal((await edda('approval/request', { configJson: c, message: 'bitte' })).pending.mine, true);
+    const asked = await paul('approval/get');
+    assert.equal(asked.pending.mayApprove, true);
+    const r = await paul('approval/approve', { hash: asked.pending.hash });
+    assert.equal(r.error, undefined, r.error);
+    assert.equal(r.changed, true);
+    // Edda cannot approve what Paul asks for (he would publish himself anyway).
+    assert.equal((await paul('publish', { configJson: c })).error, undefined);
+  } finally { s.srv.close(); roles.close(); }
+});
+
+test('automatic backups: set by the local admin with a passphrase, made, kept, downloaded and opened', async () => {
+  const { openBackup } = require('../server/backup');
+  const s = await server();
+  try {
+    const admin = s.as(await s.signIn('admin', 'admin-pw')), anna = s.as(await s.signIn('anna', 'anna-pw'));
+    assert.match((await anna('backup/auto/get')).error, /local account admin/);
+    assert.match((await admin('backup/auto/save', { at: '02:30', keep: 7 })).error, /passphrase/);
+    assert.match((await admin('backup/auto/save', { at: '25:00', keep: 7, passphrase: 'a-long-passphrase' })).error, /time of day/);
+    const set = await admin('backup/auto/save', { at: '02:30', keep: 7, passphrase: 'a-long-passphrase' });
+    assert.deepEqual([set.on, set.at, set.keep, set.passSet], [true, '02:30', 7, true]);
+    // The passphrase is kept sealed, never as typed.
+    assert.doesNotMatch(fs.readFileSync(path.join(s.dataDir, 'autobackup.json'), 'utf8'), /a-long-passphrase/);
+    const made = await admin('backup/auto/run');
+    assert.equal(made.backups.length, 1);
+    assert.equal(made.last.ok, true);
+    const file = await admin('backup/auto/download', { name: made.backups[0].name });
+    const b = openBackup(file.data, 'a-long-passphrase');
+    assert.equal(b.error, undefined, b.error);
+    // Neither the backups nor their settings go into a backup.
+    assert.ok(!Object.keys(b.files).some((f) => f.startsWith('backups/') || f === 'autobackup.json'));
+    assert.match((await admin('backup/auto/download', { name: '../settings.json' })).error, /no such backup/);
+    assert.equal((await admin('backup/auto/save', { at: '', keep: 7 })).on, false);
+  } finally { s.srv.close(); }
+});

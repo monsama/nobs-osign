@@ -10,9 +10,40 @@
     return v;
   }
 
+  // The signature as the preview shows it (its values, the building blocks put in), with its images
+  // inside (data: addresses), as one file: to try it in a mail program without publishing.
+  async function exportHtml() {
+    const s = sig(); if (!s) return null;
+    const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const doc = new DOMParser().parseFromString('<!doctype html><body>' + html + '</body>', 'text/html');
+    await Promise.all([...doc.querySelectorAll('img[src^="/"]')].map(async (img) => {
+      try {
+        const r = await fetch(img.getAttribute('src'), { credentials: 'same-origin' });
+        if (!r.ok) { img.remove(); return; }
+        const b = await r.blob();
+        img.src = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); });
+      } catch (e) { img.remove(); }
+    }));
+    return { body: doc.body.innerHTML, name: (s.name || 'signature').replace(/[^\w\- ]+/g, '').trim() || 'signature' };
+  }
+  $('pvCopy').addEventListener('click', async () => {
+    const x = await exportHtml(); if (!x) return;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([x.body], { type: 'text/html' }), 'text/plain': new Blob([core.htmlToText(x.body)], { type: 'text/plain' }) })]);
+      toast(t('Copied, with these values: paste it into a mail or into Outlook\'s signature settings.'));
+    } catch (e) { toast(t('The browser did not let it be copied: use Download instead.'), true); }
+  });
+  $('pvSave').addEventListener('click', async () => {
+    const x = await exportHtml(); if (!x) return;
+    const file = '<!doctype html><html><head><meta charset="utf-8"><title>' + core.escapeHtml(x.name) + '</title></head><body>' + x.body + '</body></html>';
+    const a = el('a', { href: URL.createObjectURL(new Blob([file], { type: 'text/html' })), download: x.name + '.htm' });
+    document.body.append(a); a.click(); a.remove();
+    toast(t('Downloaded: {0}.htm, with these values.', x.name));
+  });
+
   function renderPreview() {
     const s = sig(); if (!s || S.view !== 'sig') return;
-    const html = core.render(core.compile(sanitize(s.html), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
     const asText = $('pvText').checked;
     const greet = asText ? '' : '<p>' + core.escapeHtml(t('Hello,')) + '</p><p>' + core.escapeHtml(t('this is how the signature looks under a message.')) + '</p><p>&nbsp;</p>';
     const body = asText ? '<pre style="font:11pt/1.4 Consolas,monospace;white-space:pre-wrap">' + core.escapeHtml(core.htmlToText(html)) + '</pre>' : greet + html;
@@ -44,7 +75,7 @@
     };
 
     // What to know about this signature before it goes out.
-    const notes = [], keys = fieldKeys(), used = core.placeholdersIn(s.html);
+    const notes = [], keys = fieldKeys(), used = core.placeholdersIn(sigFull(s));
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && core.fieldSource(S.config, f) === 'none'; });
     if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', ')) + ' ',
@@ -54,7 +85,7 @@
         changed({ list: false });
         toast(t('Fields added: {0}. Check their AD attribute and Graph source under Fields.', added.map((k) => '@@' + k).join(', ')));
       } }, t('Add them as fields'))));
-    if ($('pvDark').checked && /<img\b/i.test(s.html || '')) notes.push(el('div', null, t('Dark mode, roughly: Outlook turns the colours itself. Check that the logo still shows on a dark background (a white edge or a light version helps).')));
+    if ($('pvDark').checked && /<img\b/i.test(sigFull(s))) notes.push(el('div', null, t('Dark mode, roughly: Outlook turns the colours itself. Check that the logo still shows on a dark background (a white edge or a light version helps).')));
     if (core.isCampaign(s) && !core.inPeriod(s)) notes.push(el('div', { class: 'warn' }, t('A campaign, not running today ({0}): nobody gets it now.', campaignText(s))));
     if (noGraph.length) notes.push(el('div', { class: 'warn' }, core.valueSource(S.config) === 'graph'
       ? t('No Graph source, so empty in Outlook (see Fields): {0}', noGraph.map(fieldName).join(', '))

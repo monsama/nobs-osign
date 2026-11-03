@@ -61,7 +61,14 @@ const DE = {
   'Classic Outlook: {0} image(s) did not fit into your mailbox settings and are left out when the signature goes in by itself there. Insert puts in everything.': 'Klassisches Outlook: {0} Bild(er) passen nicht in die Postfach-Einstellungen und fehlen, wenn die Signatur dort selbst eingefügt wird. Einfügen fügt alles ein.',
   'Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.': 'Outlook hat die Variante nicht gespeichert: Der Platz für Add-in-Einstellungen in Ihrem Postfach ist voll. Kürzen oder löschen Sie andere Varianten.',
   'You have {0} variants, the most there can be.': 'Sie haben {0} Varianten, mehr sind nicht möglich.',
-  'Only the fields below are yours to change; the rest stays the company signature.': 'Nur die Felder unten können Sie ändern; der Rest bleibt die Firmensignatur.'
+  'Only the fields below are yours to change; the rest stays the company signature.': 'Nur die Felder unten können Sie ändern; der Rest bleibt die Firmensignatur.',
+  'How it works': 'So funktioniert es',
+  'Your signature goes into new mail and replies by itself, with your details from the company directory. If they are wrong, IT changes them there; "Read my details again" fetches them anew.': 'Ihre Signatur kommt von selbst in neue Mails und Antworten, mit Ihren Angaben aus dem Firmenverzeichnis. Stimmen sie nicht, ändert die IT sie dort; «Meine Angaben neu lesen» holt sie neu.',
+  'Above, choose which signature goes into new mail and which into replies. "Company default" follows what the company sets.': 'Oben wählen Sie, welche Signatur in neue Mails und welche in Antworten kommt. «Firmenstandard» folgt dem, was die Firma festlegt.',
+  'Insert puts a signature into the message open now, e.g. another one than usual.': 'Einfügen setzt eine Signatur in die gerade offene Mail, z. B. eine andere als sonst.',
+  'Own variant: a copy of a company signature that is yours to change, all of it. It is kept in your mailbox, also on your other devices with Outlook.': 'Eigene Variante: eine Kopie einer Firmensignatur, die Sie ganz ändern können. Sie wird in Ihrem Postfach gespeichert, auch für Ihre anderen Geräte mit Outlook.',
+  'Own variant: a copy of a company signature in which you change the marked fields (e.g. a greeting); the rest stays the company signature. It is kept in your mailbox.': 'Eigene Variante: eine Kopie einer Firmensignatur, in der Sie die markierten Felder ändern (z. B. einen Gruss); der Rest bleibt die Firmensignatur. Sie wird in Ihrem Postfach gespeichert.',
+  'After saving, choose your variant above for new mail or replies.': 'Nach dem Speichern wählen Sie Ihre Variante oben für neue Mails oder Antworten.'
 };
 let german = false;
 function t(s, ...args) {
@@ -71,7 +78,7 @@ function t(s, ...args) {
 function translatePage() {
   german = /^de/i.test((Office.context && Office.context.displayLanguage) || navigator.language || '');
   document.documentElement.lang = german ? 'de' : 'en';
-  document.querySelectorAll('h1 .sub, label, #refresh').forEach((el) => {
+  document.querySelectorAll('h1 .sub, label, #refresh, #help summary').forEach((el) => {
     el.childNodes.forEach((n) => { if (n.nodeType === 3 && n.nodeValue.trim() && DE[n.nodeValue.trim()] && german) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), DE[n.nodeValue.trim()]); });
   });
 }
@@ -338,7 +345,23 @@ async function deleteVariant(sig, btn) {
   render();
 }
 
+// How it works, in a few lines: only what this setup allows (choosing, variants, own signatures).
+function renderHelp() {
+  const o = cfg.options || {}, items = [t('Your signature goes into new mail and replies by itself, with your details from the company directory. If they are wrong, IT changes them there; "Read my details again" fetches them anew.')];
+  if (o.allowUserChoice !== false) items.push(t('Above, choose which signature goes into new mail and which into replies. "Company default" follows what the company sets.'));
+  items.push(t('Insert puts a signature into the message open now, e.g. another one than usual.'));
+  if (core.variantsAllowed(cfg)) {
+    items.push(core.ownAllowed(cfg)
+      ? t('Own variant: a copy of a company signature that is yours to change, all of it. It is kept in your mailbox, also on your other devices with Outlook.')
+      : t('Own variant: a copy of a company signature in which you change the marked fields (e.g. a greeting); the rest stays the company signature. It is kept in your mailbox.'));
+    items.push(t('After saving, choose your variant above for new mail or replies.'));
+  }
+  $('helpList').replaceChildren(...items.map((x) => { const li = document.createElement('li'); li.textContent = x; return li; }));
+  $('help').hidden = false;
+}
+
 function render() {
+  renderHelp();
   full = core.withVariants(cfg, getVariants());
   const list = core.available(full, user.values, from, user.groups);
   renderChoice(list);

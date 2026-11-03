@@ -29,6 +29,10 @@ button:disabled { opacity: .5; cursor: default; }
 /* Which add-in this is, and which signatures: for whoever helps when something looks old. */
 .ver { margin-top: 18px; font-size: 11px; color: var(--muted); }
 a { color: var(--accent); }
+/* How it works: short, and only what this setup allows. */
+.help { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.help summary { cursor: pointer; font-weight: 600; }
+.help ul { margin: 8px 0 2px; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); }
 h1 .sub { font-weight: 400; color: var(--muted); margin-left: 4px; }
 
 /* One size for every control, as in the editor: 30 px high (a touch more for a pane used with the

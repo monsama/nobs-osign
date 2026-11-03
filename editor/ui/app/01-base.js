@@ -73,10 +73,20 @@
     return id;
   }
 
+  // A signature's HTML with its building blocks put in, as Outlook gets it.
+  const sigFull = (s) => core.expandBlocks((s && s.html) || '', S.config.blocks);
+
   // The configuration as published: every signature compiled, the image address set.
   function prepared() {
     const c = JSON.parse(JSON.stringify(S.config));
-    c.signatures.forEach((s) => { delete s.__audSome; s.html = sanitize(s.html); s.compiled = core.compile(s.html, scratchDoc); });
+    c.signatures.forEach((s) => {
+      delete s.__audSome;
+      // Building blocks put in for Outlook (html, compiled); as written kept in source, for the editor.
+      const own = sanitize(s.html);
+      if (core.blocksIn(own).length) s.source = own; else delete s.source;
+      s.html = sanitize(core.expandBlocks(own, c.blocks));
+      s.compiled = core.compile(s.html, scratchDoc);
+    });
     return c;
   }
 
@@ -191,7 +201,8 @@
   const ES_ICON = {
     photo: '<circle cx="12" cy="9" r="4"/><path d="M4 21c1-5 4-7 8-7s7 2 8 7"/>',
     history: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'
+    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+    blocks: '<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/>'
   };
   function emptyState(icon, title, text, action) {
     const ic = el('span', { class: 'es-icon', 'aria-hidden': 'true' });
@@ -218,6 +229,7 @@
         el('div', { class: 'badges' },
           s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
           s.defaultReply ? el('span', { class: 'badge on' }, t('Reply')) : null,
+          s.language ? el('span', { class: 'badge', title: t('Language variant') }, s.language.toUpperCase()) : null,
           core.forNobody(s) ? el('span', { class: 'badge warn', title: t('Not assigned: nobody gets it. Give it groups, departments or domains, or the entire organization (Who gets it).') }, t('Not assigned')) :
           audienceText(s) !== t('entire organization') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
           core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' on' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
@@ -319,7 +331,7 @@
   }
   function goView(view) {
     show(view);
-    if (view === 'fields') renderFields(); else if (view === 'users') renderUsers(); else if (view === 'options') renderOptions(); else if (view === 'photos') renderPhotos();
+    if (view === 'fields') renderFields(); else if (view === 'users') renderUsers(); else if (view === 'options') renderOptions(); else if (view === 'photos') renderPhotos(); else if (view === 'blocks') renderBlocks();
   }
   addEventListener('popstate', (e) => {
     const st = e.state;
@@ -342,6 +354,7 @@
     $('viewOptions').hidden = view !== 'options';
     $('viewUsers').hidden = view !== 'users';
     $('viewPhotos').hidden = view !== 'photos';
+    $('viewBlocks').hidden = view !== 'blocks';
     $('viewEmpty').hidden = view !== 'empty';
     renderList();
     navStep();
@@ -357,6 +370,7 @@
     $('sigNew').checked = !!s.defaultNew;
     $('sigReply').checked = !!s.defaultReply;
     $('sigRemoveEmpty').checked = s.removeEmptyLines !== false;
+    $('sigLang').value = s.language || ''; $('sigLangChip').textContent = s.language ? ' · ' + s.language.toUpperCase() : '';
     audienceShow(s);
     $('sigFrom').value = s.validFrom || '';
     $('sigUntil').value = s.validUntil || '';

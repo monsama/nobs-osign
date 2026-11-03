@@ -300,3 +300,28 @@ test('who gets a signature: a new one is not assigned (nobody), the entire organ
   assert.equal(core.isAvailable(g, {}, 'a@b.ch', ['sg']), true);
   assert.equal(core.forNobody(g), false);
 });
+
+test('building blocks: {{key}} put in on a line of its own or in the text, unknown ones left; not put in twice', () => {
+  const blocks = [{ key: 'disclaimer', name: 'Disclaimer', html: '<p>Vertraulich @@mail</p>' }, { key: 'x', html: '{{disclaimer}}' }];
+  assert.equal(core.expandBlocks('<p>Hi</p><p>{{Disclaimer}}</p>', blocks), '<p>Hi</p><p>Vertraulich @@mail</p>');
+  assert.equal(core.expandBlocks('<div> {{disclaimer}} </div>', blocks), '<p>Vertraulich @@mail</p>');
+  assert.equal(core.expandBlocks('a {{nope}} b', blocks), 'a {{nope}} b');
+  assert.equal(core.expandBlocks('{{x}}', blocks), '{{disclaimer}}', 'a block in a block stays as typed (no loops)');
+  assert.deepEqual(core.blocksIn('{{a}} {{b}} {{a}} @@c'), ['a', 'b']);
+  assert.deepEqual(core.placeholdersIn(core.expandBlocks('{{disclaimer}}', blocks)), ['mail']);
+  const c = core.defaultConfig(); c.blocks = [{ key: 'a' }, { key: 'A' }, { key: '1x' }];
+  assert.equal(core.validate(c).filter((e) => /building block/i.test(e)).length, 2);
+});
+
+test('language variants: the default in the person\'s language wins; another language only when there is nothing else', () => {
+  const cfg = { options: {}, signatures: [
+    { id: 'de', name: 'Haupt', defaultNew: true, audience: { everyone: true } },
+    { id: 'en', name: 'Main EN', language: 'en', defaultNew: true, audience: { everyone: true } },
+    { id: 'fr', name: 'Réponse', language: 'fr', defaultReply: true, audience: { everyone: true } }] };
+  assert.equal(core.pick(cfg, { preferredLanguage: 'en-US' }, 'a@x.ch', 'new').id, 'en');
+  assert.equal(core.pick(cfg, { preferredLanguage: 'de-CH' }, 'a@x.ch', 'new').id, 'de');
+  assert.equal(core.pick(cfg, {}, 'a@x.ch', 'new').id, 'de');
+  assert.equal(core.pick(cfg, { preferredLanguage: 'de' }, 'a@x.ch', 'reply').id, 'fr', 'the only default for replies');
+  assert.equal(core.langOf({ preferredLanguage: 'DE_ch' }), 'de');
+  assert.equal(core.fieldFor('preferredLanguage').graph, 'preferredLanguage');
+});

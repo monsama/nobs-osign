@@ -53,6 +53,7 @@
     <div class="side-head"><span id="sideManage"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Manage</span></div>
     <ul class="nav-list">
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
+      <li><a href="#" data-view="blocks" class="nav">Building blocks <small>disclaimer, banner, address</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; values</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
       <li><a href="#" data-view="photos" class="nav">Photos <small>one per person</small></a></li>
@@ -108,10 +109,14 @@
           </div>
         </details>
         <details class="audience" id="sigMore">
-          <summary><span class="chip-k">Options</span></summary>
+          <summary><span class="chip-k">Options</span><span id="sigLangChip"></span></summary>
           <div class="pop pop-s">
             <label class="check"><input type="checkbox" id="sigRemoveEmpty"> Leave out empty lines <button type="button" class="help" data-help="hRemoveEmpty" aria-label="Help">?</button></label>
             <p class="hint">On for nearly every signature: a line whose fields are all empty for someone (e.g. «Mobile» without a mobile number) is left out.</p>
+            <label class="lang-row">Language <select id="sigLang">
+              <option value="">All languages</option><option value="de">Deutsch</option><option value="en">English</option><option value="fr">Français</option><option value="it">Italiano</option>
+            </select></label>
+            <p class="hint" data-th="langHint">A language variant: as a default, it goes to whoever has that language in Entra ID / AD (<code>preferredLanguage</code>), and wins over one for all languages. E.g. the main signature for all, and a copy in English for those with English.</p>
           </div>
         </details>
       </div>
@@ -154,6 +159,8 @@
             <span class="zoom" data-zoom="preview" role="group" aria-label="Zoom"><button type="button" class="ghost" data-z="-1" aria-label="Zoom out" title="Zoom out (Ctrl + mouse wheel)">−</button><button type="button" class="ghost zpct" data-z="0" title="Back to 80 %">80 %</button><button type="button" class="ghost" data-z="1" aria-label="Zoom in" title="Zoom in (Ctrl + mouse wheel)">+</button></span>
             <label class="tgl" title="Plain text"><input type="checkbox" id="pvText"><span aria-hidden="true">T</span><span class="sr-only">Plain text</span></label>
             <label class="tgl" title="Dark mode: roughly as Outlook's dark mode shows it to recipients who use it"><input type="checkbox" id="pvDark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span class="sr-only">Dark mode</span></label>
+            <button type="button" id="pvCopy" class="icon-btn ghost" title="Copy as HTML, with these values and the images in it: to paste into Outlook or a test mail" aria-label="Copy as HTML"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button>
+            <button type="button" id="pvSave" class="icon-btn ghost" title="Download as .htm, with these values and the images in it: to try in a mail program without publishing" aria-label="Download as .htm"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 19h14"/></svg></button>
           </div>
           <div id="pvNote" class="pv-note"></div>
           <div class="mail">
@@ -191,6 +198,15 @@
       </div>
     </section>
 
+    <section id="viewBlocks" class="view" hidden>
+      <h1>Building blocks</h1>
+      <p class="lead" data-th="blocksLead">A part several signatures share, kept here once: a disclaimer, a campaign banner, the address. In a signature it is
+        <code>{{name}}</code> (<i>+ Insert field → Building blocks</i>); changed here, it changes in all of them with the next publish.
+        Fields (<code>@@mail</code>) work in it too.</p>
+      <div id="blockList" class="block-list"></div>
+      <div class="field-actions"><button type="button" id="btnAddBlock" class="ghost">+ Add building block</button></div>
+    </section>
+
     <!-- add-in options -->
     <section id="viewOptions" class="view" hidden>
       <h1>Add-in</h1>
@@ -218,6 +234,7 @@
       <div class="users-bar">
         <button id="btnAdRead" class="primary">Read from AD</button>
         <label class="check"><input type="checkbox" id="usersChanges" checked> Only changes</label>
+        <label class="check"><input type="checkbox" id="usersNone"> Only without a signature</label>
         <input id="usersFilter" placeholder="Search name or mail" aria-label="Search name or mail">
         <span id="usersInfo" class="users-info"></span>
       </div>
@@ -341,6 +358,18 @@
       <div><input id="bakPass2" type="password" autocomplete="new-password"></div>
     </div>
     <p><button type="button" id="bakExport">Download the backup</button> <span id="bakExportOk" class="where"></span></p>
+    <h3>Automatically, every day</h3>
+    <p class="lead" id="abWhere"></p>
+    <div class="form">
+      <label for="abAt">Daily at</label>
+      <div><input id="abAt" type="time" style="width:120px"> <small>(empty: off)</small></div>
+      <label for="abKeep">Keep for</label>
+      <div><input id="abKeep" type="number" min="1" max="365" value="30" style="width:90px"> <small>days (the newest always stays)</small></div>
+      <label for="abPass">Passphrase</label>
+      <div><input id="abPass" type="password" autocomplete="new-password" minlength="12"> <small id="abPassNote"></small></div>
+    </div>
+    <p><button type="button" id="abSave">Save</button> <button type="button" id="abRun" class="ghost">Make one now</button> <span id="abOk" class="where"></span></p>
+    <ul id="abList" class="ab-list"></ul>
     <h3>Bring a backup back</h3>
     <p class="lead warn">This replaces the draft, the settings, the connections and the history here with the backup's.</p>
     <div class="form">
@@ -555,6 +584,9 @@
         <label for="cn_ldapGroup">Sign-in group</label>
         <div><input id="cn_ldapGroup" data-ph="NOBS-OSign-Admins" autocomplete="off">
           <small>(the name of an AD group: its members may use the editor, nested groups count)</small></div>
+        <label for="cn_ldapPublishGroup">Publishing group</label>
+        <div><input id="cn_ldapPublishGroup" data-ph="optional" autocomplete="off">
+          <small>(optional: only its members publish and approve; the others edit and ask for approval. Empty: everyone in the sign-in group publishes)</small></div>
         <label for="cn_ldapServiceDn">Service account</label>
         <div><input id="cn_ldapServiceDn" data-ph="svc-osign" autocomplete="off">
           <small>(its login. A plain domain user is enough: it only reads)</small></div>

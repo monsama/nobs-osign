@@ -42,11 +42,12 @@
         if (uses.length && await ask(t('Change @@{0} to @@{1} in {2} signature(s) too?', oldKey, nk, uses.length), t('Change them too'), false, t('Only the field'))) {
           const re = new RegExp('@@' + oldKey + '(?![A-Za-z0-9_])', 'g');
           uses.forEach((s) => { s.html = s.html.replace(re, '@@' + nk); });
+          S.config.blocks.forEach((b) => { b.html = b.html.replace(re, '@@' + nk); });
         }
         f.key = nk; oldKey = nk; changed({ list: false });
       });
       const del = el('button', { class: 'ghost small danger', title: t('Remove field'), 'aria-label': t('Remove field @@{0}', f.key), onclick: async () => {
-        const uses = S.config.signatures.filter((s) => core.placeholdersIn(s.html).indexOf(f.key) >= 0).map((s) => s.name);
+        const uses = S.config.signatures.filter((s) => core.placeholdersIn(sigFull(s)).indexOf(f.key) >= 0).map((s) => s.name).concat(S.config.blocks.filter((b) => core.placeholdersIn(b.html).indexOf(f.key) >= 0).map((b) => '{{' + b.key + '}}'));
         if (uses.length && !(await ask(t('@@{0} is used in: {1}. Remove the field anyway? The placeholder then stays as typed.', f.key, uses.join(', ')), t('Remove'), true))) return;
         S.config.fields.splice(i, 1); changed({ list: false }); renderFields();
         // Back as it was, at its place, while the note shows.
@@ -171,10 +172,14 @@
     $('usersInfo').textContent = t('Read {0}: {1} users - {2} new, {3} changed, {4} removed.', when(snap.readAt), snap.users.length, c.new, c.changed, c.removed) +
       (!S.snapMatches ? ' ' + t('The fields or groups changed since: read again.') : snap.written ? ' ' + t('Published already.') : ' ' + t('Not published yet.'));
     const showGroups = core.groupsUsed(S.config).length > 0;
-    head.append(el('tr', null, el('th', null, ''), el('th', null, t('Name')), el('th', null, t('Mail')), fields.map((f) => el('th', null, (f.label || f.key))), showGroups ? el('th', null, t('Groups')) : null));
+    // Who gets what: the signature each person gets for new mail and for replies, as published now.
+    const gets = whoGets(snap.users);
+    const none = snap.users.filter((u) => !gets.get(u).new);
+    $('usersInfo').textContent += ' ' + (none.length ? t('{0} of them get no signature for new mail.', none.length) : t('Everyone gets a signature for new mail.'));
+    head.append(el('tr', null, el('th', null, ''), el('th', null, t('Name')), el('th', null, t('Mail')), el('th', null, t('New mail')), el('th', null, t('Replies')), fields.map((f) => el('th', null, (f.label || f.key))), showGroups ? el('th', null, t('Groups')) : null));
     const q = $('usersFilter').value.trim().toLowerCase();
-    const only = $('usersChanges').checked;
-    const rows = snap.users.filter((u) => (!only || u.status !== 'unchanged') &&
+    const only = $('usersChanges').checked, noneOnly = $('usersNone').checked;
+    const rows = snap.users.filter((u) => (!only || u.status !== 'unchanged') && (!noneOnly || !gets.get(u).new) &&
       (!q || u.mail.toLowerCase().includes(q) || String(u.name || '').toLowerCase().includes(q) || Object.values(u.values || {}).some((v) => String(v).toLowerCase().includes(q))));
     const LIMIT = 500;
     rows.slice(0, LIMIT).forEach((u) => {
@@ -182,6 +187,7 @@
         el('td', null, el('span', { class: 'st ' + u.status }, t(u.status))),
         el('td', { class: 'nowrap' }, u.name || ''),
         el('td', null, u.mail),
+        ['new', 'reply'].map((k) => { const g = gets.get(u)[k]; return el('td', { class: 'nowrap' + (g ? '' : ' none') }, g ? g.name : t('none')); }),
         fields.map((f) => {
           const v = (u.values || {})[f.key] || '', was = u.old ? (u.old[f.key] || '') : null;
           const chg = u.status === 'changed' && was !== null && was !== v;
@@ -190,10 +196,10 @@
         showGroups ? el('td', null, (u.groups || []).join(', ')) : null));
     });
     snap.removed.filter((m) => !q || m.includes(q)).forEach((m) => {
-      body.append(el('tr', { class: 'removed' }, el('td', null, el('span', { class: 'st removed' }, t('removed'))), el('td', { colspan: fields.length + (showGroups ? 3 : 2) }, m)));
+      body.append(el('tr', { class: 'removed' }, el('td', null, el('span', { class: 'st removed' }, t('removed'))), el('td', { colspan: fields.length + (showGroups ? 5 : 4) }, m)));
     });
     if (rows.length > LIMIT) $('usersMore').textContent = t('{0} more - narrow the search to see them.', rows.length - LIMIT);
-    if (!rows.length && !snap.removed.length) body.append(el('tr', null, el('td', { colspan: fields.length + 3 }, only ? t('No changes: everything is as published.') : t('No users found.'))));
+    if (!rows.length && !snap.removed.length) body.append(el('tr', null, el('td', { colspan: fields.length + 5 }, only ? t('No changes: everything is as published.') : t('No users found.'))));
   }
   $('btnAdRead').addEventListener('click', async () => {
     $('btnAdRead').disabled = true; $('usersInfo').textContent = t('Reading…');
@@ -202,5 +208,16 @@
     finally { $('btnAdRead').disabled = false; renderUsers(); }
   });
   $('usersChanges').addEventListener('change', renderUsers);
+  $('usersNone').addEventListener('change', () => { if ($('usersNone').checked) $('usersChanges').checked = false; renderUsers(); });
+  // For each user read from AD: { new, reply }, the signatures they get by the central defaults
+  // (their own pick in the add-in aside). Their department, when the AD fields have it.
+  function whoGets(list) {
+    const m = new Map(), now = new Date();
+    (list || []).forEach((u) => {
+      const v = Object.assign({}, u.values || {});
+      m.set(u, { new: core.pick(S.config, v, u.mail, 'new', null, u.groups || [], now), reply: core.pick(S.config, v, u.mail, 'reply', null, u.groups || [], now) });
+    });
+    return m;
+  }
   $('usersFilter').addEventListener('input', renderUsers);
 
