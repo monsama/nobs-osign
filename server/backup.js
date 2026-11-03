@@ -16,7 +16,8 @@ const zlib = require('node:zlib');
 const { writeAtomic } = require('./store');
 
 const FORMAT = 'nobs-osign-backup';
-const SKIP = new Set(['audit.log', 'audit.1.log', 'addin', 'publish', 'lost+found']);
+// Not in a backup: the audit log, what is made again anyway, and the backups made by themselves.
+const SKIP = new Set(['audit.log', 'audit.1.log', 'addin', 'publish', 'lost+found', 'backups', 'autobackup.json']);
 const MIN_PASS = 12;
 // scrypt with 2^15 rounds: a second or so to try one passphrase, on purpose.
 const KDF = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };

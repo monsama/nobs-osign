@@ -8,7 +8,7 @@
   // the same audience could never be picked.
   function setDefault(flag, on) {
     const s = sig(); if (!s) return;
-    if (on) S.config.signatures.forEach((x) => { if (x !== s && x[flag] && audienceText(x) === audienceText(s)) x[flag] = false; });
+    if (on) S.config.signatures.forEach((x) => { if (x !== s && x[flag] && audienceText(x) === audienceText(s) && (x.language || '') === (s.language || '')) x[flag] = false; });
     s[flag] = on; changed();
   }
   // The panels of When and Who gets it: one at a time, closed by a click elsewhere or Esc.
@@ -47,6 +47,18 @@
     $('campaignSummary').textContent = campaignText(s) || t('always'); placeOpen();
     changed({ list: true });
   }));
+  // A language variant: the person's language comes from the field preferredLanguage, added when missing.
+  $('sigLang').addEventListener('change', () => {
+    const s = sig(); if (!s) return;
+    s.language = $('sigLang').value;
+    if (!s.language) delete s.language;
+    $('sigLangChip').textContent = s.language ? ' · ' + s.language.toUpperCase() : '';
+    if (s.language && !S.config.fields.some((f) => f.key === 'preferredLanguage' || (f.ad || '').toLowerCase() === 'preferredlanguage')) {
+      S.config.fields.push(core.fieldFor('preferredLanguage'));
+      toast(t('Added the field «Language» (preferredLanguage): it tells which variant someone gets.'));
+    }
+    changed();
+  });
   $('sigRemoveEmpty').addEventListener('change', () => { const s = sig(); if (s) { s.removeEmptyLines = $('sigRemoveEmpty').checked; changed({ list: false }); } });
   // Who gets it, as in the Microsoft 365 admin center: the entire organization, specific groups,
   // departments or sender domains (one field, each a token), or not assigned.

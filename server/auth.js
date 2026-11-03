@@ -84,7 +84,7 @@ function createAuth({ env, ldap, now = Date.now, log = console }) {
     let user = null;
     if (loginName.toLowerCase() === LOCAL_LOGIN) {
       const pw = adminPassword();
-      if (pw && same(pw, String(password))) user = { login: LOCAL_LOGIN, name: 'admin', local: true };
+      if (pw && same(pw, String(password))) user = { login: LOCAL_LOGIN, name: 'admin', local: true, publisher: true };
     } else if (ldap.url) {
       const problem = ldapProblem(ldap);
       if (problem) return { status: 503, error: 'Signing in with Active Directory is not set up right: ' + problem };
@@ -94,7 +94,7 @@ function createAuth({ env, ldap, now = Date.now, log = console }) {
         return { status: 503, error: 'Active Directory cannot be reached. The local account admin still works.' };
       }
       if (r && !r.allowed) return { status: 403, error: 'You are not in the group that may use NOBS OSign. Ask IT to add you.' };
-      if (r) user = { login: r.login, name: r.name, local: false };
+      if (r) user = { login: r.login, name: r.name, local: false, publisher: r.publisher !== false };
     }
     if (!user) { failed(key); return { status: 401, error: 'The sign-in name or the password is wrong.' }; }
     fails.delete(key);

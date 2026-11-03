@@ -49,6 +49,9 @@ function ldapConfig(env) {
     // The whole domain, where groups are found.
     domainBase: dnOfDomain(domainOfDn(searchBase)) || dnOfDomain(domain),
     group: env.OSIGN_LDAP_GROUP || '',
+    // Optional: only its members (and the local account admin) publish and approve; the other
+    // members of the sign-in group edit the draft and ask for approval.
+    publishGroup: env.OSIGN_LDAP_PUBLISH_GROUP || '',
     loginAttr: env.OSIGN_LDAP_LOGIN_ATTR || 'sAMAccountName',
     caFile: env.OSIGN_LDAP_CA || '',
     startTls: env.OSIGN_LDAP_STARTTLS === '1',
@@ -117,9 +120,10 @@ async function search(client, base, filter, attributes, sizeLimit) {
 
 // The sign-in group's DN: as set, or found by its name (sAMAccountName or CN) in the domain. null
 // when there is no such group.
-async function groupDn(client, c) {
-  if (isDn(c.group)) return c.group;
-  const g = escapeFilter(c.group);
+async function groupDn(client, c, which) {
+  const name = which || c.group;
+  if (isDn(name)) return name;
+  const g = escapeFilter(name);
   const [hit] = await search(client, c.domainBase || c.searchBase, '(&(objectClass=group)(|(sAMAccountName=' + g + ')(cn=' + g + ')))', ['cn'], 2);
   return hit ? hit.dn : null;
 }
@@ -161,7 +165,14 @@ async function ldapLogin(c, login, password) {
     let allowed = false;
     if (group) allowed = (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(canonical) + ')' + chain(group) + ')', ['cn'])).length > 0;
     else allowed = (entry.attrs.memberof || []).some((g) => cnOf(g).toLowerCase() === c.group.toLowerCase());
-    return { login: canonical, name: (entry.attrs.displayname || [])[0] || canonical, allowed };
+    // Who publishes: everyone allowed, unless a publishing group is set.
+    let publisher = allowed;
+    if (allowed && c.publishGroup) {
+      const pg = await groupDn(client, c, c.publishGroup);
+      publisher = pg ? (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(canonical) + ')' + chain(pg) + ')', ['cn'])).length > 0
+        : (entry.attrs.memberof || []).some((g) => cnOf(g).toLowerCase() === c.publishGroup.toLowerCase());
+    }
+    return { login: canonical, name: (entry.attrs.displayname || [])[0] || canonical, allowed, publisher };
   } catch (e) {
     if (e instanceof InvalidCredentialsError) return null;
     throw e;

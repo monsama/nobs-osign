@@ -29,7 +29,7 @@ const CONTACT_ATTRS = ['givenName', 'sn', 'displayName', 'cn', 'initials', 'midd
   'title', 'department', 'departmentNumber', 'company', 'division', 'description', 'physicalDeliveryOfficeName',
   'telephoneNumber', 'otherTelephone', 'mobile', 'homePhone', 'ipPhone', 'facsimileTelephoneNumber', 'pager',
   'mail', 'userPrincipalName', 'sAMAccountName', 'wWWHomePage', 'url', 'streetAddress', 'postOfficeBox', 'l', 'st', 'postalCode',
-  'c', 'co', 'info'];
+  'c', 'co', 'info', 'preferredLanguage'];
 const extraAttrs = (text) => [...new Set(String(text || '').split(/[\s,;]+/).filter(Boolean))];
 // The attributes allowed, as written (for the editor's list).
 function allowedAttrs(c) {

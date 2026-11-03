@@ -22,6 +22,7 @@ const { createHistory } = require('./history');
 const { createCerts } = require('./cert');
 const { createAudit } = require('./audit');
 const { exportBackup, openBackup, restoreFiles } = require('./backup');
+const { createAutoBackup } = require('./autobackup');
 const { createUpdates } = require('./updates');
 const { diffConfigs } = require('./diff');
 const tlsInfo = require('./tls');
@@ -130,6 +131,9 @@ function createApp(opts) {
   // The connections (AD, Graph, Cloudflare): .env, with what the admin saved in the editor on top.
   // Each is read anew when that changes (configure, below), so no restart is needed.
   const connections = createConnections({ dataDir, env });
+  // Backups by themselves, every day (server/autobackup.js).
+  const autoBackup = createAutoBackup({ dataDir, dir: env.OSIGN_BACKUP_DIR || '', seal: connections.seal, open: connections.open, rawKey: connections.rawKey, version: VERSION, log });
+  autoBackup.schedule();
   // The server's certificate for Microsoft Entra ID (server/cert.js), sealed like the passwords.
   const certs = createCerts({ dataDir, seal: connections.seal, open: connections.open });
   // Filled in by configure(); the same objects throughout, so what holds them sees the change.
@@ -266,15 +270,19 @@ function createApp(opts) {
   const approvalFile = path.join(dataDir, 'approval.json');
   const approval = () => { try { return JSON.parse(readText(approvalFile) || 'null'); } catch (e) { return null; } };
   const needsApproval = () => settings.get().requireApproval === 'on';
+  // Who publishes and approves: with a publishing group set, only its members (and the local admin).
+  const publisher = (s) => !!(s && s.user && (s.user.local || s.user.publisher !== false));
+  // Approval needed for this person: four eyes on, or not one who publishes.
+  const needsApprovalFor = (s) => needsApproval() || !publisher(s);
   // The same person, however they typed their login (AD does not mind the case).
   const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
   function approvalAnswer(s) {
     const a = approval();
-    if (!a) return { pending: null, required: needsApproval() };
+    if (!a) return { pending: null, required: needsApprovalFor(s), publisher: publisher(s) };
     const current = store.draftHash() === a.hash;
     return {
-      required: needsApproval(),
-      pending: { by: a.by, at: a.at, message: a.message, current, mine: same(a.login, s.user.login), mayApprove: !same(a.login, s.user.login) && current,
+      required: needsApprovalFor(s), publisher: publisher(s),
+      pending: { by: a.by, at: a.at, message: a.message, current, mine: same(a.login, s.user.login), mayApprove: !same(a.login, s.user.login) && current && publisher(s),
         hash: a.hash, changes: diffConfigs(history.latest(), a.configJson).concat(current ? imageChanges() : []) }
     };
   }
@@ -343,13 +351,13 @@ function createApp(opts) {
         // A newer release, when the server is allowed to look (OSIGN_UPDATE_CHECK).
         update: updates.status(),
         // Four eyes: publishing waits for a second person.
-        requireApproval: needsApproval(),
+        requireApproval: needsApprovalFor(s),
         // Others than the local admin can sign in (Active Directory).
         adSignIn: !!ldapCfg.url && !ldapProblem(ldapCfg),
         // The key the passwords and the certificate's key are kept with (secrets/app_key).
         keyOk: connections.keyOk()
       },
-      user: { login: s.user.login, name: s.user.name, local: !!s.user.local }
+      user: { login: s.user.login, name: s.user.name, local: !!s.user.local, publisher: publisher(s) }
     }),
     'draft/get': () => store.getDraft(),
     'draft/save': (d) => store.saveDraft(typeof d.configJson === 'string' ? d.configJson : ''),
@@ -504,12 +512,13 @@ function createApp(opts) {
     },
     publish: async (d, s) => {
       if (needsApproval()) return { error: 'Publishing needs a second person\'s approval here: ask for it (Publish… → Ask for approval).' };
+      if (!publisher(s)) return { error: 'You edit the draft; publishing is for the publishing group: ask for approval (Publish… → Ask for approval).' };
       return publishNow(d.configJson, s.user.name || s.user.login, d.message);
     },
     // Four eyes (settings: requireApproval).
     'approval/get': (d, s) => approvalAnswer(s),
     'approval/request': (d, s) => {
-      if (!needsApproval()) return { error: 'Approval before publishing is not on.' };
+      if (!needsApprovalFor(s)) return { error: 'Approval before publishing is not on.' };
       const saved = store.saveDraft(typeof d.configJson === 'string' ? d.configJson : '');
       if (saved.error) return saved;
       writeAtomic(approvalFile, JSON.stringify({ by: s.user.name || s.user.login, login: s.user.login, at: Date.now(), message: String(d.message || '').slice(0, 200), configJson: d.configJson, hash: store.draftHash() }));
@@ -519,6 +528,7 @@ function createApp(opts) {
       const a = approval();
       if (!a) return { error: 'Nothing is waiting for approval.' };
       if (same(a.login, s.user.login)) return { error: 'Someone else has to approve what you asked for.' };
+      if (!publisher(s)) return { error: 'Only the publishing group approves.' };
       if (store.draftHash() !== a.hash) return { error: 'The draft changed after approval was asked for: it has to be asked for again.' };
       // Only what the approver was shown: asked for again since, it is to be looked at again.
       if (String(d.hash || '') !== a.hash) return { error: 'The request changed while you looked at it: look at it again, then approve.' };
@@ -564,6 +574,14 @@ function createApp(opts) {
       log.info('backup: brought back the backup of ' + b.at + ' (version ' + b.version + ', ' + r.files + ' files) by ' + s.user.login);
       return { at: b.at, version: b.version, files: r.files };
     },
+    // Backups by themselves: set, made now, downloaded. The local account admin's.
+    'backup/auto/get': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the automatic backups.' } : autoBackup.answer()),
+    'backup/auto/save': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the automatic backups.' } : autoBackup.save(d)),
+    'backup/auto/run': (d, s) => {
+      if (adminOnly(s)) return { error: 'Only the local account admin sets the automatic backups.' };
+      const r = autoBackup.run(); return r.error ? r : autoBackup.answer();
+    },
+    'backup/auto/download': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin downloads backups.' } : autoBackup.get(d.name)),
     // The web certificate the proxy serves for the editor's address (as the browser asked for it).
     'server/tls': (d) => tlsInfo.inspect({ addr: env.OSIGN_PROXY_ADDR || 'nobs-proxy:443', host: String(d.host || ''), caFile: ldapCfg.caFile }),
     // The audit log, for the local account admin.
@@ -653,7 +671,8 @@ function createApp(opts) {
       try { return await users.apiRead(settings.target(), d); } catch (e) { return { error: 'Active Directory: ' + e.message }; }
     },
     'ad/snapshot': (d) => users.apiSnapshot(d),
-    'ad/export': async (d) => {
+    'ad/export': async (d, s) => {
+      if (!publisher(s)) return { error: 'Only the publishing group writes the users.' };
       // With four eyes, the users are written when the publish is approved, as it was approved.
       if (needsApproval()) return { error: 'With approval on, the users are written when the publish is approved.' };
       try { return await users.apiExport(settings.target(), d); } catch (e) { return { error: 'Writing the users: ' + e.message }; }
@@ -706,6 +725,9 @@ function createApp(opts) {
     'ad/export': () => 'users exported',
     'backup/export': () => 'backup downloaded',
     'backup/restore': () => 'backup restored',
+    'backup/auto/save': (d) => 'automatic backups ' + (d.at ? 'daily at ' + d.at + ', kept ' + (d.keep || 30) + ' days' : 'off') + (d.passphrase ? ', passphrase set' : ''),
+    'backup/auto/run': (d, r) => 'automatic backup made now' + (r && r.last && r.last.name ? ': ' + r.last.name : ''),
+    'backup/auto/download': (d) => 'backup downloaded: ' + String(d.name || '').slice(0, 80),
     'approval/request': (d) => 'asked for approval' + (d.message ? ': ' + d.message : ''),
     'approval/approve': () => 'approved and published',
     'approval/cancel': () => 'request withdrawn'

@@ -12,7 +12,10 @@
     // A field, shown by its name in a plain token; in the signature it is the placeholder @@key.
     'span.osf{display:inline-block;padding:0 .35em;margin:0 .05em;border-radius:3px;background:#f2f4f7;color:#344054;' +
     'line-height:1.35;white-space:nowrap;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #d0d5dd}' +
-    'span.osf.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}';
+    'span.osf.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}' +
+    // A building block: its name in a band of its own, as wide as the text.
+    'span.osb{display:inline-block;padding:2px .6em;margin:1px 0;border-radius:4px;background:#eaf1fb;color:#1d4ed8;font:600 9pt Arial,sans-serif;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #b6cdf5}' +
+    'span.osb::before{content:"\\25A4  "}span.osb.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}';
 
   function initDesign() {
     designReady = new Promise((resolve) => {
@@ -59,21 +62,33 @@
     c.textContent = f ? (f.label || f.key) : '@@' + key;
     return c;
   }
+  function blockChip(doc, key) {
+    const b = S.config.blocks.find((x) => x.key.toLowerCase() === key.toLowerCase());
+    const c = doc.createElement('span');
+    c.className = 'osb' + (b ? '' : ' unknown');
+    c.dataset.b = b ? b.key : key;
+    c.contentEditable = 'false';
+    c.title = '{{' + key + '}}' + (b ? ' - ' + t('building block, changed under Building blocks') : ' - ' + t('not a building block'));
+    c.textContent = b ? b.name : '{{' + key + '}}';
+    return c;
+  }
+  const TOKEN_RE = /@@([A-Za-z0-9_]+)|\{\{([A-Za-z][A-Za-z0-9_-]{0,39})\}\}/g;
   // Makes chips of the placeholders in the text under root (and re-arms chips pasted or copied in);
   // answers the last chip made, for the caret to go after it.
   function chipify(root) {
     const doc = root.ownerDocument;
     root.querySelectorAll('span.osf[data-f]').forEach((c) => { c.replaceWith(fieldChip(doc, c.dataset.f)); });
+    root.querySelectorAll('span.osb[data-b]').forEach((c) => { c.replaceWith(blockChip(doc, c.dataset.b)); });
     const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT), texts = [];
-    while (walker.nextNode()) if (walker.currentNode.nodeValue.indexOf('@@') >= 0 && !walker.currentNode.parentNode.closest('span.osf')) texts.push(walker.currentNode);
+    while (walker.nextNode()) if (/@@|\{\{/.test(walker.currentNode.nodeValue) && !walker.currentNode.parentNode.closest('span.osf, span.osb')) texts.push(walker.currentNode);
     let last = null;
     texts.forEach((n) => {
       const v = n.nodeValue, frag = doc.createDocumentFragment();
       let at = 0, m, made = false;
-      FIELD_RE.lastIndex = 0;
-      while ((m = FIELD_RE.exec(v))) {
+      TOKEN_RE.lastIndex = 0;
+      while ((m = TOKEN_RE.exec(v))) {
         if (m.index > at) frag.append(v.slice(at, m.index));
-        last = fieldChip(doc, m[1]); frag.append(last); made = true;
+        last = m[1] ? fieldChip(doc, m[1]) : blockChip(doc, m[2]); frag.append(last); made = true;
         at = m.index + m[0].length;
       }
       if (made) { if (at < v.length) frag.append(v.slice(at)); n.replaceWith(frag); }
@@ -88,6 +103,7 @@
       const extra = [...c.childNodes].filter((n) => n.nodeType === 1);
       c.replaceWith(ddoc.createTextNode('@@' + c.dataset.f), ...extra);
     });
+    copy.querySelectorAll('span.osb[data-b]').forEach((c) => c.replaceWith(ddoc.createTextNode('{{' + c.dataset.b + '}}')));
     copy.querySelectorAll('img.sel').forEach((i) => { i.classList.remove('sel'); if (!i.className) i.removeAttribute('class'); });
     return copy.innerHTML;
   }
@@ -96,7 +112,7 @@
     const s = sig(); if (!s) return;
     // A placeholder typed by hand becomes a chip once it is complete (a space or punctuation after it).
     const sel = ddoc.getSelection(), node = sel.rangeCount ? sel.anchorNode : null;
-    if (node && node.nodeType === 3 && /@@[A-Za-z0-9_]+[^A-Za-z0-9_]/.test(node.nodeValue) && !node.parentNode.closest('span.osf')) {
+    if (node && node.nodeType === 3 && /@@[A-Za-z0-9_]+[^A-Za-z0-9_]|\{\{[A-Za-z][A-Za-z0-9_-]*\}\}/.test(node.nodeValue) && !node.parentNode.closest('span.osf, span.osb')) {
       const holder = node.parentNode;
       const tail = node.nodeValue.slice(sel.anchorOffset);
       const last = chipify(holder);
@@ -145,7 +161,7 @@
     else {
       const r = sel.getRangeAt(0);
       // Never inside a field's chip (the caret can end up there, e.g. with Ctrl+End): after it.
-      const inChip = (n) => (n.nodeType === 1 ? n : n.parentNode).closest('span.osf');
+      const inChip = (n) => (n.nodeType === 1 ? n : n.parentNode).closest('span.osf, span.osb');
       const chip = inChip(r.startContainer) || inChip(r.endContainer);
       if (chip) { r.setStartAfter(chip); r.collapse(true); }
       r.deleteContents(); r.insertNode(frag);
@@ -188,6 +204,13 @@
     fieldSel.addEventListener('change', () => {
       const k = fieldSel.value; fieldSel.value = '';
       if (!k) return;
+      if (k.startsWith('block:')) {
+        // A building block: on a line of its own.
+        const b = k.slice(6);
+        if (S.mode === 'html') insertAtCursor($('source'), '<div>{{' + b + '}}</div>');
+        else insertHtml('<div>' + blockChip(ddoc, b).outerHTML + '</div>');
+        return;
+      }
       if (S.mode === 'html') insertAtCursor($('source'), '@@' + k);
       else { const c = fieldChip(ddoc, k); insertHtml(c.outerHTML); }
     });
@@ -211,7 +234,7 @@
     const have = new Set(S.config.fields.map((f) => f.key));
     const added = [];
     for (const s of sigs || S.config.signatures) {
-      for (const k of core.placeholdersIn(s.html)) if (!have.has(k)) { have.add(k); S.config.fields.push(core.fieldFor(k)); added.push(k); }
+      for (const k of core.placeholdersIn(sigFull(s))) if (!have.has(k)) { have.add(k); S.config.fields.push(core.fieldFor(k)); added.push(k); }
     }
     return added;
   }
@@ -233,6 +256,11 @@
       if (!fs.length) continue;
       const g = el('optgroup', { label: t(name) });
       fs.forEach((f) => { placed.add(f); g.append(el('option', { value: f.key }, f.label || f.key)); });
+      sel.append(g);
+    }
+    if (S.config.blocks.length) {
+      const g = el('optgroup', { label: t('Building blocks') });
+      S.config.blocks.forEach((b) => g.append(el('option', { value: 'block:' + b.key }, b.name)));
       sel.append(g);
     }
   }
@@ -329,7 +357,7 @@
     i.src = '/' + src;
   }
   async function deleteAsset(name) {
-    const used = S.config.signatures.filter((s) => (s.html || '').includes('assets/' + name)).map((s) => s.name);
+    const used = S.config.signatures.filter((s) => sigFull(s).includes('assets/' + name)).map((s) => s.name);
     if (used.length && !(await ask(t('{0} is used in: {1}. Remove it anyway?', name, used.join(', ')), t('Remove'), true))) return;
     try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = t(e.message); }
   }

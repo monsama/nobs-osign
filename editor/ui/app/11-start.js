@@ -13,8 +13,11 @@
     c.options = Object.assign({}, d.options, c.options || {});
     delete c.auth; delete c.assetBaseUrl;
     if (!Array.isArray(c.fields)) c.fields = d.fields;
+    c.blocks = (Array.isArray(c.blocks) ? c.blocks : []).filter((b) => b && b.key).map((b) => ({ key: String(b.key), name: String(b.name || b.key), html: String(b.html || '') }));
     c.signatures = (Array.isArray(c.signatures) ? c.signatures : []).map((s) => {
       const n = Object.assign(core.newSignature(s.id, s.name), s);
+      // As written, with its building blocks as {{key}} (html is them put in, for Outlook).
+      if (typeof s.source === 'string') { n.html = s.source; delete n.source; }
       n.audience = Object.assign({ departments: [], domains: [], groups: [] }, s.audience || {});
       return n;
     });
@@ -27,6 +30,8 @@
     S.config = normalize(c);
     S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = +r.publishedAt || 0;
     renderStatus();
+    // The logos looked at for dark mode, for the checks before publishing.
+    setTimeout(() => (S.assets || []).forEach((a) => { if (/\.png$/i.test(a.name)) darkCheck(a.name); }), 500);
     if (S.config.signatures.length) openSig(S.sigId && S.config.signatures.some((s) => s.id === S.sigId) ? S.sigId : S.config.signatures[0].id);
     else show('empty');
   }

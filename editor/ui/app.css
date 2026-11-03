@@ -923,3 +923,29 @@ dialog.find .dlg { padding: 0; display: flex; flex-direction: column; max-height
 .fields td.src.open .src-edit { display: flex; }
 .fields .src-edit label { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--muted); }
 .fields .src-sum.bad { color: var(--danger, #c62828); }
+
+/* Building blocks */
+.block-list { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+.block-card { border: 1px solid var(--line); border-radius: var(--r-l); background: var(--panel); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.block-head { display: flex; align-items: center; gap: 10px; }
+.block-head > input { font-weight: 600; max-width: 280px; }
+.block-key { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+.block-key input { width: 180px; }
+.block-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.block-body textarea { width: 100%; min-height: 120px; resize: vertical; font-size: 12px; }
+.block-pv { width: 100%; min-height: 120px; border: 1px solid var(--line); border-radius: var(--r-m); background: #fff; }
+@media (max-width: 800px) { .block-body { grid-template-columns: 1fr; } }
+table.users td.none { color: var(--warn, #b45309); font-style: italic; }
+.ab-list { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ab-list li { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.ab-list li span { font-family: ui-monospace, Consolas, monospace; }
+/* The preview's bar on one line: the values' list gives way first. */
+.preview-head { gap: 4px; }
+.preview-head .tgl, .preview-head .icon-btn { width: 26px; min-width: 26px; padding: 0; }
+.preview-head .help { margin-right: 4px; }
+.preview-head #pvSource { flex: 0 1 160px; min-width: 90px; }
+.preview-pane { container-type: inline-size; }
+.preview-head:not(:has(#pvAd:not([hidden]))) { flex-wrap: nowrap; }
+.preview-head > * { flex-shrink: 0; }
+.preview-head > #pvSource { flex-shrink: 1; }
+@container (max-width: 430px) { .preview-head { flex-wrap: wrap !important; } }
