@@ -654,8 +654,8 @@
 
   // The texts that speak of "this PC" (OSign.ps1 on Windows): on the server, what it does instead.
   const SERVER_TEXTS = {
-    wizValuesNote: ['You can change this at any time under <b>Add-in</b>. The server reads Active Directory itself, with its service account (<b>Settings → Server connections</b>).',
-      'Sie können das jederzeit unter <b>Add-in</b> ändern. Active Directory liest der Server selbst, mit seinem Dienstkonto (<b>Einstellungen → Server-Verbindungen</b>).'],
+    wizValuesNote: ['You can change this at any time under <b>Add-in</b>. The server reads Active Directory itself, with its service account (<b>Settings → Server</b>).',
+      'Sie können das jederzeit unter <b>Add-in</b> ändern. Active Directory liest der Server selbst, mit seinem Dienstkonto (<b>Einstellungen → Server</b>).'],
     wizFolderLead: ['NOBS OSign keeps the signatures, their images and the photos in a folder in your company\'s SharePoint, where Outlook reads them with each user\'s own sign-in. Make a folder <b>OSign</b> there (with a folder <b>photos</b> in it), and paste its address here: the server writes into it through Microsoft Graph.',
       'NOBS OSign bewahrt die Signaturen, ihre Bilder und die Fotos in einem Ordner im SharePoint Ihrer Firma auf, wo Outlook sie mit der Anmeldung der jeweiligen Person liest. Legen Sie dort einen Ordner <b>OSign</b> an (mit einem Ordner <b>photos</b> darin) und fügen Sie seine Adresse hier ein: der Server schreibt über Microsoft Graph hinein.'],
     hSpSite: ['Where the add-in finds the OSign folder in SharePoint, and where the server publishes. <code>root</code> is the home site (<code>https://&lt;tenant&gt;.sharepoint.com</code>). Paste the folder\'s address from the browser or a sharing link to it; NOBS OSign converts it, e.g. to <code>contoso.sharepoint.com:/sites/IT:</code>.',

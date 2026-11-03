@@ -694,8 +694,8 @@ select:disabled { opacity: .55; cursor: not-allowed; }
 label.check { min-height: var(--h); }
 label.check.block { min-height: 0; }
 /* The status pills: one height, their text centred. */
-.status { box-sizing: border-box; height: 24px; display: inline-flex; align-items: center; padding: 0 10px; }
-button.status.pub { height: 24px; }
+.status { box-sizing: border-box; height: var(--h); display: inline-flex; align-items: center; padding: 0 10px; }
+button.status.pub { height: var(--h); }
 
 /* Zoom of the design view and the preview: − 100 % +, quiet, at the right of their bar. */
 .tabs { align-items: center; }
@@ -1173,3 +1173,20 @@ a#coffeeBtn.btnlike.icon:hover, .side-btns .icon-btn:hover { background: var(--p
 :root[data-theme="dark"] .tip kbd { border-color: rgba(0, 0, 0, .2); background: rgba(0, 0, 0, .05); }
 @keyframes tip-in { from { opacity: 0; transform: translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) { .tip { animation: none; } }
+
+/* The assistant's steps as breadcrumbs: numbered, the ones gone through ticked, › between them. */
+#dlgWizard .wiz-nav { gap: 2px; align-items: center; }
+#dlgWizard .wiz-nav button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px 0 4px; border: 0; border-radius: var(--r-s); background: transparent; color: var(--muted); font-size: 12.5px; }
+#dlgWizard .wiz-nav button + button::before { content: '›'; margin: 0 6px 0 0; color: var(--line); font-size: 14px; order: -1; }
+#dlgWizard .wiz-nav button .wn-n { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); font-size: 11px; font-weight: 600; line-height: 1; }
+#dlgWizard .wiz-nav button.done { color: var(--text); }
+#dlgWizard .wiz-nav button.done .wn-n { background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); }
+#dlgWizard .wiz-nav button:not(:disabled):hover { background: var(--panel-2); color: var(--text); }
+#dlgWizard .wiz-nav button[aria-current] { background: transparent; color: var(--text); font-weight: 600; }
+#dlgWizard .wiz-nav button[aria-current] .wn-n { background: var(--accent-btn); border-color: var(--accent-btn); color: var(--accent-ink); }
+#dlgWizard .wiz-nav button:disabled { opacity: .5; }
+#dlgWizard .wiz-nav { padding: 3px 2px; }
+#dlgWizard .wiz-sum { margin: 14px 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); }
+#dlgWizard .wiz-sum .checks { margin: 6px 0 0; }
+#dlgWizard .wiz-sum .checks li { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+#dlgWizard .wiz-sum .checks li::before { top: 50%; transform: translateY(-50%); }
