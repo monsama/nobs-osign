@@ -206,7 +206,9 @@
         fields.map((f) => {
           const v = (u.values || {})[f.key] || '', was = u.old ? (u.old[f.key] || '') : null;
           const chg = u.status === 'changed' && was !== null && was !== v;
-          return el('td', { class: chg ? 'chg' : '' }, v, chg ? el('span', { class: 'was' }, was || t('(empty)')) : null);
+          // A phone number on one line (not broken in the middle of it).
+          const num = /^\+?[\d\s()./-]{6,}$/.test(v) ? ' nowrap' : '';
+          return el('td', { class: (chg ? 'chg' : '') + num }, v, chg ? el('span', { class: 'was' }, was || t('(empty)')) : null);
         }),
         showGroups ? el('td', null, (u.groups || []).join(', ')) : null));
     });

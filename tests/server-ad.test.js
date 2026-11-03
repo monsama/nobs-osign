@@ -138,6 +138,11 @@ test('export: exactly what was read, once, as users/<mail>.json', async () => {
   assert.deepEqual(userFile('anna.muster@example.ch.json'), { values: { description: 'Dipl. Ing.', homePhone: '+41 41 000 00 01' }, groups: ['sg-field'] });
   assert.deepEqual(userFile('beat@example.ch.json'), { values: { description: '', homePhone: '+41 41 000 00 02' }, groups: [] });
   assert.match((await api('ad/export', { fields: FIELDS, groups: ['sg-field'] })).error, /written already/);
+  // Written: the last read shows nothing new or changed any more.
+  const after = (await api('ad/snapshot', { fields: FIELDS, groups: ['sg-field'] })).snapshot;
+  assert.equal(after.written, true);
+  assert.deepEqual([after.counts.new, after.counts.changed], [0, 0]);
+  assert.ok(after.users.every((u) => u.status === 'unchanged'));
 });
 
 test('read again: what changed in AD, with the old value; who left; only changed files are fetched', async () => {

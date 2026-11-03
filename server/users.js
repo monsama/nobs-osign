@@ -99,13 +99,15 @@ function createUsers({ dataDir, directory, log }) {
   }
 
   // For the UI: the users as read, without the file contents. (Get-SnapshotSummary)
+  // Once written (published), what was read is what is there: nothing is new or changed any more.
   function summary(snap) {
-    const count = (st) => snap.entries.filter((e) => e.status === st).length;
+    const w = !!snap.written, st = (e) => (w ? 'unchanged' : e.status);
+    const count = (x) => snap.entries.filter((e) => st(e) === x).length;
     return {
-      readAt: snap.readAt, sig: snap.sig, written: !!snap.written,
-      users: snap.entries.map((e) => ({ mail: e.mail, name: e.name || '', status: e.status, values: e.values, groups: e.groups, old: e.old ? e.old.values : null })),
-      removed: snap.removed.map((n) => n.replace(/\.json$/, '')),
-      counts: { new: count('new'), changed: count('changed'), unchanged: count('unchanged'), removed: snap.removed.length }
+      readAt: snap.readAt, sig: snap.sig, written: w,
+      users: snap.entries.map((e) => ({ mail: e.mail, name: e.name || '', status: st(e), values: e.values, groups: e.groups, old: !w && e.old ? e.old.values : null })),
+      removed: w ? [] : snap.removed.map((n) => n.replace(/\.json$/, '')),
+      counts: { new: count('new'), changed: count('changed'), unchanged: count('unchanged'), removed: w ? 0 : snap.removed.length }
     };
   }
 
