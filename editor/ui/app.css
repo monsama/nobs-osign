@@ -1234,3 +1234,18 @@ dialog.fit { width: min(1080px, 96vw); }
    last in its group, so nothing after it shifts. */
 .sig-list .badges { min-height: 18px; }
 .top .status-wrap { margin-left: 4px; }
+/* The checks before publishing (10-publish.js): one line each, the names a click away. */
+#pubChecks .chk > summary, #pubChecks .chk-all > summary { cursor: pointer; list-style: none; }
+#pubChecks .chk > summary::-webkit-details-marker, #pubChecks .chk-all > summary::-webkit-details-marker { display: none; }
+#pubChecks .chk > summary::after { content: ' ›'; color: var(--muted); }
+#pubChecks .chk[open] > summary::after { content: ' ⌄'; }
+#pubChecks .chk > p { margin: 4px 0 4px; color: var(--muted); font-size: 12.5px; }
+#pubChecks .chk > button { margin: 2px 0 6px; }
+#pubChecks li.chk-head { padding-left: 0; }
+#pubChecks li.chk-head::before { content: none; }
+#pubChecks .chk-all > summary::before { content: '›'; display: inline-block; width: 14px; color: var(--muted); }
+#pubChecks .chk-all[open] > summary::before { content: '⌄'; }
+#pubChecks .chk-sub { margin: 6px 0 0 4px; }
+#pubChecks li.chk-ok { color: var(--muted); font-size: 12.5px; }
+#pubChecks li.chk-ok .chk { display: inline; margin-left: 6px; }
+#pubChecks li.chk-ok .chk > summary { display: inline; }
