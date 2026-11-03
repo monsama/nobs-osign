@@ -76,6 +76,7 @@
         <input id="sigName" class="title-input" placeholder="Signature name" maxlength="80" aria-label="Signature name">
         <code id="blockEditKey" class="block-only"></code>
         <div class="spacer"></div>
+        <button id="btnCompare" class="ghost" hidden title="The signature as published and as it is now, side by side">Compare</button>
         <button id="btnRevert" class="ghost" hidden title="Back to the signature as it is published: the changes made since go (Outlook has not seen them)">Discard changes</button>
         <button id="btnDup" class="ghost">Duplicate</button>
         <button id="btnDel" class="ghost danger">Delete</button>
@@ -1037,6 +1038,18 @@
     <p class="lead">What the draft has that Outlook does not have yet. Each can be discarded on its own, or all of it.</p>
     <ul id="chgList" class="chg-list"></ul>
     <div class="dlg-foot"><button type="button" id="chgAll" class="ghost danger">Discard all changes…</button><span class="spacer"></span><button value="cancel" class="ghost">Close</button><button type="button" id="chgPublish" class="primary">Publish…</button></div>
+  </form>
+</dialog>
+<dialog id="dlgCompare" class="compare">
+  <form method="dialog" class="dlg wide">
+    <h2 id="cmpTitle">Before and after</h2>
+    <p class="lead" id="cmpLead"></p>
+    <table class="fields cmp-rules"><thead><tr><th></th><th>Published</th><th>Now</th></tr></thead><tbody id="cmpRules"></tbody></table>
+    <div class="cmp-panes">
+      <div><div class="cmp-h">Published <small>(Outlook has this)</small></div><iframe id="cmpBefore" sandbox="allow-same-origin" tabindex="-1" title="Published"></iframe></div>
+      <div><div class="cmp-h">Now <small>(the draft)</small></div><iframe id="cmpAfter" sandbox="allow-same-origin" tabindex="-1" title="Now"></iframe></div>
+    </div>
+    <div class="dlg-foot"><button type="button" id="cmpRevert" class="ghost danger">Discard changes</button><span class="spacer"></span><button value="cancel" class="primary">Close</button></div>
   </form>
 </dialog>
 <dialog id="dlgImpReport">

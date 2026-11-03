@@ -255,7 +255,7 @@
     for (const s of S.config.signatures) {
       const p = pub.get(s.id);
       if (!p) rows.push(row('new', s.name, t('New, not published yet.'), btn(t('Open'), open(s.id)), btn(t('Delete…'), () => { $('dlgChanges').close(); openSig(s.id); $('btnDel').click(); }, true)));
-      else { const d = sigDiff(s, p); if (d.length) rows.push(row('chg', s.name, t('Changed: {0}.', d.join(', ')), btn(t('Open'), open(s.id)), btn(t('Discard changes'), revert(s.id), true))); }
+      else { const d = sigDiff(s, p); if (d.length) rows.push(row('chg', s.name, t('Changed: {0}.', d.join(', ')), btn(t('Compare'), () => { $('dlgChanges').close(); openCompare(s.id); }), btn(t('Open'), open(s.id)), btn(t('Discard changes'), revert(s.id), true))); }
     }
     for (const [id, p] of pub) if (!S.config.signatures.some((x) => x.id === id)) {
       rows.push(row('gone', p.name, t('Removed: still in Outlook until you publish.'), btn(t('Bring back'), async () => {
@@ -278,7 +278,41 @@
   }
   $('chgAll').addEventListener('click', () => { $('dlgChanges').close(); $('btnLoad').click(); });
   $('chgPublish').addEventListener('click', () => { $('dlgChanges').close(); $('btnPublish').click(); });
-  function revertShow() { const s = sig(); $('btnRevert').hidden = sigState(s) !== 'changed'; }
+  function revertShow() { const s = sig(); $('btnRevert').hidden = $('btnCompare').hidden = sigState(s) !== 'changed'; }
+  // Before and after: the signature as published and as it is now, each with the preview's values,
+  // and what changed in who gets it, when and as default.
+  function openCompare(id) {
+    flushSource();
+    const s = S.config.signatures.find((x) => x.id === id), p = S.pub && S.pub.get(id);
+    if (!s || !p) return;
+    const values = previewValues();
+    const page = (html) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:12px 14px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.9}p{margin:0}table{border-collapse:collapse}</style></head><body>' + html + '</body></html>';
+    const show = (frame, html, removeEmpty) => {
+      frame.srcdoc = page(core.render(core.compile(sanitize(html), scratchDoc), values, { assetBase: '/', removeEmptyLines: removeEmpty }));
+      frame.onload = () => { const d = frame.contentDocument; if (d) d.querySelectorAll('img').forEach((i) => { if (i.complete && !i.naturalWidth) i.remove(); else i.addEventListener('error', () => i.remove()); }); };
+    };
+    show($('cmpBefore'), p.html || '', p.removeEmptyLines !== false);
+    show($('cmpAfter'), sigFull(s), s.removeEmptyLines !== false);
+    $('cmpTitle').textContent = t('Before and after: {0}', s.name);
+    const src = $('pvSource');
+    $('cmpLead').textContent = t('With the values: {0}. What changed: {1}.', src.options[src.selectedIndex].textContent, sigDiff(s, p).join(', ') || t('nothing'));
+    const aud = (x) => { const a = x.audience || {}; return audienceText(x) || (a.everyone === false ? t('not assigned') : t('entire organization')); };
+    const yes = (b) => (b ? t('yes') : t('no'));
+    const rules = [
+      [t('Name'), p.name || '', s.name || ''],
+      [t('Who gets it'), aud(p), aud(s)],
+      [t('When'), campaignText(p) || t('always'), campaignText(s) || t('always')],
+      [t('Default for new mail'), yes(p.defaultNew), yes(s.defaultNew)],
+      [t('Default for replies & forwards'), yes(p.defaultReply), yes(s.defaultReply)],
+      [t('Language'), (p.language || '').toUpperCase() || t('All languages'), (s.language || '').toUpperCase() || t('All languages')],
+      [t('Leave out empty lines'), yes(p.removeEmptyLines !== false), yes(s.removeEmptyLines !== false)]
+    ].filter((r) => r[1] !== r[2]);
+    $('cmpRules').closest('table').hidden = !rules.length;
+    $('cmpRules').replaceChildren(...rules.map(([k, a, b]) => el('tr', null, el('th', null, k), el('td', { class: 'was' }, a), el('td', { class: 'now' }, b))));
+    $('cmpRevert').onclick = () => { $('dlgCompare').close(); openSig(id); $('btnRevert').click(); };
+    $('dlgCompare').showModal();
+  }
+  $('btnCompare').addEventListener('click', () => { const s = sig(); if (s) openCompare(s.id); });
   $('btnRevert').addEventListener('click', async () => {
     const s = sig(); if (!s) return;
     if (!(await ask(t('Discard the changes to «{0}» since it was published? It goes back to what Outlook has.', s.name), t('Discard changes'), true))) return;

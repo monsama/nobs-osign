@@ -1293,6 +1293,7 @@ test('changes not published yet: marked in the list, and discarded back to what 
   await page.click('#dlgPublish button[value=cancel]');
   await page.waitForFunction(() => !/Changed|Not published/.test(document.querySelector('#sigList li a.active').textContent));
   assert.equal(await page.isVisible('#btnRevert'), false);
+  assert.equal(await page.isVisible('#btnCompare'), false);
   // A change: marked, and the button there.
   await page.fill('#sigName', 'Revert me (edited)'); await page.dispatchEvent('#sigName', 'input');
   await page.waitForFunction(() => /Changed/.test(document.querySelector('#sigList li a.active').textContent));
@@ -1302,6 +1303,12 @@ test('changes not published yet: marked in the list, and discarded back to what 
   await page.waitForSelector('#dlgChanges[open]');
   assert.match(await page.textContent('#chgList'), /Revert me \(edited\)Changed: name/);
   await page.click('#dlgChanges button[value=cancel]');
+  // Before and after, side by side, with what changed in words.
+  await page.click('#btnCompare');
+  await page.waitForSelector('#dlgCompare[open]');
+  assert.match(await page.textContent('#cmpRules'), /NameRevert meRevert me \(edited\)/);
+  await page.waitForFunction(() => /Anna Muster/.test(document.querySelector('#cmpAfter').srcdoc) && /Anna Muster/.test(document.querySelector('#cmpBefore').srcdoc));
+  await page.click('#dlgCompare button[value=cancel]');
   await page.click('#btnRevert'); await page.click('#askOk');
   await page.waitForFunction(() => document.querySelector('#sigName').value === 'Revert me');
   assert.equal(await page.isVisible('#btnRevert'), false);
