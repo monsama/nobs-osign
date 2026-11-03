@@ -949,3 +949,5 @@ table.users td.none { color: var(--warn, #b45309); font-style: italic; }
 .preview-head > * { flex-shrink: 0; }
 .preview-head > #pvSource { flex-shrink: 1; }
 @container (max-width: 430px) { .preview-head { flex-wrap: wrap !important; } }
+.pub-steps { display: grid; grid-template-columns: auto minmax(0, 260px); gap: 6px 10px; align-items: center; margin: 4px 0 10px; }
+.pub-steps input[hidden] { display: none; }

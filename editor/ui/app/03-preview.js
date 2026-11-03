@@ -16,11 +16,14 @@
     const s = sig(); if (!s) return null;
     const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
     const doc = new DOMParser().parseFromString('<!doctype html><body>' + html + '</body>', 'text/html');
-    await Promise.all([...doc.querySelectorAll('img[src^="/"]')].map(async (img) => {
+    await Promise.all([...doc.querySelectorAll('img[src]')].map(async (img) => {
+      // Only the signatures' own images and photos, and only what is an image.
+      if (!/^\/(assets|photos)\/[^/?#]+(\?[^#]*)?$/.test(img.getAttribute('src'))) { if (/^\//.test(img.getAttribute('src'))) img.remove(); return; }
       try {
         const r = await fetch(img.getAttribute('src'), { credentials: 'same-origin' });
         if (!r.ok) { img.remove(); return; }
         const b = await r.blob();
+        if (!/^image\//.test(b.type)) { img.remove(); return; }
         img.src = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); });
       } catch (e) { img.remove(); }
     }));

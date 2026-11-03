@@ -23,6 +23,7 @@ const { createCerts } = require('./cert');
 const { createAudit } = require('./audit');
 const { exportBackup, openBackup, restoreFiles } = require('./backup');
 const { createAutoBackup } = require('./autobackup');
+const { createReleaseRoutes } = require('./routes-release');
 const { createUpdates } = require('./updates');
 const { diffConfigs } = require('./diff');
 const tlsInfo = require('./tls');
@@ -293,11 +294,28 @@ function createApp(opts) {
     for (const n of Object.keys(was).sort()) if (!(n in now)) out.push({ kind: 'imgdel', name: n });
     return out;
   }
+  // A signature whose compiled HTML (what the add-in renders) says other than its html is refused:
+  // what was looked at (and approved) is what goes out.
+  function compiledProblem(configJson) {
+    let c; try { c = JSON.parse(configJson); } catch (e) { return ''; }
+    const all = [c].concat(c && c.pilot && c.pilot.config ? [c.pilot.config] : []);
+    for (const x of all) for (const s of (x && x.signatures) || []) {
+      if (s && !core.compiledMatches(s.html, s.compiled)) return 'The signature "' + (s.name || s.id) + '" is not as its HTML says (compiled). Open it in the editor and publish again.';
+    }
+    return '';
+  }
+  // While publishing, the draft's images and the draft stay as they are (what was checked goes out).
+  let publishing = false;
   async function publishNow(configJson, by, message) {
     const t = settings.target();
+    const bad = compiledProblem(typeof configJson === 'string' ? configJson : '');
+    if (bad) return { error: bad };
+    if (publishing) return { error: 'Another publish is running: try again in a moment.' };
     let r;
+    publishing = true;
     try { r = await store.publish(t, typeof configJson === 'string' ? configJson : ''); }
     catch (e) { return { error: e.message }; }
+    finally { publishing = false; }
     settings.forget(); photos.clear();
     // A version that differs from what was there: kept, with who and the note.
     if (!r.error && r.changed) history.add({ by, message, configJson });
@@ -318,6 +336,8 @@ function createApp(opts) {
     });
   }
 
+  // A version in steps: a pilot group first, or at a time set beforehand (server/routes-release.js).
+  const release = createReleaseRoutes({ dataDir, history, publishNow, publisher, needsApproval, log });
   const routes = {
     ping: () => ({}),
     info: (data, s) => ({
@@ -360,12 +380,13 @@ function createApp(opts) {
       user: { login: s.user.login, name: s.user.name, local: !!s.user.local, publisher: publisher(s) }
     }),
     'draft/get': () => store.getDraft(),
-    'draft/save': (d) => store.saveDraft(typeof d.configJson === 'string' ? d.configJson : ''),
-    'assets/upload': (d) => store.uploadAsset(d.name, d.data),
-    'assets/delete': (d) => store.deleteAsset(d.name),
+    'draft/save': (d) => (publishing ? { error: 'Publishing right now: saved in a moment.' } : store.saveDraft(typeof d.configJson === 'string' ? d.configJson : '')),
+    'assets/upload': (d) => (publishing ? { error: 'Publishing right now: try again in a moment.' } : store.uploadAsset(d.name, d.data)),
+    'assets/delete': (d) => (publishing ? { error: 'Publishing right now: try again in a moment.' } : store.deleteAsset(d.name)),
     // A person's photo (photos/<username>.jpg in the OSign folder), e.g. brought over from CI-Sign.
     'photos/upload': async (d, s) => {
-      // A photo counts at once, without publishing: with four eyes, only the local admin may.
+      // A photo counts at once, without publishing: a publisher's, and with four eyes only the local admin's.
+      if (!publisher(s)) return { error: 'A photo counts at once, without publishing: only the publishing group changes photos.' };
       if (needsApproval() && !s.user.local) return { error: 'With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.' };
       const name = String(d.name || '');
       if (!PHOTO_NAME.test(name) || name !== path.basename(name)) return { error: 'A photo is a PNG, JPG or GIF named after the user, like mustera.jpg.' };
@@ -384,10 +405,11 @@ function createApp(opts) {
       const t = settings.target();
       try {
         const list = (await t.listInfo('photos')).filter((f) => PHOTO_NAME.test(f.name) && !f.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
-        return { photos: list.map((f) => ({ name: f.name, tag: f.tag })), where: t.describe() + '/photos', mayChange: !needsApproval() || !!s.user.local };
+        return { photos: list.map((f) => ({ name: f.name, tag: f.tag })), where: t.describe() + '/photos', mayChange: publisher(s) && (!needsApproval() || !!s.user.local) };
       } catch (e) { return { error: e.message }; }
     },
     'photos/delete': async (d, s) => {
+      if (!publisher(s)) return { error: 'A photo counts at once, without publishing: only the publishing group changes photos.' };
       if (needsApproval() && !s.user.local) return { error: 'With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.' };
       const name = String(d.name || '');
       if (!PHOTO_NAME.test(name) || name !== path.basename(name) || name.startsWith('.')) return { error: 'There is no such photo.' };
@@ -521,6 +543,8 @@ function createApp(opts) {
       if (!needsApprovalFor(s)) return { error: 'Approval before publishing is not on.' };
       const saved = store.saveDraft(typeof d.configJson === 'string' ? d.configJson : '');
       if (saved.error) return saved;
+      const bad = compiledProblem(typeof d.configJson === 'string' ? d.configJson : '');
+      if (bad) return { error: bad };
       writeAtomic(approvalFile, JSON.stringify({ by: s.user.name || s.user.login, login: s.user.login, at: Date.now(), message: String(d.message || '').slice(0, 200), configJson: d.configJson, hash: store.draftHash() }));
       return approvalAnswer(s);
     },
@@ -708,6 +732,7 @@ function createApp(opts) {
       }
     }
   };
+  Object.assign(routes, release.routes);
   // What goes into the audit log, by request: the words for it, from what was sent and answered.
   const AUDIT = {
     publish: (d, r) => (r.changed ? 'changed' : 'nothing changed') + (d.message ? ': ' + d.message : ''),
@@ -732,6 +757,7 @@ function createApp(opts) {
     'approval/approve': () => 'approved and published',
     'approval/cancel': () => 'request withdrawn'
   };
+  Object.assign(AUDIT, release.audit);
 
   // What only Windows, OneDrive or (for now) the PowerShell editor can do: said plainly.
   const NOT_HERE = {

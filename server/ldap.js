@@ -124,8 +124,12 @@ async function groupDn(client, c, which) {
   const name = which || c.group;
   if (isDn(name)) return name;
   const g = escapeFilter(name);
-  const [hit] = await search(client, c.domainBase || c.searchBase, '(&(objectClass=group)(|(sAMAccountName=' + g + ')(cn=' + g + ')))', ['cn'], 2);
-  return hit ? hit.dn : null;
+  // Its account name is unique in the domain; a CN is not (another OU can have one alike): by CN
+  // only when exactly one group has it.
+  const [byName] = await search(client, c.domainBase || c.searchBase, '(&(objectClass=group)(sAMAccountName=' + g + '))', ['cn'], 1);
+  if (byName) return byName.dn;
+  const hits = await search(client, c.domainBase || c.searchBase, '(&(objectClass=group)(cn=' + g + '))', ['cn'], 2);
+  return hits.length === 1 ? hits[0].dn : null;
 }
 
 // What the domain controller says of itself, without signing in (its RootDSE, which AD lets anyone

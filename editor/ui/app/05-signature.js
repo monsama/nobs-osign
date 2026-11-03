@@ -53,7 +53,7 @@
     s.language = $('sigLang').value;
     if (!s.language) delete s.language;
     $('sigLangChip').textContent = s.language ? ' · ' + s.language.toUpperCase() : '';
-    if (s.language && !S.config.fields.some((f) => f.key === 'preferredLanguage' || (f.ad || '').toLowerCase() === 'preferredlanguage')) {
+    if (s.language && !S.config.fields.some((f) => f.key === 'preferredLanguage')) {
       S.config.fields.push(core.fieldFor('preferredLanguage'));
       toast(t('Added the field «Language» (preferredLanguage): it tells which variant someone gets.'));
     }

@@ -215,14 +215,17 @@ export async function loadConfig(opts) {
     const cfg = JSON.parse(text);
     const errs = core.validate(cfg);
     if (errs.length) throw new Error('The published signatures are not valid: ' + errs[0]);
+    // A pilot that is not valid is left out: everyone gets the version for all.
+    if (cfg.pilot && (!core.pilotOf(cfg) || core.validate(cfg.pilot.config).length)) delete cfg.pilot;
     if (!cached || cached.etag !== meta.eTag) await store.set(CONFIG_KEY, JSON.stringify({ etag: meta.eTag || '', text }));
-    return cfg;
+    return core.withPilotFields(cfg);
   } catch (e) {
     if (cached && cached.text) {
       try {
         const cfg = JSON.parse(cached.text);
         console.log('OSign: signatures from the copy kept before (' + (e && e.message ? e.message : e) + ').');
-        return cfg;
+        if (cfg.pilot && (!core.pilotOf(cfg) || core.validate(cfg.pilot.config).length)) delete cfg.pilot;
+        return core.withPilotFields(cfg);
       } catch (e2) { /* below */ }
     }
     const classic = classicCopy();
