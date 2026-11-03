@@ -317,7 +317,7 @@
       const at = new Date(e.at);
       return el('tr', { class: e.ok ? '' : 'refused' },
         el('td', { class: 'when' }, el('span', null, at.toLocaleDateString(loc)), el('small', null, at.toLocaleTimeString(loc))),
-        el('td', { class: 'who' }, e.who || '–'),
+        el('td', { class: 'who' }, e.who || '-'),
         el('td', { class: 'ip' }, e.ip || ''),
         el('td', { class: 'what' }, el('span', { class: 'st ' + (e.ok ? 'ok' : 'removed'), title: e.what }, t(AUDIT_WHAT[e.what] || e.what)), e.ok ? null : el('small', { class: 'warn' }, t('refused'))),
         el('td', { class: 'detail' }, e.detail ? t(e.detail) : ''));
@@ -483,7 +483,7 @@
     if (!r.versions.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5 }, emptyState('history', t('Nothing published yet.'), t('Each version you publish is kept here, to compare and to go back to.'), [t('Publish…'), () => { $('dlgHistory').open && $('dlgHistory').close(); $('btnPublish').click(); }])))); return; }
     tb.replaceChildren(...r.versions.map((v, i) => el('tr', null,
       el('td', null, new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB'), i === 0 ? el('span', { class: 'badge on', style: 'margin-left:6px' }, t('current')) : null),
-      el('td', null, v.by), el('td', null, v.message || '–'), el('td', null, String(v.signatures)),
+      el('td', null, v.by), el('td', null, v.message || '-'), el('td', null, String(v.signatures)),
       el('td', { class: 'nowrap' }, el('button', { type: 'button', class: 'small', onclick: () => historyDiff(v) }, t('Compare')), ' ',
         el('button', { type: 'button', class: 'small', onclick: () => historyRestore(v) }, t('Load into the draft'))))));
   }

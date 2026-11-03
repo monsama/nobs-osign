@@ -65,6 +65,9 @@
     $('wizUrlHint').textContent = project ? t('(the server\'s Pages project {0}, made on the first upload; or your own domain set up on it)', project) : t(URL_HINTS[host] || URL_HINTS.other);
     $('wizRedirect').textContent = base ? 'brk-multihub://' + new URL(base).host : t('(enter the address in the step before)');
     $('wizManifest').textContent = base ? base + 'manifest.xml' : '';
+    // No address yet: what to do instead of an empty line to copy.
+    $('wizManifest').parentNode.hidden = !base; $('wizNoUrl').hidden = !!base;
+    $('wizCheck').disabled = !base;
     const perms = ['User.Read', 'Sites.Read.All'];
     if (radio('wvsrc') === 'graph') perms.push('GroupMember.Read.All');
     $('wizPerms').textContent = perms.join(', ');
@@ -92,6 +95,7 @@
   // As breadcrumbs: each step numbered, the ones gone through ticked, the current one marked; once
   // set up, any of them a click away.
   // The last step: what is set up, and a step still open a click away (it can be left for later).
+  $('wizToHost').addEventListener('click', () => wizGo(WIZ.indexOf('host')));
   function wizSummary() {
     const f = (S.info && S.info.features) || {}, st = S.settings || {};
     const rows = [
@@ -101,7 +105,13 @@
       ['app', t('App registration in Entra ID'), !!st.clientId],
       ['files', t('The add-in\'s files'), !!f.addinVersion && f.addinVersion === S.info.version]
     ].filter(([step]) => WIZ.includes(step));
-    $('wizSummary').replaceChildren(...rows.map(([step, what, ok]) => el('li', { class: ok ? 'good' : 'warn' }, what + (ok ? '' : ' – ' + t('not done yet')),
+    // The text above says what is so: done, or how much is still open.
+    const open = rows.filter((r) => !r[2]).length;
+    document.querySelector('#dlgWizard [data-th=wizDone]').hidden = !!open;
+    $('wizDoneOpen').hidden = !open;
+    $('wizDoneOpen').textContent = open === 1 ? t('Almost done: one point is still open. Do it now, or later: Setup assistant in Settings → General.')
+      : t('Almost done: {0} points are still open. Do them now, or later: Setup assistant in Settings → General.', open);
+    $('wizSummary').replaceChildren(...rows.map(([step, what, ok]) => el('li', { class: ok ? 'good' : 'warn' }, what + (ok ? '' : ' - ' + t('not done yet')),
       ok ? null : el('button', { type: 'button', class: 'small ghost', onclick: () => wizGo(WIZ.indexOf(step)) }, t('To the step')))));
   }
   function wizNavRender() {
@@ -370,9 +380,9 @@
       ['directory', t('Active Directory: the users\' values, with the service account'), false],
       ['pages', t('Cloudflare Pages: uploading the add-in\'s files'), false]
     ];
-    // SharePoint is set up by the setup script, a few steps on: nothing to do here for it.
-    $('wizConnList').replaceChildren(...rows.map(([k, what, needed]) => el('li', { class: p[k] ? 'warn' : 'good' },
-      what + (!p[k] ? ' – ' + t('ready') : needed ? ' – ' + t('set up by the setup script in the step "Register the app in Entra ID"') : ' – ' + t(p[k]) + ' ' + t('(optional)')))));
+    // Not problems: SharePoint comes a few steps on (the setup script), the others are optional.
+    $('wizConnList').replaceChildren(...rows.map(([k, what, needed]) => el('li', { class: !p[k] ? 'good' : needed ? 'later' : 'opt' },
+      what + (!p[k] ? ' - ' + t('ready') : needed ? ' - ' + t('set up by the setup script in the step "Register the app in Entra ID"') : ' - ' + t(p[k]) + ' ' + t('(optional)')))));
   }
   async function wizConnLoad() {
     try { wizConn = await api('connections/get'); } catch (e) { wizConn = null; }

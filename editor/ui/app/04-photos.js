@@ -165,7 +165,7 @@
     const neutral = el('img', { src: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80"><rect width="100" height="80" fill="#e9ecef"/><circle cx="50" cy="31" r="14" fill="#b8bec6"/><ellipse cx="50" cy="82" rx="30" ry="26" fill="#b8bec6"/></svg>'), alt: '' });
     $('phList').replaceChildren(
       card(neutral, t('Grey figure'), () => makeNeutral()),
-      card(el('span', { class: 'ph-none' }, '–'), t('No placeholder'), () => (photoDefault ? removeDefault() : true), !info.def),
+      card(el('span', { class: 'ph-none' }, '-'), t('No placeholder'), () => (photoDefault ? removeDefault() : true), !info.def),
       ...(info.def ? [card(pic(phUrl(info.def)), t('As it is now'), async () => true, true)] : []),
       ...info.photos.map((p) => card(pic(phUrl(p)), p.name, () => useAsDefault('/photos/' + encodeURIComponent(p.name), p.name))),
       ...(S.assets || []).map((a) => card(pic('/assets/' + encodeURIComponent(a.name)), a.name, () => useAsDefault('/assets/' + encodeURIComponent(a.name), a.name))));

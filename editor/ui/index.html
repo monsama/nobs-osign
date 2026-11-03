@@ -140,7 +140,7 @@
             <label>Width <input id="imgW" type="number" min="16" max="800" step="1"> px</label>
             <label>Alt text <input id="imgAlt"></label>
             <label>Link <input id="imgHref" placeholder="https://"></label>
-            <span id="imgPh" class="img-ph" hidden><span class="img-ph-l">Placeholder (all signatures):</span><img id="imgPhThumb" alt="" hidden><span id="imgPhNone" class="ph-none">–</span><button type="button" id="imgPhChange" class="small">Change…</button></span>
+            <span id="imgPh" class="img-ph" hidden><span class="img-ph-l">Placeholder (all signatures):</span><img id="imgPhThumb" alt="" hidden><span id="imgPhNone" class="ph-none">-</span><button type="button" id="imgPhChange" class="small">Change…</button></span>
             <button id="imgDone" class="ghost small">Done</button>
           </div>
           <iframe id="design" class="design" title="Signature editor"></iframe>
@@ -243,6 +243,7 @@
         <input id="usersFilter" placeholder="Search name or mail" aria-label="Search name or mail">
         <span id="usersInfo" class="users-info"></span>
       </div>
+      <div id="usersEmpty"></div>
       <div class="table-wrap"><table class="fields users"><thead id="usersHead"></thead><tbody id="usersRows"></tbody></table></div>
       <p id="usersMore" class="hint"></p>
     </section>
@@ -262,7 +263,7 @@
       </div>
       <p id="photoErr" class="err" role="alert"></p>
       <div class="photo-default">
-        <div class="pd-img"><img id="photoDefaultImg" alt="" hidden><span id="photoDefaultNone">–</span></div>
+        <div class="pd-img"><img id="photoDefaultImg" alt="" hidden><span id="photoDefaultNone">-</span></div>
         <div class="pd-text">
           <b>Without a photo of their own</b>
           <p id="photoDefaultNote" class="hint"></p>
@@ -759,9 +760,9 @@
         you can pause at any time and continue later with <b>Setup assistant</b> at the top.</p>
       <h3 class="wiz-h">Before you start</h3>
       <ul class="wiz-list ticks">
-        <li data-th="wizNeed1"><b>Microsoft 365 administrator rights</b> – for the app registration in Entra ID and for deploying the add-in.</li>
-        <li data-th="wizNeed2"><b>Access to SharePoint</b> – for a folder that holds the signatures.</li>
-        <li data-th="wizNeed3"><b>A web host for the add-in's files</b> – for example Cloudflare Pages: free of charge, no credit card required.</li>
+        <li data-th="wizNeed1"><b>Microsoft 365 administrator rights</b> - for the app registration in Entra ID and for deploying the add-in.</li>
+        <li data-th="wizNeed2"><b>Access to SharePoint</b> - for a folder that holds the signatures.</li>
+        <li data-th="wizNeed3"><b>A web host for the add-in's files</b> - for example Cloudflare Pages: free of charge, no credit card required.</li>
         <li data-th="wizNeed4"><b>About one hour.</b> After deployment, Microsoft 365 can take up to 24 hours to make the add-in available in every mailbox.</li>
       </ul>
       <div class="wiz-fields"><label>Language<select id="wizLang"></select></label></div>
@@ -846,7 +847,7 @@
     </section>
 
     <section class="wiz-step" data-step="host" data-title="Where the add-in is served">
-      <p class="wiz-intro" data-th="wizHostLead">The add-in consists of a few static files – code only, no data – that Outlook loads from a web
+      <p class="wiz-intro" data-th="wizHostLead">The add-in consists of a few static files - code only, no data - that Outlook loads from a web
         address. They only change with a new version of NOBS OSign. Choose where they will be hosted:</p>
       <label class="wiz-opt"><input type="radio" name="whost" value="cloudflare"> <span data-th="wizHostCf"><b>Cloudflare Pages</b> <em>recommended</em><span class="sub">Free
         of charge, no credit card required; the server uploads the files itself.</span></span></label>
@@ -975,6 +976,7 @@
           apps</b>.</li>
         <li><span data-th="wizDeploy2">Choose <i>Office Add-in</i> and <b>Provide link to the manifest file</b>:</span>
           <span class="copyline"><code id="wizManifest"></code><button type="button" class="copy" data-copy="wizManifest">Copy</button></span>
+          <span id="wizNoUrl" class="wiz-nourl" hidden><span data-th="wizNoUrl">No address yet: enter it in the step <i>Add-in address</i> first.</span> <button type="button" id="wizToHost" class="small">To the step</button></span>
           <span data-th="wizDeploy2b">Or <b>Upload manifest file (.xml)</b> with</span> <a class="btnlike" href="/addin/manifest.xml" download>manifest.xml</a></li>
         <li data-th="wizDeploy3"><b>Assign users:</b> for testing <i>Just me</i> or a pilot group, later the entire organization.</li>
         <li data-th="wizDeploy4">Allow up to 24 hours for the deployment. To test right away, for yourself only: in Outlook on the web open
@@ -989,6 +991,7 @@
       <p class="wiz-intro" data-th="wizDone">The setup is complete. Next, create your signatures: import your existing templates (from CI-Sign
         or classic Outlook) or start a new one, define who receives which signature, and select <b>Publish</b>. Changes to signatures
         never require new add-in files.</p>
+      <p id="wizDoneOpen" class="wiz-intro" hidden></p>
       <div class="wiz-sum"><b>What is set up</b><ul id="wizSummary" class="checks"></ul></div>
       <p class="wiz-actions"><button type="button" id="wizImport" class="primary">Import templates…</button> <button type="button" id="wizNewSig">New signature</button></p>
     </section>

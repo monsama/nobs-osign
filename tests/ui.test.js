@@ -179,25 +179,25 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   await page.waitForSelector('#dlgImpReport[open]');
   const rep = await page.textContent('#impReport');
   assert.match(rep, /template\(s\) imported: .*Vertrieb/);
-  assert.match(rep, /Campaigns made from text blocks with days: Vertrieb – notice/);
+  assert.match(rep, /Campaigns made from text blocks with days: Vertrieb - notice/);
   assert.match(rep, /not taken over from CI-Sign/);
   await page.click('#dlgImpReport button[value=cancel]');
   assert.equal(await page.inputValue('#sigName'), 'Vertrieb');
   // The text block without days in the template; the one with days a campaign of its own.
   let imported = '';
-  for (let i = 0; i < 50 && !/Vertrieb – notice/.test(imported); i++) { await new Promise((r) => setTimeout(r, 100)); imported = (await api('draft/get')).configJson || ''; }
+  for (let i = 0; i < 50 && !/Vertrieb - notice/.test(imported); i++) { await new Promise((r) => setTimeout(r, 100)); imported = (await api('draft/get')).configJson || ''; }
   const sigs = JSON.parse(imported).signatures;
-  const vt = sigs.find((x) => x.name === 'Vertrieb'), camp = sigs.find((x) => x.name === 'Vertrieb – notice');
+  const vt = sigs.find((x) => x.name === 'Vertrieb'), camp = sigs.find((x) => x.name === 'Vertrieb - notice');
   assert.match(vt.html, /Contoso AG/);
   assert.doesNotMatch(vt.html, /Closed in January|Fair 2020|\{##/);
   assert.ok(!sigs.some((x) => /old$/.test(x.name)), 'a past block makes no campaign');
   assert.match(camp.html, /Closed in January.*Contoso AG|Contoso AG.*Closed in January/s);
   assert.deepEqual([camp.validFrom, camp.validUntil], ['2099-01-01', '2099-01-31']);
-  await page.click('#sigList a:has-text("Vertrieb – notice")');
+  await page.click('#sigList a:has-text("Vertrieb - notice")');
   await page.click('#btnDel');
   // Cancel keeps it; Delete deletes.
   await page.click('#askCancel');
-  assert.ok(await page.isVisible('#sigList a:has-text("Vertrieb – notice")'));
+  assert.ok(await page.isVisible('#sigList a:has-text("Vertrieb - notice")'));
   await page.click('#btnDel');
   assert.equal(await page.textContent('#askOk'), 'Delete');
   await page.click('#askOk');
@@ -277,7 +277,7 @@ test('users from AD: read, look, and publish exactly that', { skip }, async () =
   await page.click('#dlgPublish button[value=cancel]');
 
   await page.click('a[data-view=users]');
-  assert.match(await page.textContent('#usersInfo'), /Not read yet/);
+  assert.match(await page.textContent('#usersEmpty'), /Not read from AD yet/);
   await page.click('#btnAdRead');
   await page.waitForFunction(() => /Read .*2 users - 2 new/.test(document.querySelector('#usersInfo').textContent));
   // Who gets what: the signature for new mail and for replies, per person.
@@ -323,7 +323,7 @@ test('setup assistant: opens by itself until NOBS OSign is set up, and walks thr
   await next("The server's connections");
   // AD is set up here; SharePoint is the setup script's, a few steps on.
   await page.waitForFunction(() => /SharePoint .* set up by the setup script/.test(document.querySelector('#wizConnList').textContent));
-  assert.match(await page.textContent('#wizConnList'), /signing in with Windows accounts – ready/);
+  assert.match(await page.textContent('#wizConnList'), /signing in with Windows accounts - ready/);
   await next('Where the signatures are kept');
   // Nothing given yet (only the saved default): the address is asked for.
   await nextFails(/Paste the address of the folder in SharePoint/);

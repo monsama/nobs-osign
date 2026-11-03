@@ -6,7 +6,7 @@
   function normalize(c) {
     const d = core.defaultConfig();
     c = c && typeof c === 'object' ? c : d;
-    // Published with a pilot by 0.9.57–0.9.60 (loaded or brought back from History): its newer version.
+    // Published with a pilot by 0.9.57-0.9.60 (loaded or brought back from History): its newer version.
     if (c.pilot && c.pilot.config && typeof c.pilot.config === 'object') c = c.pilot.config;
     delete c.pilot;
     // One made before the value source could be chosen took its values from Entra ID: it stays so

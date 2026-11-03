@@ -216,7 +216,7 @@ export async function loadConfig(opts) {
     const errs = core.validate(cfg);
     if (errs.length) throw new Error('The published signatures are not valid: ' + errs[0]);
     if (!cached || cached.etag !== meta.eTag) await store.set(CONFIG_KEY, JSON.stringify({ etag: meta.eTag || '', text }));
-    // A pilot (published by 0.9.57–0.9.60): not any more; everyone gets the version for all.
+    // A pilot (published by 0.9.57-0.9.60): not any more; everyone gets the version for all.
     delete cfg.pilot;
     return cfg;
   } catch (e) {

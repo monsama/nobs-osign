@@ -169,7 +169,10 @@
     head.textContent = ''; body.textContent = ''; $('usersMore').textContent = '';
     // Nothing read yet: no empty table, the button says what to do.
     $('usersRows').closest('.table-wrap').hidden = off || !snap;
-    if (off || !snap) { $('usersInfo').textContent = off ? '' : t('Not read yet.'); return; }
+    // Not read yet: said in the page, as the other pages say what to do first.
+    $('usersEmpty').replaceChildren(...(!off && !snap ? [emptyState('photo', t('Not read from AD yet.'),
+      t('Read from AD shows everyone with the values their signature would get, and who gets none. Nothing is written until you publish.'))] : []));
+    if (off || !snap) { $('usersInfo').textContent = ''; return; }
     const c = snap.counts;
     $('usersInfo').textContent = t('Read {0}: {1} users - {2} new, {3} changed, {4} removed.', when(snap.readAt), snap.users.length, c.new, c.changed, c.removed) +
       (!S.snapMatches ? ' ' + t('The fields or groups changed since: read again.') : snap.written ? ' ' + t('Published already.') : ' ' + t('Not published yet.'));
