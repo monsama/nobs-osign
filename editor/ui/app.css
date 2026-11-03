@@ -1136,3 +1136,40 @@ a#coffeeBtn.btnlike.icon:hover, .side-btns .icon-btn:hover { background: var(--p
 .preview-head .icon-btn, .preview-head label.tgl { border-color: transparent; background: transparent; color: var(--muted); }
 .preview-head .icon-btn:hover, .preview-head label.tgl:hover { background: var(--panel-2); color: var(--text); }
 .preview-head label.tgl:has(input:checked) { background: var(--info-soft); border-color: var(--info-line); color: var(--accent); }
+
+/* Not assigned: a group of its own in the list, folded away. */
+.sig-list .sig-group-li { margin-top: 6px; }
+.sig-list .sig-group { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 10px; border: 0; border-top: 1px solid var(--line-2); border-radius: 0; background: transparent;
+  color: var(--muted); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; text-align: left; cursor: pointer; }
+.sig-list .sig-group:hover { color: var(--text); background: transparent; filter: none; }
+.sig-list .sig-group .chev { width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .15s; flex: none; margin-right: 2px; }
+.sig-list .sig-group.open .chev { transform: rotate(45deg); }
+.sig-list .sig-group-n { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: var(--r-s); background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-size: 11px; text-align: center; letter-spacing: 0; }
+.sig-list .sig-group-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
+
+/* The pages use their whole width: text, notes, cards and empty states end at the same edge as the
+   tables (the dialogs keep their own widths). */
+.view .lead, .view .callout, .view .empty-state, .view .photo-default, .view .block-list,
+.view .wiz-note, .view .tokens, .view .grid2.narrow, #vsrcServerNote { max-width: none; }
+.view .photo-add { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); margin: 14px 0 6px; }
+.view .photo-add > label:first-child { flex: 0 1 280px; }
+.view .photo-add > label:first-child input { width: 100%; }
+.view:not(#viewEmpty) .empty-state { max-width: none; }
+
+/* The connections, a page of Server: back to its status list at the top. */
+#connHost .conn-crumb { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+#connHost .conn-crumb span { font-weight: 600; color: var(--text); }
+#connHost .conn-crumb span::before { content: '›'; margin-right: 10px; color: var(--muted); font-weight: 400; }
+#connHost .ctest:has(.where:empty) { display: none; }
+
+/* Tooltips (01-base.js): small, dark in both themes, a shortcut as a key. */
+.tip { position: fixed; z-index: 1000; max-width: 320px; padding: 5px 9px; border-radius: var(--r-s); background: #1d2330; color: #f3f5f8;
+  font-size: 12px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); pointer-events: none; margin: 0; border: 0; inset: auto;
+  animation: tip-in .12s ease-out; }
+.tip[hidden] { display: none; }
+.tip kbd { margin-left: 8px; padding: 0 5px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 3px; background: rgba(255, 255, 255, .08); color: inherit; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tip { background: #e9edf3; color: #1d2330; } :root:not([data-theme="light"]) .tip kbd { border-color: rgba(0, 0, 0, .2); background: rgba(0, 0, 0, .05); } }
+:root[data-theme="dark"] .tip { background: #e9edf3; color: #1d2330; }
+:root[data-theme="dark"] .tip kbd { border-color: rgba(0, 0, 0, .2); background: rgba(0, 0, 0, .05); }
+@keyframes tip-in { from { opacity: 0; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .tip { animation: none; } }

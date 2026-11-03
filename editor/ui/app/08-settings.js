@@ -60,7 +60,6 @@
     // The server's connections, and where it publishes: the local account admin's alone.
     $('setConnRow').hidden = true;
     $('setTabServer').hidden = !(onServer() && S.info.user && S.info.user.local);
-    $('setTabConn').hidden = $('setTabServer').hidden;
     $('setApproval').checked = S.settings.requireApproval === 'on';
     $('setApprovalNote').textContent = '';
     const locked = onServer() && !(S.info.user && S.info.user.local);
@@ -82,7 +81,9 @@
   });
   // Settings in tabs: general, the server (the local admin's), the Outlook add-in.
   function setTab(name) {
-    document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === name); b.setAttribute('aria-selected', b.dataset.stab === name); });
+    // The connections are a page of Server (from its status list): Server stays the tab marked.
+    const tab = name === 'conn' ? 'server' : name;
+    document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => { b.classList.toggle('active', b.dataset.stab === tab); b.setAttribute('aria-selected', b.dataset.stab === tab); });
     document.querySelectorAll('#dlgSettings [data-spane]').forEach((p) => { p.hidden = p.dataset.spane !== name; });
     document.querySelector('#dlgSettings .dlg').scrollTop = 0;
     // Info saves nothing: only Close there. The connections have their own Save and Cancel.
@@ -91,10 +92,10 @@
     document.querySelector('#dlgSettings .dlg-foot').hidden = name === 'conn';
     document.querySelector('#dlgSettings .dlg-foot button[value=cancel]').textContent = view ? t('Close') : t('Cancel');
   }
-  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.stab === 'conn') { openConn(); return; } setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
+  document.querySelectorAll('#dlgSettings [data-stab]').forEach((b) => b.addEventListener('click', () => { setTab(b.dataset.stab); if (b.dataset.stab === 'server') runHealth(); }));
 
-  // Status: every part the server depends on, tried now, in one list; a part to set up opens
-  // its tab in Server connections.
+  // Status: every part the server depends on, tried now, in one list ("Check everything"); a part
+  // to set up opens its page of the connections. Saving them comes back here and checks again.
   // Asked again while it runs (say, after the add-in's files were made again): once more after it,
   // so the rows show what is there now.
   let healthRunning = null, healthAgain = false;
@@ -111,8 +112,8 @@
     try { S.info = await api('info'); } catch (e) { /* the last one known */ }
     const f = S.info.features || {};
     const test = (what) => async () => {
-      try { return { state: 'good', text: t((await api('connections/test', { what })).message) }; } catch (e) {
-        return { state: /^(Not set up yet|Noch nicht eingerichtet)/.test(e.message) ? 'off' : 'bad', text: e.message };
+      try { return { state: 'good', text: connText((await api('connections/test', { what })).message) }; } catch (e) {
+        return { state: /^(Not set up yet|Noch nicht eingerichtet)/.test(e.message) ? 'off' : 'bad', text: connText(e.message) };
       }
     };
     const checks = [
@@ -436,6 +437,7 @@
   // Back from the connections to Status: checked again, with what was just changed.
   function connBack() { setTab('server'); runHealth(); }
   $('connCancel').addEventListener('click', connBack);
+  $('connBackTop').addEventListener('click', connBack);
   $('connHost').addEventListener('click', (e) => {
     const b = e.target.closest('[data-drop]');
     if (!b) return;
@@ -452,7 +454,7 @@
       const a = el('a', { href: URL.createObjectURL(new Blob([bytes], { type: 'application/pkix-cert' })), download: 'nobs-osign-server.cer' });
       document.body.append(a); a.click(); a.remove();
       $('connCert').textContent = t('Thumbprint {0}, valid until {1}.', r.thumbprint, day(r.expires));
-      out.textContent = t('Downloaded. Upload it to the server\'s app in Entra, then Save and test the connection.');
+      out.textContent = t('Downloaded. Upload it to the server\'s app in Entra, then Save: the status checks the connection.');
     } catch (err) { out.className = 'where warn'; out.textContent = connText(err.message); }
   });
   $('connCaRemove').addEventListener('click', () => { connCa = null; connCaReading = null; $('connCaRemove').hidden = true; $('connCa').textContent = t('Removed when you save.'); });
@@ -499,17 +501,6 @@
     } catch (err) { out.className = 'where warn'; out.textContent = t(err.message); }
     finally { $('connDetect').disabled = false; }
   });
-  // Test: saved first, so what is tested is what the dialog shows; the answer next to the button.
-  document.querySelectorAll('#connHost [data-ctest]').forEach((b) => b.addEventListener('click', async () => {
-    const out = document.querySelector('#connHost [data-ctestout="' + b.dataset.ctest + '"]');
-    out.className = 'where'; out.textContent = t('Testing…'); b.disabled = true; $('connErr').textContent = '';
-    try {
-      renderConnections(await connSaveNow());
-      const r = await api('connections/test', { what: b.dataset.ctest });
-      out.className = 'where good'; out.textContent = '✓ ' + connText(r.message);
-    } catch (err) { out.className = 'where warn'; out.textContent = connText(err.message); }
-    finally { b.disabled = false; }
-  }));
 
   // The server version: the files made go to Cloudflare Pages from the server.
   async function pagesUpload(out, btn) {
