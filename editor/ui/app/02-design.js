@@ -439,6 +439,8 @@
     histButtons();
   }
   // Typing goes in as one step once it pauses.
+  // Whether the editor's own undo has a step that way (typing in the signature open now).
+  function histCan(dir) { const s = sig(); if (!s || s.id !== hist.id) return false; if (hist.timer) return true; return dir < 0 ? hist.pos > 0 : hist.pos < hist.stack.length - 1; }
   function histNote() { if (S.view === 'sig' && hist.id) { clearTimeout(hist.timer); hist.timer = setTimeout(histRecord, 500); } }
   function histStep(dir) {
     if (hist.timer) histRecord();

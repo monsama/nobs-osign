@@ -896,7 +896,7 @@ test('photos: one per person, uploaded and made small, listed, removed; the prev
   // Removed again (asked first).
   await page.click('#pvNote a:has-text("Add the photo")');
   await page.waitForSelector('#viewPhotos:not([hidden])');
-  assert.match(await page.textContent("#photosRule"), /takes photos\/@@\w+\.jpg/);
+  assert.match(await page.textContent('#photosRule'), /Photos are named after/);
   assert.equal(await page.inputValue('#photoWho'), 'Muster');
   await page.click('#photoList button[aria-label="Remove photo neu1.jpg"]');
   await page.click('#askOk');
@@ -1445,5 +1445,30 @@ test('replace in all signatures: shown first, fields left alone, undone in one g
   assert.match(html, /Bahnhofstrasse 1, @@mail/);
   const c1 = await draft(); Object.assign(c1.signatures.find((x) => x.name === 'Main signature'), was);
   await api('draft/save', { configJson: JSON.stringify(c1) });
+  assert.deepEqual(errors, []);
+});
+
+test('the photos named after another field, and undone with the draft\'s undo (Ctrl+Z, ↶ in the top bar)', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('.nav-list a[data-view=photos]');
+  await page.waitForSelector('#viewPhotos:not([hidden])');
+  await page.waitForFunction(() => document.querySelector('#photosRule select'));
+  const sel = '#photosRule select >> nth=0';
+  const v0 = await page.inputValue(sel), v1 = v0 === 'givenName' ? 'sn' : 'givenName';
+  await page.selectOption(sel, v1);
+  await page.click('#photosRule button:has-text("Change")');
+  if (await page.isVisible('#dlgAsk[open]')) await page.click('#askOk');
+  await page.waitForFunction((v) => document.querySelector('#photosRule select').value === v && !document.querySelector('#photosRule button:not([hidden])'), v1);
+  // Undone from the top bar: as it was, on the page where it was.
+  await page.waitForFunction(() => /Undo: /.test(document.querySelector('#ghUndo').getAttribute('title') || document.querySelector('#ghUndo').dataset.tip || ''));
+  await page.click('#ghUndo');
+  await page.waitForFunction((v) => document.querySelector('#photosRule select') && document.querySelector('#photosRule select').value === v, v0);
+  // And with the keyboard, outside a text field: redone, then undone.
+  await page.click('#viewPhotos h1');
+  await page.keyboard.press('Control+y');
+  await page.waitForFunction((v) => document.querySelector('#photosRule select').value === v, v1);
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction((v) => document.querySelector('#photosRule select').value === v, v0);
   assert.deepEqual(errors, []);
 });

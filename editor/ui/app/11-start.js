@@ -38,6 +38,8 @@
     setTimeout(() => (S.assets || []).forEach((a) => { if (/\.png$/i.test(a.name)) darkCheck(a.name); }), 500);
     if (S.config.signatures.length) openSig(S.sigId && S.config.signatures.some((s) => s.id === S.sigId) ? S.sigId : S.config.signatures[0].id);
     else show('empty');
+    // A draft loaded (at the start, from History, a backup): the undo steps start from it.
+    ghReset();
   }
 
   let toastTimer = null;

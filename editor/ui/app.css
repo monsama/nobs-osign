@@ -1221,3 +1221,7 @@ label.check.block > input[type=radio], label.check.block > input[type=checkbox] 
 .rep-list small { color: var(--muted); }
 dialog.fit { width: min(1080px, 96vw); }
 .camp-axis { overflow: hidden; }
+.top .gh-btns { display: inline-flex; gap: 2px; flex: none; }
+.callout.photo-rule { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.callout.photo-rule select { width: auto; }
+.callout.photo-rule small { color: var(--muted); }
