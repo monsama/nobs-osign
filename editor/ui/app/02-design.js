@@ -243,6 +243,20 @@
     contact: ['mail', 'mobile', 'homephone', 'telephonenumber', 'othertelephone', 'ipphone', 'facsimiletelephonenumber', 'pager', 'wwwhomepage', 'othermobile'],
     company: ['company', 'physicaldeliveryofficename', 'streetaddress', 'postofficebox', 'postalcode', 'l', 'st', 'co', 'c']
   };
+  // A separator only between two groups on the same line: none at the start or end of a line
+  // where the toolbar wraps.
+  function tidySeps(bar) {
+    if (!bar) return;
+    const seps = [...bar.querySelectorAll(':scope > .sep')];
+    seps.forEach((s) => { s.classList.remove('edge'); });
+    const shown = (n) => n && n.offsetParent !== null && getComputedStyle(n).display !== 'none';
+    const near = (s, dir) => { let n = s[dir]; while (n && (!shown(n) || n.classList.contains('sep'))) n = n[dir]; return n; };
+    seps.forEach((s) => {
+      const a = near(s, 'previousElementSibling'), b = near(s, 'nextElementSibling');
+      if (!a || !b || a.offsetTop !== b.offsetTop || s.offsetTop !== b.offsetTop) s.classList.add('edge');
+    });
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => tidySeps($('toolbar'))).observe($('toolbar'));
   function fillFieldSelect(sel) {
     sel.textContent = '';
     sel.append(el('option', { value: '' }, t('+ Insert field')));
@@ -540,6 +554,7 @@
     design.hidden = mode !== 'design';
     $('source').hidden = mode !== 'html';
     document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = n.classList.contains('html-only') ? (mode === 'html' ? '' : 'none') : mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
+    tidySeps($('toolbar'));
     hideImgBar();
   }
   // What was typed in the HTML tab, made safe, once the tab is left.
