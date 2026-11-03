@@ -1381,3 +1381,32 @@ test('tooltips: a button\'s title in the app\'s look, its shortcut as a key; the
   assert.equal(await page.getAttribute('#btnFind', 'title'), title);
   assert.deepEqual(errors, []);
 });
+
+test('connections changed and not saved: asked before leaving; the signature list filtered by name', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnSettings');
+  await page.click('#dlgSettings [data-stab=server]');
+  await page.click('#setConn');
+  await page.waitForSelector('#connHost:not([hidden])');
+  await page.fill('#cn_adDomain', 'changed.example.ch');
+  await page.click('#connBackTop');
+  await page.waitForSelector('#dlgAsk[open]');
+  await page.click('#askCancel');
+  assert.equal(await page.isVisible('#connHost'), true, 'stays');
+  await page.click('#connBackTop');
+  await page.waitForSelector('#dlgAsk[open]');
+  await page.click('#askOk');
+  await page.waitForSelector('#connHost', { state: 'hidden' });
+  await page.click('#dlgSettings button[value=cancel]');
+  // Many signatures: a filter above the list.
+  const before = await page.$$eval('#sigList li a', (as) => as.length);
+  for (let i = before; i < 8; i++) { await page.click('#btnNew'); await page.waitForSelector('#dlgTpl[open] .tpl-card'); await page.click('#dlgTpl .tpl-card >> nth=0'); await page.waitForSelector('#dlgTpl', { state: 'hidden' }); }
+  await page.waitForSelector('#sigFilterRow:not([hidden])');
+  await page.fill('#sigFilter', 'Main signature');
+  await page.waitForFunction(() => [...document.querySelectorAll('#sigList li a')].every((a) => /Main signature/.test(a.textContent)));
+  await page.fill('#sigFilter', 'zzz-nothing');
+  await page.waitForFunction(() => /No signature named like that/.test(document.querySelector('#sigList').textContent));
+  await page.fill('#sigFilter', '');
+  assert.deepEqual(errors, []);
+});

@@ -3,7 +3,7 @@
 You do this once. Afterwards, changing a signature only means editing it and clicking **Publish**.
 
 **The quick way:** install the server (step 1), sign in as `admin`. The **setup assistant** opens
-by itself and walks through steps 2–6, saving each one. It can be opened again any time with
+by itself and walks through steps 2-6, saving each one. It can be opened again any time with
 **Setup assistant** at the top. This page has the same steps in full.
 
 NOBS OSign does not need GitHub to run: the server is installed from a release once, and everything
@@ -167,7 +167,7 @@ somebody else registered under these names are never used.
 **The server's app** (*NOBS OSign server*):
 
 1. **New registration**: name *NOBS OSign server*, no redirect URI.
-2. **The server's certificate**: in Server connections → SharePoint → *Enter by hand*, **Download
+2. **The server's certificate**: in Settings → Server → SharePoint → *Enter by hand*, **Download
    the certificate (.cer)** (the server makes it; its key stays on the server), then in Entra
    **Certificates & secrets → Certificates → Upload certificate**. It holds for two years; the
    editor warns 30 days before. No client secret.
@@ -240,7 +240,7 @@ too (step 7).
    **Check before you publish:** open **Users**, click **Read from AD**. You see every user with
    the values that would go out, new and changed ones marked, and who would be removed. Nothing is
    written yet. **Publish** then writes exactly what you read there, once. With an export time set
-   (Server connections → Service account), the server also exports by itself every day; the
+   (Settings → Server → Service account), the server also exports by itself every day; the
    Add-in view shows how its last run went.
 3. **Preview**: sample values, all fields empty, or a real person: *User from Active Directory…*
    (with the service account), or *Person from Entra ID…* (when the setup script gave the server
@@ -303,7 +303,7 @@ there, and no change with the From address. Try it on one phone first.
 
 ## Settings of the server
 
-In Settings → Server connections, or as environment variables in `.env` with the secrets as files:
+In Settings → Server, or as environment variables in `.env` with the secrets as files:
 
 | Variable | |
 |---|---|
@@ -322,7 +322,7 @@ In Settings → Server connections, or as environment variables in `.env` with t
 | `OSIGN_LDAP_SERVICE_PASSWORD_FILE` | a file holding its password |
 | `OSIGN_LDAP_DIRECTORY_BASE` | where users and groups are searched; empty: the whole domain of `OSIGN_LDAP_BASE` |
 | `OSIGN_AD_EXPORT_AT` | `06:00`: the users' values are exported every day at that time (`TZ`) |
-| `OSIGN_AD_ATTRIBUTES` | more AD attributes fields may read (`extensionAttribute1, employeeID`); without, only contact details (names, title, department, company, office, phone numbers, mail, address, web page). Also under Server connections → Active Directory |
+| `OSIGN_AD_ATTRIBUTES` | more AD attributes fields may read (`extensionAttribute1, employeeID`); without, only contact details (names, title, department, company, office, phone numbers, mail, address, web page). Also under Settings → Server → Active Directory |
 | `OSIGN_CF_ACCOUNT_ID`, `OSIGN_CF_PROJECT`, `OSIGN_CF_API_TOKEN_FILE` | Cloudflare Pages |
 | `OSIGN_REQUIRE_ATTESTATION` | `1`: an update whose attestation cannot be checked stops |
 | `OSIGN_UPDATE_CHECK` | `0`: the server does not ask GitHub whether a newer version is out (default `1`) |
@@ -385,7 +385,7 @@ Server shows which one is served, and whether PCs trust it.
 | No photo | No `OSign/photos/<username>.jpg` for that user, or `@@sAMAccountName` has no Graph source. |
 | Group signatures missing | `GroupMember.Read.All` without admin consent, or the group not synced to Entra ID. |
 | Publishing says the server could not sign in | The certificate or client secret ran out (the status bar says so 30 days before), or the certificate was taken off the app in Entra: run the setup script again. |
-| Setup script: *the server could not be reached* (SSL/TLS trust) | The PC does not trust the certificate of the editor's address (your own CA, or the proxy's). The script saves its result as `nobs-osign-setup-result.json` next to itself: **Upload the result** in Server connections → SharePoint (or the setup assistant), then delete the file. Or have the PC trust that CA. |
+| Setup script: *the server could not be reached* (SSL/TLS trust) | The PC does not trust the certificate of the editor's address (your own CA, or the proxy's). The script saves its result as `nobs-osign-setup-result.json` next to itself: **Upload the result** in Settings → Server → SharePoint (or the setup assistant), then delete the file. Or have the PC trust that CA. |
 | Setup script: *403* on the site | Your account is not an owner of that site (for a personal OneDrive: not its owner). The script stops before it makes anything. Make your account an owner of the site, or choose a SharePoint site, and run it again. |
 | Setup script: the rights could not be taken back | It tells which; take them back in Entra → Enterprise applications → *Microsoft Graph Command Line Tools* → Permissions → User consent. |
 | Two signatures | Check *Add-in → Switch off Outlook's own signature*. In classic Outlook the user can also remove their default under File → Options → Mail → Signatures. |

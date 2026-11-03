@@ -34,7 +34,7 @@
       // The one the signatures take: _default with their extension (a _default of another kind is not used).
       photoDefaultShow(r.photos.find((p) => p.name.toLowerCase() === defaultName().toLowerCase()), r.mayChange);
       phRefresh();
-      $('photoFile').disabled = $('photoUrlGo').disabled = !r.mayChange;
+      for (const id of ['photoFile', 'photoUrlGo']) offFor($(id), r.mayChange ? '' : t('Only the publishing group changes photos (with four eyes on: the local admin).'));
       if (!r.mayChange) $('photoErr').textContent = t('With four eyes on, photos go into photos/ of the OSign folder by hand, or the local admin uploads them.');
       photosShow(r.mayChange);
     } catch (e) { photoItems = []; $('photosInfo').textContent = ''; $('photoErr').textContent = t(e.message); $('photoList').replaceChildren(); }
@@ -112,7 +112,7 @@
     if (p) $('photoDefaultImg').src = '/photos/' + encodeURIComponent(p.name) + '?v=' + encodeURIComponent(p.tag || '');
     $('photoDefaultNote').textContent = p ? t('People without a photo get this one ({0}).', p.name) : t('People without a photo get the signature without one.');
     $('photoDefaultOff').hidden = !p;
-    $('photoDefaultMake').disabled = $('photoDefaultFile').disabled = $('photoDefaultOff').disabled = $('photoDefaultAsset').disabled = mayChange === false;
+    for (const id of ['photoDefaultMake', 'photoDefaultFile', 'photoDefaultOff', 'photoDefaultAsset']) offFor($(id), mayChange === false ? t('Only the publishing group changes photos (with four eyes on: the local admin).') : '');
     photoDefaultAssets();
     // A neutral one is drawn, and a drawing is no GIF: for signatures that take GIF photos, an image of your own.
     if (/\.gif$/i.test(defaultName())) { $('photoDefaultMake').disabled = true; $('photoDefaultMake').title = t('The signatures take GIF photos: choose a GIF of your own.'); }

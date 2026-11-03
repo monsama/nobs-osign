@@ -48,6 +48,7 @@
       </span>
     </div>
     <div id="sigPicked" class="sig-picked" hidden><span id="sigPickedN"></span><span class="spacer"></span><button type="button" id="sigPickedDel" class="small danger">Delete…</button><button type="button" id="sigPickedNone" class="small ghost" title="Let go of the selection (Esc)">Cancel</button></div>
+    <div id="sigFilterRow" class="sig-filter" hidden><input id="sigFilter" type="search" placeholder="Filter signatures" aria-label="Filter signatures" autocomplete="off"></div>
     <ul id="sigList" class="sig-list" aria-multiselectable="true"></ul>
     </section>
     <section class="side-sect" aria-labelledby="sideManage">
@@ -241,6 +242,7 @@
         <label class="check"><input type="checkbox" id="usersChanges" checked> Only changes</label>
         <label class="check"><input type="checkbox" id="usersNone"> Only without a signature</label>
         <input id="usersFilter" placeholder="Search name or mail" aria-label="Search name or mail">
+        <button type="button" id="usersCsv" class="ghost" hidden title="Who gets what, as shown, as a CSV file (Excel)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>CSV</button>
         <span id="usersInfo" class="users-info"></span>
       </div>
       <div id="usersEmpty"></div>
@@ -340,9 +342,11 @@
       <select id="auditWhat" aria-label="Show">
         <option value="">Everything</option><option value="signin">Sign-ins</option><option value="publish">Publishing</option>
         <option value="connections/save">Server connections</option><option value="failed">Refused only</option></select>
+      <select id="auditSince" aria-label="Since"><option value="">Any time</option><option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
       <input id="auditFind" type="search" placeholder="Search who, from where, what…" aria-label="Search">
       <span id="auditCount" class="muted"></span>
       <button type="button" id="auditReload" class="ghost" title="Load again"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>Refresh</button>
+      <button type="button" id="auditCsv" class="ghost" title="What is shown, as a CSV file (Excel)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>CSV</button>
     </div>
     <div class="table-wrap audit-wrap"><table class="fields audit"><thead><tr><th>When</th><th>Who</th><th>From</th><th>What</th><th>Details</th></tr></thead>
       <tbody id="auditRows"></tbody></table></div>
@@ -385,7 +389,7 @@
       <label for="bakRestorePass">Its passphrase</label>
       <div><input id="bakRestorePass" type="password" autocomplete="off"></div>
     </div>
-    <p><button type="button" id="bakRestore" class="danger">Bring it back</button> <span id="bakRestoreOk" class="where"></span></p>
+    <p><button type="button" id="bakCheck">Check it only</button> <button type="button" id="bakRestore" class="danger">Bring it back</button> <span id="bakRestoreOk" class="where"></span></p>
     <p id="bakErr" class="err"></p>
     <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
   </form>
@@ -757,7 +761,7 @@
       <p class="wiz-intro" data-th="wizWelcome">NOBS OSign manages your organization's email signatures centrally and adds them
         automatically to every message in classic Outlook, new Outlook and Outlook on the web. This assistant guides you
         through the one-time setup. Each step explains what to do in Microsoft 365 and saves your entries right away, so
-        you can pause at any time and continue later with <b>Setup assistant</b> at the top.</p>
+        you can pause at any time and continue later with <b>Setup assistant</b> (at the top, or in Settings → General).</p>
       <h3 class="wiz-h">Before you start</h3>
       <ul class="wiz-list ticks">
         <li data-th="wizNeed1"><b>Microsoft 365 administrator rights</b> - for the app registration in Entra ID and for deploying the add-in.</li>

@@ -33,8 +33,8 @@ Parts many signatures share (a disclaimer, a banner, the address) are **building
 |---|---|---|---|
 | Edit signatures, fields, building blocks | ✓ | ✓ | ✓ |
 | Publish, set time, write users, change photos | asks for approval | ✓ | ✓ |
-| Approve someone else's publish | – | ✓ | ✓ |
-| Server connections, add-in files, backups, audit log, four eyes | – | – | ✓ |
+| Approve someone else's publish | - | ✓ | ✓ |
+| Server connections, add-in files, backups, audit log, four eyes | - | - | ✓ |
 
 The **publishing group** is optional (*Settings → Server → Active Directory → Publishing
 group*); empty, everyone in the sign-in group publishes. Membership is read when someone signs in:
@@ -48,6 +48,9 @@ taken out of the group, they keep their rights until they sign in again (at most
 - **Automatically, every day:** a time, how many days to keep them, and a passphrase. The server
   keeps them in `backups/` of the data volume, or in `OSIGN_BACKUP_DIR` (another disk is better:
   set it in `.env`, outside the data volume). The newest always stays. *Download* fetches one.
+- **Check it only:** the file and its passphrase: whether it opens, and what is in it (date,
+  version, signatures, published versions). Nothing is changed; do it now and then with a backup
+  from the automatic ones.
 - **Bring a backup back:** the file and its passphrase. It replaces the draft, the settings, the
   connections and the history; the audit log and the automatic backups stay.
 
@@ -77,7 +80,9 @@ Outlook add-in → Create the add-in files* (and upload them); a new `manifest.x
 | A signature for a group does not reach it | the group's name as in AD, and whether the add-in can read groups (`GroupMember.Read.All`) |
 
 The **audit log** (*Settings → Server*, local `admin`) has every sign-in, publish, approval and
-change of the connections, with who and from where.
+change of the connections, with who and from where. Filter it by kind and time, search it, and
+download what is shown as **CSV**. *Users* (after *Read from AD*) downloads who gets which signature
+the same way.
 
 ## Before a big change: try it in a test tenant
 

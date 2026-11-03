@@ -69,7 +69,7 @@
     const ul = $('impList'); ul.textContent = '';
     impItems.forEach((it) => {
       const box = el('input', { type: 'checkbox' }); box.checked = it.checked;
-      box.addEventListener('change', () => { it.checked = box.checked; $('impGo').disabled = !impItems.some((x) => x.checked); });
+      box.addEventListener('change', () => { it.checked = box.checked; offFor($('impGo'), impItems.some((x) => x.checked) ? '' : t('Tick at least one template.')); });
       const exists = S.config.signatures.some((x) => x.name.toLowerCase() === it.name.toLowerCase());
       const meta = [];
       if (it.blocks) meta.push(el('span', { class: 'warn' }, t('CI-Sign text blocks ({##…}), not a signature. ')));
@@ -98,7 +98,7 @@
     }
     const n = impItems.length;
     $('impNote').textContent = n ? t('{0} template file(s) found, {1} image(s) picked.', n, impImages.size) : t('No .htm files among what was picked.');
-    $('impGo').disabled = !impItems.some((x) => x.checked);
+    offFor($('impGo'), impItems.some((x) => x.checked) ? '' : t('Tick at least one template.'));
   }
 
   async function uploadImage(file) {

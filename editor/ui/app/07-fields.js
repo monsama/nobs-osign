@@ -155,6 +155,7 @@
   }
   const when = (ms) => new Date(ms).toLocaleString(I18N.lang);
 
+  let usersCsvRows = null;
   function renderUsers() {
     const mode = core.valueSource(S.config);
     const fields = core.adFields(S.config);
@@ -163,12 +164,13 @@
     $('usersOff').textContent = mode === 'graph'
       ? t('The values come from Entra ID (Add-in → Where the users\' values come from): there is nothing to read from AD.')
       : t('No field takes its value from AD (Fields: an AD attribute, and no Graph source in the mixed mode).');
-    $('btnAdRead').disabled = off;
+    offFor($('btnAdRead'), off ? $('usersOff').textContent : '');
     const snap = S.snap;
     const head = $('usersHead'), body = $('usersRows');
     head.textContent = ''; body.textContent = ''; $('usersMore').textContent = '';
     // Nothing read yet: no empty table, the button says what to do.
     $('usersRows').closest('.table-wrap').hidden = off || !snap;
+    $('usersCsv').hidden = off || !snap; usersCsvRows = null;
     // Not read yet: said in the page, as the other pages say what to do first.
     $('usersEmpty').replaceChildren(...(!off && !snap ? [emptyState('photo', t('Not read from AD yet.'),
       t('Read from AD shows everyone with the values their signature would get, and who gets none. Nothing is written until you publish.'))] : []));
@@ -186,6 +188,9 @@
     const only = $('usersChanges').checked, noneOnly = $('usersNone').checked;
     const rows = snap.users.filter((u) => (!only || u.status !== 'unchanged') && (!noneOnly || !gets.get(u).new) &&
       (!q || u.mail.toLowerCase().includes(q) || String(u.name || '').toLowerCase().includes(q) || Object.values(u.values || {}).some((v) => String(v).toLowerCase().includes(q))));
+    usersCsvRows = () => [[t('State'), t('Name'), t('Mail'), t('New mail'), t('Replies')].concat(fields.map((f) => f.label || f.key), showGroups ? [t('Groups')] : [])]
+      .concat(rows.map((u) => [t(u.status), u.name || '', u.mail, ...['new', 'reply'].map((k) => { const g = gets.get(u)[k]; return g ? g.name : t('none'); })]
+        .concat(fields.map((f) => (u.values || {})[f.key] || ''), showGroups ? [(u.groups || []).join(', ')] : [])));
     const LIMIT = 500;
     rows.slice(0, LIMIT).forEach((u) => {
       body.append(el('tr', null,
@@ -212,6 +217,8 @@
     catch (e) { toast(t(e.message), true); }
     finally { $('btnAdRead').disabled = false; renderUsers(); }
   });
+  // Who gets what, as the table shows it now (its filters too), for Excel: all rows, not only 500.
+  $('usersCsv').addEventListener('click', () => { if (usersCsvRows) downloadCsv('nobs-osign-users-' + new Date().toISOString().slice(0, 10) + '.csv', usersCsvRows()); });
   $('usersChanges').addEventListener('change', renderUsers);
   $('usersNone').addEventListener('change', () => { if ($('usersNone').checked) $('usersChanges').checked = false; renderUsers(); });
   // For each user read from AD: { new, reply }, the signatures they get by the central defaults

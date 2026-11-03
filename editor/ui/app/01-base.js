@@ -148,7 +148,7 @@
       p.title = S.publishedAt ? t('Last published {0}: Outlook uses the draft as it is.', when) : '';
     }
     // Nothing published yet: nothing to load.
-    $('btnLoad').disabled = !S.publishedAt;
+    offFor($('btnLoad'), S.publishedAt ? '' : t('Nothing is published yet.'));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -265,9 +265,13 @@
       });
       return el('li', null, a);
     };
-    assigned.forEach((s) => ul.append(item(s, false)));
+    // The filter above the list (many signatures): by name, the ones nobody gets too when they match.
+    const fq = ($('sigFilter').value || '').trim().toLowerCase();
+    const fit = (s) => !fq || String(s.name || '').toLowerCase().includes(fq);
+    $('sigFilterRow').hidden = S.config.signatures.length < 8 && !fq;
+    assigned.filter(fit).forEach((s) => ul.append(item(s, false)));
     // Only both kinds make a group worth folding: else the list as it is.
-    if (!assigned.length) unassigned.forEach((s) => ul.append(item(s, false)));
+    if (!assigned.length) unassigned.filter(fit).forEach((s) => ul.append(item(s, false)));
     else if (unassigned.length) {
       const pending = unassigned.some((s) => sigState(s) === 'changed' || sigState(s) === 'new');
       const head = el('button', { type: 'button', class: 'sig-group' + (open ? ' open' : ''), 'aria-expanded': String(open), id: 'sigGroupUnassigned',
@@ -275,11 +279,12 @@
         el('span', { class: 'chev', 'aria-hidden': 'true' }), el('span', null, t('Not assigned')), el('span', { class: 'sig-group-n' }, String(unassigned.length)),
         pending ? el('span', { class: 'sig-group-dot', title: t('One of them is not published yet') }) : null);
       ul.append(el('li', { class: 'sig-group-li' }, head));
-      unassigned.forEach((s) => {
-        const keep = open || (S.view === 'sig' && !S.blockEdit && s.id === S.sigId) || picked.has(s.id);
+      unassigned.filter(fit).forEach((s) => {
+        const keep = open || !!fq || (S.view === 'sig' && !S.blockEdit && s.id === S.sigId) || picked.has(s.id);
         if (keep) ul.append(item(s, true));
       });
     }
+    if (fq && !ul.querySelector('li a')) ul.append(el('li', { class: 'none' }, t('No signature named like that.')));
     // A building block in the editor: Building blocks is where one is.
     document.querySelectorAll('.nav-list a').forEach((a) => a.classList.toggle('active', a.dataset.view === (S.blockEdit ? 'blocks' : S.view)));
     // Several picked: what can be done with them, above the list.
@@ -559,3 +564,23 @@
     for (const n of ['pointerdown', 'keydown', 'scroll', 'wheel']) document.addEventListener(n, (ev) => { if (n !== 'keydown' || ev.key === 'Escape' || ev.key === 'Enter' || ev.key === ' ') hide(); }, true);
     window.addEventListener('blur', hide);
   })();
+
+  // A button off for a reason: the reason is its tooltip then (its own title back once it is on).
+  function offFor(b, reason) {
+    if (!b) return;
+    if (!('title0' in b.dataset)) b.dataset.title0 = b.getAttribute('title') || '';
+    b.disabled = !!reason;
+    const own = b.dataset.title0;
+    if (reason) b.setAttribute('title', reason); else if (own) b.setAttribute('title', own); else b.removeAttribute('title');
+  }
+  // A table to download as CSV: with a BOM and ; between the values, as Excel in Switzerland and
+  // Germany opens it at once. A value starting with = + - @ is kept as text (no formula).
+  function downloadCsv(name, rows) {
+    const cell = (v) => { let x = v === null || v === undefined ? '' : String(v); if (/^[=+\-@\t\r]/.test(x)) x = "'" + x; return /[";\n\r]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+    const text = '\ufeff' + rows.map((r) => r.map(cell).join(';')).join('\r\n') + '\r\n';
+    const a = el('a', { href: URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })), download: name });
+    document.body.append(a); a.click(); a.remove();
+  }
+
+  $('sigFilter').addEventListener('input', () => renderList());
+  $('sigFilter').addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('sigFilter').value) { e.preventDefault(); e.stopPropagation(); $('sigFilter').value = ''; renderList(); } });

@@ -173,7 +173,7 @@
       : t('No folder set yet (Settings).');
     const checks = publishChecks();
     $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
-    $('pubGo').disabled = checks.some((c) => c[0] === 'bad');
+    offFor($('pubGo'), checks.some((c) => c[0] === 'bad') ? t('First fix what is marked red above.') : '');
     $('pubErr').textContent = ''; $('pubOk').textContent = ''; $('pubMsg').value = ''; $('pubGo').hidden = false;
     await loadApproval(); renderApproval();
     await loadRelease();
@@ -301,15 +301,16 @@
     signin: 'Sign-in', signout: 'Sign-out', publish: 'Published', 'history/restore': 'Version brought back',
     'connections/save': 'Server connections', 'connections/cert': 'Certificate', 'settings/save': 'Settings',
     'setup/start': 'Setup script', 'setup/finish': 'Setup script result', 'addin/build': 'Add-in files', 'addin/upload': 'Add-in upload',
-    'ad/export': 'Users exported', 'backup/export': 'Backup', 'backup/restore': 'Backup restored',
+    'ad/export': 'Users exported', 'backup/export': 'Backup', 'backup/restore': 'Backup restored', 'backup/check': 'Backup checked',
     'approval/request': 'Approval asked', 'approval/approve': 'Approved', 'approval/cancel': 'Approval withdrawn',
     'photos/upload': 'Photo', 'photos/delete': 'Photo removed', 'photos/fetch': 'Photo from the web'
   };
-  let auditEntries = [];
+  let auditEntries = [], auditShown = [];
   function auditShow() {
     const q = $('auditFind').value.trim().toLowerCase();
     const loc = I18N.lang === 'de' ? 'de-CH' : 'en-GB';
-    const rows = auditEntries.filter((e) => !q || [e.who, e.ip, e.what, t(AUDIT_WHAT[e.what] || e.what), e.detail ? t(e.detail) : ''].join(' ').toLowerCase().includes(q));
+    const since = Number($('auditSince').value) ? Date.now() - Number($('auditSince').value) * 86400000 : 0;
+    const rows = auditShown = auditEntries.filter((e) => (!since || Date.parse(e.at) >= since) && (!q || [e.who, e.ip, e.what, t(AUDIT_WHAT[e.what] || e.what), e.detail ? t(e.detail) : ''].join(' ').toLowerCase().includes(q)));
     $('auditCount').textContent = auditEntries.length ? t('{0} of {1}', rows.length, auditEntries.length) : '';
     const tb = $('auditRows');
     if (!rows.length) { tb.replaceChildren(el('tr', null, el('td', { colspan: 5, class: 'muted empty' }, auditEntries.length ? t('Nothing matches.') : t('Nothing yet.')))); return; }
@@ -333,10 +334,16 @@
       auditShow();
     } catch (err) { auditEntries = []; $('auditRows').replaceChildren(); $('auditCount').textContent = ''; $('auditErr').textContent = t(err.message); }
   }
-  $('setAudit').addEventListener('click', () => { $('auditFind').value = ''; $('dlgAudit').showModal(); renderAudit(); });
+  $('setAudit').addEventListener('click', () => { $('auditFind').value = ''; $('auditSince').value = ''; $('dlgAudit').showModal(); renderAudit(); });
   $('auditWhat').addEventListener('change', renderAudit);
   $('auditReload').addEventListener('click', renderAudit);
   $('auditFind').addEventListener('input', auditShow);
+  $('auditSince').addEventListener('change', auditShow);
+  $('auditCsv').addEventListener('click', () => {
+    if (!auditShown.length) { toast(t('Nothing to export.'), true); return; }
+    downloadCsv('nobs-osign-audit-' + new Date().toISOString().slice(0, 10) + '.csv', [[t('When'), t('Who'), t('From'), t('What'), t('Went through'), t('Details')]]
+      .concat(auditShown.map((e) => [new Date(e.at).toISOString(), e.who || '', e.ip || '', t(AUDIT_WHAT[e.what] || e.what), e.ok ? t('yes') : t('no'), e.detail ? t(e.detail) : ''])));
+  });
 
   // A backup: downloaded locked with a passphrase, or brought back.
   $('setBackup').addEventListener('click', () => {
@@ -354,7 +361,7 @@
       r.last ? new Date(r.last.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' ' + (r.last.ok ? '✓' : '✕ ' + t(r.last.error || '')) : t('none yet'));
     if (r.warning) $('abWhere').textContent += ' ' + t(r.warning);
     $('abPassNote').textContent = r.passLost ? t('The one set cannot be opened any more (another server key): set it again.') : r.passSet ? t('(set; type a new one to change it)') : t('(at least 12 characters; needed to open them)');
-    $('abRun').disabled = !r.passSet;
+    offFor($('abRun'), r.passSet ? '' : t('Set a passphrase for the automatic backups first.'));
     $('abList').replaceChildren(...(r.backups || []).slice(0, 10).map((b) => el('li', null,
       el('span', null, b.name), el('small', { class: 'where' }, Math.round(b.size / 1024) + ' KB'),
       el('button', { type: 'button', class: 'small ghost', onclick: () => abDownload(b.name) }, t('Download')))));
@@ -397,14 +404,29 @@
     } catch (err) { $('bakExportOk').textContent = ''; $('bakErr').textContent = t(err.message); }
     finally { $('bakExport').disabled = false; }
   });
-  $('bakRestore').addEventListener('click', async () => {
+  // Whether the file opens with that passphrase, and what is in it: nothing is changed here.
+  const bakRead = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+  $('bakCheck').addEventListener('click', async () => {
     $('bakErr').textContent = ''; $('bakRestoreOk').textContent = '';
+    const f = $('bakFile').files[0];
+    if (!f) { $('bakErr').textContent = t('Choose the backup file.'); return; }
+    $('bakCheck').disabled = true; $('bakRestoreOk').textContent = t('Opening it…');
+    try {
+      const r = await api('backup/check', { data: await bakRead(f), passphrase: $('bakRestorePass').value });
+      const when = new Date(r.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB');
+      $('bakRestoreOk').className = 'where good';
+      $('bakRestoreOk').textContent = '✓ ' + t('It opens: the backup of {0} (version {1}), {2} signatures, {3} published versions, {4} files. Nothing was changed.', when, r.version, r.signatures === null ? '?' : r.signatures, r.versions, r.files);
+    } catch (err) { $('bakRestoreOk').textContent = ''; $('bakRestoreOk').className = 'where'; $('bakErr').textContent = t(err.message); }
+    finally { $('bakCheck').disabled = false; }
+  });
+  $('bakRestore').addEventListener('click', async () => {
+    $('bakErr').textContent = ''; $('bakRestoreOk').textContent = ''; $('bakRestoreOk').className = 'where';
     const f = $('bakFile').files[0];
     if (!f) { $('bakErr').textContent = t('Choose the backup file.'); return; }
     if (!(await ask(t('Replace the draft, the settings, the connections and the history here with the backup\'s?'), t('Restore'), true))) return;
     $('bakRestore').disabled = true; $('bakRestoreOk').textContent = t('Bringing it back…');
     try {
-      const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+      const data = await bakRead(f);
       const r = await api('backup/restore', { data, passphrase: $('bakRestorePass').value });
       const [info, st, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
       S.info = info; S.settings = st.settings; lastSettings = st;

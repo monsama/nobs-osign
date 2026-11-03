@@ -189,6 +189,13 @@ test('a backup: locked with a passphrase, brought back on a new server with anot
     await admin2('draft/save', { configJson: cfg([{ id: 'z', name: 'Z', html: '<p>z</p>' }]) });
     assert.match((await admin2('backup/restore', { data: b.data, passphrase: 'wrong passphrase!' })).error, /passphrase is not the one/);
     assert.match((await admin2('backup/restore', { data: Buffer.from('{}').toString('base64'), passphrase: 'x' })).error, /not a backup/);
+    // Checked only: what it holds, and the draft here as it was.
+    assert.match((await admin2('backup/check', { data: b.data, passphrase: 'wrong passphrase!' })).error, /passphrase is not the one/);
+    const ck = await admin2('backup/check', { data: b.data, passphrase: 'correct horse battery' });
+    assert.equal(ck.ok, true, ck.error);
+    assert.ok(ck.files > 0 && ck.signatures >= 1 && ck.key, JSON.stringify(ck));
+    assert.match((await admin2('draft/get')).configJson, /"Z"/, 'nothing brought back');
+    assert.match((await anna('backup/check', { data: b.data, passphrase: 'correct horse battery' })).error, /Only the local account admin/);
     const r = await admin2('backup/restore', { data: b.data, passphrase: 'correct horse battery' });
     assert.equal(r.ok, true, r.error);
     // The draft, its image, the history and the connections, with the token readable again.
