@@ -1543,3 +1543,41 @@ test('a change undone: the status says published again, also when the draft is s
   await api('draft/save', { configJson: keep });
   assert.deepEqual(errors, []);
 });
+
+test('load again (⟳): the draft as it is on the server now, the page staying where it is', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('.nav-list a[data-view=fields]');
+  await page.click('#btnRefresh');
+  await page.waitForFunction(() => /Loaded again: as it was/.test(document.querySelector('#toast').textContent));
+  assert.equal(await page.isVisible('#viewFields'), true, 'still on Fields');
+  // Changed elsewhere (another window, someone else): taken in.
+  const c = JSON.parse((await api('draft/get')).configJson), keep = JSON.stringify(c);
+  c.signatures[0].name = 'Renamed elsewhere';
+  await api('draft/save', { configJson: JSON.stringify(c) });
+  await page.click('#btnRefresh');
+  await page.waitForFunction(() => /Renamed elsewhere/.test(document.querySelector('#sigList').textContent));
+  assert.match(await page.textContent('#toast'), /was changed/);
+  await page.goto('about:blank');
+  await api('draft/save', { configJson: keep });
+  assert.deepEqual(errors, []);
+});
+
+test('discard all changes (load published): the draft replaced by what is published, in the page (no reload)', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  const pub = JSON.parse((await api('published/get')).configJson);
+  const first = pub.signatures[0];
+  await page.click(`#sigList a:has-text("${first.name}") >> nth=0`);
+  await page.fill('#sigName', first.name + ' (draft only)'); await page.dispatchEvent('#sigName', 'input');
+  await page.waitForFunction(() => /Unpublished changes/.test(document.querySelector('#stPub').textContent));
+  await page.evaluate(() => { window.__stayed = true; });
+  await page.click('#stPub');
+  await page.waitForSelector('#dlgChanges[open]');
+  await page.click('#chgAll');
+  if (await page.isVisible('#dlgAsk[open]')) await page.click('#askOk');
+  await page.waitForFunction((n) => ![...document.querySelectorAll('#sigList li a')].some((a) => a.textContent.includes(n)), first.name + ' (draft only)');
+  assert.equal(await page.evaluate(() => window.__stayed), true, 'the page was not loaded anew');
+  assert.match(await page.textContent('#toast'), /Loaded the published signatures/);
+  assert.deepEqual(errors, []);
+});

@@ -1255,3 +1255,4 @@ dialog.fit { width: min(1080px, 96vw); }
 #healthRows .health-rest > summary::before { content: '›'; display: inline-block; width: 14px; }
 #healthRows .health-rest[open] > summary::before { content: '⌄'; }
 #healthRows > .health-rest:first-child > summary { border-top: 0; }
+#btnRefresh.busy svg { animation: spin 0.8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
