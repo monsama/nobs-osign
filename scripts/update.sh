@@ -5,6 +5,9 @@
 # not become healthy.
 #   sudo ./scripts/update.sh            the latest release
 #   sudo ./scripts/update.sh 0.5.0      that release
+# Run it, never source it (". scripts/update.sh"): its exec and exit would end your own shell, and
+# with it an SSH session.
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then echo "[ERROR] Run it as: sudo ./scripts/update.sh (not with . or source)" >&2; return 1; fi
 set -Eeuo pipefail
 # The update replaces this very file, and bash reads a script as it goes: it runs from a copy.
 BASE_DIR="${OSIGN_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"

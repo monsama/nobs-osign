@@ -210,7 +210,7 @@
     const ic = el('span', { class: 'es-icon', 'aria-hidden': 'true' });
     ic.innerHTML = '<svg viewBox="0 0 24 24">' + ES_ICON[icon] + '</svg>';
     return el('div', { class: 'empty-state' }, ic,
-      el('p', { class: 'es-title' }, title), text ? el('p', null, text) : null,
+      el('div', { class: 'es-text' }, el('p', { class: 'es-title' }, title), text ? el('p', null, text) : null),
       action ? el('div', { class: 'es-actions' }, el('button', { type: 'button', onclick: action[1] }, action[0])) : null);
   }
 
