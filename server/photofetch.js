@@ -30,6 +30,7 @@ function groups6(ip) {
   const all = [...h, ...Array(Math.max(0, fill)).fill('0'), ...t].map((x) => parseInt(x || '0', 16));
   return all.length === 8 && all.every((x) => x >= 0 && x <= 0xffff) ? all : null;
 }
+// Whether an address is in a private, local or reserved range: a photo is never fetched from there.
 function isPrivate(ip) {
   if (net.isIPv6(ip)) {
     const g = groups6(ip);
@@ -73,6 +74,7 @@ function kindOf(bytes) {
   return '';
 }
 
+// One HTTPS request to a public address, the answer limited in size and time, redirects followed only to public ones.
 function get(url, left, opts) {
   return new Promise((resolve, reject) => {
     let u;
@@ -116,4 +118,4 @@ async function fetchPhoto(url, opts) {
   try { return await get(String(url || '').trim(), MAX_REDIRECTS, opts); } finally { busy = false; }
 }
 
-module.exports = { fetchPhoto, isPrivate, kindOf, publicLookup };
+module.exports = { fetchPhoto, isPrivate };

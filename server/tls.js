@@ -14,6 +14,7 @@ const crypto = require('node:crypto');
 const HOST = /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
 const cn = (s) => (/CN=([^\n,]+)/.exec(String(s || '')) || [])[1] || String(s || '').split('\n')[0];
 
+// The web certificate the proxy serves for an address: names, issuer, until when, and whether PCs trust it.
 function inspect({ addr, host, caFile, timeout = 8000 }) {
   if (!HOST.test(String(host || ''))) return Promise.resolve({ error: 'That is not a host name.' });
   const [h, p] = String(addr || 'nobs-proxy:443').split(':');

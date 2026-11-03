@@ -11,6 +11,7 @@ import { core, localize, langOf, loadConfig, loadUserValues, getPrefs, getVarian
 // The notice above the message, under a key of its own: a later attempt that works takes it away.
 const NOTICE = 'osign';
 function notices(item) { return item && item.notificationMessages; }
+// A short notice above the message (why no signature went in), in Outlook's language, 150 characters at most.
 function showNotice(item, reason) {
   const n = notices(item); if (!n || !n.replaceAsync) return Promise.resolve();
   const lang = langOf(Office.context.displayLanguage || '');
@@ -38,6 +39,7 @@ function log(m) { try { console.log('OSign ' + VERSION + ': ' + m); } catch (e) 
 
 const CLASSIC_HINT = 'In classic Outlook, open OSign → Signatures once; from then on it goes in by itself.';
 
+// The signature put into a new message, reply or forward (or meeting), or none; a notice when it could not.
 async function sign(event, what) {
   let item = null;
   try {

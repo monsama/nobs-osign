@@ -15,6 +15,7 @@ const KEEP = 50;
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const ID = /^\d{13}$/;
 
+// The published versions: one file per publish with its configuration, the images kept by their hash.
 function createHistory({ dataDir, assetDir }) {
   const dir = path.join(dataDir, 'history');
   const blobs = path.join(dir, 'assets');
@@ -41,6 +42,7 @@ function createHistory({ dataDir, assetDir }) {
     prune();
     return id;
   }
+  // The oldest versions removed past the number kept, and the images no version uses any more.
   function prune() {
     const all = ids();
     for (const id of all.slice(KEEP)) { try { fs.unlinkSync(path.join(dir, id + '.json')); } catch (e) { /* gone */ } }

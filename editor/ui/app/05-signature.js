@@ -1,7 +1,6 @@
   // ---------------------------------------------------------------------------------------------
   // Signature properties
   // ---------------------------------------------------------------------------------------------
-  const splitList = (v) => v.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
   $('sigName').addEventListener('input', () => { const s = sig(); if (s) { s.name = $('sigName').value; changed({ preview: false }); } });
   $('sigName').addEventListener('blur', () => { const s = sig(); if (s && !s.name.trim()) { s.name = t('Signature'); $('sigName').value = s.name; changed(); } });
   // One default for new mail and one for replies, unless the audiences differ: a second one with

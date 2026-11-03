@@ -39,6 +39,7 @@ function summary(r) {
   };
 }
 
+// Where the add-in is deployed in Microsoft 365: the read-only script made, and its answer taken.
 function createDeployment({ dataDir, now = Date.now }) {
   const file = path.join(dataDir, 'addin-deployment.json');
   let pending = null;
@@ -50,6 +51,7 @@ function createDeployment({ dataDir, now = Date.now }) {
     return { id: pending.id, until: new Date(pending.until).toISOString() };
   }
 
+  // The PowerShell script that reads the add-in's deployment, with the one-time token to send its answer.
   function script(id) {
     if (!pending || pending.id !== id || now() > pending.until) return null;
     const values = { __OSIGN_SERVER__: psq(pending.origin), __OSIGN_TOKEN__: psq(pending.token), __OSIGN_ADDIN_ID__: psq(pending.addinId) };

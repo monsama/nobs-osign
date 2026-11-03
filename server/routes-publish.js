@@ -10,6 +10,7 @@ const { diffConfigs } = require('./diff');
 
 function createPublishRoutes({ store, history, settings, users, approvalFile, approval, needsApproval, needsApprovalFor, publisher, publishNow, compiledProblem, live }) {
   const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
+  // What waits for approval, for the editor: who asked, when, and whether it is the one asking now.
   function approvalAnswer(s) {
     const a = approval();
     if (!a) return { pending: null, required: needsApprovalFor(s), publisher: publisher(s) };

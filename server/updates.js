@@ -17,11 +17,13 @@ function newer(a, b) {
   return false;
 }
 
+// Whether a newer release is out (OSIGN_UPDATE_CHECK): asked of GitHub at most twice a day.
 function createUpdates({ env, version, fetchFn, log, now = Date.now }) {
   const on = String(env.OSIGN_UPDATE_CHECK || '0') !== '0';
   const url = env.OSIGN_UPDATE_URL || LATEST;
   let found = null, checkedAt = 0, running = null;
 
+  // One look at the latest release; the last answer kept.
   async function check() {
     checkedAt = now();
     try {

@@ -49,6 +49,7 @@ function checkConfigJson(text) {
   return null;
 }
 
+// The draft, its images and publishing: to the server's folder or, through Graph, to SharePoint.
 function createStore(dataDir) {
   const draftFile = path.join(dataDir, 'draft.json');
   const assetDir = path.join(dataDir, 'assets');
@@ -92,6 +93,7 @@ function createStore(dataDir) {
     return { dirty: dirty() };
   }
 
+  // An image into the draft: PNG, JPG or GIF only, as it says it is, 1 MB at most; another one of the same name gets a name of its own.
   function uploadAsset(name, data) {
     let n = safeAssetName(name);
     if (!n) return { error: 'Only PNG, JPG and GIF images can be used: Outlook does not show SVG or WebP in a signature.' };
@@ -155,6 +157,7 @@ function createStore(dataDir) {
     return { changed, images };
   }
 
+  // What is published, as the draft again (the draft before kept once as draft.json.bak).
   async function loadPublished(target) {
     const buf = await target.read('signatures.json');
     if (!buf) return { error: 'Nothing has been published there yet.' };
@@ -178,4 +181,4 @@ function createStore(dataDir) {
   return { assetDir, getDraft, saveDraft, uploadAsset, deleteAsset, publish, draftImages, loadPublished, draftHash, assetHashes };
 }
 
-module.exports = { createStore, safeAssetName, checkConfigJson, ASSET_TYPES, writeAtomic, readText };
+module.exports = { createStore, safeAssetName, ASSET_TYPES, writeAtomic, readText };

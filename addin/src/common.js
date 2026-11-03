@@ -118,6 +118,7 @@ export function localize(message, lang) {
 // The permissions a token carries (its scp claim). Decoded by hand: classic Outlook's runtime has
 // no atob.
 const B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+// The permissions a token carries (its scp claim), or null.
 function scopesOf(token) {
   try {
     const part = String(token).split('.')[1].replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -128,6 +129,7 @@ function scopesOf(token) {
   } catch (e) { return null; }
 }
 
+// One GET to Graph with the user's token: its JSON, null for a 404 when allowed, or an error in words.
 async function graphGet(token, url, what, allowNotFound) {
   const r = await withTimeout(fetch(url, { headers: { Authorization: 'Bearer ' + token } }), 8000, what);
   if (r.status === 404 && allowNotFound) return null;
@@ -152,6 +154,7 @@ const TOKEN_REUSE_MS = 10 * 60 * 1000;
 // would wait until Outlook gives up on it, silently: so it waits this long, then says so.
 const SIGN_IN_MS = 20 * 1000;
 let tokens = {};
+// A Graph token for the add-in (nested app authentication), cached until shortly before it runs out.
 async function token(scopes, interactive) {
   const key = scopes.join(' ');
   const had = tokens[key];
@@ -174,6 +177,7 @@ function siteUrl() {
   if (!m) throw new Error('The add-in was made for the SharePoint site "' + SITE + '": make its files again in NOBS OSign.');
   return GRAPH + '/sites/' + m[1] + ':/' + m[2] + '/' + encodeURIComponent(m[3]) + ':';
 }
+// The Graph address of the site's drive the signatures are in, found once.
 async function siteBase(tok) {
   if (!SITE || SITE === 'root') return GRAPH + '/sites/root';
   if (!siteId) {
@@ -197,6 +201,7 @@ async function itemUrl(tok, rel) {
   return (await siteBase(tok)) + '/drive/root:/' + parts.join('/');
 }
 
+// A file of the signatures' folder, as text or as bytes.
 async function download(meta, tok, what, asText) {
   // The address Graph hands out is signed for a short while: no token is sent there.
   const url = meta['@microsoft.graph.downloadUrl'];
@@ -405,6 +410,7 @@ async function loadImages(refs, interactive) {
   }
   // The placeholder photo, for whoever has none of their own: looked for once per extension.
   const placeholders = {};
+  // The placeholder photo, for people without one of their own.
   const placeholder = async (ext) => {
     if (!(ext in placeholders)) {
       placeholders[ext] = null;

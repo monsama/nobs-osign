@@ -85,6 +85,7 @@
     return { key: key, label: key, ad: /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(key) ? key : '', graph: '', sample: '' };
   }
 
+  // A new configuration: the starter fields, the default options, no signatures.
   function defaultConfig() {
     return {
       schemaVersion: SCHEMA_VERSION,
@@ -118,6 +119,7 @@
     };
   }
 
+  // A new signature for nobody yet, with the fields every signature has.
   function newSignature(id, name) {
     return {
       id: id,
@@ -234,6 +236,7 @@
     return false;
   }
 
+  // A signature's HTML made into what the add-in fills in: fields as markers, lines that may go when empty marked.
   function compile(html, doc) {
     if (!doc) throw new Error('compile needs a document');
     var host = doc.createElement('div');
@@ -285,6 +288,7 @@
     while ((m = BLOCK_RE.exec(String(html || '')))) if (out.indexOf(m[1]) < 0) out.push(m[1]);
     return out;
   }
+  // Building blocks put in where a signature names them ({{key}}); unknown ones left as typed.
   function expandBlocks(html, blocks) {
     var map = {};
     (blocks || []).forEach(function (b) { if (b && b.key) map[String(b.key).toLowerCase()] = String(b.html || ''); });
@@ -612,6 +616,7 @@
   // countries get + for 00 and lose (0), their spacing kept. Anything else (an extension, letters,
   // too short) stays as it was.
   var CC2 = '20 27 30 31 32 33 34 36 39 40 41 43 44 45 46 47 48 49 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66 81 82 84 86 90 91 92 93 94 95 98'.split(' ');
+  // A phone number written one way (+41 79 123 45 67); see below.
   function formatPhone(value, country) {
     var raw = String(value || '').trim();
     if (!raw || /[A-Za-z]/.test(raw) || /[^\d\s+()./-]/.test(raw)) return raw;
@@ -725,8 +730,7 @@
     compile: compile,
     render: render,
     htmlToText: htmlToText,
-    localImages: localImages,
-    domainOf: domainOf,
+    localImages: localImages, 
     isAvailable: isAvailable,
     inPeriod: inPeriod,
     isCampaign: isCampaign,
@@ -734,8 +738,7 @@
     PHOTO_DEFAULT: PHOTO_DEFAULT,
     today: today,
     available: available,
-    pick: pick,
-    editableKeys: editableKeys,
+    pick: pick, 
     editableIn: editableIn,
     variantsAllowed: variantsAllowed,
     ownAllowed: ownAllowed,
@@ -752,8 +755,7 @@
     adFields: adFields,
     usesAdExport: usesAdExport,
     userFileName: userFileName,
-    mergeValues: mergeValues, formatPhone: formatPhone, formatValue: formatValue,
-    readPath: readPath,
+    mergeValues: mergeValues, formatPhone: formatPhone, formatValue: formatValue, 
     graphSelect: graphSelect,
     valuesFromGraph: valuesFromGraph,
     validate: validate

@@ -16,6 +16,7 @@ const { nextAt } = require('./users');
 
 const NAME = /^nobs-osign-backup-\d{4}-\d{2}-\d{2}(?:-\d{4})?\.osignbak$/;
 
+// The automatic backups: their settings, the daily timer, making, pruning and handing out the files.
 function createAutoBackup({ dataDir, dir, seal, open, rawKey, version, log }) {
   const file = path.join(dataDir, 'autobackup.json');
   // A folder of its own inside the data volume would go into every backup and be emptied when one
@@ -45,6 +46,7 @@ function createAutoBackup({ dataDir, dir, seal, open, rawKey, version, log }) {
     const all = list(), cut = Date.now() - keep * 86400000;
     all.slice(1).filter((b) => Date.parse(b.at) < cut).forEach((b) => { try { fs.rmSync(path.join(where, b.name)); } catch (e) { /* next time */ } });
   }
+  // One backup made now, with the passphrase kept: written, the older ones pruned, the outcome kept.
   function run(now = new Date()) {
     const s = read(), pass = passphrase(s);
     if (!pass) return { error: 'No passphrase for the automatic backups: set it (again) in Backup.' };
@@ -61,6 +63,7 @@ function createAutoBackup({ dataDir, dir, seal, open, rawKey, version, log }) {
     s.last = { at: now.toISOString(), ok: true, name }; write(s);
     return { name };
   }
+  // The next backup armed at its time of day; none while it is off.
   function schedule() {
     if (timer) { clearTimeout(timer); timer = null; }
     const s = read();

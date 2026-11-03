@@ -54,6 +54,7 @@ function createAuth({ env, ldap, now = Date.now, log = console, store }) {
   const adminPassword = () => readSecret(env.OSIGN_ADMIN_PASSWORD_FILE, env.OSIGN_ADMIN_PASSWORD);
   const secure = env.OSIGN_SECURE_COOKIE !== '0';
 
+  // The session of a request, from its cookie: none when it ran out (idle or too old), kept fresh otherwise.
   function session(req) {
     const id = cookieOf(req);
     const s = id && sessions.get(id);
@@ -143,4 +144,4 @@ function createAuth({ env, ldap, now = Date.now, log = console, store }) {
   return { session, login, logout, methods, list, end, ref, flush: saveNow };
 }
 
-module.exports = { createAuth, COOKIE };
+module.exports = { createAuth };

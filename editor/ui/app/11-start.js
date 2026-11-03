@@ -27,6 +27,7 @@
     return c;
   }
 
+  // A draft from the server into the editor: made as the editor reads it, opened, the undo steps from here.
   function applyDraft(r) {
     let c = null;
     try { c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { toast(t('The saved draft could not be read; starting from an empty one.'), true); }
@@ -51,6 +52,7 @@
     const p = ask(text, okLabel || t('OK'), false, null, true).then((yes) => (yes ? $('askInput').value : null));
     return p;
   }
+  // A question with its answer as a button (Delete, Restore …): true when that was chosen.
   function ask(text, okLabel, danger, cancelLabel, withInput) {
     const d = $('dlgAsk');
     if (!withInput) $('askInput').hidden = true;
@@ -218,6 +220,7 @@
     renderTray();
   }
 
+  // The start: signed in, the info and settings, the draft, the assistant when nothing is set up yet.
   async function start() {
     I18N.apply(document.body);
     a11y();

@@ -43,6 +43,7 @@ const attrOk = (a, c) => attrName(a) && (!c || allowedAttrs(c).some((x) => x.toL
 // Users with a mail address whose account is not disabled (userAccountControl flag 2).
 const ACTIVE_USERS = '(&(objectCategory=person)(objectClass=user)(mail=*)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))';
 
+// How the server reads AD: from the environment, with the attributes it may read.
 function directoryConfig(env, ldapCfg) {
   let pw = '';
   if (env.OSIGN_LDAP_SERVICE_PASSWORD_FILE) { try { pw = fs.readFileSync(env.OSIGN_LDAP_SERVICE_PASSWORD_FILE, 'utf8').trim(); } catch (e) { pw = ''; } }
@@ -59,6 +60,7 @@ function directoryConfig(env, ldapCfg) {
     extraAttrs: extraAttrs(env.OSIGN_AD_ATTRIBUTES) });
 }
 const directoryEnabled = (c) => !!(c.url && c.serviceDn);
+// What is missing to read AD with the service account, or '' when it can.
 function directoryProblem(c) {
   if (!c.url) return 'Active Directory is not set up on the server (Settings → Server connections).';
   if (!c.serviceDn) return 'Enter the service account and its password (Settings → Server connections).';
@@ -69,6 +71,7 @@ function directoryProblem(c) {
   return ldapProblem(c);
 }
 
+// One LDAP connection bound as the service account, for what fn does with it; closed afterwards.
 async function withService(c, fn) {
   const problem = directoryProblem(c);
   if (problem) throw new Error(problem);
@@ -142,6 +145,7 @@ async function usersMatching(c, query) {
 // Read from every active user (page by page), and kept for ten minutes: typing asks AD once.
 const DEPARTMENTS_FRESH_MS = 10 * 60 * 1000;
 const departmentLists = new WeakMap();
+// The departments in AD that start with or hold what was typed, for the suggestions.
 async function departmentsMatching(c, query) {
   const q = String(query || '').trim().toLowerCase();
   let kept = departmentLists.get(c);

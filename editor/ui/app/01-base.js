@@ -26,6 +26,7 @@
   })();
 
   let serverDown = false;
+  // One request to the server's API: JSON both ways, the error said in words; signed out, to the sign-in page.
   async function api(path, body, opts) {
     let r;
     try {
@@ -106,6 +107,7 @@
   // Saving: every change goes to the draft on its own, a moment after the last keystroke.
   // ---------------------------------------------------------------------------------------------
   let saveTimer = null, saving = Promise.resolve(), changeSeq = 0;
+  // Something in the draft changed: saved a moment later, the list, the preview and the undo steps follow.
   function changed(opts) {
     histNote(); ghNote();
     S.dirty = true; changeSeq++; renderStatus(t('Saving…'));
@@ -117,6 +119,7 @@
     revertShow();
     if (!opts || opts.preview !== false) schedulePreview();
   }
+  // The draft to the server now; an answer to an older save says nothing about changes made since.
   function save(opts) {
     clearTimeout(saveTimer); saveTimer = null;
     const json = JSON.stringify(prepared()), seq = changeSeq;
@@ -171,6 +174,7 @@
     const doc = new DOMParser().parseFromString('<!doctype html><body><template>' + stripHandlers(html).replace(/<\/template/gi, '&lt;/template') + '</template></body>', 'text/html');
     return doc.querySelector('template');
   }
+  // HTML made safe for a signature: only what Outlook shows, no scripts, handlers or javascript: links.
   function sanitize(html) {
     const t = inertTemplate(html);
     t.content.querySelectorAll(DROP).forEach((n) => {
@@ -207,6 +211,7 @@
     return e;
   }
 
+  // Who gets a signature, in words.
   function audienceText(s) {
     const a = s.audience || {}, parts = [];
     if ((a.groups || []).length) parts.push(a.groups.join(', '));
@@ -236,6 +241,7 @@
     return s.validFrom && s.validUntil ? t('{0} to {1}', day(s.validFrom), day(s.validUntil)) : s.validFrom ? t('from {0}', day(s.validFrom)) : t('until {0}', day(s.validUntil));
   }
 
+  // The list of signatures in the sidebar: the assigned ones, then the group of those nobody gets.
   function renderList() {
     // Users (the values read from AD, to check before they go out): only where values come from AD.
     const nu = document.querySelector('.nav-list a[data-view=users]');
@@ -316,6 +322,7 @@
     return v ? v === 'open' : nAssigned === 0;
   }
   function setUnassignedOpen(on) { try { localStorage.setItem('osign.unassigned', on ? 'open' : 'closed'); } catch (e) { /* this time only */ } }
+  // A click in the list: open it, or with Ctrl/Shift pick several.
   function sigClick(s, e) {
     const g = sigGroups(), list = g.assigned.concat(g.unassigned);
     if (e.ctrlKey || e.metaKey) {
@@ -419,6 +426,7 @@
     history.replaceState({ osign: 1, view: S.view, sigId: S.view === 'sig' ? S.sigId : null }, '');
   });
 
+  // One view shown (signature, fields, …), the others hidden.
   function show(view) {
     S.view = view;
     // Away from the editor: no building block edited in it any more.
@@ -434,6 +442,7 @@
     navStep();
   }
 
+  // A signature into the editor: its name, design, HTML, rules and preview.
   function openSig(id) {
     flushSource();
     S.blockEdit = null; document.body.classList.remove('editing-block');
@@ -505,6 +514,7 @@
       P('font-size:9pt;color:#555555', 'T @@telephoneNumber &nbsp;·&nbsp; <a href="mailto:@@mail" style="color:#2f6fde;text-decoration:none">@@mail</a>')].join('\n') }
   ];
 
+  // A new signature added (from a layout, or a copy) and opened.
   function addSig(from, html) {
     const name = from ? from.name + ' ' + t('(copy)') : (S.config.signatures.length ? t('New signature') : t('Main signature'));
     const s = from ? JSON.parse(JSON.stringify(from)) : core.newSignature('', name);
