@@ -428,7 +428,28 @@
   }
   $('stApproval').addEventListener('click', () => $('btnPublish').click());
   // To the place that makes them again.
-  $('stAddin').addEventListener('click', async () => { $('btnSettings').click(); setTab('server'); runHealth(); });
+  // One click: the add-in's files made for this version and uploaded (with Cloudflare Pages);
+  // what it does is shown on the button, done with a check that goes by itself.
+  $('stAddin').addEventListener('click', async () => {
+    const b = $('stAddin'), text = $('stAddinText');
+    if (b.classList.contains('busy')) return;
+    b.classList.add('busy'); b.classList.remove('failed'); b.disabled = true;
+    try {
+      text.textContent = t('Making the add-in…');
+      const r = await api('addin/build');
+      let uploaded = false;
+      if (S.info.features.pagesUpload) { text.textContent = t('Uploading…'); await api('addin/upload'); uploaded = true; }
+      b.classList.remove('busy'); b.classList.add('done');
+      text.textContent = uploaded ? t('Add-in {0} is out', r.version) : t('Add-in {0} made', r.version);
+      if (!uploaded) toast(t('Add-in files made for {0}: copy them to the web server.', r.version), false, { label: t('Download as ZIP'), run: () => { location.href = '/addin.zip'; } });
+      else if (r.note) toast(t(r.note), true);
+      setTimeout(() => { b.classList.remove('done'); b.disabled = false; afterAddinChange(); }, 4000);
+    } catch (e) {
+      b.classList.remove('busy'); b.classList.add('failed'); b.disabled = false;
+      text.textContent = t('Not done: try again');
+      toast(t(e.message), true, { label: t('Settings'), run: () => { $('btnSettings').click(); setTab('addin'); } });
+    }
+  });
   $('pubApprove').addEventListener('click', async () => {
     $('pubApprove').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {

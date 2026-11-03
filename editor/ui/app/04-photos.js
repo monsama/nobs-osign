@@ -24,7 +24,7 @@
     const rule = photoRule();
     $('photosRule').textContent = rule ? t('The signature «{0}» takes photos/@@{1}.{2}: a photo is named after the person\'s {1}, e.g. mustera.{2}.', rule.sig, rule.key, rule.ext)
       : t('No signature shows a photo per person yet. Put an image photos/@@sAMAccountName.jpg into one (Insert image → Photo per person), then add the photos here.');
-    $('photosRule').className = 'callout' + (rule ? '' : ' warn');
+    $('photosRule').className = 'callout' + (rule ? ' info' : '');
     photoNameShow();
     $('photoErr').textContent = '';
     $('photosInfo').textContent = t('Loading…');

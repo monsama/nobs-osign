@@ -1027,3 +1027,68 @@ dialog:has(#cmpBefore) { width: min(1100px, 96vw); }
 .cmp-rules thead th:first-child, .cmp-rules tbody th { width: 30%; }
 .cmp-rules tbody th { font-weight: 600; }
 .cmp-rules th:not(:first-child), .cmp-rules td { width: 35%; text-align: left !important; padding-left: 10px !important; padding-right: 10px !important; }
+
+/* The status bar's one-click action (the add-in made and uploaded): a small pill, its state on it. */
+.statusbar .sb-action { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 10px 0 8px; border-radius: 10px;
+  border: 1px solid var(--accent); background: var(--accent-soft, #eaf1fb); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.statusbar .sb-action:hover { background: var(--accent); color: var(--accent-ink, #fff); filter: none; }
+.statusbar .sb-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.statusbar .sb-action .sb-ic { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.statusbar .sb-action.busy { cursor: progress; background: var(--accent-soft, #eaf1fb); color: var(--accent); }
+.statusbar .sb-action.busy .sb-ic { animation: sb-spin 0.9s linear infinite; }
+.statusbar .sb-action.done { border-color: var(--ok, #2e7d32); background: transparent; color: var(--ok, #2e7d32); }
+.statusbar .sb-action.done .sb-ic { display: none; }
+.statusbar .sb-action.done::before { content: '✓'; font-weight: 700; }
+.statusbar .sb-action.failed { border-color: var(--danger); color: var(--danger); background: transparent; }
+@keyframes sb-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .statusbar .sb-action.busy .sb-ic { animation: none; } }
+
+/* ---------------------------------------------------------------------------------------------
+   Colours with one meaning each, the same everywhere, filled (not only a border):
+     green  live, fine          (published, saved, a campaign running, the add-in out)
+     amber  not live yet, look  (changed, not published, not assigned, unpublished changes)
+     red    wrong, removed      (errors, removed, delete)
+     blue   a role, an action   (default for new mail / replies, a language, buttons)
+     grey   information         (limited to some, a campaign not now)
+   --------------------------------------------------------------------------------------------- */
+:root {
+  --ok-soft: color-mix(in srgb, var(--ok) 13%, var(--panel));
+  --warn-soft: color-mix(in srgb, var(--warn) 14%, var(--panel));
+  --danger-soft: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  --info-soft: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  --ok-line: color-mix(in srgb, var(--ok) 45%, transparent);
+  --warn-line: color-mix(in srgb, var(--warn) 45%, transparent);
+  --danger-line: color-mix(in srgb, var(--danger) 45%, transparent);
+  --info-line: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.badge { background: var(--panel-2); border-color: var(--line); color: var(--muted); }
+.badge.on { background: var(--info-soft); border-color: var(--info-line); color: var(--accent); }
+.badge.ok { background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); border-color: var(--warn-line); color: var(--warn); }
+.badge.danger { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
+/* On the selected signature the same colours, a little stronger so they keep standing out. */
+.sig-list a.active .badge { filter: saturate(1.15); }
+
+/* The two states at the top: the draft (green: saved) and what Outlook has (amber: changes not out). */
+.status.clean { background: var(--ok-soft); border-color: var(--ok-line); }
+.status.dirty { background: var(--warn-soft); border-color: var(--warn-line); }
+.status.bad { background: var(--danger-soft); border-color: var(--danger-line); }
+
+/* Notes and boxes: the same colour for the same meaning, filled lightly. */
+.callout { background: var(--warn-soft); border-color: var(--warn-line); border-left-color: var(--warn); color: var(--text); }
+.callout.info { background: var(--info-soft); border-color: var(--info-line); border-left-color: var(--accent); }
+.approval { background: var(--warn-soft); border-color: var(--warn-line); border-left-color: var(--warn); }
+.chg-list li { border-left-width: 4px; }
+.chg-list li.chg, .chg-list li.new { border-left-color: var(--warn); background: var(--warn-soft); }
+.chg-list li.gone { border-left-color: var(--danger); background: var(--danger-soft); }
+.chg-list li.none { border-left-color: var(--ok); background: var(--ok-soft); color: var(--text); }
+.checks li.good::before { color: var(--ok); }
+.checks li.warn::before { color: var(--warn); }
+.checks li.bad::before { color: var(--danger); }
+.photo-list .pwarn { color: var(--warn); }
+table.users td.none { color: var(--warn); }
+.cmp-rules td.was { color: var(--danger); }
+.cmp-rules td.now { color: var(--ok); }
+.badge { white-space: nowrap; }
+.sig-list .badges { flex-wrap: wrap; row-gap: 3px; }
+.statusbar .sb-action:disabled { opacity: 1; }
