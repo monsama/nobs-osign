@@ -191,10 +191,16 @@
       r.dot.className = 'hdot ' + x.state; r.dot.title = t({ good: 'All right', warn: 'Needs attention', bad: 'Not working', off: 'Not set up' }[x.state]);
       r.text.textContent = x.text; r.row.dataset.state = x.state;
     }));
-    const n = (s) => rows.filter((r) => r.row.dataset.state === s).length;
-    const bad = n('bad'), warn = n('warn');
-    $('healthSum').textContent = bad && warn ? t('{0} not working, {1} to look at.', bad, warn) : bad ? t('{0} not working.', bad) : warn ? t('{0} to look at.', warn) : t('Everything set up works.');
-    $('healthSum').className = 'health-sum ' + (bad ? 'bad' : warn ? 'warn' : 'good');
+    // What does not work first, then what to look at; what works or is not set up folded below.
+    const rank = { bad: 0, warn: 1, good: 2, off: 3 };
+    const sorted = rows.slice().sort((a, b) => rank[a.row.dataset.state] - rank[b.row.dataset.state]);
+    const top = sorted.filter((r) => /bad|warn/.test(r.row.dataset.state)), rest = sorted.filter((r) => !/bad|warn/.test(r.row.dataset.state));
+    const ok = rest.filter((r) => r.row.dataset.state === 'good').length, off = rest.length - ok;
+    const label = [ok ? (ok === 1 ? t('1 works') : t('{0} work', ok)) : '', off ? (off === 1 ? t('1 not set up') : t('{0} not set up', off)) : ''].filter(Boolean).join(', ');
+    const wasOpen = !!document.querySelector('#healthRows .health-rest[open]');
+    $('healthRows').replaceChildren(...top.map((r) => r.row),
+      ...(rest.length ? [el('details', { class: 'health-rest', open: !top.length || wasOpen ? '' : null }, el('summary', null, label), ...rest.map((r) => r.row))] : []));
+    $('healthSum').textContent = ''; $('healthSum').className = 'health-sum';
     $('healthRun').disabled = false;
   }
   $('healthRun').addEventListener('click', runHealth);
