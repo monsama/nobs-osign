@@ -623,12 +623,12 @@ table.history td[colspan] { text-align: center; white-space: normal; }
 .photo-add .photo-url input { flex: 1; }
 .photo-add .or { color: var(--muted); padding-bottom: 7px; }
 .photo-name { font-family: Consolas, monospace; font-size: 12.5px; color: var(--muted); padding-bottom: 7px; min-width: 120px; }
-.photo-list { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.photo-list { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 12px; }
 .photo-list li { position: relative; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .photo-list li.empty { grid-column: 1 / -1; border-style: dashed; color: var(--muted); padding: 18px; }
 .photo-list img { width: 100%; height: 120px; object-fit: contain; background: var(--panel-2); border-radius: var(--r-s); }
 .photo-list .pf { display: flex; align-items: center; gap: 6px; width: 100%; }
-.photo-list .pn { flex: 1; min-width: 0; font-size: 12.5px; word-break: break-all; }
+.photo-list .pn { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .photo-list .pf button { flex: none; width: var(--h); padding: 0; }
 
 .photo-default { display: flex; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); padding: 10px 12px; margin: 8px 0 14px; max-width: 760px; }
@@ -788,7 +788,8 @@ button.danger-btn { background: #c62828; border-color: #c62828; color: #fff; }
 #dlgPlaceholder { width: min(760px, 94vw); }
 #audienceSummary.warn { color: var(--warn); }
 .badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
-.photo-list .pwarn { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; font-size: 12px; color: var(--warn); }
+.photo-list .pwarn { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; font-size: 12px; color: var(--warn); }
+.photo-list .pwarn button { width: 100%; }
 .photo-list .pwarn button { height: 24px; }
 
 /* Who gets it: a segmented choice, and the groups, departments and domains as tokens in one field. */
@@ -975,3 +976,15 @@ dialog.settings .dlg-body { display: flex; flex-direction: column; }
 /* The connections' own buttons, like a window's: always in sight at the bottom. */
 #connHost .conn-foot { position: sticky; bottom: 0; z-index: 2; background: var(--panel); margin: 16px -16px 0; padding: 10px 16px; }
 #dlgSettings .dlg-body:has(#connHost:not([hidden])) > :last-child { margin-bottom: 0; }
+
+/* A building block's own design view */
+.block-edit { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.block-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.block-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.block-btns select { width: auto; max-width: 160px; }
+.block-btns .ghost.small { width: var(--h); padding: 0; }
+.block-btns svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.block-btns .ghost.small { color: var(--text); }
+.block-ed-box { border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; background: #fff; }
+.block-ed { display: block; width: 100%; height: 150px; border: 0; }
+.block-body textarea { min-height: 150px; }
