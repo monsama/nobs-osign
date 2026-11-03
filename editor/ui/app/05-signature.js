@@ -251,7 +251,7 @@
     const row = (cls, name, what, ...btns) => el('li', { class: cls }, el('div', { class: 'chg-text' }, el('b', null, name), el('small', null, what)), el('div', { class: 'chg-btns' }, ...btns));
     const btn = (label, fn, danger) => el('button', { type: 'button', class: 'small' + (danger ? ' ghost danger' : ' ghost'), onclick: fn }, label);
     const open = (id) => () => { $('dlgChanges').close(); openSig(id); };
-    const revert = (id) => async () => { $('dlgChanges').close(); openSig(id); $('btnRevert').click(); };
+    const revert = (id) => async () => { $('dlgChanges').close(); openSig(id); fromChanges = true; $('btnRevert').click(); };
     for (const s of S.config.signatures) {
       const p = pub.get(s.id);
       if (!p) rows.push(row('new', s.name, t('New, not published yet.'), btn(t('Open'), open(s.id)), btn(t('Delete…'), () => { $('dlgChanges').close(); openSig(s.id); $('btnDel').click(); }, true)));
@@ -313,9 +313,10 @@
     $('dlgCompare').showModal();
   }
   $('btnCompare').addEventListener('click', () => { const s = sig(); if (s) openCompare(s.id); });
+  let fromChanges = false;
   $('btnRevert').addEventListener('click', async () => {
     const s = sig(); if (!s) return;
-    if (!(await ask(t('Discard the changes to «{0}» since it was published? It goes back to what Outlook has.', s.name), t('Discard changes'), true))) return;
+    if (!(await ask(t('Discard the changes to «{0}» since it was published? It goes back to what Outlook has.', s.name), t('Discard changes'), true))) { fromChanges = false; return; }
     flushSource();
     try {
       const r = await api('published/revert', { id: s.id });
@@ -326,6 +327,9 @@
       back.audience = Object.assign({ departments: [], domains: [], groups: [] }, back.audience || {});
       S.config.signatures[i] = back; S.assets = r.assets || S.assets;
       changed(); openSig(back.id);
+      // Saved at once, so the status at the top and the marks say it right away.
+      await save(); await loadPublishedCopy();
+      if (fromChanges) { fromChanges = false; openChanges(); }
       toast(t('«{0}» is as published again.', back.name), false, { label: t('Undo'), run: () => { const j = S.config.signatures.findIndex((x) => x.id === before.id); if (j >= 0) { S.config.signatures[j] = before; changed(); openSig(before.id); } } });
     } catch (e) { toast(t(e.message), true); }
   });

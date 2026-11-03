@@ -264,6 +264,8 @@
       $('setWizRow').hidden = !mayWizard;
       if (mayWizard && (resume !== null || !setUp)) wizOpen(+resume || 0);
       if (!info.features.adLookup) $('pvSource').querySelector('option[value=ad]').textContent = t('User from Active Directory (not reachable)');
+      // A note left before the page loaded anew (everything discarded).
+      try { const n = sessionStorage.getItem('osign.note'); if (n) { sessionStorage.removeItem('osign.note'); toast(n); } } catch (e) { /* none */ }
       // Loaded: what waits for the editor (the tests) can go on.
       document.documentElement.dataset.ready = '1';
     } catch (e) {

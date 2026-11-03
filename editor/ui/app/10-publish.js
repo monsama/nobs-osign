@@ -145,7 +145,14 @@
   function openFind() {
     if ($('dlgFind').open) { $('findInput').select(); return; }
     $('findInput').value = ''; findAt = 0; findShow();
-    $('dlgFind').showModal(); $('findInput').focus();
+    // Right under the search field, from its left edge (kept inside the window).
+    const d = $('dlgFind'), r = $('btnFind').getBoundingClientRect();
+    const w = Math.min(620, innerWidth - 16), top = (r.height ? r.bottom : 48) + 6;
+    d.style.width = w + 'px';
+    d.style.left = Math.max(8, Math.min(r.height ? r.left : (innerWidth - w) / 2, innerWidth - w - 8)) + 'px';
+    d.style.top = top + 'px';
+    d.style.setProperty('--find-max', Math.max(240, innerHeight - top - 16) + 'px');
+    d.showModal(); $('findInput').focus();
   }
   $('btnFind').addEventListener('click', openFind);
   $('findInput').addEventListener('input', () => { findAt = 0; findShow(); });
@@ -505,7 +512,9 @@
   $('navHistory').addEventListener('click', (e) => { e.preventDefault(); $('dlgHistory').showModal(); renderHistory(); });
   $('btnLoad').addEventListener('click', async () => {
     if (S.dirty && !(await ask(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'), t('Replace'), true))) return;
-    try { applyDraft(await api('load-published')); $('dlgHistory').close(); toast(t('Loaded the published signatures.')); }
+    // Everything as published again: the page loaded anew, so nothing shows the old state, and the
+    // note after it.
+    try { await api('load-published'); try { sessionStorage.setItem('osign.note', t('Loaded the published signatures.')); } catch (e2) { /* without the note */ } location.reload(); }
     catch (e) { toast(t(e.message), true); }
   });
 
