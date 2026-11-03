@@ -273,11 +273,18 @@
         } catch (e) { toast(t(e.message), true); }
       })));
     }
-    // The rest of the configuration: said, discarded only with all of it.
-    const part = (k) => JSON.stringify((S.config || {})[k] || null) !== JSON.stringify((pubCfg || {})[k] || null);
+    // The rest of the configuration: said, discarded only with all of it. Both sides as the editor
+    // reads them (a version published by an older editor has other defaults, no names on its
+    // building blocks, its options in another order), the HTML as it shows: only a real change counts.
+    const pubN = pubCfg ? normalize(JSON.parse(JSON.stringify(pubCfg))) : null;
+    const stable = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => { if (x[key] !== undefined && x[key] !== '') o[key] = x[key]; return o; }, {}) : x));
+    const view = { blocks: (c) => (c.blocks || []).map((b) => [b.key, b.name, sanitize(b.html || '').replace(/\s+/g, ' ').trim()]), fields: (c) => c.fields || [], options: (c) => c.options || {} };
+    const part = (k) => !!pubN && stable(view[k](S.config || {})) !== stable(view[k](pubN));
     const other = [part('fields') && t('Fields'), part('blocks') && t('Building blocks'), part('options') && t('Add-in')].filter(Boolean);
     if (other.length) rows.push(row('chg', other.join(', '), t('Changed too: they go out with the next publish.')));
-    $('chgList').replaceChildren(...(rows.length ? rows : [el('li', { class: 'none' }, t('Nothing: the draft is as published.'))]));
+    // Nothing to show while the status says otherwise: the same in content, saved another way.
+    const none = S.dirty ? t('Nothing to see: the draft is the same as what is published, only saved another way (e.g. by a newer version). Publishing again makes them one.') : t('Nothing: the draft is as published.');
+    $('chgList').replaceChildren(...(rows.length ? rows : [el('li', { class: 'none' }, none)]));
     $('dlgChanges').showModal();
   }
   $('chgAll').addEventListener('click', () => { $('dlgChanges').close(); $('btnLoad').click(); });

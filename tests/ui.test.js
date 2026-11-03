@@ -1472,3 +1472,25 @@ test('the photos named after another field, and undone with the draft\'s undo (C
   await page.waitForFunction((v) => document.querySelector('#photosRule select').value === v, v0);
   assert.deepEqual(errors, []);
 });
+
+test('unpublished changes: a version published by an older editor (no block names, options in another order) is not taken for a change', { skip }, async () => {
+  const keep = (await api('draft/get')).configJson;
+  const c = JSON.parse((await api('published/get')).configJson);
+  c.blocks = [{ key: 'old-block', html: '<p>Old  block</p>' }];
+  c.options = Object.fromEntries(Object.entries(c.options || {}).reverse());
+  await page.goto('about:blank');
+  assert.ok(!(await api('draft/save', { configJson: JSON.stringify(c) })).error);
+  const p = await api('publish', { configJson: JSON.stringify(c), message: 'older editor' });
+  assert.ok(!p.error, p.error);
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.evaluate(() => { const b = document.getElementById('stPub'); b.disabled = false; b.click(); });
+  await page.waitForSelector('#dlgChanges[open]');
+  await page.waitForFunction(() => document.querySelector('#chgList').textContent.trim());
+  const text = await page.textContent('#chgList');
+  assert.doesNotMatch(text, /Building blocks|Add-in|Fields/, text);
+  await page.click('#dlgChanges button[value=cancel]');
+  await page.goto('about:blank');
+  await api('draft/save', { configJson: keep });
+  assert.deepEqual(errors, []);
+});

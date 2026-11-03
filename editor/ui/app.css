@@ -1225,3 +1225,7 @@ dialog.fit { width: min(1080px, 96vw); }
 .callout.photo-rule { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .callout.photo-rule select { width: auto; }
 .callout.photo-rule small { color: var(--muted); }
+/* The name beside Sign out: laid out as the buttons are (same height, line height 1, centred), so
+   both sit on one line whatever font the system has. */
+.top .who { display: inline-flex; align-items: center; height: var(--h); line-height: 1; }
+.top .who[hidden] { display: none; }

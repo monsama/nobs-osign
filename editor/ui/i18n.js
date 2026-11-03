@@ -1028,6 +1028,7 @@
     'The add-in\'s files': 'Die Dateien des Add-ins',
     'not done yet': 'noch offen',
     'To the step': 'Zum Schritt',
+    'Nothing to see: the draft is the same as what is published, only saved another way (e.g. by a newer version). Publishing again makes them one.': 'Nichts zu sehen: Der Entwurf entspricht dem Veröffentlichten, ist nur anders gespeichert (z. B. von einer neueren Version). Erneutes Veröffentlichen gleicht sie an.',
     'Photos are named after': 'Fotos heissen nach',
     'The signatures name them differently ({0}): «Change» makes them all alike.': 'Die Signaturen benennen sie verschieden ({0}): «Ändern» macht sie alle gleich.',
     'Kind of file': 'Dateityp',
