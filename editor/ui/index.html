@@ -43,6 +43,7 @@
       <span id="sideSigs"><svg class="side-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M6 15c2.5-6 4.5-9 6-9s1 4-1 7 1 3 3 1 3-3 4-2"/></svg>Signatures</span>
       <span class="side-btns">
         <button id="btnImportOpen" type="button" hidden>Import templates</button>
+        <button id="btnAll" class="icon-btn" title="All signatures side by side, with the preview's values" aria-label="All signatures"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button>
         <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
       </span>
     </div>
@@ -1023,6 +1024,21 @@
   <form method="dialog" class="dlg">
     <input id="findInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search signatures, views, fields, photos…" aria-controls="findList">
     <ul id="findList" class="find-list" role="listbox"></ul>
+  </form>
+</dialog>
+<dialog id="dlgAll" class="all-sigs">
+  <form method="dialog" class="dlg wide">
+    <h2>All signatures</h2>
+    <p class="lead" id="allLead"></p>
+    <div id="allList" class="all-list"></div>
+    <div class="dlg-foot"><span class="spacer"></span><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+<dialog id="dlgImpReport">
+  <form method="dialog" class="dlg wide">
+    <h2>Import report</h2>
+    <ul id="impReport" class="checks"></ul>
+    <div class="dlg-foot"><span class="spacer"></span><button value="cancel" class="primary">OK</button></div>
   </form>
 </dialog>
 <dialog id="dlgAsk" class="ask" aria-labelledby="askText">

@@ -44,6 +44,30 @@
     toast(t('Downloaded: {0}.htm, with these values.', x.name));
   });
 
+  // All signatures side by side, each as the preview shows it (the same values): to see that they
+  // look alike before publishing. A click opens one.
+  function openAll() {
+    flushSource();
+    const src = $('pvSource');
+    $('allLead').textContent = t('With the values: {0}. Change them in the preview (above the preview, left).', src.options[src.selectedIndex].textContent + (src.value === 'ad' || src.value === 'entra' ? ' ' + ($('pvUser').value || '') : ''));
+    const values = previewValues();
+    $('allList').replaceChildren(...(S.config.signatures.length ? S.config.signatures.map((s) => {
+      const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), values, { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+      // Its images from this server (signed in): same origin, still no scripts. A photo that is not
+      // there goes, as in the preview.
+      const frame = el('iframe', { tabindex: '-1', 'aria-hidden': 'true', sandbox: 'allow-same-origin' });
+      frame.addEventListener('load', () => { const d = frame.contentDocument; if (d) d.querySelectorAll('img').forEach((i) => { if (i.complete && !i.naturalWidth) i.remove(); else i.addEventListener('error', () => i.remove()); }); });
+      frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:12px 14px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.8}p{margin:0}table{border-collapse:collapse}</style></head><body>' + html + '</body></html>';
+      const b = el('button', { type: 'button', class: 'tpl-card', 'data-sig': s.id }, frame,
+        el('span', { class: 'tpl-name' }, s.name || t('(no name)')),
+        el('span', { class: 'tpl-text' }, [s.defaultNew ? t('New') : '', s.defaultReply ? t('Reply') : '', s.language ? s.language.toUpperCase() : '', audienceText(s)].filter(Boolean).join(' · ')));
+      b.addEventListener('click', () => { $('dlgAll').close(); openSig(s.id); });
+      return b;
+    }) : [emptyState('blocks', t('No signatures yet'), '')]));
+    $('dlgAll').showModal();
+  }
+  $('btnAll').addEventListener('click', openAll);
+
   function renderPreview() {
     const s = sig(); if (!s || S.view !== 'sig') return;
     const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });

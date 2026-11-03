@@ -114,6 +114,8 @@
     const uploaded = new Map(); // picked file name (lower case) -> asset name
     let first = null, count = 0;
     const campaigns = [];
+    // For the report at the end: what was not found, what was put in.
+    const report = { missing: new Set(), blocks: new Set(), unknownBlocks: new Set() };
     try {
       const imported = [];
       for (const it of impItems.filter((x) => x.checked)) {
@@ -127,6 +129,7 @@
           if (impImages.has(key) && !uploaded.has(key)) uploaded.set(key, await uploadImage(impImages.get(key)));
           // Not picked: it points where the image will be once uploaded under that name.
           img.setAttribute('src', 'assets/' + (uploaded.get(key) || core.assetName(base)));
+          if (!uploaded.get(key) && !S.assets.some((a) => a.name === core.assetName(base))) report.missing.add(base);
         }
         // Text blocks: one without days goes in as it is; one with days becomes a campaign of its
         // own (the template with that block, on those days), and the template itself goes without.
@@ -134,7 +137,8 @@
         const timed = [];
         const plain = html.replace(BLOCK_REF, (all, name) => {
           const b = impBlocks.get(name.toLowerCase());
-          if (!b) return all;
+          if (!b) { report.unknownBlocks.add(name); return all; }
+          report.blocks.add(b.name + (b.expired ? ' (' + I18N.t('over, left out') + ')' : b.from || b.until ? ' (' + I18N.t('a campaign of its own') + ')' : ''));
           if (b.expired) return '';
           if (b.from || b.until) { timed.push(b); return ''; }
           return sanitize(b.html);
@@ -178,10 +182,20 @@
           if (!r.error) photosDone++;
         }
       }
-      toast((uploaded.size ? t('{0} template(s) imported, with {1} image(s).', count, uploaded.size) : t('{0} template(s) imported.', count))
-        + (impPhotosOn ? ' ' + t('{0} of {1} photo(s) uploaded.', photosDone, impPhotos.length) : '')
-        + (newFields.length ? ' ' + t('Fields added: {0}. Check their AD attribute and Graph source under Fields.', newFields.map((k) => '@@' + k).join(', ')) : '')
-        + ' ' + t('The signatures go live only when you publish.'));
+      // What came over and what did not: a report to work through, not a note that is gone in seconds.
+      const li = (cls, text) => el('li', { class: cls }, text);
+      $('impReport').replaceChildren(
+        li('good', t('{0} template(s) imported: {1}.', count, imported.filter((x) => !campaigns.some(([c]) => c === x)).map((x) => x.name).join(', '))),
+        campaigns.length ? li('good', t('Campaigns made from text blocks with days: {0}.', campaigns.map(([c]) => c.name + ' (' + (campaignText(c) || '') + ')').join(', '))) : null,
+        uploaded.size ? li('good', t('{0} image(s) uploaded.', uploaded.size)) : null,
+        report.missing.size ? li('warn', t('Images the templates use but were not picked: {0}. Add them (Insert image) or import again with them.', [...report.missing].join(', '))) : null,
+        report.blocks.size ? li('good', t('Text blocks put in: {0}.', [...report.blocks].join(', '))) : null,
+        report.unknownBlocks.size ? li('warn', t('Text blocks named but not picked, left as typed: {0}.', [...report.unknownBlocks].join(', '))) : null,
+        newFields.length ? li('warn', t('Fields added: {0}. Check their AD attribute and Graph source under Fields.', newFields.map((k) => '@@' + k).join(', '))) : null,
+        impPhotosOn ? li(photosDone === impPhotos.length ? 'good' : 'warn', t('{0} of {1} photo(s) uploaded.', photosDone, impPhotos.length)) : null,
+        li('warn', t('Who gets which signature is not taken over from CI-Sign (its rules): every imported one is «not assigned» until you set Who gets it.')),
+        li('good', t('The signatures go live only when you publish.')));
+      $('dlgImpReport').showModal();
     } catch (e) { $('impErr').textContent = t(e.message); $('impGo').disabled = false; }
   }
 

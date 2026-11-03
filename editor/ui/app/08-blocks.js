@@ -27,7 +27,7 @@
       return;
     }
     list.replaceChildren(...S.config.blocks.map((b, i) => {
-      const frame = el('iframe', { class: 'block-pv', sandbox: '', tabindex: '-1', title: t('Preview') });
+      const frame = el('iframe', { class: 'block-pv', sandbox: 'allow-same-origin', tabindex: '-1', title: t('Preview') });
       const name = el('input', { value: b.name, 'aria-label': t('Name') });
       const key = el('input', { value: b.key, class: 'mono', 'aria-label': t('Its name in a signature') });
       const src = el('textarea', { class: 'mono', rows: '5', spellcheck: 'false', 'aria-label': t('HTML') });

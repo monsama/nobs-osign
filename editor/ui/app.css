@@ -951,3 +951,8 @@ table.users td.none { color: var(--warn, #b45309); font-style: italic; }
 @container (max-width: 430px) { .preview-head { flex-wrap: wrap !important; } }
 .pub-steps { display: grid; grid-template-columns: auto minmax(0, 260px); gap: 6px 10px; align-items: center; margin: 4px 0 10px; }
 .pub-steps input[hidden] { display: none; }
+
+/* All signatures side by side */
+.all-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+dialog:has(#allList) { width: min(1200px, 96vw); }
+.all-list .tpl-card iframe { height: 200px; }

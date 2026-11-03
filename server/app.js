@@ -21,9 +21,8 @@ const { createDeployment } = require('./deployment');
 const { createHistory } = require('./history');
 const { createCerts } = require('./cert');
 const { createAudit } = require('./audit');
-const { exportBackup, openBackup, restoreFiles } = require('./backup');
-const { createAutoBackup } = require('./autobackup');
 const { createReleaseRoutes } = require('./routes-release');
+const { createBackupRoutes } = require('./routes-backup');
 const { createUpdates } = require('./updates');
 const { diffConfigs } = require('./diff');
 const tlsInfo = require('./tls');
@@ -132,9 +131,6 @@ function createApp(opts) {
   // The connections (AD, Graph, Cloudflare): .env, with what the admin saved in the editor on top.
   // Each is read anew when that changes (configure, below), so no restart is needed.
   const connections = createConnections({ dataDir, env });
-  // Backups by themselves, every day (server/autobackup.js).
-  const autoBackup = createAutoBackup({ dataDir, dir: env.OSIGN_BACKUP_DIR || '', seal: connections.seal, open: connections.open, rawKey: connections.rawKey, version: VERSION, log });
-  autoBackup.schedule();
   // The server's certificate for Microsoft Entra ID (server/cert.js), sealed like the passwords.
   const certs = createCerts({ dataDir, seal: connections.seal, open: connections.open });
   // Filled in by configure(); the same objects throughout, so what holds them sees the change.
@@ -579,33 +575,6 @@ function createApp(opts) {
       const draft = store.getDraft().configJson || '';
       return d.against === 'draft' ? { changes: diffConfigs(v.configJson, draft) } : { changes: diffConfigs(v.previous, v.configJson) };
     },
-    // A backup of the data (server/backup.js), for the local account admin.
-    'backup/export': (d, s) => {
-      if (adminOnly(s)) return { error: 'Only the local account admin can make a backup.' };
-      return exportBackup({ dataDir, passphrase: d.passphrase, appKey: connections.rawKey(), version: VERSION });
-    },
-    'backup/restore': (d, s) => {
-      if (adminOnly(s)) return { error: 'Only the local account admin can bring back a backup.' };
-      const b = openBackup(d.data, d.passphrase);
-      if (b.error) return b;
-      const r = restoreFiles(dataDir, b.files);
-      if (r.error) return r;
-      fs.mkdirSync(store.assetDir, { recursive: true });
-      fs.mkdirSync(path.join(dataDir, 'history', 'assets'), { recursive: true });
-      // Sealed with the key of the server it came from: sealed again with this one's.
-      connections.reseal(b.appKey);
-      configure();
-      log.info('backup: brought back the backup of ' + b.at + ' (version ' + b.version + ', ' + r.files + ' files) by ' + s.user.login);
-      return { at: b.at, version: b.version, files: r.files };
-    },
-    // Backups by themselves: set, made now, downloaded. The local account admin's.
-    'backup/auto/get': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the automatic backups.' } : autoBackup.answer()),
-    'backup/auto/save': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the automatic backups.' } : autoBackup.save(d)),
-    'backup/auto/run': (d, s) => {
-      if (adminOnly(s)) return { error: 'Only the local account admin sets the automatic backups.' };
-      const r = autoBackup.run(); return r.error ? r : autoBackup.answer();
-    },
-    'backup/auto/download': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin downloads backups.' } : autoBackup.get(d.name)),
     // The web certificate the proxy serves for the editor's address (as the browser asked for it).
     'server/tls': (d) => tlsInfo.inspect({ addr: env.OSIGN_PROXY_ADDR || 'nobs-proxy:443', host: String(d.host || ''), caFile: ldapCfg.caFile }),
     // The audit log, for the local account admin.
@@ -733,6 +702,9 @@ function createApp(opts) {
     }
   };
   Object.assign(routes, release.routes);
+  // The backups (server/routes-backup.js).
+  const backups = createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version: VERSION, log });
+  Object.assign(routes, backups.routes);
   // What goes into the audit log, by request: the words for it, from what was sent and answered.
   const AUDIT = {
     publish: (d, r) => (r.changed ? 'changed' : 'nothing changed') + (d.message ? ': ' + d.message : ''),
@@ -748,16 +720,11 @@ function createApp(opts) {
     'photos/fetch': (d) => 'photo fetched from ' + String(d.url || '').slice(0, 200),
     'addin/upload': (d, r) => 'uploaded to Cloudflare Pages' + (r.url ? ' ' + r.url : ''),
     'ad/export': () => 'users exported',
-    'backup/export': () => 'backup downloaded',
-    'backup/restore': () => 'backup restored',
-    'backup/auto/save': (d) => 'automatic backups ' + (d.at ? 'daily at ' + d.at + ', kept ' + (d.keep || 30) + ' days' : 'off') + (d.passphrase ? ', passphrase set' : ''),
-    'backup/auto/run': (d, r) => 'automatic backup made now' + (r && r.last && r.last.name ? ': ' + r.last.name : ''),
-    'backup/auto/download': (d) => 'backup downloaded: ' + String(d.name || '').slice(0, 80),
     'approval/request': (d) => 'asked for approval' + (d.message ? ': ' + d.message : ''),
     'approval/approve': () => 'approved and published',
     'approval/cancel': () => 'request withdrawn'
   };
-  Object.assign(AUDIT, release.audit);
+  Object.assign(AUDIT, release.audit, backups.audit);
 
   // What only Windows, OneDrive or (for now) the PowerShell editor can do: said plainly.
   const NOT_HERE = {

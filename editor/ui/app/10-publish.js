@@ -117,7 +117,7 @@
     const view = (v) => () => document.querySelector('.nav-list a[data-view="' + v + '"]').click();
     const items = [];
     S.config.signatures.forEach((s) => items.push({ kind: t('Signature'), label: s.name || t('(no name)'), go: () => openSig(s.id) }));
-    [[t('Fields'), view('fields')], [t('Building blocks'), view('blocks')], [t('Add-in'), view('options')], core.usesAdExport(S.config) ? [t('Users'), view('users')] : null, [t('Photos'), view('photos')],
+    [[t('All signatures'), () => openAll()], [t('Fields'), view('fields')], [t('Building blocks'), view('blocks')], [t('Add-in'), view('options')], core.usesAdExport(S.config) ? [t('Users'), view('users')] : null, [t('Photos'), view('photos')],
       [t('History'), () => $('navHistory').click()], [t('Settings'), () => $('btnSettings').click()], [t('New signature'), () => $('btnNew').click()],
       [t('Import templates'), () => $('btnImportOpen').click()], [t('Publish…'), () => $('btnPublish').click()], [t('Keyboard shortcuts'), () => $('dlgKeys').showModal()]]
       .filter(Boolean).forEach(([label, go]) => items.push({ kind: t('Go to'), label, go }));
