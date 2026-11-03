@@ -22,6 +22,14 @@ is undone with one click. Phone numbers from AD written alike for everyone: *Fie
 of the field → *Written as: phone number* (`079 123 45 67` → `+41 79 123 45 67`). Campaigns on a
 timeline, with two for the same people at the same time marked: the calendar button above the list.
 
+**Undo** for the whole draft: ↶ ↷ next to *Draft saved*, or Ctrl+Z / Ctrl+Y outside a text field
+(in the signature editor, Ctrl+Z first undoes the typing there). Up to 100 steps in this tab: signatures,
+fields, building blocks, options; it goes to where the change was. Publishing, photos and images are
+not part of the draft (*History* brings back a published version).
+
+Photos are named after a field (*Photos* → *Photos are named after*): changed there for all
+signatures at once; photos uploaded already keep their names, so upload them again under the new ones.
+
 ## Releasing a change carefully
 
 - **Try it on a few people first:** *Duplicate* the signature, give the copy *Who gets it → Specific

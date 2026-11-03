@@ -107,7 +107,7 @@
   // ---------------------------------------------------------------------------------------------
   let saveTimer = null, saving = Promise.resolve(), changeSeq = 0;
   function changed(opts) {
-    histNote();
+    histNote(); ghNote();
     S.dirty = true; changeSeq++; renderStatus(t('Saving…'));
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 600);

@@ -130,9 +130,16 @@
     // Undo and redo of the signature: in the design view, and anywhere on its page but a field
     // (a field, and the HTML tab, undo their own typing).
     const k = (e.key || '').toLowerCase();
-    if (mod && !e.altKey && (k === 'z' || k === 'y') && S.view === 'sig' && !inDialog) {
+    // Ctrl+Z / Ctrl+Y: in a text field the browser's own; in the signature editor its typing first
+    // (as long as it has steps); else, and on every other page, the whole draft (10-undo.js).
+    if (mod && !e.altKey && (k === 'z' || k === 'y') && !inDialog) {
       const inField = e.target && e.target.ownerDocument !== ddoc && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
-      if (!inField) { e.preventDefault(); histStep(k === 'y' || e.shiftKey ? 1 : -1); return; }
+      if (!inField) {
+        const dir = k === 'y' || e.shiftKey ? 1 : -1;
+        e.preventDefault();
+        if (S.view === 'sig' && histCan(dir)) histStep(dir); else ghStep(dir);
+        return;
+      }
     }
     if (mod && !e.shiftKey && !e.altKey && k === 'k' && !(inDialog && inDialog.id !== 'dlgFind')) { e.preventDefault(); openFind(); return; }
     if (mod && !e.shiftKey && !e.altKey && k === 'h' && !inDialog) { e.preventDefault(); openReplace(); return; }

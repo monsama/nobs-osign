@@ -11,20 +11,49 @@
         // Its shape, from the size it is shown at: the first one shown at a width and a height
         // (one with a width only keeps the photo's own shape).
         const w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0, h = Number((/\sheight\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0;
-        if (!rule) rule = { key: m[1], ext: m[2].toLowerCase(), sig: s.name, ratio: null, w: 0, h: 0 };
+        if (!rule) rule = { key: m[1], ext: m[2].toLowerCase(), sig: s.name, ratio: null, w: 0, h: 0, keys: [] };
+        if (!rule.keys.includes(m[1])) rule.keys.push(m[1]);
         if (!rule.ratio && w && h) Object.assign(rule, { ratio: h / w, w, h });
       }
     }
     return rule;
+  }
+  // Photos named after another field or of another kind: every photos/@@….ext in the signatures
+  // and building blocks changed. Photos there already keep their names: said first.
+  async function photoRuleChange(rule, key, ext) {
+    if (photoItems.some((p) => !isDefaultPhoto(p.name)) && !(await ask(t('The photos there now are named after @@{0}. After the change a photo is found by @@{1}: upload them again under the new names. Change?', rule.key, key), t('Change')))) return;
+    // All of them alike, also where signatures named photos after different fields.
+    const re = /photos\/@@[A-Za-z][A-Za-z0-9_]*\.(png|jpe?g|gif)/gi, to = 'photos/@@' + key + '.' + ext;
+    let n = 0;
+    S.config.signatures.forEach((s) => { const h = (s.html || '').replace(re, () => { n++; return to; }); s.html = h; if (s.source) s.source = s.source.replace(re, to); });
+    (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, () => { n++; return to; }); });
+    changed(); renderPhotos();
+    toast(t('Photos are named after @@{0} now ({1} places changed).', key, n), false, { label: t('Undo'), run: () => ghStep(-1) });
   }
   const isDefaultPhoto = (n) => n.toLowerCase().startsWith(core.PHOTO_DEFAULT + '.');
   const PHOTO_W = 400;
   let photoItems = [];
   async function renderPhotos() {
     const rule = photoRule();
-    $('photosRule').textContent = rule ? t('The signature «{0}» takes photos/@@{1}.{2}: a photo is named after the person\'s {1}, e.g. mustera.{2}.', rule.sig, rule.key, rule.ext)
-      : t('No signature shows a photo per person yet. Put an image photos/@@sAMAccountName.jpg into one (Insert image → Photo per person), then add the photos here.');
-    $('photosRule').className = 'callout' + (rule ? ' info' : '');
+    $('photosRule').className = 'callout' + (rule ? ' info photo-rule' : '');
+    if (!rule) $('photosRule').textContent = t('No signature shows a photo per person yet. Put an image photos/@@sAMAccountName.jpg into one (Insert image → Photo per person), then add the photos here.');
+    else {
+      // Which field names a photo, and its kind: changed here for every signature and building block.
+      const f = S.config.fields.find((x) => x.key === rule.key), eg = (f && f.sample) || 'mustera';
+      const keySel = el('select', { 'aria-label': t('Photos are named after') }, ...S.config.fields.map((x) => el('option', { value: x.key }, (x.label || x.key) + ' (@@' + x.key + ')')));
+      if (!f) keySel.prepend(el('option', { value: rule.key }, '@@' + rule.key));
+      keySel.value = rule.key;
+      const extSel = el('select', { 'aria-label': t('Kind of file') }, ...['jpg', 'png', 'gif'].map((x) => el('option', { value: x }, '.' + x)));
+      extSel.value = rule.ext === 'jpeg' ? 'jpg' : rule.ext;
+      const go = el('button', { type: 'button', class: 'small', hidden: '', onclick: () => photoRuleChange(rule, keySel.value, extSel.value) }, t('Change'));
+      const mixed = rule.keys.length > 1;
+      const dirty = () => { go.hidden = !mixed && keySel.value === rule.key && extSel.value === (rule.ext === 'jpeg' ? 'jpg' : rule.ext); };
+      dirty();
+      keySel.addEventListener('change', dirty); extSel.addEventListener('change', dirty);
+      $('photosRule').replaceChildren(
+        el('span', null, t('Photos are named after')), keySel, extSel, go,
+        el('small', null, mixed ? t('The signatures name them differently ({0}): «Change» makes them all alike.', rule.keys.map((k) => '@@' + k).join(', ')) : t('e.g. {0}.{1} · as in «{2}»', eg, rule.ext, rule.sig)));
+    }
     photoNameShow();
     $('photoErr').textContent = '';
     $('photosInfo').textContent = t('Loading…');
