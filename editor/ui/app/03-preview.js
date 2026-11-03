@@ -6,7 +6,7 @@
 
   function previewValues() {
     const src = $('pvSource').value, v = {};
-    S.config.fields.forEach((f) => { v[f.key] = src === 'sample' ? (f.sample || '') : (src === 'ad' || src === 'entra') && S.adValues && S.adFrom === src ? (S.adValues[f.key] || '') : ''; });
+    S.config.fields.forEach((f) => { v[f.key] = core.formatValue(f, src === 'sample' ? (f.sample || '') : (src === 'ad' || src === 'entra') && S.adValues && S.adFrom === src ? (S.adValues[f.key] || '') : ''); });
     return v;
   }
 

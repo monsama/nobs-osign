@@ -3,7 +3,8 @@
  * when the From address changes. It puts the right signature in, or none. Only when it could not
  * (the signatures or the user's details could not be read) does it show a short notice on the message.
  */
-import { core, localize, loadConfig, loadUserValues, getPrefs, getVariants, isClassicOutlook, composeInfo, fromAddress, insertSignature, isMessage } from './common.js';
+import { LANG } from './lang.js';
+import { core, localize, langOf, loadConfig, loadUserValues, getPrefs, getVariants, isClassicOutlook, composeInfo, fromAddress, insertSignature, isMessage } from './common.js';
 
 /* global Office */
 
@@ -12,9 +13,10 @@ const NOTICE = 'osign';
 function notices(item) { return item && item.notificationMessages; }
 function showNotice(item, reason) {
   const n = notices(item); if (!n || !n.replaceAsync) return Promise.resolve();
-  const german = /^de/i.test(Office.context.displayLanguage || '');
+  const lang = langOf(Office.context.displayLanguage || '');
   // What to do first (the pane shows the whole story, and signs in where that is needed), then why.
-  let text = (german ? 'OSign hat keine Signatur eingefügt; mehr unter Signaturen. ' : 'OSign inserted no signature; see Signatures. ') + localize(reason, german);
+  const first = lang === 'de' ? 'OSign hat keine Signatur eingefügt; mehr unter Signaturen. ' : LANG[lang] ? LANG[lang].notice : 'OSign inserted no signature; see Signatures. ';
+  let text = first + localize(reason, lang);
   // Outlook takes at most 150 characters.
   if (text.length > 150) text = text.slice(0, 149) + '\u2026';
   return new Promise((resolve) => {

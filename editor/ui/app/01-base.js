@@ -262,6 +262,12 @@
         else if (e.key === 'F2') { e.preventDefault(); openSig(s.id); $('sigName').focus(); $('sigName').select(); }
         else if (e.key === 'Delete') { e.preventDefault(); if (picked.size > 1 && picked.has(s.id)) deletePicked(); else { openSig(s.id); $('btnDel').click(); } }
         else if (e.key === 'Escape' && picked.size) { e.preventDefault(); pickClear(); }
+        // ↑ ↓ Home End: to another signature in the list (Enter opens it, as a click).
+        else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) && !e.altKey && !e.ctrlKey && !e.metaKey) {
+          const all = [...document.querySelectorAll('#sigList li a')], i = all.indexOf(a);
+          const to = e.key === 'Home' ? all[0] : e.key === 'End' ? all[all.length - 1] : all[i + (e.key === 'ArrowDown' ? 1 : -1)];
+          if (to) { e.preventDefault(); to.focus(); }
+        }
       });
       return el('li', null, a);
     };
@@ -269,6 +275,7 @@
     const fq = ($('sigFilter').value || '').trim().toLowerCase();
     const fit = (s) => !fq || String(s.name || '').toLowerCase().includes(fq);
     $('sigFilterRow').hidden = S.config.signatures.length < 8 && !fq;
+    $('btnCampaigns').hidden = !S.config.signatures.some((s) => core.isCampaign(s));
     assigned.filter(fit).forEach((s) => ul.append(item(s, false)));
     // Only both kinds make a group worth folding: else the list as it is.
     if (!assigned.length) unassigned.filter(fit).forEach((s) => ul.append(item(s, false)));

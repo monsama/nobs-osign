@@ -219,12 +219,15 @@
     const fmt = el('button', { type: 'button', class: 'html-only', title: t('Indent the HTML again (Alt+Shift+F)') }, t('Format'));
     fmt.addEventListener('click', formatSource);
     fmt.style.display = S.mode === 'html' ? '' : 'none';
+    // Two lines, at any width: what to insert, the font and Undo/Redo (at the right) on the first,
+    // the formatting on the second. In groups that wrap as a whole on a narrow screen.
+    const g = (cls, ...kids) => el('span', { class: 'tb-g ' + cls }, ...kids);
+    const hist = g('tb-hist', btn('undo', 'Undo (Ctrl+Z)', () => histStep(-1), 'undo'), btn('redo', 'Redo (Ctrl+Y)', () => histStep(1), 'redo'));
     tb.append(
-      fieldSel, fmt, sep(), fontSel, sizeSel, color, sep(),
-      btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline'), sep(),
-      btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), sep(),
-      btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), btn('table', 'Two columns (logo beside the text)', insertTable), btn('hr', 'Line', () => exec('insertHorizontalRule')), sep(),
-      btn('clear', 'Clear formatting', () => exec('removeFormat')), btn('undo', 'Undo (Ctrl+Z)', () => histStep(-1), 'undo'), btn('redo', 'Redo (Ctrl+Y)', () => histStep(1), 'redo')
+      g('tb-keep', fieldSel, fmt), sep(), g('tb-font', fontSel, sizeSel, color), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
+      g('tb-style', btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline')), sep(),
+      g('tb-align', btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight')), sep(),
+      g('tb-insert', btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), btn('table', 'Two columns (logo beside the text)', insertTable), btn('hr', 'Line', () => exec('insertHorizontalRule')), btn('clear', 'Clear formatting', () => exec('removeFormat')))
     );
   }
 
@@ -553,7 +556,9 @@
     document.querySelectorAll('.tab[data-mode]').forEach((t) => { t.classList.toggle('active', t.dataset.mode === mode); t.setAttribute('aria-selected', t.dataset.mode === mode); });
     design.hidden = mode !== 'design';
     $('source').hidden = mode !== 'html';
-    document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = n.classList.contains('html-only') ? (mode === 'html' ? '' : 'none') : mode === 'html' && !n.classList.contains('field-pick') ? 'none' : ''; });
+    // HTML: only inserting a field and Format; the design tools in Design.
+    document.querySelectorAll('#toolbar > *').forEach((n) => { n.style.display = mode === 'html' && !n.classList.contains('tb-keep') ? 'none' : ''; });
+    document.querySelectorAll('#toolbar .html-only').forEach((n) => { n.style.display = mode === 'html' ? '' : 'none'; });
     tidySeps($('toolbar'));
     hideImgBar();
   }

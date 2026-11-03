@@ -596,15 +596,41 @@
     return m.replace(/[^a-z0-9@._-]/g, '_') + '.json';
   }
 
-  // One set of values from both sources: each field from where it is to come from.
+  // One set of values from both sources: each field from where it is to come from, written the way
+  // the field says (a phone number alike for everyone).
   function mergeValues(config, graphValues, adValues) {
     var v = {};
     (config.fields || []).forEach(function (f) {
       var src = fieldSource(config, f);
       var from = src === 'graph' ? graphValues : src === 'ad' ? adValues : null;
-      v[f.key] = from && from[f.key] !== undefined && from[f.key] !== null ? String(from[f.key]) : '';
+      v[f.key] = formatValue(f, from && from[f.key] !== undefined && from[f.key] !== null ? String(from[f.key]) : '');
     });
     return v;
+  }
+
+  // A phone number written one way: +41 79 123 45 67. 079 123 45 67 and 0041… become +41…; other
+  // countries get + for 00 and lose (0), their spacing kept. Anything else (an extension, letters,
+  // too short) stays as it was.
+  var CC2 = '20 27 30 31 32 33 34 36 39 40 41 43 44 45 46 47 48 49 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66 81 82 84 86 90 91 92 93 94 95 98'.split(' ');
+  function formatPhone(value, country) {
+    var raw = String(value || '').trim();
+    if (!raw || /[A-Za-z]/.test(raw) || /[^\d\s+()./-]/.test(raw)) return raw;
+    var d = raw.replace(/\(0\)/g, '').replace(/[^\d+]/g, '');
+    if (/^00\d/.test(d)) d = '+' + d.slice(2);
+    else if (/^0\d/.test(d)) d = '+' + (country || '41') + d.slice(1);
+    if (!/^\+\d{7,15}$/.test(d)) return raw;
+    var n = d.slice(1);
+    var cc = /^[17]/.test(n) ? n.slice(0, 1) : CC2.indexOf(n.slice(0, 2)) >= 0 ? n.slice(0, 2) : n.slice(0, 3);
+    var rest = n.slice(cc.length);
+    // Switzerland and Liechtenstein as they are written there: 79 123 45 67, 232 12 34.
+    if (cc === '41' && rest.length === 9) return '+41 ' + rest.slice(0, 2) + ' ' + rest.slice(2, 5) + ' ' + rest.slice(5, 7) + ' ' + rest.slice(7);
+    if ((cc === '423' && rest.length === 7)) return '+423 ' + rest.slice(0, 3) + ' ' + rest.slice(3, 5) + ' ' + rest.slice(5);
+    // Elsewhere area codes differ in length: the spacing as it was typed, with + and without (0).
+    return raw.replace(/\s*\(0\)\s*/g, ' ').replace(/^00/, '+').replace(/^0(?=\d)/, '+' + (country || '41') + ' ').replace(/\s+/g, ' ').trim();
+  }
+  function formatValue(field, value) {
+    if (!field || !value) return value;
+    return field.format === 'phone' ? formatPhone(value) : value;
   }
 
   // The top-level properties Graph has to be asked for ($select) to fill these fields.
@@ -635,6 +661,7 @@
       if (!f || !/^[A-Za-z][A-Za-z0-9_]*$/.test(f.key || '')) errors.push('Field ' + (i + 1) + ': the placeholder name may hold only letters, digits and _, and starts with a letter.');
       else if (keys[f.key]) errors.push('Field @@' + f.key + ' is there twice.');
       else keys[f.key] = 1;
+      if (f && f.format && f.format !== 'phone') errors.push('Field @@' + f.key + ': unknown format ' + f.format + '.');
     });
     var bkeys = {};
     (config.blocks || []).forEach(function (b, i) {
@@ -725,7 +752,7 @@
     adFields: adFields,
     usesAdExport: usesAdExport,
     userFileName: userFileName,
-    mergeValues: mergeValues,
+    mergeValues: mergeValues, formatPhone: formatPhone, formatValue: formatValue,
     readPath: readPath,
     graphSelect: graphSelect,
     valuesFromGraph: valuesFromGraph,

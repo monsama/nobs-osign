@@ -378,3 +378,36 @@
   ['imgW', 'imgAlt', 'imgHref'].forEach((id) => $(id).addEventListener('change', applyImg));
   $('imgDone').addEventListener('click', () => { applyImg(); hideImgBar(); });
 
+
+  // Campaigns on a timeline: from today (or the first one) to the last day, a month per tick; the
+  // ones for the same people at the same time marked.
+  function renderCampaigns() {
+    const camps = S.config.signatures.filter((s) => core.isCampaign(s));
+    const DAY = 86400000, day = (x) => Date.parse(x + 'T00:00:00');
+    const now = new Date(); const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) + now.getTimezoneOffset() * 60000;
+    const froms = camps.map((s) => (s.validFrom ? day(s.validFrom) : null)).filter((x) => x !== null);
+    const untils = camps.map((s) => (s.validUntil ? day(s.validUntil) + DAY : null)).filter((x) => x !== null);
+    const start = Math.min(today - 7 * DAY, ...froms), end = Math.max(today + 60 * DAY, ...untils);
+    const span = end - start, pct = (x) => (100 * (x - start) / span).toFixed(2) + '%';
+    const loc = I18N.lang === 'de' ? 'de-CH' : 'en-GB';
+    const range = (s) => [s.validFrom ? day(s.validFrom) : start, s.validUntil ? day(s.validUntil) + DAY : end];
+    const clash = (a, b) => a !== b && audienceText(a) === audienceText(b) && (a.language || '') === (b.language || '') && range(a)[0] < range(b)[1] && range(b)[0] < range(a)[1];
+    const ticks = [];
+    for (let d = new Date(start); d.getTime() <= end; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+      const m = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      if (m >= start) ticks.push(el('span', { class: 'camp-tick', style: 'left:' + pct(m) }, new Date(m).toLocaleDateString(loc, { month: 'short', year: '2-digit' })));
+    }
+    const fmt = (x) => (x ? new Date(day(x)).toLocaleDateString(loc) : '…');
+    $('campTimeline').replaceChildren(
+      el('div', { class: 'camp-axis' }, ...ticks, el('span', { class: 'camp-today', style: 'left:' + pct(today), title: t('Today') })),
+      ...camps.map((s) => {
+        const [a, b] = range(s), over = camps.some((o) => clash(s, o));
+        const bar = el('button', { type: 'button', class: 'camp-bar' + (core.inPeriod(s) ? ' now' : b <= today ? ' past' : '') + (over ? ' clash' : ''),
+          style: 'left:' + pct(a) + ';width:calc(' + pct(b) + ' - ' + pct(a) + ')',
+          title: fmt(s.validFrom) + ' - ' + fmt(s.validUntil) + ' · ' + audienceText(s) + (over ? ' · ' + t('at the same time as another one for the same people') : ''),
+          onclick: () => { $('dlgCampaigns').close(); openSig(s.id); } });
+        return el('div', { class: 'camp-row' }, el('span', { class: 'camp-name' }, s.name || t('(no name)')), el('div', { class: 'camp-track' }, bar, el('span', { class: 'camp-today', style: 'left:' + pct(today) })));
+      }),
+      ...(camps.length ? [] : [el('p', { class: 'muted' }, t('No campaigns: a signature becomes one with its days under When.'))]));
+  }
+  $('btnCampaigns').addEventListener('click', () => { renderCampaigns(); $('dlgCampaigns').showModal(); });

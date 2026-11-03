@@ -16,6 +16,12 @@ part is short on purpose: what to do, where in the editor, and what to look at w
 Parts many signatures share (a disclaimer, a banner, the address) are **building blocks**
 (*Building blocks* in the sidebar), put in as `{{name}}`: change them there, once.
 
+A new address or phone number in all of them at once: **Replace in all signatures** (the ⇄ button
+above the list, or Ctrl+H) shows where it is found, leaves fields and building blocks alone, and
+is undone with one click. Phone numbers from AD written alike for everyone: *Fields* → the source
+of the field → *Written as: phone number* (`079 123 45 67` → `+41 79 123 45 67`). Campaigns on a
+timeline, with two for the same people at the same time marked: the calendar button above the list.
+
 ## Releasing a change carefully
 
 - **Try it on a few people first:** *Duplicate* the signature, give the copy *Who gets it → Specific
@@ -39,6 +45,17 @@ Parts many signatures share (a disclaimer, a banner, the address) are **building
 The **publishing group** is optional (*Settings → Server → Active Directory → Publishing
 group*); empty, everyone in the sign-in group publishes. Membership is read when someone signs in:
 taken out of the group, they keep their rights until they sign in again (at most 12 hours).
+
+## Being told when something needs doing
+
+*Settings → Server → Notifications*: a webhook (in Teams: the channel → *Workflows* → *Post to a
+channel when a webhook request is received*; for an email, a Power Automate flow with such a
+webhook). The server tells it, once a day at most while it lasts: an automatic backup that failed,
+its sign-in to Microsoft 365 running out (from 14 days before), the daily AD export that failed, a
+publish set for later that did not go out. Only outgoing, over HTTPS.
+
+*Settings → Server → Signed in now* lists who is signed in, from where and since when; one session
+is ended there (that person signs in again).
 
 ## Backups
 

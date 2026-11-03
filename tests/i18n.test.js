@@ -83,3 +83,17 @@ test('German in the add-in: every t(\'…\') of the pane has its German, none tw
   }));
   assert.deepEqual([...missing], []);
 });
+
+test('French and Italian in the add-in: every text the German has, and every message', async () => {
+  const pane = fs.readFileSync(path.join(__dirname, '..', 'addin', 'src', 'taskpane.js'), 'utf8');
+  const block = pane.slice(pane.indexOf('const DE = {'), pane.indexOf('};', pane.indexOf('const DE = {')));
+  const keys = [...block.matchAll(/^ {2}(['"])((?:(?!\1)[^\\]|\\.)*)\1:/gm)].map((m) => m[2].replace(/\\(['"])/g, '$1'));
+  const { LANG } = await import(path.join(__dirname, '..', 'addin', 'src', 'lang.js'));
+  const common = fs.readFileSync(path.join(__dirname, '..', 'addin', 'src', 'common.js'), 'utf8');
+  const msgs = (common.slice(common.indexOf('const MSG_DE = ['), common.indexOf('];', common.indexOf('const MSG_DE = ['))).match(/^\s+\[\//gm) || []).length;
+  for (const l of ['fr', 'it']) {
+    assert.deepEqual(keys.filter((k) => !LANG[l].ui[k]), [], l + ': missing');
+    assert.deepEqual(Object.keys(LANG[l].ui).filter((k) => !keys.includes(k)), [], l + ': not in the German');
+    assert.equal(LANG[l].msg.length, msgs, l + ': one per message');
+  }
+});

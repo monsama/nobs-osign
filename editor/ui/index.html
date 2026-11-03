@@ -44,6 +44,8 @@
       <span class="side-btns">
         <button id="btnImportOpen" type="button" hidden>Import templates</button>
         <button id="btnAll" class="icon-btn" title="All signatures side by side, with the preview's values" aria-label="All signatures"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button>
+        <button id="btnReplace" class="icon-btn" title="Replace in all signatures (Ctrl+H)" aria-label="Replace in all signatures"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11M12 4l3 3-3 3"/><path d="M20 17H9M12 14l-3 3 3 3"/></svg></button>
+        <button id="btnCampaigns" class="icon-btn" title="Campaigns on a timeline" aria-label="Campaigns" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></button>
         <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
       </span>
     </div>
@@ -333,6 +335,61 @@
   </form>
 </dialog>
 
+<dialog id="dlgReplace">
+  <form method="dialog" class="dlg">
+    <h2>Replace in all signatures</h2>
+    <p class="lead" data-th="repLead">In the text people read, link targets and image texts: a new address or phone number in every signature and building
+      block at once. The HTML itself is not touched. Shown first; undone with one click.</p>
+    <div class="form">
+      <label for="repFind">Find</label><div><input id="repFind" autocomplete="off" placeholder="Bahnhofstrasse 1"></div>
+      <label for="repBy">Replace with</label><div><input id="repBy" autocomplete="off" placeholder="Seestrasse 12"></div>
+      <span></span><div><label class="check"><input type="checkbox" id="repCase"> Match case</label></div>
+    </div>
+    <p id="repSum" class="hint"></p>
+    <ul id="repList" class="rep-list"></ul>
+    <p id="repErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="ghost">Cancel</button><button type="button" id="repGo" class="primary">Replace</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgNotify">
+  <form method="dialog" class="dlg">
+    <h2>Notifications</h2>
+    <p class="lead" data-th="notifyLead">The server tells a webhook when something needs doing: an automatic backup that failed, its sign-in to
+      Microsoft 365 running out (from 14 days before), the daily AD export that failed, a publish set for later that did not go out. Each
+      once a day at most while it lasts. Only outgoing, over HTTPS. In Teams: the channel → <b>Workflows</b> → <i>Post to a channel when a
+      webhook request is received</i>, and its address here. An email: a Power Automate flow with such a webhook.</p>
+    <div class="form">
+      <label for="ntUrl">Webhook</label>
+      <div><input id="ntUrl" type="password" autocomplete="off" placeholder="https://…"><small id="ntUrlNote"></small></div>
+    </div>
+    <p id="ntNow" class="hint"></p>
+    <p id="ntOk" class="where"></p>
+    <p id="ntErr" class="err"></p>
+    <div class="dlg-foot"><button type="button" id="ntOff" class="ghost danger">Turn off</button><span class="spacer"></span><button type="button" id="ntTest">Send a test</button><button type="button" id="ntSave" class="primary">Save</button><button value="cancel" class="ghost">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgCampaigns" class="fit">
+  <form method="dialog" class="dlg wide">
+    <h2>Campaigns</h2>
+    <p class="lead" data-th="campLead">Each campaign's days, with today marked. Two for the same people at the same time are marked: check which one they should get. A click opens it.</p>
+    <div id="campTimeline" class="camp-tl"></div>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgSessions" class="fit">
+  <form method="dialog" class="dlg wide">
+    <h2>Signed in now</h2>
+    <p class="lead" data-th="sessLead">Each sign-in lasts 12 hours at most, and ends after two hours without using the editor. Ended here, that person signs in again.</p>
+    <div class="table-wrap"><table class="fields audit"><thead><tr><th>Who</th><th>From</th><th>Signed in</th><th>Last active</th><th></th></tr></thead>
+      <tbody id="sessRows"></tbody></table></div>
+    <p id="sessErr" class="err"></p>
+    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
+  </form>
+</dialog>
+
 <dialog id="dlgAudit" class="audit">
   <form method="dialog" class="dlg wide">
     <h2>Audit log</h2>
@@ -407,6 +464,8 @@
       <tr><td><kbd>?</kbd></td><td>This list (outside a field)</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Close a dialog</td></tr>
       <tr><td><kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd></td><td>Back, forward (also the mouse's side buttons)</td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>H</kbd></td><td>Replace in all signatures</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Enter</kbd></td><td>Through the signature list, open the one focused</td></tr>
       <tr><td>Right-click, <kbd>Shift</kbd> + <kbd>F10</kbd></td><td>Menu of a signature in the list</td></tr>
       <tr><td><kbd>F2</kbd> / <kbd>Del</kbd></td><td>Rename, delete the signature selected in the list</td></tr>
     </table>
@@ -473,6 +532,14 @@
         <div class="setrow">
           <div class="setrow-text"><b>Audit log</b><small>Who signed in, published or changed something, and from where.</small></div>
           <button type="button" id="setAudit">Audit log…</button>
+        </div>
+        <div class="setrow">
+          <div class="setrow-text"><b>Notifications</b><small>A message to Teams (or another webhook) when a backup fails, a certificate runs out or a publish set for later did not go out.</small> <small id="setNotifyState" class="where"></small></div>
+          <button type="button" id="setNotify">Notifications…</button>
+        </div>
+        <div class="setrow">
+          <div class="setrow-text"><b>Signed in now</b><small>Who has the editor open or signed in, since when and from where; a session ended.</small></div>
+          <button type="button" id="setSessions">Sessions…</button>
         </div>
         <div class="setrow">
           <div class="setrow-text"><b>Backup</b><small>Everything in one file locked with a passphrase, or brought back from one.</small></div>

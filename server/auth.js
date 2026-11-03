@@ -115,7 +115,7 @@ function createAuth({ env, ldap, now = Date.now, log = console, store }) {
     if (!user) { failed(key); return { status: 401, error: 'The sign-in name or the password is wrong.' }; }
     fails.delete(key);
     const id = crypto.randomBytes(32).toString('base64url');
-    sessions.set(id, { id, user, started: now(), last: now() });
+    sessions.set(id, { id, user, started: now(), last: now(), from: String(from || '').slice(0, 64) });
     saveNow();
     log.info('sign-in: ' + user.login);
     return { cookie: cookie(id, MAX_MS / 1000), user };
@@ -125,9 +125,22 @@ function createAuth({ env, ldap, now = Date.now, log = console, store }) {
     if (id && sessions.delete(id)) saveNow();
     return cookie('', 0);
   }
+  // Who is signed in now, for the local account admin: each session by a reference (never its id,
+  // which is the cookie), and one ended by it.
+  const ref = (id) => crypto.createHash('sha256').update(String(id)).digest('base64url').slice(0, 16);
+  function list() {
+    sweep();
+    return [...sessions.values()].map((s) => ({ ref: ref(s.id), login: s.user.login, name: s.user.name || '', local: !!s.user.local,
+      started: new Date(s.started).toISOString(), last: new Date(s.last).toISOString(), from: s.from || '' }))
+      .sort((a, b) => (a.last < b.last ? 1 : -1));
+  }
+  function end(r) {
+    for (const [id, s] of sessions) if (ref(id) === r) { sessions.delete(id); saveNow(); return s.user.login; }
+    return '';
+  }
   // What the sign-in page offers.
   const methods = () => ({ local: !!adminPassword(), ad: !!ldap.url });
-  return { session, login, logout, methods, flush: saveNow };
+  return { session, login, logout, methods, list, end, ref, flush: saveNow };
 }
 
 module.exports = { createAuth, COOKIE };

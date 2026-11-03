@@ -189,6 +189,18 @@ test('a backup: locked with a passphrase, brought back on a new server with anot
     await admin2('draft/save', { configJson: cfg([{ id: 'z', name: 'Z', html: '<p>z</p>' }]) });
     assert.match((await admin2('backup/restore', { data: b.data, passphrase: 'wrong passphrase!' })).error, /passphrase is not the one/);
     assert.match((await admin2('backup/restore', { data: Buffer.from('{}').toString('base64'), passphrase: 'x' })).error, /not a backup/);
+    // Who is signed in: the local admin sees them, ends one (not the own), others may not.
+    const admin3 = t.as(await t.signIn('admin', 'admin-pw'));
+    const sl = await admin2('sessions/list');
+    assert.equal(sl.ok, true, sl.error);
+    const mine = sl.sessions.find((x) => x.mine), other = sl.sessions.find((x) => !x.mine && x.login === 'admin');
+    assert.ok(mine && other, JSON.stringify(sl.sessions));
+    assert.ok(!JSON.stringify(sl).match(/[A-Za-z0-9_-]{43}/), 'no session id given out');
+    assert.match((await admin2('sessions/end', { ref: mine.ref })).error, /your own session/);
+    assert.match((await anna('sessions/list')).error, /Only the local account admin/, 'a member of the sign-in group: no');
+    const ended = await admin2('sessions/end', { ref: other.ref });
+    assert.equal(ended.ended, 'admin');
+    assert.ok((await admin3('draft/get')).error, 'the ended one is out');
     // Checked only: what it holds, and the draft here as it was.
     assert.match((await admin2('backup/check', { data: b.data, passphrase: 'wrong passphrase!' })).error, /passphrase is not the one/);
     const ck = await admin2('backup/check', { data: b.data, passphrase: 'correct horse battery' });

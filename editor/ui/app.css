@@ -1197,3 +1197,27 @@ a#coffeeBtn.btnlike.icon:hover, .side-btns .icon-btn:hover { background: var(--p
 label.check.block > input[type=radio], label.check.block > input[type=checkbox] { flex: none; align-self: flex-start; margin-top: calc((1.45em - 13px) / 2 + 1px); }
 .sig-filter { padding: 0 8px 6px; }
 .sig-filter input { width: 100%; height: 28px; font-size: 12.5px; }
+.toolbar .tb-g { display: inline-flex; align-items: center; gap: 2px; flex-wrap: nowrap; }
+.toolbar .tb-font { gap: 4px; }
+.toolbar .tb-hist { margin-left: auto; }
+.toolbar .tb-break { flex-basis: 100%; height: 0; }
+.toolbar { row-gap: 4px; }
+/* Campaigns on a timeline (05-signature.js). */
+.camp-tl { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
+.camp-axis { position: relative; height: 22px; margin-left: 200px; border-bottom: 1px solid var(--line); }
+.camp-tick { position: absolute; bottom: 3px; font-size: 11px; color: var(--muted); border-left: 1px solid var(--line); padding-left: 4px; white-space: nowrap; }
+.camp-row { display: flex; align-items: center; min-height: 28px; }
+.camp-name { flex: 0 0 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 10px; font-size: 13px; }
+.camp-track { position: relative; flex: 1; height: 22px; background: var(--panel-2); border-radius: var(--r-s); }
+.camp-bar { position: absolute; top: 3px; height: 16px; min-width: 6px; padding: 0; border-radius: 3px; border: 1px solid var(--info-line, var(--accent)); background: var(--info-soft, var(--accent-soft)); }
+.camp-bar.now { background: var(--ok-soft); border-color: var(--ok-line); }
+.camp-bar.past { opacity: .5; }
+.camp-bar.clash { background: var(--warn-soft); border-color: var(--warn); }
+.camp-today { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--danger); transform: translateX(-1px); pointer-events: none; }
+.camp-axis .camp-today { top: auto; height: 8px; bottom: -4px; }
+@media (max-width: 700px) { .camp-axis { margin-left: 110px; } .camp-name { flex-basis: 110px; } }
+.rep-list { list-style: none; padding: 0; margin: 4px 0; max-height: 280px; overflow: auto; }
+.rep-list li { padding: 2px 0; }
+.rep-list small { color: var(--muted); }
+dialog.fit { width: min(1080px, 96vw); }
+.camp-axis { overflow: hidden; }
