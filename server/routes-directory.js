@@ -8,6 +8,17 @@ const core = require('../shared/signature-core.js');
 const { directoryProblem, lookup, groupsStartingWith, usersMatching, departmentsMatching } = require('./directory');
 const { graphProblem } = require('./graph');
 
+// What a field may read from Entra ID for the preview: contact details, as for AD
+// (server/directory.js), and the attributes synchronised from AD for signatures
+// (onPremisesExtensionAttributes, directory extensions). Not anything else of anyone.
+const GRAPH_CONTACT = ['displayName', 'givenName', 'surname', 'jobTitle', 'department', 'companyName', 'officeLocation', 'businessPhones', 'mobilePhone',
+  'faxNumber', 'mail', 'userPrincipalName', 'streetAddress', 'postalCode', 'city', 'state', 'country', 'preferredLanguage', 'onPremisesSamAccountName',
+  'employeeId', 'employeeType', 'aboutMe', 'mySite', 'otherMails', 'proxyAddresses'].map((x) => x.toLowerCase());
+function graphOk(p) {
+  const head = String(p).split(/[.[]/)[0];
+  return GRAPH_CONTACT.includes(head.toLowerCase()) || /^onPremisesExtensionAttributes$/i.test(head) || /^extension_[A-Za-z0-9]{32}_[A-Za-z0-9_]{1,100}$/.test(head);
+}
+
 function createDirectoryRoutes({ live, dir, graphCfg, users, settings, store, history, publisher, needsApproval }) {
   const routes = {
     // Active Directory, with the service account.
@@ -25,7 +36,7 @@ function createDirectoryRoutes({ live, dir, graphCfg, users, settings, store, hi
       for (const text of [store.getDraft().configJson || '', history.latest() || '']) {
         try { for (const f of (JSON.parse(text) || {}).fields || []) if (f && f.graph) known.add(String(f.graph)); } catch (e) { /* none */ }
       }
-      const fields = (Array.isArray(d.fields) ? d.fields : []).filter((f) => f && f.key && f.graph && known.has(String(f.graph))).map((f) => ({ key: String(f.key), graph: String(f.graph) }));
+      const fields = (Array.isArray(d.fields) ? d.fields : []).filter((f) => f && f.key && f.graph && known.has(String(f.graph)) && graphOk(String(f.graph))).map((f) => ({ key: String(f.key), graph: String(f.graph) }));
       try {
         const r = await graph.user(d.query, core.graphSelect(fields));
         return { values: core.valuesFromGraph(fields, r.user), displayName: r.user.displayName || d.query, groups: r.groups };
@@ -65,4 +76,4 @@ function createDirectoryRoutes({ live, dir, graphCfg, users, settings, store, hi
   return { routes };
 }
 
-module.exports = { createDirectoryRoutes };
+module.exports = { createDirectoryRoutes, graphOk };

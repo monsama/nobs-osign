@@ -12,4 +12,7 @@ const server = http.createServer(createApp());
 server.requestTimeout = 60000;
 server.headersTimeout = 20000;
 server.listen(port, () => console.info('NOBS OSign ' + require('../package.json').version + ' listening on port ' + port));
+// Something no request was waiting for (a timer's work): said, and the server keeps running.
+process.on('unhandledRejection', (e) => console.error('unhandled: ' + (e && e.stack || e)));
+process.on('uncaughtException', (e) => console.error('uncaught: ' + (e && e.stack || e)));
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => server.close(() => process.exit(0)));

@@ -122,14 +122,27 @@ function createStore(dataDir) {
   // first, then the configuration (the add-in never reads one that points at images not there
   // yet), then the images it no longer uses go. Only what differs is written. photos/ and users/
   // are not touched.
-  async function publish(target, text) {
+  // The draft's images, read now (name → bytes): what is published is what was read, even if an
+  // image changes while the upload runs.
+  function draftImages() {
+    const m = new Map();
+    for (const a of assets()) m.set(a.name, fs.readFileSync(path.join(assetDir, a.name)));
+    return m;
+  }
+  // opts.images: the images to publish (name → bytes) in place of the draft's, for a version that
+  // is not the draft (a pilot given to all, one set for later); opts.draft false: the draft stays
+  // as it is, and is not marked published.
+  async function publish(target, text, opts) {
+    opts = opts || {};
     const err = checkConfigJson(text); if (err) return { error: err };
-    writeAtomic(draftFile, text);
+    const images = opts.images || draftImages();
+    if (opts.draft !== false) writeAtomic(draftFile, text);
     let changed = false;
     const keep = new Set();
-    for (const a of assets()) {
+    for (const [name, src] of images) {
+      if (safeAssetName(name) !== name) continue;
+      const a = { name };
       keep.add(a.name);
-      const src = fs.readFileSync(path.join(assetDir, a.name));
       const there = await target.read('assets/' + a.name);
       if (!there || sha256(there) !== sha256(src)) { await target.write('assets/' + a.name, src, ASSET_TYPES[path.extname(a.name)]); changed = true; }
     }
@@ -138,8 +151,8 @@ function createStore(dataDir) {
     for (const n of await target.list('assets')) {
       if (!keep.has(n) && safeAssetName(n) === n) { await target.remove('assets/' + n); changed = true; }
     }
-    saveState(draftHash());
-    return { changed };
+    if (opts.draft !== false) saveState(draftHash());
+    return { changed, images };
   }
 
   async function loadPublished(target) {
@@ -162,7 +175,7 @@ function createStore(dataDir) {
     return getDraft();
   }
 
-  return { assetDir, getDraft, saveDraft, uploadAsset, deleteAsset, publish, loadPublished, draftHash, assetHashes };
+  return { assetDir, getDraft, saveDraft, uploadAsset, deleteAsset, publish, draftImages, loadPublished, draftHash, assetHashes };
 }
 
 module.exports = { createStore, safeAssetName, checkConfigJson, ASSET_TYPES, writeAtomic, readText };

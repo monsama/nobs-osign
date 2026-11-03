@@ -190,7 +190,9 @@
     if (p) $('pubPilotWho').textContent = t('A pilot runs since {0} for the group {1} ({2}): they have the new version, everyone else the one before. Publishing for everyone ends it.', when(p.at), p.group, p.by);
     $('pubPromote').disabled = $('pubPilotEnd').disabled = !can;
     $('pubSchedNow').hidden = !x;
-    if (x) $('pubSchedWho').textContent = t('Set to go out on {0} ({1}){2}: the draft as it was then.', when(x.at), x.by, x.pilot ? ' ' + t('for the pilot group {0}', x.pilot) : '');
+    if (x) $('pubSchedWho').textContent = t('Set to go out on {0} ({1}){2}: the draft as it was then.', when(x.at), x.by, x.pilot ? ' ' + t('for the pilot group {0}', x.pilot) : '') +
+      (x.error ? ' ' + t('It did not go out: {0}', t(x.error)) : '');
+    $('pubSchedWho').classList.toggle('warn', !!(x && x.error));
   }
   $('pubPilot').addEventListener('change', () => { $('pubPilotGroup').hidden = !$('pubPilot').checked; if ($('pubPilot').checked) $('pubPilotGroup').focus(); $('pubGo').textContent = pubGoText(); });
   $('pubLater').addEventListener('change', () => {

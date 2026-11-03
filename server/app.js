@@ -278,17 +278,36 @@ function createApp(opts) {
   const RECHECK = new Set(['info', 'approval/get', 'publish', 'approval/request', 'approval/approve', 'ad/export', 'photos/upload', 'photos/delete', 'photos/list',
     'pilot/start', 'pilot/promote', 'pilot/end', 'schedule/set', 'schedule/cancel']);
   const cnOf = (g) => { const m = /^CN=((?:\\,|[^,])+)/i.exec(String(g || '')); return (m ? m[1].replace(/\\,/g, ',') : String(g || '')).trim().toLowerCase(); };
+  // What AD says of a login now: { signIn, publisher } (in the sign-in group, in the publishing
+  // group); signIn false for an account that is gone; null when AD cannot be asked.
+  async function adRoles(login) {
+    try {
+      const r = await lookup(dir, login, []);
+      const mine = r.groups.map((g) => g.toLowerCase());
+      const signIn = mine.includes(cnOf(ldapCfg.group));
+      return { signIn, publisher: signIn && (!ldapCfg.publishGroup || mine.includes(cnOf(ldapCfg.publishGroup))) };
+    } catch (e) {
+      if (/^No user /.test(e.message)) return { signIn: false, publisher: false };
+      log.warn('roles: could not ask AD about ' + login + ': ' + e.message);
+      return null;
+    }
+  }
+  // For a publish set for later: whether its setter still publishes (null: not known).
+  async function stillPublisher(login) {
+    if (!login || !ldapCfg.publishGroup || !adOn) return null;
+    const r = await adRoles(login);
+    return r ? r.publisher : null;
+  }
   async function recheckPublisher(s) {
     if (!s || !s.user || s.user.local || !ldapCfg.publishGroup || !adOn) return;
     if (s.user.publisherAt && Date.now() - s.user.publisherAt < 60000) return;
-    try {
-      const r = await lookup(dir, s.user.login, []);
-      const mine = r.groups.map((g) => g.toLowerCase());
-      const was = s.user.publisher;
-      s.user.publisher = mine.includes(cnOf(ldapCfg.publishGroup)) && mine.includes(cnOf(ldapCfg.group));
-      s.user.publisherAt = Date.now();
-      if (was !== s.user.publisher) log.info('roles: ' + s.user.login + (s.user.publisher ? ' publishes again' : ' no longer publishes'));
-    } catch (e) { log.warn('roles: could not ask AD about ' + s.user.login + ': ' + e.message); }
+    const r = await adRoles(s.user.login);
+    if (!r) return;
+    const was = s.user.publisher;
+    s.user.publisher = r.publisher; s.user.publisherAt = Date.now();
+    // Gone from AD, or out of the sign-in group: signed out.
+    if (!r.signIn) { s.user.gone = true; log.info('roles: ' + s.user.login + ' is no longer allowed to sign in: signed out'); }
+    else if (was !== s.user.publisher) log.info('roles: ' + s.user.login + (s.user.publisher ? ' publishes again' : ' no longer publishes'));
   }
   // The same person, however they typed their login (AD does not mind the case).
   const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
@@ -321,19 +340,20 @@ function createApp(opts) {
   }
   // While publishing, the draft's images and the draft stay as they are (what was checked goes out).
   let publishing = false;
-  async function publishNow(configJson, by, message) {
+  // opts: { images, draft } as store.publish takes them (a version that is not the draft).
+  async function publishNow(configJson, by, message, opts) {
     const t = settings.target();
     const bad = compiledProblem(typeof configJson === 'string' ? configJson : '');
     if (bad) return { error: bad };
     if (publishing) return { error: 'Another publish is running: try again in a moment.' };
     let r;
     publishing = true;
-    try { r = await store.publish(t, typeof configJson === 'string' ? configJson : ''); }
+    try { r = await store.publish(t, typeof configJson === 'string' ? configJson : '', opts); }
     catch (e) { return { error: e.message }; }
     finally { publishing = false; }
     settings.forget(); photos.clear();
     // A version that differs from what was there: kept, with who and the note.
-    if (!r.error && r.changed) history.add({ by, message, configJson });
+    if (!r.error && r.changed) history.add({ by, message, configJson, images: r.images });
     return r.error ? r : { changed: r.changed, folder: t.describe() };
   }
   function connectionsAnswer() {
@@ -352,7 +372,7 @@ function createApp(opts) {
   }
 
   // A version in steps: a pilot group first, or at a time set beforehand (server/routes-release.js).
-  const release = createReleaseRoutes({ dataDir, history, publishNow, publisher, needsApproval, log });
+  const release = createReleaseRoutes({ dataDir, history, store, publishNow, publisher, needsApproval, compiledProblem, stillPublisher, audit, log });
   const routes = {
     ping: () => ({}),
     info: (data, s) => ({
@@ -559,6 +579,7 @@ function createApp(opts) {
     // The versions published, and one of them back into the draft (with its images).
     'history/list': () => ({ versions: history.list() }),
     'history/restore': (d) => {
+      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
       const r = history.restore(String(d.id || ''));
       if (r.error) return r;
       const saved = store.saveDraft(r.configJson);
@@ -566,6 +587,7 @@ function createApp(opts) {
       return { at: r.at };
     },
     'load-published': async () => {
+      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
       try { return await store.loadPublished(settings.target()); } catch (e) { return { error: e.message }; }
     },
     // The add-in's files: made into the data volume, then uploaded or downloaded.
@@ -636,7 +658,7 @@ function createApp(opts) {
   };
   Object.assign(routes, release.routes);
   // The backups (server/routes-backup.js).
-  const backups = createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version: VERSION, log });
+  const backups = createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version: VERSION, log, busy: () => publishing });
   Object.assign(routes, backups.routes);
   // Photos (server/routes-photos.js) and the directory, AD and Entra ID (server/routes-directory.js).
   Object.assign(routes, createPhotoRoutes({ settings, photos, publisher, needsApproval, opts }).routes);
@@ -725,6 +747,7 @@ function createApp(opts) {
     let r;
     // What publishes or goes live at once: whether they are still in the publishing group, asked now.
     if (RECHECK.has(name)) await recheckPublisher(s);
+    if (s.user.gone) { auth.logout(req); return fail(res, 'You are not in the group that may use NOBS OSign any more.', 401); }
     const logged = Object.prototype.hasOwnProperty.call(AUDIT, name);
     try { r = await fn(data, s, ip); } catch (e) {
       log.error('api ' + name + ': ' + (e && e.stack || e));

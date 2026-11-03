@@ -48,7 +48,9 @@ function createAutoBackup({ dataDir, dir, seal, open, rawKey, version, log }) {
   function run(now = new Date()) {
     const s = read(), pass = passphrase(s);
     if (!pass) return { error: 'No passphrase for the automatic backups: set it (again) in Backup.' };
-    const b = exportBackup({ dataDir, passphrase: pass, appKey: rawKey(), version, now });
+    let b;
+    // A file gone while it is read (a request withdrawn, history pruned): the next try.
+    try { b = exportBackup({ dataDir, passphrase: pass, appKey: rawKey(), version, now }); } catch (e) { b = { error: 'Reading the data: ' + e.message }; }
     if (b.error) { s.last = { at: now.toISOString(), ok: false, error: b.error }; write(s); return b; }
     const name = b.name.replace(/\.osignbak$/, '-' + now.toISOString().slice(11, 16).replace(':', '') + '.osignbak');
     try {
@@ -66,8 +68,10 @@ function createAutoBackup({ dataDir, dir, seal, open, rawKey, version, log }) {
     const next = nextAt(s.at, Date.now());
     if (!next) return;
     timer = setTimeout(() => {
-      const r = run();
-      if (r.error) log.warn('automatic backup: ' + r.error); else log.info('automatic backup: ' + r.name);
+      try {
+        const r = run();
+        if (r.error) log.warn('automatic backup: ' + r.error); else log.info('automatic backup: ' + r.name);
+      } catch (e) { log.error('automatic backup: ' + (e && e.message)); }
       schedule();
     }, Math.max(1000, next - Date.now()));
     if (timer.unref) timer.unref();
