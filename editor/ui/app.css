@@ -1011,3 +1011,4 @@ dialog.settings .dlg-body { display: flex; flex-direction: column; }
 .view:not(#viewEmpty) .empty-state .es-actions, .dlg .empty-state .es-actions, td .empty-state .es-actions { margin: 0 0 0 auto; }
 .empty-state .es-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .photo-list > li.wide { align-items: stretch; padding: 0; }
+.badge.chg { color: var(--accent); border-color: var(--accent); }

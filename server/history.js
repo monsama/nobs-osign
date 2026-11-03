@@ -80,6 +80,12 @@ function createHistory({ dataDir, assetDir }) {
   }
   // The last one published ('' before the first).
   function latest() { const id = ids()[0]; const h = id ? load(id) : null; return h ? h.configJson : ''; }
+  // One image of it, as bytes (null when it has none of that name).
+  function latestImage(name) {
+    const id = ids()[0]; const h = id ? load(id) : null;
+    const a = ((h && h.assets) || []).find((x) => x.name === name);
+    try { return a ? fs.readFileSync(path.join(blobs, a.blob)) : null; } catch (e) { return null; }
+  }
   // Its images: name → sha256 of the content.
   function latestImages() {
     const id = ids()[0]; const h = id ? load(id) : null; const out = {};
@@ -87,7 +93,7 @@ function createHistory({ dataDir, assetDir }) {
     return out;
   }
 
-  return { add, list, restore, get, latest, latestImages };
+  return { add, list, restore, get, latest, latestImages, latestImage };
 }
 
 module.exports = { createHistory };

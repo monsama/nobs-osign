@@ -231,7 +231,7 @@
         return;
       }
       const r = await api('publish', { configJson: JSON.stringify(c), message: pubNote() });
-      S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus();
+      S.config.updated = c.updated; S.dirty = false; S.publishedAt = Date.now(); renderStatus(); loadPublishedCopy();
       // The server version: whether the folder is there now (it is made on the first publish).
       if (onServer()) { try { lastSettings = await api('settings/get'); } catch (e2) { /* as it was */ } }
       $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
@@ -432,7 +432,7 @@
     $('pubApprove').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
       const r = await api('approval/approve', { hash: (S.approval && S.approval.pending && S.approval.pending.hash) || '' });
-      S.dirty = false; S.publishedAt = Date.now(); renderStatus();
+      S.dirty = false; S.publishedAt = Date.now(); renderStatus(); loadPublishedCopy();
       $('pubOk').textContent = r.changed ? t('Approved and published to {0}.', r.folder) : t('Nothing had changed.');
       await loadApproval(); renderApproval();
     } catch (err) { $('pubOk').textContent = ''; $('pubErr').textContent = t(err.message); }

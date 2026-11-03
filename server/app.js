@@ -8,7 +8,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { createStore, ASSET_TYPES } = require('./store');
+const { createStore, ASSET_TYPES, safeAssetName } = require('./store');
 const { createSettings, check: checkSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
 const { createAuth } = require('./auth');
@@ -584,6 +584,24 @@ function createApp(opts) {
       const saved = store.saveDraft(r.configJson);
       if (saved && saved.error) return saved;
       return { at: r.at };
+    },
+    // What is published, to see what the draft changed: the configuration as it went out.
+    'published/get': () => ({ configJson: history.latest() || '' }),
+    // One signature back as it is published (its changes in the draft dropped), with the images it
+    // needs that the draft no longer has.
+    'published/revert': (d) => {
+      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
+      let c = null; try { c = JSON.parse(history.latest() || 'null'); } catch (e) { c = null; }
+      const sig = c && (c.signatures || []).find((x) => x && x.id === String(d.id || ''));
+      if (!sig) return { error: 'This signature is not published yet: there is nothing to go back to.' };
+      const have = new Set(store.draftImages().keys());
+      for (const m of String((sig.source || '') + (sig.html || '')).matchAll(/assets\/([^"'\s)?#]+)/g)) {
+        let n = m[1]; try { n = decodeURIComponent(n); } catch (e) { /* as it is */ }
+        if (have.has(n) || safeAssetName(n) !== n) continue;
+        const bytes = history.latestImage(n);
+        if (bytes) { writeAtomic(path.join(store.assetDir, n), bytes); have.add(n); }
+      }
+      return { signature: sig, assets: store.getDraft().assets };
     },
     'load-published': async () => {
       if (publishing) return { error: 'Publishing right now: try again in a moment.' };

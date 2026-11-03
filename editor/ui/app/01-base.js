@@ -100,6 +100,9 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 600);
     if (!opts || opts.list !== false) renderList();
+    // Changed against what is published: the marks follow a moment after typing stops.
+    else { clearTimeout(changed.marks); changed.marks = setTimeout(() => { renderList(); revertShow(); }, 700); }
+    revertShow();
     if (!opts || opts.preview !== false) schedulePreview();
   }
   function save(opts) {
@@ -232,6 +235,8 @@
           s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
           s.defaultReply ? el('span', { class: 'badge on' }, t('Reply')) : null,
           s.language ? el('span', { class: 'badge', title: t('Language variant') }, s.language.toUpperCase()) : null,
+          sigState(s) === 'changed' ? el('span', { class: 'badge chg', title: t('Changed since it was published: Outlook still has the published one.') }, t('Changed')) :
+          sigState(s) === 'new' ? el('span', { class: 'badge chg', title: t('Not published yet: Outlook does not have it.') }, t('Not published')) : null,
           core.forNobody(s) ? el('span', { class: 'badge warn', title: t('Not assigned: nobody gets it. Give it groups, departments or domains, or the entire organization (Who gets it).') }, t('Not assigned')) :
           audienceText(s) !== t('entire organization') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
           core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' on' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
@@ -372,6 +377,7 @@
     $('sigNew').checked = !!s.defaultNew;
     $('sigReply').checked = !!s.defaultReply;
     $('sigRemoveEmpty').checked = s.removeEmptyLines !== false;
+    revertShow();
     $('sigLang').value = s.language || ''; $('sigLangChip').textContent = s.language ? ' · ' + s.language.toUpperCase() : '';
     audienceShow(s);
     $('sigFrom').value = s.validFrom || '';

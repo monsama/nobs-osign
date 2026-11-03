@@ -33,6 +33,7 @@
     S.config = normalize(c);
     S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = +r.publishedAt || 0;
     renderStatus();
+    loadPublishedCopy();
     // The logos looked at for dark mode, for the checks before publishing.
     setTimeout(() => (S.assets || []).forEach((a) => { if (/\.png$/i.test(a.name)) darkCheck(a.name); }), 500);
     if (S.config.signatures.length) openSig(S.sigId && S.config.signatures.some((s) => s.id === S.sigId) ? S.sigId : S.config.signatures[0].id);
