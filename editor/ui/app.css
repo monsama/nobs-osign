@@ -1103,3 +1103,16 @@ table.users td.none { color: var(--warn); }
 /* The coffee: a square button, the cup in its middle (its handle makes it look off by itself). */
 a#coffeeBtn.btnlike.icon { width: var(--h); padding: 0; justify-content: center; }
 #coffeeBtn svg { margin: 0; transform: translateX(-0.5px); }
+
+/* The top bar on one line whatever the width: below 1200 pixels Settings and Sign out are their
+   icons (with their name as a tooltip), the name of who is signed in goes, the states may shorten. */
+.top { flex-wrap: nowrap; min-width: 0; }
+.top .tb-ic { display: none; width: 16px; height: 16px; margin: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.top .status { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.top .status-wrap { min-width: 0; flex: 0 1 auto; }
+@media (max-width: 1200px) {
+  .top .tb-ic { display: block; }
+  .top .tb-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .top #btnSettings, .top #btnLogout { width: var(--h); padding: 0; justify-content: center; }
+  .top #who, .top #whoSep { display: none; }
+}

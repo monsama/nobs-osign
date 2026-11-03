@@ -512,7 +512,9 @@
   $('navHistory').addEventListener('click', (e) => { e.preventDefault(); $('dlgHistory').showModal(); renderHistory(); });
   $('btnLoad').addEventListener('click', async () => {
     if (S.dirty && !(await ask(t('Replace the draft with what is published? Changes not published are lost (the draft is kept once as draft.json.bak).'), t('Replace'), true))) return;
-    try { applyDraft(await api('load-published')); $('dlgHistory').close(); toast(t('Loaded the published signatures.')); }
+    // Everything as published again: the page loaded anew, so nothing shows the old state, and the
+    // note after it.
+    try { await api('load-published'); try { sessionStorage.setItem('osign.note', t('Loaded the published signatures.')); } catch (e2) { /* without the note */ } location.reload(); }
     catch (e) { toast(t(e.message), true); }
   });
 
