@@ -691,9 +691,16 @@ test('the add-in\'s files older than the server: said in the status bar and unde
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
   await page.waitForSelector('#stAddin:not([hidden])');
-  assert.match(await page.textContent('#stAddin'), /Add-in files from 0\.0\.1/);
+  assert.match(await page.textContent('#stAddin'), /Update the add-in \(0\.0\.1 → /);
+  // One click: made for this version, said on the button, which then goes.
   await page.click('#stAddin');
-  await page.waitForSelector('#dlgSettings [data-spane=server]:not([hidden])');
+  await page.waitForFunction(() => /Add-in .* (made|is out)/.test(document.querySelector('#stAddinText').textContent));
+  await page.waitForSelector('#stAddin', { state: 'hidden', timeout: 10000 });
+  // Under Settings → Server, Make again does it too.
+  fs.writeFileSync(ver, JSON.stringify(Object.assign({}, JSON.parse(fs.readFileSync(ver, 'utf8')), { version: '0.0.1' })));
+  await page.goto(url);
+  await page.waitForSelector('#stAddin:not([hidden])');
+  await page.click('#btnSettings'); await page.click('#dlgSettings [data-stab=server]');
   await page.waitForFunction(() => /Made with 0\.0\.1/.test(document.querySelector('#healthRows').textContent));
   await page.click('#healthRows button:has-text("Make again")');
   await page.waitForFunction(() => !/Made with 0\.0\.1/.test(document.querySelector('#healthRows').textContent) && !document.querySelector('#healthRows .hdot.run'));

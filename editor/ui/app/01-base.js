@@ -246,12 +246,12 @@
         el('div', { class: 'badges' },
           s.defaultNew ? el('span', { class: 'badge on' }, t('New')) : null,
           s.defaultReply ? el('span', { class: 'badge on' }, t('Reply')) : null,
-          s.language ? el('span', { class: 'badge', title: t('Language variant') }, s.language.toUpperCase()) : null,
-          sigState(s) === 'changed' ? el('span', { class: 'badge chg', title: t('Changed since it was published: Outlook still has the published one.') }, t('Changed')) :
-          sigState(s) === 'new' ? el('span', { class: 'badge chg', title: t('Not published yet: Outlook does not have it.') }, t('Not published')) : null,
+          s.language ? el('span', { class: 'badge on', title: t('Language variant') }, s.language.toUpperCase()) : null,
+          sigState(s) === 'changed' ? el('span', { class: 'badge warn', title: t('Changed since it was published: Outlook still has the published one.') }, t('Changed')) :
+          sigState(s) === 'new' ? el('span', { class: 'badge warn', title: t('Not published yet: Outlook does not have it.') }, t('Not published')) : null,
           core.forNobody(s) ? el('span', { class: 'badge warn', title: t('Not assigned: nobody gets it. Give it groups, departments or domains, or the entire organization (Who gets it).') }, t('Not assigned')) :
           audienceText(s) !== t('entire organization') ? el('span', { class: 'badge', title: audienceText(s) }, t('Limited')) : null,
-          core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' on' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
+          core.isCampaign(s) ? el('span', { class: 'badge' + (core.inPeriod(s) ? ' ok' : ''), title: campaignText(s) }, core.inPeriod(s) ? t('Campaign') : t('Campaign, not now')) : null));
       a.addEventListener('contextmenu', (e) => { e.preventDefault(); sigMenu(s, e.clientX, e.clientY); });
       a.addEventListener('keydown', (e) => {
         if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = a.getBoundingClientRect(); sigMenu(s, r.left + 24, r.bottom); }
@@ -325,9 +325,17 @@
     const up = f.update;
     // The add-in's files older than this server (after an update): for the local admin, who makes them.
     const f0s = S.info.features || {}, admin = !!(S.info.user && S.info.user.local);
-    const stale = admin && f0s.addinVersion && f0s.addinVersion !== S.info.version;
-    $('stAddin').hidden = !stale;
-    if (stale) { $('stAddin').textContent = t('Add-in files from {0}: make them again', f0s.addinVersion); $('stAddin').title = t('Settings → Server'); }
+    // Older than the server, or made but not uploaded yet (with Cloudflare Pages): one click does it.
+    const built = f0s.addinVersion, up2 = f0s.addinUploaded && f0s.addinUploaded.version;
+    const stale = admin && built && built !== S.info.version;
+    const unsent = admin && built && !stale && f0s.pagesUpload && up2 !== built;
+    if (!$('stAddin').classList.contains('busy') && !$('stAddin').classList.contains('done')) {
+      $('stAddin').hidden = !(stale || unsent);
+      if (stale) $('stAddinText').textContent = t('Update the add-in ({0} → {1})', built, S.info.version);
+      else if (unsent) $('stAddinText').textContent = t('Upload the add-in ({0})', built);
+      $('stAddin').title = f0s.pagesUpload ? t('Makes the add-in\'s files for this version and uploads them to Cloudflare Pages: Outlook takes them by itself.')
+        : t('Makes the add-in\'s files for this version; then copy them to the web server.');
+    }
     $('stUpdate').hidden = !up;
     if (up) { $('stUpdate').textContent = t('Version {0} is out', up.version); $('stUpdate').href = up.url || '#'; $('stUpdate').title = t('Update with sudo ./scripts/update.sh {0}', up.version); }
     const ap = S.approval && S.approval.pending;
