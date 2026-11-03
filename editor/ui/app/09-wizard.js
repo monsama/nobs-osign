@@ -41,6 +41,7 @@
     $('wizBar').style.width = Math.round(100 * wiz.step / (WIZ.length - 1)) + '%';
     $('wizBack').hidden = wiz.step === 0;
     wizNavRender();
+    if (name === 'done') wizSummary();
     $('wizNext').textContent = name === 'welcome' ? t('Start') : name === 'done' ? t('Finish') : t('Next');
     $('wizLater').hidden = name === 'done';
     $('wizErr').textContent = '';
@@ -84,18 +85,40 @@
   // The steps as a row to jump to: once set up, any of them; before, those reached already.
   const WIZ_SHORT = { welcome: 'Welcome', connect: 'Connections', folder: 'Signatures', values: 'Values', host: 'Add-in address', app: 'App registration', files: 'Add-in files', deploy: 'Deployment', done: 'Ready' };
   const wizAnyStep = () => S.settings.setupDone === '1';
+  // How far the assistant got, kept in this browser: opened again, the steps up to there are a
+  // click away, as they are once it is set up.
+  function wizFar() { try { return WIZ.indexOf(localStorage.getItem('osign.wizReached')); } catch (e) { return -1; } }
+  function wizKeepFar() { try { if (wiz.reached > wizFar()) localStorage.setItem('osign.wizReached', WIZ[wiz.reached]); } catch (e) { /* this time only */ } }
+  // As breadcrumbs: each step numbered, the ones gone through ticked, the current one marked; once
+  // set up, any of them a click away.
+  // The last step: what is set up, and a step still open a click away (it can be left for later).
+  function wizSummary() {
+    const f = (S.info && S.info.features) || {}, st = S.settings || {};
+    const rows = [
+      ['connect', t('Active Directory: signing in with Windows accounts'), onServer() ? !f.adProblem : true],
+      ['folder', t('SharePoint: where the signatures are kept'), onServer() ? f.publishTarget === 'sharepoint' && !f.graphProblem : !!st.folder],
+      ['host', t('The add-in\'s address'), !!st.addinUrl],
+      ['app', t('App registration in Entra ID'), !!st.clientId],
+      ['files', t('The add-in\'s files'), !!f.addinVersion && f.addinVersion === S.info.version]
+    ].filter(([step]) => WIZ.includes(step));
+    $('wizSummary').replaceChildren(...rows.map(([step, what, ok]) => el('li', { class: ok ? 'good' : 'warn' }, what + (ok ? '' : ' – ' + t('not done yet')),
+      ok ? null : el('button', { type: 'button', class: 'small ghost', onclick: () => wizGo(WIZ.indexOf(step)) }, t('To the step')))));
+  }
   function wizNavRender() {
-    const nav = $('wizNav');
+    const nav = $('wizNav'), any = wizAnyStep();
+    wizKeepFar();
     nav.replaceChildren(...WIZ.map((n, i) => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.dataset.step = n;
-      b.textContent = t(WIZ_SHORT[n] || n);
-      b.title = t(document.querySelector('#dlgWizard .wiz-step[data-step=' + n + ']').dataset.title);
+      const done = i !== wiz.step && i < wiz.reached;
+      // Its full title is the heading above once there: named so for a screen reader, no tooltip.
+      const b = el('button', { type: 'button', 'data-step': n, class: done ? 'done' : null,
+        'aria-label': (i + 1) + '. ' + t(document.querySelector('#dlgWizard .wiz-step[data-step=' + n + ']').dataset.title) + (done ? ' ✓' : '') },
+        el('span', { class: 'wn-n', 'aria-hidden': 'true' }, done ? '✓' : String(i + 1)), t(WIZ_SHORT[n] || n));
       if (i === wiz.step) b.setAttribute('aria-current', 'step');
-      b.disabled = i !== wiz.step && !wizAnyStep() && i > wiz.reached;
+      b.disabled = i !== wiz.step && !any && i > wiz.reached;
       b.addEventListener('click', () => wizGo(i));
       return b;
     }));
+    const cur = nav.querySelector('[aria-current]'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   // What stops a step, where it is seen (on a small screen it is below what shows).
   function wizError(err) {
@@ -312,7 +335,7 @@
   function wizOpen(step) {
     WIZ = wizSteps();
     wizFill();
-    wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.reached = wiz.step; wiz.built = false; wiz.warned = '';
+    wiz.step = Math.max(0, Math.min(WIZ.length - 1, step || 0)); wiz.reached = Math.max(wiz.step, wizFar()); wiz.built = false; wiz.warned = '';
     $('wizMakeOk').textContent = ''; $('wizChecks').replaceChildren();
     $('wizWhereFound').textContent = ''; $('wizLinkNote').textContent = ''; $('wizGrantMsNote').textContent = '';
     wiz.spOk = false; $('wizFolderNote').textContent = ''; $('wizCfOk').textContent = '';
