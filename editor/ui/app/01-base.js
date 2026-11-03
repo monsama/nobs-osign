@@ -502,3 +502,60 @@
     if (!from) { $('sigName').focus(); $('sigName').select(); }
   }
 
+
+  // Tooltips: what a button's title says, in the app's look, sooner than the browser's own, and also
+  // when a button is reached with the keyboard. A shortcut at its end, "(Ctrl+K)", shows as a key.
+  // The title goes back on the element when the tip goes, so it stays what it was otherwise.
+  (function () {
+    const tip = el('div', { class: 'tip', role: 'tooltip', id: 'appTip', hidden: '' });
+    document.body.append(tip);
+    let on = null, timer = null, keptLabel = false;
+    const SKIP = 'input, textarea, select, iframe, option';
+    function hide() {
+      clearTimeout(timer); timer = null;
+      if (!on) return;
+      // A title set meanwhile (the state changed) is the newer one.
+      if (on.dataset.tip !== undefined) { if (!on.hasAttribute('title')) on.setAttribute('title', on.dataset.tip); delete on.dataset.tip; }
+      if (keptLabel) on.removeAttribute('aria-label');
+      on.removeAttribute('aria-describedby');
+      keptLabel = false; on = null; tip.hidden = true;
+    }
+    function show(e, delay) {
+      if (!e || e === on) return;
+      hide();
+      const text = e.getAttribute('title');
+      if (!text || !text.trim()) return;
+      on = e;
+      // The browser's own tooltip would show as well: the title rests on the element meanwhile.
+      e.dataset.tip = text; e.removeAttribute('title');
+      if (!e.hasAttribute('aria-label') && !e.textContent.trim()) { e.setAttribute('aria-label', text); keptLabel = true; }
+      timer = setTimeout(() => {
+        if (on !== e || !e.isConnected) return;
+        const m = /\s*\(((?:Ctrl|Shift|Alt|⌘)\+[^)]+)\)\s*$/.exec(text);
+        const mac = /Mac|iPhone|iPad/.test(navigator.userAgent);
+        tip.replaceChildren(m ? text.slice(0, m.index) : text);
+        if (m) tip.append(el('kbd', null, mac ? m[1].replace(/Ctrl\+/g, '⌘') : m[1].replace(/\+/g, ' ')));
+        tip.hidden = false;
+        e.setAttribute('aria-describedby', 'appTip');
+        // Below the element, or above when there is no room; inside the window.
+        const r = e.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+        let top = r.bottom + 6; if (top + h > innerHeight - 4) top = r.top - h - 6;
+        const left = Math.max(4, Math.min(innerWidth - w - 4, r.left + r.width / 2 - w / 2));
+        tip.style.top = Math.max(4, top) + 'px'; tip.style.left = left + 'px';
+        // Inside an open dialog the tip goes into it, so it is drawn above it (the top layer).
+        const dlg = e.closest('dialog[open]');
+        if (dlg ? tip.parentNode !== dlg : tip.parentNode !== document.body) (dlg || document.body).append(tip);
+      }, delay);
+    }
+    const target = (n) => { const e = n && n.closest && n.closest('[title]'); return e && !e.matches(SKIP) && !e.closest('.tip') ? e : null; };
+    document.addEventListener('pointerover', (ev) => {
+      if (ev.pointerType === 'touch') return;
+      const e = target(ev.target);
+      if (e) show(e, 350); else if (on && !on.contains(ev.target)) hide();
+    });
+    document.addEventListener('pointerout', (ev) => { if (on && !on.contains(ev.relatedTarget)) hide(); });
+    document.addEventListener('focusin', (ev) => { const e = target(ev.target); if (e && e.matches(':focus-visible')) show(e, 150); else hide(); });
+    document.addEventListener('focusout', hide);
+    for (const n of ['pointerdown', 'keydown', 'scroll', 'wheel']) document.addEventListener(n, (ev) => { if (n !== 'keydown' || ev.key === 'Escape' || ev.key === 'Enter' || ev.key === ' ') hide(); }, true);
+    window.addEventListener('blur', hide);
+  })();

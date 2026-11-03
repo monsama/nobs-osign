@@ -36,7 +36,7 @@ Parts many signatures share (a disclaimer, a banner, the address) are **building
 | Approve someone else's publish | – | ✓ | ✓ |
 | Server connections, add-in files, backups, audit log, four eyes | – | – | ✓ |
 
-The **publishing group** is optional (*Settings → Connections → Active Directory → Publishing
+The **publishing group** is optional (*Settings → Server → Active Directory → Publishing
 group*); empty, everyone in the sign-in group publishes. Membership is read when someone signs in:
 taken out of the group, they keep their rights until they sign in again (at most 12 hours).
 

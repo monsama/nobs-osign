@@ -588,9 +588,15 @@ test('Server connections: SharePoint offers the setup script, and says what is m
   assert.equal(await page.isVisible('#cn_graphTenantId'), false, 'by hand only when opened');
   const lead = await page.textContent('#connGraph');
   assert.match(lead, /setup script does it/);
-  await page.click('#connHost [data-ctest=graph]');
-  await page.waitForFunction(() => document.querySelector('#connHost [data-ctestout=graph]').textContent && !/Testing/.test(document.querySelector('#connHost [data-ctestout=graph]').textContent));
-  assert.equal(await page.textContent('#connHost [data-ctestout=graph]'), await page.textContent('#connGraph'));
+  // Saved: back on the status list, which checks it, in the same words.
+  await page.click('#connSave');
+  await page.waitForSelector('#connHost', { state: 'hidden' });
+  await page.waitForFunction(() => document.querySelectorAll('#healthRows .setrow').length >= 8 && !document.querySelector('#healthRows .hdot.run'));
+  assert.equal(await page.textContent('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) small'), lead);
+  assert.equal(await page.getAttribute('#dlgSettings [data-stab=server]', 'aria-selected'), 'true');
+  await page.click('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) button');
+  await page.waitForSelector('#connHost:not([hidden])');
+  assert.equal(await page.getAttribute('#dlgSettings [data-stab=server]', 'aria-selected'), 'true', 'a page of Server');
   // The folder the script gives access to: shown, and changed by pasting its address.
   assert.match(await page.textContent('#connSpWhere'), /OSign/);
   await page.fill('#connSpUrl', 'https://contoso.sharepoint.com/sites/Signaturen/Shared%20Documents/Forms/AllItems.aspx');
@@ -635,8 +641,9 @@ test('Status: every part the server depends on, tried now; a part opens its tab 
   await page.click('#healthRows .setrow:has(b:text-is("SharePoint (Microsoft 365)")) button');
   await page.waitForSelector('#connHost:not([hidden])');
   assert.equal(await page.isVisible('#connScriptGet'), true);
-  await page.click('#connCancel');
+  await page.click('#connBackTop');
   await page.waitForFunction(() => !document.querySelector('#healthRows .hdot.run'));
+  assert.equal(await page.isVisible('#healthRun'), true);
   // The Server tab names Active Directory itself.
   await page.click('#dlgSettings [data-stab=server]');
   assert.equal((await page.textContent('#setConn')).trim(), 'Active Directory…');
@@ -1358,5 +1365,19 @@ test('not assigned ones: a group below the others, folded away (the one open sta
   await page.waitForFunction(() => /For nobody/.test(document.querySelector('#sigList').textContent));
   assert.equal(await page.getAttribute('#sigGroupUnassigned', 'aria-expanded'), 'true');
   for (const n of ['For nobody', 'For all']) { await page.click('#sigList a:has-text("' + n + '")'); await page.click('#btnDel'); await page.click('#askOk'); }
+  assert.deepEqual(errors, []);
+});
+
+test('tooltips: a button\'s title in the app\'s look, its shortcut as a key; the title back afterwards', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  const title = await page.getAttribute('#btnFind', 'title');
+  await page.hover('#btnFind');
+  await page.waitForSelector('#appTip:not([hidden])');
+  assert.equal(await page.textContent('#appTip kbd'), 'Ctrl K');
+  assert.equal(await page.getAttribute('#btnFind', 'title'), null, 'not the browser\'s own as well');
+  await page.mouse.move(5, 500);
+  await page.waitForSelector('#appTip', { state: 'hidden' });
+  assert.equal(await page.getAttribute('#btnFind', 'title'), title);
   assert.deepEqual(errors, []);
 });

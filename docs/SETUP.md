@@ -53,9 +53,10 @@ so backups are encrypted, and keep them as private as the server.
 
 ## 2. The server's connections
 
-**Settings → Server connections** (also the setup assistant's first step), for the local account
-`admin` only: whoever sets the domain controller's address gets the passwords people sign in with.
-Each tab has **Save and test**.
+**Settings → Server**, a part's button in the status list (also the setup assistant's first step), for
+the local account `admin` only: whoever sets the domain controller's address gets the passwords people
+sign in with. **Save** goes back to the status list, which checks every connection again
+(**Check everything** does it any time).
 
 - **Active Directory:**
   1. **Domain controller**: `ldaps://dc01.example.ch` (`ldap://` only with StartTLS), and, when its
@@ -186,8 +187,8 @@ somebody else registered under these names are never used.
    permission `Sites.FullControl.All`, no client secret. Keep it narrow: no admin consent (the
    consent holds for your account only), *Assignment required?* = Yes with only you assigned, and
    *Enabled for users to sign-in?* = No (or delete it) once the site is granted.
-5. Enter the tenant ID and the client ID in Server connections → SharePoint → *Enter by hand*, and
-   **Save and test the connection**.
+5. Enter the tenant ID and the client ID in *Settings → Server* → SharePoint → *Enter by hand*, and
+   **Save**: the status list checks the connection.
 
 `Sites.ReadWrite.All` instead of `Sites.Selected` works too, but lets the server write to every site
 of the tenant.
@@ -260,7 +261,7 @@ too (step 7).
 8. **Status** (Settings → Server, the local `admin`): every part the server depends on, tried now: Active
    Directory, SharePoint, Cloudflare Pages, the web certificate, the sign-in to Microsoft 365 and
    until when, the key for passwords, the daily export of the users, the add-in's files (made again with one
-   click after an update), the last publish and the version. Each part to set up opens its tab in Server connections.
+   click after an update), the last publish and the version. Each part to set up opens its page of the server connections; **Check everything** tries them all again.
 
 ## 7. Deploy the add-in
 
