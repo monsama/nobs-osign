@@ -96,6 +96,9 @@ number. This works for paragraphs, lines split by line breaks, and table rows.
 
 ## Getting started
 
+Running it day to day (releasing in steps, backups, roles, what to look at when something is off):
+[docs/ADMIN.md](docs/ADMIN.md).
+
 Install the server ([docs/SETUP.md](docs/SETUP.md), "The editor on a server"), sign in as `admin`,
 and the **setup assistant** walks through the rest:
 
@@ -138,7 +141,7 @@ signature, kept in their mailbox and offered for new mail and replies:
 
 ## Importing existing templates
 
-**⤓** next to *Signatures* imports `.htm` templates with their images: from CI-Sign (it keeps them
+**+** next to *Signatures* → *Import templates* imports `.htm` templates with their images: from CI-Sign (it keeps them
 next to `CI-Sign.exe`, as UTF-16, with images in `images\`) or from classic Outlook. Pick the
 template files and images together. A per-person image (`images/@@sAMAccountName.jpg`) becomes the
 photo from `OSign/photos`. CI-Sign's text blocks (`{##Name}…{end ##Name}` in
@@ -148,14 +151,17 @@ the whole CI-Sign share works: copies in `AutoBackup-…`, `editor`, `Templates`
 `ci-sign-update` are left unticked, and of images with the same name the current one is taken.
 With a per-person photo in a template, the user photos in `images\` (named like a user,
 `mustera.jpg`) can go into `photos\` of the OSign folder in the same step; they count at once.
-Nothing else goes live before *Publish*.
+Nothing else goes live before *Publish*. A report afterwards lists what came over and what is left
+to do (images not picked, fields added, and *Who gets it*: CI-Sign's rules are not taken over).
 
 ## Who may do what
 
 - **Editors** (members of the AD group set under *Server connections → Active Directory*, signed
-  in with their AD account): make, change, import and publish signatures, edit fields and the
-  add-in's behaviour, look at users from AD, and approve someone else's publish when four eyes is
-  on.
+  in with their AD account): make, change, import and publish signatures, edit fields, building
+  blocks and the add-in's behaviour, look at users from AD, and approve someone else's publish when
+  four eyes is on.
+- With a **publishing group** set there, only its members publish (also to a pilot group or at a set
+  time), approve, write the users and change photos; the other editors ask for approval.
 - **The local account `admin`** besides: the server connections, the setup script, the add-in's
   files (make, upload), backups, the audit log, four eyes, and the check where the add-in is
   deployed.

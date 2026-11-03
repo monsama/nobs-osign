@@ -353,3 +353,32 @@ test('automatic backups: set by the local admin with a passphrase, made, kept, d
     assert.equal((await admin('backup/auto/save', { at: '', keep: 7 })).on, false);
   } finally { s.srv.close(); }
 });
+
+test('a pilot: the new version for its group, the one before for everyone else; given to all or stopped; and publishing at a set time', async () => {
+  const core = require('../shared/signature-core.js');
+  const s = await server();
+  try {
+    const admin = s.as(await s.signIn('admin', 'admin-pw'));
+    const v1 = cfg([{ id: 'a', name: 'Old', html: '<p>Old</p>', defaultNew: true, audience: { everyone: true } }]);
+    const v2 = cfg([{ id: 'a', name: 'New', html: '<p>New</p>', defaultNew: true, audience: { everyone: true } }]);
+    assert.match((await admin('pilot/start', { configJson: v2, group: 'OSign-Pilot' })).error, /Publish once for everyone first/);
+    assert.equal((await admin('publish', { configJson: v1 })).error, undefined);
+    assert.equal((await admin('pilot/start', { configJson: v2, group: 'OSign-Pilot', message: 'try' })).error, undefined);
+    const pub = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'publish', 'signatures.json'), 'utf8'));
+    assert.equal(pub.signatures[0].name, 'Old');
+    assert.equal(core.pick(core.forUser(pub, ['osign-pilot']), {}, 'x@example.ch', 'new').name, 'New');
+    assert.equal(core.pick(core.forUser(pub, ['someone-else']), {}, 'x@example.ch', 'new').name, 'Old');
+    assert.equal((await admin('pilot/get')).pilot.group, 'OSign-Pilot');
+    assert.equal((await admin('pilot/promote')).error, undefined);
+    const all = JSON.parse(fs.readFileSync(path.join(s.dataDir, 'publish', 'signatures.json'), 'utf8'));
+    assert.deepEqual([all.signatures[0].name, all.pilot], ['New', undefined]);
+    assert.equal((await admin('pilot/get')).pilot, null);
+    assert.match((await admin('pilot/end')).error, /No pilot/);
+    // At a set time: kept, shown, cancelled; in the past refused; run when it is due.
+    assert.match((await admin('schedule/set', { configJson: v1, at: new Date(Date.now() - 1000).toISOString() })).error, /future/);
+    const at = new Date(Date.now() + 3600000).toISOString();
+    assert.equal((await admin('schedule/set', { configJson: v1, at, message: 'later' })).schedule.at, at);
+    assert.equal((await admin('schedule/get')).schedule.message, 'later');
+    assert.equal((await admin('schedule/cancel')).schedule, null);
+  } finally { s.srv.close(); }
+});

@@ -289,10 +289,33 @@
     var map = {};
     (blocks || []).forEach(function (b) { if (b && b.key) map[String(b.key).toLowerCase()] = String(b.html || ''); });
     var get = function (k) { return Object.prototype.hasOwnProperty.call(map, k.toLowerCase()) ? map[k.toLowerCase()] : null; };
-    var out = String(html || '');
-    // On a line of its own (a paragraph or div holding only the block): the block in its place.
-    out = out.replace(/<(p|div)\b[^>]*>\s*\{\{([A-Za-z][A-Za-z0-9_-]{0,39})\}\}\s*<\/\1>/gi, function (all, tag, k) { var b = get(k); return b === null ? all : b; });
-    return out.replace(BLOCK_RE, function (all, k) { var b = get(k); return b === null ? all : b; });
+    // In one pass: on a line of its own (a paragraph or div holding only the block) the block in its
+    // place, in the text where it stands; what a block holds is not looked at again.
+    return String(html || '').replace(/<(p|div)\b[^>]*>\s*\{\{([A-Za-z][A-Za-z0-9_-]{0,39})\}\}\s*<\/\1>|\{\{([A-Za-z][A-Za-z0-9_-]{0,39})\}\}/gi, function (all, tag, k1, k2) {
+      var b = get(k1 || k2); return b === null ? all : b;
+    });
+  }
+
+  // Whether a signature's compiled HTML (what the add-in renders) says what its html says: the
+  // same text, and no address or other attribute value the html does not have. The server checks
+  // it, as it cannot compile without a DOM: so what an approver reads is what goes out.
+  function compiledMatches(html, compiled) {
+    if (typeof compiled !== 'string' || compiled === '') return true;
+    var ent = function (x) { return x.replace(/&nbsp;|&#160;| /g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'"); };
+    var text = function (x) { return ent(String(x || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim(); };
+    var attrs = function (x) {
+      var out = [], re = /\s([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g, m, tag, tre = /<[A-Za-z][^>]*>/g;
+      while ((tag = tre.exec(String(x || '')))) { re.lastIndex = 0; while ((m = re.exec(tag[0]))) out.push(m[1].toLowerCase() + '=' + ent(m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4]).replace(/\s+/g, ' ').trim()); }
+      return out;
+    };
+    if (text(html) !== text(compiled)) return false;
+    var have = {};
+    attrs(html).forEach(function (a) { have[a] = (have[a] || 0) + 1; });
+    var tags = function (x) { return (String(x || '').replace(/<!--[\s\S]*?-->/g, '').match(/<([A-Za-z][\w:-]*)/g) || []).map(function (t) { return t.slice(1).toLowerCase(); }); };
+    // Tags the compiled one has that the html has not (but what the browser adds by itself).
+    var htags = {}; tags(html).forEach(function (t) { htags[t] = 1; });
+    if (tags(compiled).some(function (t) { return !htags[t] && t !== 'tbody'; })) return false;
+    return attrs(compiled).every(function (a) { return have[a] > 0; });
   }
 
   function isEmpty(v) { return v === undefined || v === null || String(v).trim() === ''; }
@@ -435,16 +458,54 @@
   }
 
   // The group names the configuration limits signatures to: the add-in only needs to know these.
+  // A pilot's group, and its signatures' groups, too.
   function groupsUsed(config) {
     var out = [];
-    ((config && config.signatures) || []).forEach(function (s) {
-      lowerList((s.audience || {}).groups).forEach(function (g) { if (out.indexOf(g) < 0) out.push(g); });
-    });
+    var add = function (c) {
+      ((c && c.signatures) || []).forEach(function (s) {
+        lowerList((s.audience || {}).groups).forEach(function (g) { if (out.indexOf(g) < 0) out.push(g); });
+      });
+    };
+    add(config);
+    var p = pilotOf(config);
+    if (p) { lowerList([p.group]).forEach(function (g) { if (out.indexOf(g) < 0) out.push(g); }); add(p.config); }
     return out;
   }
 
+  // A pilot: a new version published first for one group ({ group, at, by, config }), the version
+  // before for everyone else, until it is given to all. null when there is none (or it is broken).
+  function pilotOf(config) {
+    var p = config && config.pilot;
+    return p && typeof p === 'object' && String(p.group || '').trim() && p.config && typeof p.config === 'object' && Array.isArray(p.config.signatures) ? p : null;
+  }
+  // The configuration this person gets: the pilot's when they are in its group (their groups known),
+  // the one for everyone otherwise. Both read the same fields (union), so one read of the values serves.
+  function forUser(config, groups) {
+    var p = pilotOf(config);
+    if (!p) return config;
+    var mine = lowerList(groups), inPilot = groups && mine.indexOf(String(p.group).trim().toLowerCase()) >= 0;
+    var out = Object.assign({}, inPilot ? p.config : config);
+    delete out.pilot;
+    return out;
+  }
+  // The fields of both, for reading the values once (the pilot's win where both have one).
+  function withPilotFields(config) {
+    var p = pilotOf(config);
+    if (!p) return config;
+    var byKey = {}, list = [];
+    (config.fields || []).concat(p.config.fields || []).forEach(function (f) {
+      if (!f || !f.key) return;
+      if (!(f.key in byKey)) list.push(f.key);
+      byKey[f.key] = f;
+    });
+    var fields = list.map(function (k) { return byKey[k]; });
+    var c = Object.assign({}, config, { fields: fields });
+    c.pilot = Object.assign({}, p, { config: Object.assign({}, p.config, { fields: fields }) });
+    return c;
+  }
+
   // The language of a person (or a signature) as two letters: de-CH, de_CH and DE are 'de'.
-  function langOf(values) { return String((values || {}).preferredLanguage || '').trim().slice(0, 2).toLowerCase(); }
+  function langOf(values) { return String((values || {}).preferredLanguage || '').trim().split(/[-_]/)[0].toLowerCase(); }
 
   // kind: 'new' or 'reply'. prefs: what the user picked in the add-in, { new: id|'none', reply: id|'none' }.
   // Returns the signature, or null for none.
@@ -667,6 +728,10 @@
     newSignature: newSignature,
     placeholdersIn: placeholdersIn,
     blocksIn: blocksIn,
+    compiledMatches: compiledMatches,
+    pilotOf: pilotOf,
+    forUser: forUser,
+    withPilotFields: withPilotFields,
     langOf: langOf,
     expandBlocks: expandBlocks,
     escapeHtml: escapeHtml,

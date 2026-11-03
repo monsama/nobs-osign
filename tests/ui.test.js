@@ -172,6 +172,13 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   assert.match(items[0].meta, /past text blocks left out: old · text blocks notice, legal, old \(with days: a campaign each\)/);
   await page.click('#impGo');
   await page.waitForSelector('#dlgImport:not([open])', { state: 'attached' });
+  // A report of what came over: the templates, the campaigns, the blocks, and what is left to do.
+  await page.waitForSelector('#dlgImpReport[open]');
+  const rep = await page.textContent('#impReport');
+  assert.match(rep, /template\(s\) imported: .*Vertrieb/);
+  assert.match(rep, /Campaigns made from text blocks with days: Vertrieb – notice/);
+  assert.match(rep, /not taken over from CI-Sign/);
+  await page.click('#dlgImpReport button[value=cancel]');
   assert.equal(await page.inputValue('#sigName'), 'Vertrieb');
   // The text block without days in the template; the one with days a campaign of its own.
   let imported = '';
@@ -1239,5 +1246,28 @@ test('building blocks: made once, put into a signature as a chip, published put 
   await page.click('#btnDel'); await page.click('#askOk');
   await page.click('.nav-list a[data-view=blocks]');
   await page.click('#blockList button[aria-label^="Remove the building block"]');
+  assert.deepEqual(errors, []);
+});
+
+test('all signatures side by side, and the publish dialog offers a pilot group and a later time', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  if (!(await page.$('#sigList li a'))) { await page.click('#btnNew'); await page.click('[data-tpl=classic]'); }
+  const n = await page.locator('#sigList li a').count();
+  await page.click('#btnAll');
+  await page.waitForSelector('#dlgAll[open] .tpl-card');
+  assert.equal(await page.locator('#allList .tpl-card').count(), n);
+  await page.click('#allList .tpl-card >> nth=0');
+  await page.waitForSelector('#dlgAll:not([open])', { state: 'attached' });
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  assert.equal(await page.isVisible('#pubSteps'), true);
+  await page.check('#pubPilot');
+  assert.equal(await page.isVisible('#pubPilotGroup'), true);
+  assert.equal(await page.textContent('#pubGo'), 'Publish for the pilot');
+  await page.check('#pubLater');
+  assert.equal(await page.textContent('#pubGo'), 'Set the time');
+  assert.match(await page.inputValue('#pubAt'), /^\d{4}-\d{2}-\d{2}T06:00$/);
+  await page.click('#dlgPublish button[value=cancel]');
   assert.deepEqual(errors, []);
 });

@@ -325,3 +325,15 @@ test('language variants: the default in the person\'s language wins; another lan
   assert.equal(core.langOf({ preferredLanguage: 'DE_ch' }), 'de');
   assert.equal(core.fieldFor('preferredLanguage').graph, 'preferredLanguage');
 });
+
+test('compiled says what html says: the same text, no address or tag of its own (the server refuses otherwise)', () => {
+  const doc = new JSDOM('').window.document;
+  const html = '<p>Hi <b>@@givenName</b></p><table><tr><td>Tel @@mobile</td></tr></table><p><a href="mailto:@@mail">@@mail</a><img src=\'assets/logo.png\' alt="x &amp; y"></p>';
+  const compiled = core.compile(html, doc);
+  assert.equal(core.compiledMatches(html, compiled), true);
+  assert.equal(core.compiledMatches(html, ''), true, 'none: the add-in compiles nothing, it takes html');
+  assert.equal(core.compiledMatches(html, compiled.replace('mailto:@@mail', 'https://evil.example')), false);
+  assert.equal(core.compiledMatches(html, compiled + '<img src="https://t.example/p.gif">'), false);
+  assert.equal(core.compiledMatches(html, compiled.replace('Tel', 'Call us at 0900')), false);
+  assert.equal(core.compiledMatches(html, compiled.replace('<b>', '<script>x()</script><b>')), false);
+});

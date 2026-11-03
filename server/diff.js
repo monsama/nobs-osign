@@ -27,7 +27,8 @@ function lineDiff(a, b) {
 }
 
 // What a signature's "who gets it" is made of: everything but its name and HTML.
-const rules = (s) => { const r = Object.assign({}, s); delete r.id; delete r.name; delete r.html; return r; };
+// compiled and source are the html in other forms (checked to say the same when published).
+const rules = (s) => { const r = Object.assign({}, s); delete r.id; delete r.name; delete r.html; delete r.compiled; delete r.source; return r; };
 
 // → [{ kind: 'added'|'removed'|'renamed'|'html'|'rules'|'fields'|'options', name, detail?, lines? }]
 function diffConfigs(beforeJson, afterJson) {

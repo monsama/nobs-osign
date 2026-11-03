@@ -6,6 +6,9 @@
   function normalize(c) {
     const d = core.defaultConfig();
     c = c && typeof c === 'object' ? c : d;
+    // Published with a pilot (loaded or brought back from History): the pilot's, the newer version.
+    if (c.pilot && c.pilot.config && typeof c.pilot.config === 'object') c = c.pilot.config;
+    delete c.pilot;
     // One made before the value source could be chosen took its values from Entra ID: it stays so
     // (new setups start with Entra ID and AD).
     if (c !== d && !(c.options && c.options.valueSource)) c.options = Object.assign({}, c.options || {}, { valueSource: 'graph' });

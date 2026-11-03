@@ -137,7 +137,7 @@
   // ---------------------------------------------------------------------------------------------
   // HTML hygiene: what goes into a signature is markup Outlook shows, nothing that runs.
   // ---------------------------------------------------------------------------------------------
-  const DROP = 'script,style,meta,link,title,iframe,object,embed,form,input,button,select,textarea,base,xml,o\\:p,svg,video,audio';
+  const DROP = 'script,style,meta,link,title,iframe,object,embed,form,input,button,select,textarea,base,xml,o\\:p,svg,video,audio,template';
   // Parsed in a document of its own (DOMParser), without a window: nothing in it runs or loads.
   // Event handler attributes are taken out of the text first as well, so the browser never even
   // weighs one against the page's Content-Security-Policy; the walk below takes out any left.

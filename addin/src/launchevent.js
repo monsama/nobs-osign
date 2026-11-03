@@ -42,11 +42,14 @@ async function sign(event, what) {
     item = Office.context.mailbox.item;
     const req = Office.context.requirements;
     log(what + ' started (sign-in through Outlook: ' + (req && req.isSetSupported && req.isSetSupported('NestedAppAuth', '1.1') ? 'yes' : 'no') + ').');
-    const cfg = core.withVariants(await loadConfig({ interactive: false }), getVariants());
+    const base = await loadConfig({ interactive: false });
     log('signatures loaded.');
-    if (!isMessage(item) && !(cfg.options && cfg.options.meetings)) { log('a meeting, and meetings are off.'); return; }
+    if (!isMessage(item) && !(base.options && base.options.meetings)) { log('a meeting, and meetings are off.'); return; }
     const info = await composeInfo(item);
-    const user = await loadUserValues(cfg, { interactive: false });
+    const user = await loadUserValues(base, { interactive: false });
+    // The pilot's version for its group, the one for all otherwise; then the user's own variants.
+    const cfg = core.withVariants(core.forUser(base, user.groups), getVariants());
+    if (core.pilotOf(base) && cfg !== base) log(user.groups && user.groups.indexOf(String(base.pilot.group).toLowerCase()) >= 0 ? 'the pilot version (' + base.pilot.group + ').' : 'the version for all (not in the pilot).');
     if (!user.values) {
       const why = user.error ? user.error.message : 'your details could not be read.';
       log('no user details, no signature. ' + why);
