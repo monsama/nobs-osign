@@ -33,7 +33,7 @@ const DE = {
   'signatures published {0}': 'Signaturen veröffentlicht {0}',
   'Own variant': 'Eigene Variante',
   'Yours to change: {0}': 'Änderbar: {0}',
-  'Yours to change: {0}: in the boxes below, or right in the signature underneath (marked). The rest stays the company signature.': 'Änderbar: {0} – in den Feldern unten oder direkt in der Signatur darunter (markiert). Alles andere bleibt die Firmensignatur.',
+  'Yours to change: {0}: in the boxes below, or right in the signature underneath (marked). The rest stays the company signature.': 'Änderbar: {0} - in den Feldern unten oder direkt in der Signatur darunter (markiert). Alles andere bleibt die Firmensignatur.',
   'Your signature from {0}': 'Ihre Signatur aus {0}',
   'Your own signature from {0}': 'Ihre eigene Signatur aus {0}',
   "Change it as you like right here: click into it and type. Ctrl+B, Ctrl+I and Ctrl+U format; the company's images stay.": 'Ändern Sie sie direkt hier, wie Sie möchten: hineinklicken und schreiben. Strg+B, Strg+I und Strg+U formatieren; die Bilder der Firma bleiben.',
@@ -211,7 +211,7 @@ async function editOwn(card, base, existing) {
   const hint = document.createElement('small'); hint.textContent = t('Change it as you like right here: click into it and type. Ctrl+B, Ctrl+I and Ctrl+U format; the company\'s images stay.');
   const l = document.createElement('label'); l.append(t('Name'));
   const nameIn = document.createElement('input'); nameIn.maxLength = core.VARIANT_NAME_MAX;
-  nameIn.value = existing ? existing.name : base.name + ' – ' + t('Own variant');
+  nameIn.value = existing ? existing.name : base.name + ' - ' + t('Own variant');
   l.append(nameIn);
   const box = document.createElement('div'); box.className = 'own-edit'; box.contentEditable = 'true'; box.spellcheck = true;
   box.setAttribute('role', 'textbox'); box.setAttribute('aria-multiline', 'true'); box.setAttribute('aria-label', t('Your signature'));
@@ -267,7 +267,7 @@ function editVariant(card, sig, existing) {
     l.append(i); form.append(l); return i;
   };
   form.append(title, hint);
-  const nameIn = field(t('Name'), existing ? existing.name : base.name + ' – ' + t('Own variant'), core.VARIANT_NAME_MAX);
+  const nameIn = field(t('Name'), existing ? existing.name : base.name + ' - ' + t('Own variant'), core.VARIANT_NAME_MAX);
   const inputs = {};
   core.editableIn(cfg, base).forEach((k) => {
     const had = existing && existing.values && typeof existing.values[k] === 'string' ? existing.values[k] : (user.values[k] || '');

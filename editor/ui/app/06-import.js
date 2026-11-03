@@ -152,7 +152,7 @@
         };
         const s = put(it.name, plain);
         for (const b of timed) {
-          const c = put(it.name + ' – ' + b.name, html.replace(BLOCK_REF, (all, name) => {
+          const c = put(it.name + ' - ' + b.name, html.replace(BLOCK_REF, (all, name) => {
             const x = impBlocks.get(name.toLowerCase());
             return !x ? all : x === b || !(x.from || x.until || x.expired) ? sanitize(x.html) : '';
           }), b.from, b.until);

@@ -1190,3 +1190,8 @@ a#coffeeBtn.btnlike.icon:hover, .side-btns .icon-btn:hover { background: var(--p
 #dlgWizard .wiz-sum .checks { margin: 6px 0 0; }
 #dlgWizard .wiz-sum .checks li { display: flex; align-items: center; gap: 10px; min-height: 28px; }
 #dlgWizard .wiz-sum .checks li::before { top: 50%; transform: translateY(-50%); }
+.checks li.later::before { content: "→"; color: var(--muted); left: 1px; font-weight: 400; }
+.checks li.opt::before { content: "○"; color: var(--muted); left: 1px; font-weight: 400; font-size: 12px; }
+.checks li.later, .checks li.opt { color: var(--muted); }
+/* A radio or box beside text of several lines: on its first line, centred to it. */
+label.check.block > input[type=radio], label.check.block > input[type=checkbox] { flex: none; align-self: flex-start; margin-top: calc((1.45em - 13px) / 2 + 1px); }
