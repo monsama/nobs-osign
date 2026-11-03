@@ -1581,3 +1581,30 @@ test('discard all changes (load published): the draft replaced by what is publis
   assert.match(await page.textContent('#toast'), /Loaded the published signatures/);
   assert.deepEqual(errors, []);
 });
+
+test('a building block edited in the HTML tab: its text never goes into the signature opened next; undo opens what it brings back', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList a:has-text("Main signature")');
+  const sigBefore = JSON.parse((await api('draft/get')).configJson).signatures.find((x) => x.name === 'Main signature').html;
+  await page.click('.nav-list a[data-view=blocks]');
+  await page.evaluate(() => document.getElementById('btnAddBlock').click());
+  await page.click('.block-card .block-edit-btn >> nth=-1');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Only in the block</p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('#blockBack');
+  await page.click('#sigList a:has-text("Main signature")');
+  await page.keyboard.press('Control+s');
+  await page.waitForTimeout(800);
+  const c = JSON.parse((await api('draft/get')).configJson);
+  assert.doesNotMatch(c.signatures.find((x) => x.name === 'Main signature').html, /Only in the block/);
+  assert.ok(c.blocks.some((b) => /Only in the block/.test(b.html)));
+  assert.equal(c.signatures.find((x) => x.name === 'Main signature').html.replace(/\s+/g, ''), sigBefore.replace(/\s+/g, ''));
+  await page.click('.tab[data-mode=design]');
+  // ⟳ keeps the undo steps; undo goes back to the building block.
+  await page.click('#btnRefresh');
+  await page.waitForFunction(() => /Loaded again/.test(document.querySelector('#toast').textContent));
+  assert.equal(await page.isDisabled('#ghUndo'), false);
+  assert.deepEqual(errors, []);
+});

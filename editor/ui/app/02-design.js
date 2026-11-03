@@ -567,15 +567,18 @@
   // What was typed in the HTML tab, made safe, once the tab is left.
   // The HTML tab shows a signature indented for reading: what was put there is kept, so leaving it
   // without typing changes nothing (the indenting alone is no change to the signature).
-  let sourceShown = null;
-  function showSource(html) { const v = html ? prettyHtml(html) : ''; $('source').value = v; sourceShown = v; }
+  // And whose it is: after a building block, the text there is never written into the signature
+  // open next (or the other way round).
+  let sourceShown = null, sourceFor = null;
+  function showSource(html) { const v = html ? prettyHtml(html) : ''; $('source').value = v; sourceShown = v; const s = sig(); sourceFor = s ? s.id : null; }
   function flushSource() {
     if (S.mode !== 'html') return;
-    const s = sig(); if (!s) return;
+    const s = sig(); if (!s || s.id !== sourceFor) return;
     if ($('source').value === sourceShown) return;
     const clean = sanitize(plainHtml($('source').value));
     if (clean !== s.html) { s.html = clean; changed({ list: false }); }
   }
-  $('source').addEventListener('input', () => { const s = sig(); if (!s) return; s.html = plainHtml($('source').value); changed({ list: false }); });
+  // Kept as it will be once the tab is left (made safe), so leaving it is no change of its own.
+  $('source').addEventListener('input', () => { const s = sig(); if (!s || s.id !== sourceFor) return; s.html = sanitize(plainHtml($('source').value)); changed({ list: false }); });
   $('source').addEventListener('blur', flushSource);
 

@@ -19,10 +19,21 @@
     const json = JSON.stringify(S.config), prev = gh.stack[gh.pos];
     if (json === prev.json) return;
     gh.stack = gh.stack.slice(0, gh.pos + 1);
-    gh.stack.push(Object.assign({ json, what: ghDescribe(prev.json, json) }, ghWhere()));
+    const where = ghWhere(), sigOf = ghSigOf(prev.json, json);
+    // The signature the change was in (also one added or removed), so undo opens that one.
+    if (sigOf && !where.block) { where.view = 'sig'; where.sigId = sigOf; }
+    gh.stack.push(Object.assign({ json, what: ghDescribe(prev.json, json) }, where));
     if (gh.stack.length > GH_MAX) gh.stack.shift();
     gh.pos = gh.stack.length - 1;
     ghButtons();
+  }
+  // The one signature added or removed between two states, if it is one.
+  function ghSigOf(a, b) {
+    let x, y; try { x = JSON.parse(a).signatures || []; y = JSON.parse(b).signatures || []; } catch (e) { return ''; }
+    const xi = new Map(x.map((s) => [s.id, JSON.stringify(s)])), yi = new Map(y.map((s) => [s.id, JSON.stringify(s)]));
+    // Only one added or removed: a change in a page (Photos, Fields) stays on that page.
+    const ids = [...new Set([...xi.keys(), ...yi.keys()])].filter((id) => xi.has(id) !== yi.has(id));
+    return ids.length === 1 ? ids[0] : '';
   }
   // What changed between two states, in a few words.
   function ghDescribe(a, b) {
@@ -93,19 +104,20 @@
       flushSource();
       if (saveTimer) await save();
       await saving;
-      const where = ghWhere(), before = JSON.stringify(S.config), keep = { stack: gh.stack, pos: gh.pos };
+      const where = ghWhere(), before = stableJson(prepared()), keep = { stack: gh.stack, pos: gh.pos };
       const [info, st, draft] = await Promise.all([api('info'), api('settings/get'), api('draft/get')]);
       S.info = info; S.settings = st.settings; lastSettings = st;
       applyDraft(draft);
       // The users as last read (and whether they were written since), where values come from AD.
       if (core.usesAdExport(S.config)) await loadSnapshot();
-      if (JSON.stringify(S.config) === before) { gh.stack = keep.stack; gh.pos = keep.pos; ghButtons(); }
+      const same = stableJson(prepared()) === before;
+      if (same) { gh.stack = keep.stack; gh.pos = keep.pos; gh.stack[gh.pos].json = JSON.stringify(S.config); ghButtons(); }
       if (where.view === 'sig' && where.block && S.config.blocks.some((x) => x.key === where.block)) openBlock(where.block);
       else if (where.view === 'sig' && where.sigId && S.config.signatures.some((s) => s.id === where.sigId)) openSig(where.sigId);
       else if (where.view !== 'sig' && where.view !== 'empty') goView(where.view);
       renderStatusBar();
       loadApproval().catch(() => {});
-      toast(JSON.stringify(S.config) === before ? t('Loaded again: as it was.') : t('Loaded again: the draft on the server was changed (by someone else, or in another window).'));
+      toast(same ? t('Loaded again: as it was.') : t('Loaded again: the draft on the server was changed (by someone else, or in another window).'));
     } catch (e) { toast(t(e.message), true); }
     finally { b.classList.remove('busy'); b.disabled = false; }
   }
