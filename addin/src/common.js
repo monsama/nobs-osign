@@ -10,6 +10,7 @@
  * runtime. In classic Outlook on Windows, the event handler runs in a JavaScript-only runtime:
  * no DOM, no localStorage, no window, no btoa - so nothing here may need them.
  */
+import { LANG } from './lang.js';
 import core from '../../shared/signature-core.js';
 import { getGraphToken } from './auth.js';
 
@@ -100,11 +101,17 @@ const MSG_DE = [
   [/: not found in SharePoint \(404\)\.$/, ': in SharePoint nicht gefunden (404).'],
   [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.']
 ];
-export function localize(message, german) {
+// The language of Outlook's display: German, French, Italian, else English.
+export function langOf(code) { const m = /^(de|fr|it)/i.exec(String(code || '')); return m ? m[1].toLowerCase() : 'en'; }
+// A message in that language (true, as before, is German).
+export function localize(message, lang) {
   let m = String(message || '');
-  if (!german) return m;
-  for (const [en, de] of Object.entries(WHAT_DE)) m = m.split(en + ':').join(de + ':').split(en + ' took').join(de + ' took');
-  for (const [rx, de] of MSG_DE) m = m.replace(rx, de);
+  if (lang === true) lang = 'de';
+  if (!lang || lang === 'en') return m;
+  const L = lang === 'de' ? { what: WHAT_DE, msg: MSG_DE.map((x) => x[1]) } : LANG[lang];
+  if (!L) return m;
+  for (const [en, to] of Object.entries(L.what)) m = m.split(en + ':').join(to + ':').split(en + ' took').join(to + ' took');
+  MSG_DE.forEach(([rx], i) => { if (L.msg[i]) m = m.replace(rx, L.msg[i]); });
   return m;
 }
 

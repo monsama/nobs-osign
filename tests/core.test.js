@@ -337,3 +337,19 @@ test('compiled says what html says: the same text, no address or tag of its own 
   assert.equal(core.compiledMatches(html, compiled.replace('Tel', 'Call us at 0900')), false);
   assert.equal(core.compiledMatches(html, compiled.replace('<b>', '<script>x()</script><b>')), false);
 });
+
+test('a field written as a phone number: alike for everyone, the rest left as it is', () => {
+  const p = core.formatPhone;
+  assert.equal(p('079 123 45 67'), '+41 79 123 45 67');
+  assert.equal(p('+41791234567'), '+41 79 123 45 67');
+  assert.equal(p('0041 44 123 45 67'), '+41 44 123 45 67');
+  assert.equal(p('+41 (0)44 123 45 67'), '+41 44 123 45 67');
+  assert.equal(p('+423 2321234'), '+423 232 12 34');
+  assert.equal(p('0049 (0)30 1234567'), '+49 30 1234567');
+  for (const same of ['intern 123', '+41 79 123 45 67 int. 22', '', '12']) assert.equal(p(same), same);
+  const cfg = { fields: [{ key: 'mobile', ad: 'mobile', graph: 'mobilePhone', format: 'phone' }, { key: 'pager', ad: 'pager', graph: 'pager' }] };
+  const v = core.mergeValues(cfg, { mobile: '0791234567', pager: '0791234567' }, {});
+  assert.deepEqual([v.mobile, v.pager], ['+41 79 123 45 67', '0791234567']);
+  const c = core.defaultConfig(); c.fields[0].format = 'shouting';
+  assert.ok(core.validate(c).some((e) => /unknown format/.test(e)));
+});

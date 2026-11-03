@@ -4,13 +4,44 @@
   // What a recipient would see go wrong: images too large, without a text when images are blocked,
   // too wide, unencrypted links, a signature too heavy, a dark logo gone in dark mode.
   const dark = {};
+  // The images the signatures use, made as small as they are shown: twice the width they have in a
+  // signature (sharp on high-resolution screens), uploaded as a new file and put in their place;
+  // the old file stays until removed. Without a width in the signature an image stays as it is.
+  async function shrinkUsed() {
+    const all = S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''));
+    const shown = new Map();
+    for (const h of all) for (const m of h.matchAll(/<img\b[^>]*>/gi)) {
+      const src = (/\ssrc\s*=\s*["']?assets\/([^"'\s>]+)/i.exec(m[0]) || [])[1], w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]);
+      if (src && w) shown.set(src, Math.max(shown.get(src) || 0, w));
+    }
+    let n = 0, from = 0, to = 0;
+    for (const [name, w] of shown) {
+      try {
+        const blob = await (await fetch('/assets/' + encodeURIComponent(name), { credentials: 'same-origin' })).blob();
+        const f = new File([blob], name, { type: blob.type || (/\.png$/i.test(name) ? 'image/png' : 'image/jpeg') });
+        const small = await shrinkUpload(f, Math.max(48, 2 * w));
+        if (!small.shrunk || small.size >= f.size) continue;
+        const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(small); });
+        const r = await api('assets/upload', { name, data });
+        if (r.name !== name) {
+          const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
+          S.config.signatures.forEach((s) => { s.html = (s.html || '').replace(re, 'assets/' + r.name); });
+          (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, 'assets/' + r.name); });
+        }
+        S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]);
+        n++; from += f.size; to += small.size;
+      } catch (e) { /* that one stays */ }
+    }
+    if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
+    toast(n ? t('{0} images made smaller: {1} → {2}.', n, kb(from), kb(to)) : t('The images are as small as they are shown already.'));
+  }
   function signatureChecks(c) {
     const out = [], names = (f) => [...new Set(c.signatures.filter(f).map((s) => s.name))];
     const imgs = (s) => [...(s.html || '').matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
     const attr = (tag, a) => (new RegExp('\\s' + a + '\\s*=\\s*["\']?([^"\'\\s>]*)', 'i').exec(tag) || [])[1] || '';
     const size = (n) => { const a = S.assets.find((x) => x.name === n); return a ? a.size || 0 : 0; };
     const big = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && size(n) > 100 * 1024)))];
-    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', '))]);
+    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }]);
     const noAlt = names((s) => imgs(s).some((i) => !/photos\//.test(attr(i, 'src')) && !/\salt\s*=\s*["'][^"']+["']/i.test(i)));
     if (noAlt.length) out.push(['warn', t('Images without a text for when images are blocked (alt): {0}. Image bar → alt text, e.g. the company name for the logo.', noAlt.join(', '))]);
     const tooWide = (s) => imgs(s).some((i) => Number(attr(i, 'width')) > 600) ||
@@ -104,6 +135,7 @@
       if (!inField) { e.preventDefault(); histStep(k === 'y' || e.shiftKey ? 1 : -1); return; }
     }
     if (mod && !e.shiftKey && !e.altKey && k === 'k' && !(inDialog && inDialog.id !== 'dlgFind')) { e.preventDefault(); openFind(); return; }
+    if (mod && !e.shiftKey && !e.altKey && k === 'h' && !inDialog) { e.preventDefault(); openReplace(); return; }
     if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); toast(t('Draft saved.')); return; }
     if (mod && e.key === 'Enter' && !inDialog) { e.preventDefault(); $('btnPublish').click(); return; }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable) || (e.target && e.target.ownerDocument === ddoc);
@@ -123,6 +155,8 @@
       .filter(Boolean).forEach(([label, go]) => items.push({ kind: t('Go to'), label, go }));
     if (!$('setWizRow').hidden) items.push({ kind: t('Go to'), label: t('Setup assistant'), go: () => wizOpen(0) });
     items.push({ kind: t('Go to'), label: t('Load published'), go: () => $('btnLoad').click() });
+    items.push({ kind: t('Go to'), label: t('Replace in all signatures'), go: () => openReplace() });
+    if (S.config.signatures.some((s) => core.isCampaign(s))) items.push({ kind: t('Go to'), label: t('Campaigns'), go: () => $('btnCampaigns').click() });
     S.config.fields.forEach((f) => items.push({ kind: t('Field'), label: (f.label || f.key) + (f.label && f.label !== f.key ? ' · @@' + f.key : ''), go: () => { view('fields')(); setTimeout(() => {
       const row = [...document.querySelectorAll('#viewFields tr')].find((tr) => [...tr.querySelectorAll('input')].some((i) => i.value === f.key));
       if (row) { row.scrollIntoView({ block: 'center' }); const i = row.querySelector('input'); if (i) i.focus(); }
@@ -172,7 +206,8 @@
       : S.settings.folder ? t('To {0}. OneDrive uploads it to SharePoint; new messages use it a minute or two later.', S.settings.folder)
       : t('No folder set yet (Settings).');
     const checks = publishChecks();
-    $('pubChecks').replaceChildren(...checks.map(([k, text]) => el('li', { class: k }, text)));
+    $('pubChecks').replaceChildren(...checks.map(([k, text, act]) => el('li', { class: k }, text,
+      act ? el('button', { type: 'button', class: 'small', style: 'margin-left:8px', onclick: async (e) => { e.currentTarget.disabled = true; await act.fn(); $('dlgPublish').close(); $('btnPublish').click(); } }, act.label) : null)));
     offFor($('pubGo'), checks.some((c) => c[0] === 'bad') ? t('First fix what is marked red above.') : '');
     $('pubErr').textContent = ''; $('pubOk').textContent = ''; $('pubMsg').value = ''; $('pubGo').hidden = false;
     await loadApproval(); renderApproval();
@@ -301,7 +336,7 @@
     signin: 'Sign-in', signout: 'Sign-out', publish: 'Published', 'history/restore': 'Version brought back',
     'connections/save': 'Server connections', 'connections/cert': 'Certificate', 'settings/save': 'Settings',
     'setup/start': 'Setup script', 'setup/finish': 'Setup script result', 'addin/build': 'Add-in files', 'addin/upload': 'Add-in upload',
-    'ad/export': 'Users exported', 'backup/export': 'Backup', 'backup/restore': 'Backup restored', 'backup/check': 'Backup checked',
+    'ad/export': 'Users exported', 'backup/export': 'Backup', 'backup/restore': 'Backup restored', 'backup/check': 'Backup checked', 'sessions/end': 'Session ended', 'notify/save': 'Notifications', 'notify/test': 'Test notification',
     'approval/request': 'Approval asked', 'approval/approve': 'Approved', 'approval/cancel': 'Approval withdrawn',
     'photos/upload': 'Photo', 'photos/delete': 'Photo removed', 'photos/fetch': 'Photo from the web'
   };
@@ -334,6 +369,50 @@
       auditShow();
     } catch (err) { auditEntries = []; $('auditRows').replaceChildren(); $('auditCount').textContent = ''; $('auditErr').textContent = t(err.message); }
   }
+  // Who is signed in now (the local admin's): one ended by a click, asked first.
+  function renderSessions(list) {
+    const loc = I18N.lang === 'de' ? 'de-CH' : 'en-GB', w = (iso) => new Date(iso).toLocaleString(loc);
+    $('sessRows').replaceChildren(...list.map((x) => el('tr', null,
+      el('td', { class: 'who' }, x.name && x.name !== x.login ? x.name + ' (' + x.login + ')' : x.login, x.mine ? el('small', null, ' ' + t('(you)')) : null),
+      el('td', { class: 'ip' }, x.from || ''), el('td', null, w(x.started)), el('td', null, w(x.last)),
+      el('td', null, x.mine ? null : el('button', { type: 'button', class: 'small ghost danger', onclick: async () => {
+        if (!(await ask(t('Sign {0} out? They sign in again to go on.', x.login), t('Sign out'), true))) return;
+        try { const r = await api('sessions/end', { ref: x.ref }); renderSessions(r.sessions); toast(t('{0} is signed out.', r.ended)); } catch (e) { $('sessErr').textContent = t(e.message); }
+      } }, t('Sign out'))))));
+  }
+  // Notifications to a webhook (the local admin's): the address kept sealed, never shown again.
+  function notifyRender(r) {
+    $('ntUrl').value = ''; $('ntUrl').placeholder = r.on ? t('set (type a new one to replace it)') : 'https://…';
+    $('ntUrlNote').textContent = r.lost ? t('The saved address cannot be opened any more: enter it again.') : '';
+    $('ntOff').hidden = !r.on;
+    const last = r.last ? (r.last.ok ? t('Last message {0}.', new Date(r.last.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) : t('The last message did not go out: {0}', t(r.last.error))) : '';
+    $('ntNow').textContent = (r.now && r.now.length ? t('To tell now: {0}', r.now.map((x) => t(x)).join(' · ')) : t('Nothing to tell right now.')) + (last ? ' ' + last : '');
+    $('setNotifyState').textContent = r.on ? t('On.') : '';
+  }
+  $('setNotify').addEventListener('click', async () => {
+    $('ntErr').textContent = ''; $('ntOk').textContent = '';
+    try { notifyRender(await api('notify/get')); $('dlgNotify').showModal(); } catch (e) { toast(t(e.message), true); }
+  });
+  $('ntSave').addEventListener('click', async () => {
+    $('ntErr').textContent = ''; $('ntOk').textContent = '';
+    if (!$('ntUrl').value.trim()) { $('ntErr').textContent = t('Enter the webhook\'s address.'); return; }
+    try { await api('notify/save', { url: $('ntUrl').value }); notifyRender(await api('notify/get')); $('ntOk').textContent = t('Saved. "Send a test" shows whether it arrives.'); } catch (e) { $('ntErr').textContent = t(e.message); }
+  });
+  $('ntOff').addEventListener('click', async () => {
+    try { await api('notify/save', { url: '' }); notifyRender(await api('notify/get')); $('ntOk').textContent = t('Notifications off.'); } catch (e) { $('ntErr').textContent = t(e.message); }
+  });
+  $('ntTest').addEventListener('click', async () => {
+    $('ntErr').textContent = ''; $('ntOk').textContent = t('Sending…'); $('ntTest').disabled = true;
+    try {
+      if ($('ntUrl').value.trim()) await api('notify/save', { url: $('ntUrl').value });
+      await api('notify/test'); notifyRender(await api('notify/get')); $('ntOk').textContent = '✓ ' + t('Sent: look in the channel.');
+    } catch (e) { $('ntOk').textContent = ''; $('ntErr').textContent = t(e.message); }
+    finally { $('ntTest').disabled = false; }
+  });
+  $('setSessions').addEventListener('click', async () => {
+    $('sessErr').textContent = ''; $('sessRows').replaceChildren(); $('dlgSessions').showModal();
+    try { renderSessions((await api('sessions/list')).sessions); } catch (e) { $('sessErr').textContent = t(e.message); }
+  });
   $('setAudit').addEventListener('click', () => { $('auditFind').value = ''; $('auditSince').value = ''; $('dlgAudit').showModal(); renderAudit(); });
   $('auditWhat').addEventListener('change', renderAudit);
   $('auditReload').addEventListener('click', renderAudit);

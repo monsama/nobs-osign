@@ -1410,3 +1410,40 @@ test('connections changed and not saved: asked before leaving; the signature lis
   await page.fill('#sigFilter', '');
   assert.deepEqual(errors, []);
 });
+
+test('replace in all signatures: shown first, fields left alone, undone in one go', { skip }, async () => {
+  const draft = async () => JSON.parse((await api('draft/get')).configJson);
+  const c0 = await draft();
+  const main = c0.signatures.find((x) => x.name === 'Main signature');
+  const was = { html: main.html, source: main.source };
+  main.html += '<p>Bahnhofstrasse 1, @@mail</p>';
+  if (main.source !== undefined) main.source += '<p>Bahnhofstrasse 1, @@mail</p>';
+  await page.goto('about:blank');
+  const sv = await api('draft/save', { configJson: JSON.stringify(c0) });
+  assert.ok(!sv.error, sv.error);
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList a:has-text("Main signature")');
+  await page.keyboard.press('Control+h');
+  await page.waitForSelector('#dlgReplace[open]');
+  // A field is not text: @@mail is not found, so not broken.
+  await page.fill('#repFind', '@@mail');
+  await page.waitForFunction(() => !document.querySelector('#repList').textContent.includes('Main signature'));
+  await page.fill('#repFind', 'Bahnhofstrasse 1');
+  await page.fill('#repBy', 'Seestrasse 12');
+  await page.waitForFunction(() => /Main signature/.test(document.querySelector('#repList').textContent));
+  await page.click('#repGo');
+  await page.waitForSelector('#dlgReplace', { state: 'hidden' });
+  const design = page.frameLocator('#design').locator('body');
+  await design.locator('text=Seestrasse 12').waitFor();
+  assert.equal(await design.locator('text=Bahnhofstrasse 1').count(), 0);
+  await page.click('.toast button:has-text("Undo")');
+  await design.locator('text=Bahnhofstrasse 1').waitFor();
+  await page.keyboard.press('Control+s');
+  let html = 'Seestrasse 12';
+  for (let i = 0; i < 50 && /Seestrasse 12/.test(html); i++) { await new Promise((r) => setTimeout(r, 100)); html = (await draft()).signatures.find((x) => x.name === 'Main signature').html; }
+  assert.match(html, /Bahnhofstrasse 1, @@mail/);
+  const c1 = await draft(); Object.assign(c1.signatures.find((x) => x.name === 'Main signature'), was);
+  await api('draft/save', { configJson: JSON.stringify(c1) });
+  assert.deepEqual(errors, []);
+});

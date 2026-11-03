@@ -22,6 +22,7 @@ const { createHistory } = require('./history');
 const { createCerts } = require('./cert');
 const { createAudit } = require('./audit');
 const { createReleaseRoutes } = require('./routes-release');
+const { createNotify } = require('./notify');
 const { createBackupRoutes } = require('./routes-backup');
 const { createHistoryRoutes } = require('./routes-history');
 const { createAddinRoutes } = require('./routes-addin');
@@ -420,6 +421,14 @@ function createApp(opts) {
     // The web certificate the proxy serves for the editor's address (as the browser asked for it).
     'server/tls': (d) => tlsInfo.inspect({ addr: env.OSIGN_PROXY_ADDR || 'nobs-proxy:443', host: String(d.host || ''), caFile: ldapCfg.caFile }),
     // The audit log, for the local account admin.
+    // Who is signed in now, and a session ended (that person signs in again). The local admin's.
+    'sessions/list': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sees who is signed in.' } : { sessions: auth.list().map((x) => Object.assign(x, { mine: x.ref === auth.ref(s.id) })) }),
+    'sessions/end': (d, s) => {
+      if (adminOnly(s)) return { error: 'Only the local account admin sees who is signed in.' };
+      if (String(d.ref || '') === auth.ref(s.id)) return { error: 'That is your own session: sign out instead.' };
+      const who = auth.end(String(d.ref || ''));
+      return who ? { sessions: auth.list().map((x) => Object.assign(x, { mine: x.ref === auth.ref(s.id) })), ended: who } : { error: 'That session has ended already.' };
+    },
     'audit/list': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin can read the audit log.' } : { entries: audit.list({ limit: d.limit, what: String(d.what || ''), failed: !!d.failed }) }),
 
   };
@@ -427,6 +436,26 @@ function createApp(opts) {
   // The backups (server/routes-backup.js).
   const backups = createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version: VERSION, log, busy: () => publishing });
   Object.assign(routes, backups.routes);
+  // Telling a webhook (Teams, Power Automate) when something needs doing (server/notify.js).
+  const problemsNow = () => {
+    const out = [];
+    const ab = backups.autoBackup.answer();
+    if (ab.on && ab.last && ab.last.ok === false) out.push({ key: 'backup:' + ab.last.at, text: 'The automatic backup of ' + ab.last.at.slice(0, 16).replace('T', ' ') + ' failed: ' + ab.last.error });
+    if (ab.passLost) out.push({ key: 'backup-pass', text: 'The automatic backups are not made: their passphrase cannot be opened. Set it again (Settings → Server → Backup).' });
+    const left = graph ? secretDaysLeft() : null;
+    if (left !== null && left <= 14) out.push({ key: 'secret:' + secretExpires + (left < 0 ? ':gone' : ':soon'), text: left < 0 ? 'The server\'s sign-in to Microsoft 365 ran out on ' + secretExpires + ': publishing fails. Run the setup script again.' : 'The server\'s sign-in to Microsoft 365 runs out on ' + secretExpires + ' (in ' + left + ' days): run the setup script again.' });
+    if (adOn && exportAt && lastExport && lastExport.ok === false) out.push({ key: 'adexport:' + lastExport.at, text: 'The daily export of the users from AD failed: ' + lastExport.error });
+    const sch = release.routes['schedule/get']().schedule;
+    if (sch && sch.error) out.push({ key: 'schedule:' + sch.at, text: 'The publish set for ' + sch.at.slice(0, 16).replace('T', ' ') + ' did not go out: ' + sch.error });
+    return out;
+  };
+  const notify = createNotify({ dataDir, seal: connections.seal, open: connections.open, problems: problemsNow, log, fetchImpl: fetchFn });
+  notify.schedule();
+  Object.assign(routes, {
+    'notify/get': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the notifications.' } : Object.assign(notify.answer(), { now: problemsNow().map((p) => p.text) })),
+    'notify/save': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the notifications.' } : notify.save(d)),
+    'notify/test': (d, s) => (adminOnly(s) ? { error: 'Only the local account admin sets the notifications.' } : notify.test())
+  });
   // Publishing and four eyes (server/routes-publish.js).
   Object.assign(routes, createPublishRoutes({ store, history, settings, users, approvalFile, approval, needsApproval, needsApprovalFor, publisher, publishNow, compiledProblem, live: () => ({ adOn }) }).routes);
   // The server's connections, the setup script, SharePoint for the assistant (server/routes-connections.js).
@@ -442,6 +471,9 @@ function createApp(opts) {
   // What goes into the audit log, by request: the words for it, from what was sent and answered.
   const AUDIT = {
     publish: (d, r) => (r.changed ? 'changed' : 'nothing changed') + (d.message ? ': ' + d.message : ''),
+    'sessions/end': (d, r) => 'session of ' + String(r.ended || '?') + ' ended',
+    'notify/save': (d) => 'notifications ' + (typeof d.url === 'string' ? (d.url.trim() ? 'to a webhook set' : 'off') : 'kept'),
+    'notify/test': () => 'test notification sent',
     'history/restore': (d) => 'version of ' + new Date(Number(d.id) || 0).toISOString() + ' into the draft',
     'connections/save': (d) => 'saved' + Object.keys(d.secrets || {}).map((k) => (d.secrets[k] === null ? ', ' + k + ' removed' : ', ' + k + ' set')).join('') + (d.removeCert ? ', certificate removed' : '') + (d.ca !== undefined ? ', CA certificate ' + (d.ca === null ? 'removed' : 'set') : ''),
     'settings/save': (d) => Object.keys(d.settings || {}).join(', '),

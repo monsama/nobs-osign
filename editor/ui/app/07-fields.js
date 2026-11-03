@@ -59,14 +59,19 @@
       // Where the value comes from: in one line, opened to change it (rarely needed).
       const src = el('td', { class: 'src' + (f.graph ? '' : ' nograph') });
       const sum = el('button', { type: 'button', class: 'src-sum', 'aria-expanded': 'false', title: t('Change where the value comes from') });
-      const sumText = () => { sum.textContent = (f.ad ? 'AD ' + f.ad : t('no AD attribute')) + ' · ' + (f.graph ? 'Graph ' + f.graph : t('not in Entra ID')); src.classList.toggle('nograph', !f.graph); };
+      const sumText = () => { sum.textContent = (f.ad ? 'AD ' + f.ad : t('no AD attribute')) + ' · ' + (f.graph ? 'Graph ' + f.graph : t('not in Entra ID')) + (f.format === 'phone' ? ' · ' + t('phone') : ''); src.classList.toggle('nograph', !f.graph); };
       sumText();
       sum.addEventListener('click', () => { const on = !src.classList.contains('open'); src.classList.toggle('open', on); sum.setAttribute('aria-expanded', String(on)); if (on) src.querySelector('.src-edit input').focus(); });
+      // How the value is written in the signature: as it comes, or as a phone number alike for all.
+      const fmtSel = el('select', { 'aria-label': t('Written as') }, el('option', { value: '' }, t('as it comes')), el('option', { value: 'phone' }, t('phone number: +41 79 123 45 67')));
+      fmtSel.value = f.format || '';
+      fmtSel.addEventListener('change', () => { if (fmtSel.value) f.format = fmtSel.value; else delete f.format; sumText(); changed({ list: false }); });
       const adI = inp('ad', { list: 'adAttrs', 'aria-label': t('AD attribute') }), grI = inp('graph', { list: 'graphProps', placeholder: t('not available'), 'aria-label': t('Graph source') });
       [adI, grI].forEach((x) => x.addEventListener('input', () => { sumText(); sum.classList.toggle('bad', adI.classList.contains('bad')); }));
       src.append(sum, el('div', { class: 'src-edit' },
         el('label', null, el('span', null, t('AD attribute')), adInput(f, adI)),
-        el('label', null, el('span', null, t('Graph source')), grI)));
+        el('label', null, el('span', null, t('Graph source')), grI),
+        el('label', null, el('span', null, t('Written as')), fmtSel)));
       sum.classList.toggle('bad', adI.classList.contains('bad'));
       tb.append(el('tr', null,
         el('td', null, inp('label', { 'aria-label': t('Field') })),

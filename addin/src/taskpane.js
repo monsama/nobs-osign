@@ -2,12 +2,13 @@
  * The task pane: the signatures open to this user, each with a preview to insert, and - when the
  * editor allows it - which one is used for new mail and which for replies.
  */
-import { core, localize, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, isClassicOutlook, keepForClassic, composeInfo, fromAddress, insertSignature, previewHtml, editableHtml } from './common.js';
+import { LANG } from './lang.js';
+import { core, localize, langOf, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, isClassicOutlook, keepForClassic, composeInfo, fromAddress, insertSignature, previewHtml, editableHtml } from './common.js';
 
 /* global Office, OSIGN_VERSION */
 const $ = (id) => document.getElementById(id);
 
-// In Outlook's own display language: German, or English.
+// In Outlook's own display language: German here, French and Italian in lang.js, else English.
 const DE = {
   'Signatures': 'Signaturen',
   'For new mail': 'Für neue Mails',
@@ -70,23 +71,25 @@ const DE = {
   'Own variant: a copy of a company signature in which you change the marked fields (e.g. a greeting); the rest stays the company signature. It is kept in your mailbox.': 'Eigene Variante: eine Kopie einer Firmensignatur, in der Sie die markierten Felder ändern (z. B. einen Gruss); der Rest bleibt die Firmensignatur. Sie wird in Ihrem Postfach gespeichert.',
   'After saving, choose your variant above for new mail or replies.': 'Nach dem Speichern wählen Sie Ihre Variante oben für neue Mails oder Antworten.'
 };
-let german = false;
+let lang = 'en';
+const dict = () => (lang === 'de' ? DE : LANG[lang] ? LANG[lang].ui : null);
 function t(s, ...args) {
-  const out = german && DE[s] ? DE[s] : s;
+  const d = dict();
+  const out = d && d[s] ? d[s] : s;
   return out.replace(/\{(\d+)\}/g, (all, i) => (args[i] !== undefined ? String(args[i]) : all));
 }
 function translatePage() {
-  german = /^de/i.test((Office.context && Office.context.displayLanguage) || navigator.language || '');
-  document.documentElement.lang = german ? 'de' : 'en';
+  lang = langOf((Office.context && Office.context.displayLanguage) || navigator.language || '');
+  document.documentElement.lang = lang;
   document.querySelectorAll('h1 .sub, label, #refresh, #help summary').forEach((el) => {
-    el.childNodes.forEach((n) => { if (n.nodeType === 3 && n.nodeValue.trim() && DE[n.nodeValue.trim()] && german) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), DE[n.nodeValue.trim()]); });
+    el.childNodes.forEach((n) => { const d = dict(), k = n.nodeType === 3 && n.nodeValue.trim(); if (k && d && d[k]) n.nodeValue = n.nodeValue.replace(k, d[k]); });
   });
 }
 let cfg = null, full = null, user = null, from = '', info = { kind: 'new', html: true };
 
 function message(text, isError) {
   const m = $('msg');
-  m.hidden = !text; m.textContent = localize(text || '', german); m.className = 'msg' + (isError ? ' error' : '');
+  m.hidden = !text; m.textContent = localize(text || '', lang); m.className = 'msg' + (isError ? ' error' : '');
 }
 
 function option(value, text, selected) {
@@ -427,7 +430,7 @@ async function load(refresh) {
 // OSign 0.9.14 · signatures published 30.10.2026, 14:02
 function showVersion() {
   const at = cfg && cfg.updated ? new Date(cfg.updated) : null;
-  const when = at && !isNaN(at) ? at.toLocaleString(german ? 'de-CH' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '';
+  const when = at && !isNaN(at) ? at.toLocaleString(lang === 'de' ? 'de-CH' : LANG[lang] ? LANG[lang].locale : 'en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '';
   $('ver').textContent = 'OSign ' + OSIGN_VERSION + (when ? ' · ' + t('signatures published {0}', when) : '');
 }
 
