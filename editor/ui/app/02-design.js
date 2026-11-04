@@ -4,7 +4,11 @@
   const design = $('design');
   let ddoc = null, designReady = null;
   const EDITOR_CSS = 'html{background:#fff}body{margin:14px 16px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;outline:none;word-wrap:break-word}' +
-    'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}table{border-collapse:collapse}td{vertical-align:top}' +
+    'img{max-width:100%;cursor:pointer}img.sel{outline:2px solid #2f6fde}' +
+    // The grip to size the image selected: outside the signature (a child of <html>, not <body>).
+    '.osign-grip{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;background:#2f6fde;border:2px solid #fff;border-radius:2px;box-shadow:0 0 0 1px #2f6fde;cursor:nwse-resize;z-index:5;touch-action:none}' +
+    '.osign-size{position:absolute;padding:1px 6px;font:11px/1.6 Arial,sans-serif;color:#fff;background:#2f6fde;border-radius:3px;pointer-events:none;z-index:5;white-space:nowrap}' +
+    'table{border-collapse:collapse}td{vertical-align:top}' +
     // A person's photo (photos/@@sAMAccountName.jpg) has no picture here: a grey figure in its
     // place and size, framed, so it is seen where it is and how large.
     'img[src*="@@"]{content:var(--osign-ph,url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 80\'><rect width=\'100\' height=\'80\' fill=\'%23e9ecef\'/><circle cx=\'50\' cy=\'31\' r=\'14\' fill=\'%23b8bec6\'/><ellipse cx=\'50\' cy=\'82\' rx=\'30\' ry=\'26\' fill=\'%23b8bec6\'/></svg>"));background:#e9ecef;outline:1px dashed #8a94a3;outline-offset:-1px;object-fit:cover}' +
@@ -116,6 +120,7 @@
   // Typing in the design: back into the signature's HTML, made safe.
   function onDesignInput() {
     const s = sig(); if (!s) return;
+    gripPlace();
     // A placeholder typed by hand becomes a chip once it is complete (a space or punctuation after it).
     const sel = ddoc.getSelection(), node = sel.rangeCount ? sel.anchorNode : null;
     if (node && node.nodeType === 3 && /@@[A-Za-z0-9_]+[^A-Za-z0-9_]|\{\{[A-Za-z][A-Za-z0-9_-]*\}\}/.test(node.nodeValue) && !node.parentNode.closest('span.osf, span.osb')) {
@@ -342,11 +347,51 @@
       $('imgAlt').value = selImg.getAttribute('alt') || '';
       const a = selImg.closest('a'); $('imgHref').value = a ? a.getAttribute('href') : '';
       $('imgBar').hidden = false;
+      gripShow();
     } else hideImgBar();
   }
   function hideImgBar() {
     if (selImg) { selImg.classList.remove('sel'); if (!selImg.className) selImg.removeAttribute('class'); }
     selImg = null; $('imgBar').hidden = true;
+    gripHide();
+  }
+  // Sizing an image by its corner: dragged, its width follows (the height in its shape), shown as
+  // it goes; let go, it is one step to undo. 16 to 800 pixels, as the width box allows.
+  let grip = null, gripSize = null;
+  function gripPlace() {
+    if (!grip || !selImg || !selImg.isConnected) return;
+    let x = 0, y = 0, n = selImg;
+    while (n) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+    grip.style.left = (x + selImg.offsetWidth) + 'px'; grip.style.top = (y + selImg.offsetHeight) + 'px';
+    gripSize.style.left = (x + selImg.offsetWidth + 10) + 'px'; gripSize.style.top = (y + selImg.offsetHeight - 8) + 'px';
+  }
+  $('imgOrig').addEventListener('click', () => { if (!selImg || !selImg.naturalWidth) return; $('imgW').value = Math.min(600, selImg.naturalWidth); applyImg(); gripPlace(); });
+  // The grip goes along when the text around moves the image (typing, the window's width).
+  window.addEventListener('resize', () => gripPlace());
+  function gripHide() { if (grip) grip.remove(); if (gripSize) gripSize.remove(); grip = gripSize = null; }
+  function gripShow() {
+    gripHide();
+    if (!selImg || S.mode !== 'design') return;
+    grip = ddoc.createElement('div'); grip.className = 'osign-grip'; grip.title = t('Drag to size the image');
+    gripSize = ddoc.createElement('div'); gripSize.className = 'osign-size'; gripSize.hidden = true;
+    ddoc.documentElement.append(grip, gripSize);
+    gripPlace();
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const img = selImg; if (!img) return;
+      const z = (zoom.design || 100) / 100, x0 = e.screenX, w0 = parseInt(img.getAttribute('width'), 10) || img.offsetWidth;
+      const ow = parseInt(img.getAttribute('width'), 10), oh = parseInt(img.getAttribute('height'), 10), ratio = ow > 0 && oh > 0 ? oh / ow : 0;
+      grip.setPointerCapture(e.pointerId);
+      const move = (ev) => {
+        const w = Math.max(16, Math.min(800, Math.round(w0 + (ev.screenX - x0) / z)));
+        img.setAttribute('width', w);
+        if (ratio) img.setAttribute('height', Math.round(w * ratio)); else img.removeAttribute('height');
+        img.style.width = ''; img.style.height = ''; if (!img.getAttribute('style')) img.removeAttribute('style');
+        $('imgW').value = w; gripSize.hidden = false; gripSize.textContent = w + ' px'; gripPlace();
+      };
+      const up = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); gripSize.hidden = true; onDesignInput(); gripPlace(); };
+      grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+    });
   }
   // The image bar's values onto the image selected.
   function applyImg() {
