@@ -107,6 +107,36 @@ asked.
   and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows or OneDrive (`pick-folder`, `sp/resolve`, `sp/local`, `quit`)
 answers `ok: false` with a sentence saying so.
 
+## More of the server's routes
+
+- **ad/users**, **ad/departments**, **entra/users** `{ query }` → `{ ok, users | departments }`: the
+  suggestions while typing (people for the preview, departments for *Who gets it*), from AD or
+  Entra ID.
+- **published/get** → `{ ok, configJson }`: what is published now, to mark what changed in the
+  draft. **published/revert** `{ id }` → `{ ok, signature, assets }`: one signature as published,
+  with its images back in the draft (*Discard changes*).
+- **photos/list**, **photos/upload** `{ name, data }`, **photos/delete** `{ name }`: the photos per
+  person in `photos/`, for whoever publishes (with four eyes on, the local `admin`).
+  **photos/fetch** `{ url }` → `{ ok, type, data }`: an image from a public https address (never one
+  in the own network), for the editor to crop and upload.
+- **schedule/get**, **schedule/set** `{ configJson, at, message }`, **schedule/cancel**: a publish at a
+  time set beforehand, with the draft's images as they were then (server/routes-release.js). Not with
+  four eyes on.
+- **backup/check** `{ data, passphrase }` → `{ ok, at, version, files, signatures, versions, key }`:
+  whether a backup opens and what is in it, nothing changed. **backup/auto/get**, **backup/auto/save**
+  `{ at, keep, passphrase? }`, **backup/auto/run**, **backup/auto/download** `{ name }`: the daily
+  backups (server/autobackup.js). All for the local `admin`.
+- **notify/get** → `{ ok, on, lost, last, now }` (never the address), **notify/save** `{ url }` (`''`
+  turns it off; https only), **notify/test**: the webhook told when something needs doing
+  (server/notify.js), for the local `admin`.
+- **sessions/list** → `{ ok, sessions: [{ ref, login, name, local, started, last, from, mine }] }` and
+  **sessions/end** `{ ref }`: who is signed in, and one session ended (not one's own), for the local
+  `admin`. `ref` is a hash of the session, never its id.
+- **deploy/start** `{ origin }` → `{ ok, id, until }` and **deploy/status** → `{ ok, last, waiting }`: the
+  read-only script that looks where the add-in is deployed in Microsoft 365, and its last answer.
+- **server/tls** `{ host }` → `{ ok, names, issuer, validTo, daysLeft, trusted, nameOk }`: the web
+  certificate the proxy serves for the editor's address.
+
 ## ping
 
 Keeps the server from stopping when idle. → `{ ok }`
@@ -120,7 +150,7 @@ can show the Windows folder dialog.
 
 ## draft/get
 
-→ `{ ok, configJson: string|null, assets: [{ name, size }], dirty: bool, publishedAt }`
+→ `{ ok, configJson: string|null, rev, assets: [{ name, size }], dirty: bool, publishedAt }`
 
 `publishedAt` is milliseconds since 1970 (0: never).
 
@@ -129,8 +159,13 @@ from what was last published or loaded.
 
 ## draft/save
 
-`{ configJson }` → `{ ok, dirty }`. It is refused if the text is not JSON with `schemaVersion` 1, or
-is larger than 1.5 MB.
+`{ configJson, rev?, force? }` → `{ ok, dirty, rev }`. It is refused if the text is not JSON with
+`schemaVersion` 1, or is larger than 1.5 MB.
+
+`rev` is the version the draft was made from (from `draft/get`, or the last save). When the draft
+was saved since by another window or someone else, the save is refused with `{ ok: false, conflict:
+true, rev, by: { name, at } }` and nothing is written; `force: true` writes over it. `publish`,
+`approval/request` and `approval/approve` answer the draft's `rev` after them as well.
 
 ## assets/upload
 

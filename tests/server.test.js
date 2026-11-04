@@ -347,3 +347,22 @@ test('history: each publish that changed something is kept with its images, and 
   assert.ok(d.assets.some((a) => a.name === 'hist-logo.png'), 'its image is back');
   assert.match((await api('history/restore', { id: '../../etc' })).error, /no such version/);
 });
+
+test('the draft: saved from the version it was made from; a newer one there is not written over unless asked', async () => {
+  const cfgOf = (name) => JSON.stringify({ schemaVersion: 1, options: {}, fields: [], signatures: [{ id: 'c1', name, html: '<p>x</p>', audience: { everyone: true } }] });
+  const first = await api('draft/get');
+  const a = await api('draft/save', { configJson: cfgOf('A'), rev: first.rev });
+  assert.equal(a.ok, true, JSON.stringify(a) + JSON.stringify(first).slice(0, 200));
+  assert.notEqual(a.rev, first.rev);
+  // Another window, still on the first version: refused, with the version there now.
+  const late = await api('draft/save', { configJson: cfgOf('B'), rev: first.rev });
+  assert.equal(late.conflict, true);
+  assert.equal(late.rev, a.rev);
+  assert.match((await api('draft/get')).configJson, /"A"/);
+  // Asked to: written over.
+  const forced = await api('draft/save', { configJson: cfgOf('B'), rev: first.rev, force: true });
+  assert.equal(forced.ok, true);
+  assert.match((await api('draft/get')).configJson, /"B"/);
+  // Without a version (an older editor): as before.
+  assert.equal((await api('draft/save', { configJson: cfgOf('C') })).ok, true);
+});

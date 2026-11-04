@@ -44,7 +44,7 @@ function createPublishRoutes({ store, history, settings, users, approvalFile, ap
       const bad = compiledProblem(typeof d.configJson === 'string' ? d.configJson : '');
       if (bad) return { error: bad };
       writeAtomic(approvalFile, JSON.stringify({ by: s.user.name || s.user.login, login: s.user.login, at: Date.now(), message: String(d.message || '').slice(0, 200), configJson: d.configJson, hash: store.draftHash() }));
-      return approvalAnswer(s);
+      return Object.assign(approvalAnswer(s), { rev: saved.rev });
     },
     'approval/approve': async (d, s) => {
       const a = approval();

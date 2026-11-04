@@ -41,7 +41,9 @@
 
   async function loadDesign(html) {
     await designReady;
-    ddoc.body.innerHTML = html || '';
+    // Made safe here too, whatever the draft holds (one saved through the API by hand): the
+    // Content-Security-Policy already stops handlers, this keeps them out of the page as well.
+    ddoc.body.innerHTML = sanitize(html || '');
     chipify(ddoc.body);
     hideImgBar();
   }

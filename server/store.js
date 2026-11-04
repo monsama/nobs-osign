@@ -82,15 +82,20 @@ function createStore(dataDir) {
   }
   const dirty = () => draftHash() !== String(state().publishedHash || '');
 
+  // The draft's version: a hash of its text. A save names the version it was made from; another
+  // one saved since (another window, someone else) is not written over unless asked to.
+  const draftRev = () => sha256(Buffer.from(readText(draftFile) || '', 'utf8')).slice(0, 16);
   function getDraft() {
     const configJson = readText(draftFile);
     const st = state();
-    return { configJson, assets: assets(), dirty: !!configJson && dirty(), publishedAt: typeof st.publishedAt === 'number' ? st.publishedAt : 0 };
+    return { configJson, rev: draftRev(), assets: assets(), dirty: !!configJson && dirty(), publishedAt: typeof st.publishedAt === 'number' ? st.publishedAt : 0 };
   }
-  function saveDraft(text) {
+  function saveDraft(text, opts) {
     const err = checkConfigJson(text); if (err) return { error: err };
+    const o = opts || {};
+    if (o.rev && !o.force && o.rev !== draftRev()) return { error: 'The draft was changed in the meantime, in another window or by someone else.', conflict: true, rev: draftRev() };
     writeAtomic(draftFile, text);
-    return { dirty: dirty() };
+    return { dirty: dirty(), rev: draftRev() };
   }
 
   // An image into the draft: PNG, JPG or GIF only, as it says it is, 1 MB at most; another one of the same name gets a name of its own.

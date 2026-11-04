@@ -287,7 +287,7 @@ test('users from AD: read, look, and publish exactly that', { skip }, async () =
   const rows = await page.$$eval('#usersRows tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
   // The last column: groups (an earlier test made a signature for groups).
   // Then the signature for new mail and for replies (none here: the one there is for a group she is not in).
-  assert.deepEqual(rows[0], ['new', 'Anna Muster', 'anna@example.com', 'none', 'none', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
+  assert.deepEqual(rows[0], ['Anna Musternew', 'anna@example.com', 'none', 'none', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
   assert.ok(!fs.existsSync(path.join(folder, 'users')), 'reading writes nothing');
 
   await page.click('#btnPublish');
@@ -1606,5 +1606,55 @@ test('a building block edited in the HTML tab: its text never goes into the sign
   await page.click('#btnRefresh');
   await page.waitForFunction(() => /Loaded again/.test(document.querySelector('#toast').textContent));
   assert.equal(await page.isDisabled('#ghUndo'), false);
+  assert.deepEqual(errors, []);
+});
+
+test('a draft with script in it (saved through the API by hand): nothing of it in the editor, nothing runs', { skip }, async () => {
+  const c = JSON.parse((await api('draft/get')).configJson), keep = JSON.stringify(c);
+  const evil = '<p>Hi</p><img src="x" onerror="window.__ran=1"><a href="javascript:window.__ran=2">x</a><script>window.__ran=3</script><svg onload="window.__ran=4"></svg>';
+  c.signatures[0].html = evil; if (c.signatures[0].source !== undefined) c.signatures[0].source = evil;
+  await page.goto('about:blank');
+  await api('draft/save', { configJson: JSON.stringify(c) });
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList li a >> nth=0');
+  await page.waitForTimeout(600);
+  const design = await page.evaluate(() => document.getElementById('design').contentDocument.body.innerHTML);
+  assert.doesNotMatch(design, /onerror|onload|javascript:|<script/i, design);
+  assert.equal(await page.evaluate(() => window.__ran || document.getElementById('design').contentWindow.__ran || null), null);
+  await page.goto('about:blank');
+  await api('draft/save', { configJson: keep });
+  assert.deepEqual(errors, []);
+});
+
+test('two windows on one draft: the later save does not write over the other one\'s, it asks', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  const ctx2 = await signedIn(), other = await ctx2.newPage();
+  try {
+    await other.goto(url);
+    await other.waitForSelector('html[data-ready="1"]');
+    // The other window renames the main signature and saves.
+    await other.click('#sigList a:has-text("Main signature")');
+    await other.fill('#sigName', 'Main signature (other window)'); await other.dispatchEvent('#sigName', 'input');
+    await other.keyboard.press('Control+s');
+    await other.waitForFunction(() => /Draft saved/.test(document.querySelector('#stDraft').textContent));
+    // This one, still on the version before, changes something else: asked, not written over.
+    await page.click('#sigList a:has-text("Main signature")');
+    await page.fill('#sigName', 'Main signature (this window)'); await page.dispatchEvent('#sigName', 'input');
+    await page.keyboard.press('Control+s');
+    await page.waitForSelector('#dlgAsk[open]');
+    assert.match(await page.textContent('#askText'), /changed in the meantime/);
+    assert.match(JSON.parse((await api('draft/get')).configJson).signatures.map((s) => s.name).join(), /other window/);
+    // The newer one loaded: the other window's change is here.
+    await page.click('#askCancel');
+    await page.waitForFunction(() => /other window/.test(document.querySelector('#sigList').textContent));
+    // And back as it was.
+    await page.click('#sigList a:has-text("Main signature (other window)")');
+    await page.fill('#sigName', 'Main signature'); await page.dispatchEvent('#sigName', 'input');
+    await page.keyboard.press('Control+s');
+    await page.waitForFunction(() => /Draft saved/.test(document.querySelector('#stDraft').textContent));
+    assert.match(JSON.parse((await api('draft/get')).configJson).signatures.map((s) => s.name).join(), /^Main signature,|,Main signature,|Main signature$/);
+  } finally { await ctx2.close(); }
   assert.deepEqual(errors, []);
 });

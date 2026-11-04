@@ -1256,3 +1256,28 @@ dialog.fit { width: min(1080px, 96vw); }
 #healthRows .health-rest[open] > summary::before { content: '⌄'; }
 #healthRows > .health-rest:first-child > summary { border-top: 0; }
 #btnRefresh.busy svg { animation: spin 0.8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+/* The two states in the top bar, quiet when all is well: text with a dot, no box. Only what
+   wants attention is a pill: changes not published (a click away from Publish…), not saved. */
+.top .status-wrap { gap: 2px; }
+.top .status { height: var(--h); padding: 0 8px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12.5px; border-radius: var(--r-s); }
+.top .status.clean { background: transparent; border-color: transparent; color: var(--muted); }
+.top .status::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; background: var(--line); }
+.top .status.clean::before { background: var(--ok); }
+.top .status.busy::before { background: var(--accent); animation: st-pulse 1s ease-in-out infinite; }
+.top .status.dirty { background: var(--warn-soft); border-color: var(--warn-line); color: var(--text); }
+.top .status.dirty::before { background: var(--warn); }
+.top .status.bad { background: var(--danger-soft); border-color: var(--danger-line); color: var(--text); }
+.top .status.bad::before { background: var(--danger); }
+.top button.status.pub.dirty:hover { border-color: var(--warn); }
+.top button.status.pub:disabled { cursor: default; }
+@keyframes st-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .top .status.busy::before { animation: none; } }
+.top button.status { gap: 0; }
+.top .status::before { transform: translateY(-0.5px); flex: none; }
+/* The search field's shortcut as quiet text, not a key in a box. */
+.find-btn kbd { border: 0; background: none; padding: 0; color: var(--muted); font-family: inherit; font-size: 12px; line-height: 1; opacity: .8; }
+/* Tooltips: the text and its key side by side, the text wrapped evenly (no word alone on the last line). */
+.tip { display: flex; align-items: center; gap: 10px; max-width: 380px; width: max-content; }
+.tip[hidden] { display: none; }
+.tip .tip-t { text-wrap: balance; }
+.tip kbd { margin-left: 0; flex: none; white-space: nowrap; }

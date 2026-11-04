@@ -32,6 +32,7 @@
     let c = null;
     try { c = r.configJson ? JSON.parse(r.configJson) : null; } catch (e) { toast(t('The saved draft could not be read; starting from an empty one.'), true); }
     S.config = normalize(c);
+    S.rev = r.rev || '';
     S.assets = r.assets || []; S.dirty = !!r.dirty; S.publishedAt = +r.publishedAt || 0;
     renderStatus();
     loadPublishedCopy();

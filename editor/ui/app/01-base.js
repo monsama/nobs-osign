@@ -47,7 +47,9 @@
     let j;
     try { j = await r.json(); } catch (e) { throw new Error(t('The server answered {0}.', r.status)); }
     if (r.status === 401) throw new Error(t('This window is not signed in to the server: open the address NOBS OSign printed.'));
-    if (!j.ok) throw new Error(t(j.error || 'Failed.'));
+    if (!j.ok) { const err = new Error(t(j.error || 'Failed.')); err.data = j; throw err; }
+    // The draft written on the server by this request (published, asked for approval): its version.
+    if (j.rev && /^(publish|approval\/request|approval\/approve)$/.test(path)) S.rev = j.rev;
     return j;
   }
 
@@ -123,13 +125,28 @@
   function save(opts) {
     clearTimeout(saveTimer); saveTimer = null;
     const json = JSON.stringify(prepared()), seq = changeSeq;
-    saving = saving.then(() => api('draft/save', { configJson: json }, opts))
+    saving = saving.then(() => api('draft/save', { configJson: json, rev: S.rev || '', force: !!(opts && opts.force) }, opts))
       // The answer to an older save says nothing about changes made since: those are still coming.
-      .then((r) => { if (seq === changeSeq) { S.dirty = r.dirty; S.savedAt = Date.now(); renderStatus(); } })
+      .then((r) => { if (r.rev) S.rev = r.rev; if (seq === changeSeq) { S.dirty = r.dirty; S.savedAt = Date.now(); renderStatus(); } })
       // Not taken (publishing right now, the network gone): tried again a moment later, and kept
       // for when the page closes, unless something newer is on its way already.
-      .catch((e) => { renderStatus(t('Not saved')); toast(t(e.message), true); if (seq === changeSeq && !saveTimer) saveTimer = setTimeout(save, 3000); });
+      .catch((e) => {
+        renderStatus(t('Not saved'));
+        // Changed elsewhere since this one was loaded: asked, never written over without a word.
+        if (e.data && e.data.conflict) { saveConflict(e.data); return; }
+        toast(t(e.message), true); if (seq === changeSeq && !saveTimer) saveTimer = setTimeout(save, 3000);
+      });
     return saving;
+  }
+  let conflictAsked = false;
+  async function saveConflict(d) {
+    if (conflictAsked) return;
+    conflictAsked = true;
+    const by = d.by ? t(' (last saved by {0}, {1})', d.by.name, new Date(d.by.at).toLocaleTimeString(I18N.lang === 'de' ? 'de-CH' : 'en-GB', { hour: '2-digit', minute: '2-digit' })) : '';
+    const keepMine = await ask(t('The draft was changed in the meantime, in another window or by someone else{0}. Keep your version here (it replaces that one), or load the newer one (your last changes here are dropped)?', by), t('Keep mine'), true, t('Load the newer one'));
+    conflictAsked = false;
+    if (keepMine) save({ force: true });
+    else refreshAll();
   }
   window.addEventListener('beforeunload', () => { if (saveTimer) save({ keepalive: true }); });
   setInterval(() => { api('ping').catch(() => {}); }, 60000);
@@ -557,7 +574,8 @@
         if (on !== e || !e.isConnected) return;
         const m = /\s*\(((?:Ctrl|Shift|Alt|⌘)\+[^)]+)\)\s*$/.exec(text);
         const mac = /Mac|iPhone|iPad/.test(navigator.userAgent);
-        tip.replaceChildren(m ? text.slice(0, m.index) : text);
+        // The text and the key side by side: the text wraps evenly, the key never alone on a line.
+        tip.replaceChildren(el('span', { class: 'tip-t' }, m ? text.slice(0, m.index) : text));
         if (m) tip.append(el('kbd', null, mac ? m[1].replace(/Ctrl\+/g, '⌘') : m[1].replace(/\+/g, ' ')));
         tip.hidden = false;
         e.setAttribute('aria-describedby', 'appTip');
