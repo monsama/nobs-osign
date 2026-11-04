@@ -287,7 +287,7 @@ test('users from AD: read, look, and publish exactly that', { skip }, async () =
   const rows = await page.$$eval('#usersRows tr', (trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent)));
   // The last column: groups (an earlier test made a signature for groups).
   // Then the signature for new mail and for replies (none here: the one there is for a group she is not in).
-  assert.deepEqual(rows[0], ['new', 'Anna Muster', 'anna@example.com', 'none', 'none', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
+  assert.deepEqual(rows[0], ['Anna Musternew', 'anna@example.com', 'none', 'none', 'Dipl. Ing.', '+41 41 000 00 01', '', '']);
   assert.ok(!fs.existsSync(path.join(folder, 'users')), 'reading writes nothing');
 
   await page.click('#btnPublish');

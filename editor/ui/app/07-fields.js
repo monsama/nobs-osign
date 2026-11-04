@@ -188,7 +188,7 @@
     const gets = whoGets(snap.users);
     const none = snap.users.filter((u) => !gets.get(u).new);
     $('usersInfo').textContent += ' ' + (none.length ? t('{0} of them get no signature for new mail.', none.length) : t('Everyone gets a signature for new mail.'));
-    head.append(el('tr', null, el('th', null, ''), el('th', null, t('Name')), el('th', null, t('Mail')), el('th', null, t('New mail')), el('th', null, t('Replies')), fields.map((f) => el('th', null, (f.label || f.key))), showGroups ? el('th', null, t('Groups')) : null));
+    head.append(el('tr', null, el('th', null, t('Name')), el('th', null, t('Mail')), el('th', null, t('New mail')), el('th', null, t('Replies')), fields.map((f) => el('th', null, (f.label || f.key))), showGroups ? el('th', null, t('Groups')) : null));
     const q = $('usersFilter').value.trim().toLowerCase();
     const only = $('usersChanges').checked, noneOnly = $('usersNone').checked;
     const rows = snap.users.filter((u) => (!only || u.status !== 'unchanged') && (!noneOnly || !gets.get(u).new) &&
@@ -199,8 +199,9 @@
     const LIMIT = 500;
     rows.slice(0, LIMIT).forEach((u) => {
       body.append(el('tr', null,
-        el('td', null, el('span', { class: 'st ' + u.status }, t(u.status))),
-        el('td', { class: 'nowrap' }, u.name || ''),
+        // No column of states: a new one is said beside the name, a changed value shows the old
+        // one under it, the same ones need no word.
+        el('td', { class: 'nowrap' }, u.name || '', u.status === 'new' ? el('span', { class: 'st new', style: 'margin-left:6px' }, t('new')) : null),
         el('td', null, u.mail),
         ['new', 'reply'].map((k) => { const g = gets.get(u)[k]; return el('td', { class: 'nowrap' + (g ? '' : ' none') }, g ? g.name : t('none')); }),
         fields.map((f) => {
@@ -213,10 +214,10 @@
         showGroups ? el('td', null, (u.groups || []).join(', ')) : null));
     });
     snap.removed.filter((m) => !q || m.includes(q)).forEach((m) => {
-      body.append(el('tr', { class: 'removed' }, el('td', null, el('span', { class: 'st removed' }, t('removed'))), el('td', { colspan: fields.length + (showGroups ? 5 : 4) }, m)));
+      body.append(el('tr', { class: 'removed' }, el('td', { colspan: fields.length + (showGroups ? 5 : 4) }, el('s', null, m), el('span', { class: 'st removed', style: 'margin-left:6px' }, t('removed')))));
     });
     if (rows.length > LIMIT) $('usersMore').textContent = t('{0} more - narrow the search to see them.', rows.length - LIMIT);
-    if (!rows.length && !snap.removed.length) body.append(el('tr', null, el('td', { colspan: fields.length + 5 }, only ? t('No changes: everything is as published.') : t('No users found.'))));
+    if (!rows.length && !snap.removed.length) body.append(el('tr', null, el('td', { colspan: fields.length + (showGroups ? 5 : 4) }, only ? t('No changes: everything is as published.') : t('No users found.'))));
   }
   $('btnAdRead').addEventListener('click', async () => {
     $('btnAdRead').disabled = true; $('usersInfo').textContent = t('Reading…');
