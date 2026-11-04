@@ -107,6 +107,36 @@ asked.
   and the folder is made on the first publish. A site the app has no access to answers `ok: false`. What needs Windows or OneDrive (`pick-folder`, `sp/resolve`, `sp/local`, `quit`)
 answers `ok: false` with a sentence saying so.
 
+## More of the server's routes
+
+- **ad/users**, **ad/departments**, **entra/users** `{ query }` → `{ ok, users | departments }`: the
+  suggestions while typing (people for the preview, departments for *Who gets it*), from AD or
+  Entra ID.
+- **published/get** → `{ ok, configJson }`: what is published now, to mark what changed in the
+  draft. **published/revert** `{ id }` → `{ ok, signature, assets }`: one signature as published,
+  with its images back in the draft (*Discard changes*).
+- **photos/list**, **photos/upload** `{ name, data }`, **photos/delete** `{ name }`: the photos per
+  person in `photos/`, for whoever publishes (with four eyes on, the local `admin`).
+  **photos/fetch** `{ url }` → `{ ok, type, data }`: an image from a public https address (never one
+  in the own network), for the editor to crop and upload.
+- **schedule/get**, **schedule/set** `{ configJson, at, message }`, **schedule/cancel**: a publish at a
+  time set beforehand, with the draft's images as they were then (server/routes-release.js). Not with
+  four eyes on.
+- **backup/check** `{ data, passphrase }` → `{ ok, at, version, files, signatures, versions, key }`:
+  whether a backup opens and what is in it, nothing changed. **backup/auto/get**, **backup/auto/save**
+  `{ at, keep, passphrase? }`, **backup/auto/run**, **backup/auto/download** `{ name }`: the daily
+  backups (server/autobackup.js). All for the local `admin`.
+- **notify/get** → `{ ok, on, lost, last, now }` (never the address), **notify/save** `{ url }` (`''`
+  turns it off; https only), **notify/test**: the webhook told when something needs doing
+  (server/notify.js), for the local `admin`.
+- **sessions/list** → `{ ok, sessions: [{ ref, login, name, local, started, last, from, mine }] }` and
+  **sessions/end** `{ ref }`: who is signed in, and one session ended (not one's own), for the local
+  `admin`. `ref` is a hash of the session, never its id.
+- **deploy/start** `{ origin }` → `{ ok, id, until }` and **deploy/status** → `{ ok, last, waiting }`: the
+  read-only script that looks where the add-in is deployed in Microsoft 365, and its last answer.
+- **server/tls** `{ host }` → `{ ok, names, issuer, validTo, daysLeft, trusted, nameOk }`: the web
+  certificate the proxy serves for the editor's address.
+
 ## ping
 
 Keeps the server from stopping when idle. → `{ ok }`
