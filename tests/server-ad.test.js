@@ -143,6 +143,9 @@ test('export: exactly what was read, once, as users/<mail>.json', async () => {
   assert.equal(after.written, true);
   assert.deepEqual([after.counts.new, after.counts.changed], [0, 0]);
   assert.ok(after.users.every((u) => u.status === 'unchanged'));
+  // A field added since, empty for everyone: nobody is marked changed for it alone.
+  const r2 = await api('ad/read', { fields: FIELDS.concat([{ key: 'pager', ad: 'pager' }]), groups: ['sg-field'] });
+  assert.deepEqual([r2.counts.new, r2.counts.changed], [0, 0], JSON.stringify(r2.counts));
 });
 
 test('read again: what changed in AD, with the old value; who left; only changed files are fetched', async () => {
