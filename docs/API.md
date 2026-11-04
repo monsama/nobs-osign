@@ -150,7 +150,7 @@ can show the Windows folder dialog.
 
 ## draft/get
 
-→ `{ ok, configJson: string|null, assets: [{ name, size }], dirty: bool, publishedAt }`
+→ `{ ok, configJson: string|null, rev, assets: [{ name, size }], dirty: bool, publishedAt }`
 
 `publishedAt` is milliseconds since 1970 (0: never).
 
@@ -159,8 +159,13 @@ from what was last published or loaded.
 
 ## draft/save
 
-`{ configJson }` → `{ ok, dirty }`. It is refused if the text is not JSON with `schemaVersion` 1, or
-is larger than 1.5 MB.
+`{ configJson, rev?, force? }` → `{ ok, dirty, rev }`. It is refused if the text is not JSON with
+`schemaVersion` 1, or is larger than 1.5 MB.
+
+`rev` is the version the draft was made from (from `draft/get`, or the last save). When the draft
+was saved since by another window or someone else, the save is refused with `{ ok: false, conflict:
+true, rev, by: { name, at } }` and nothing is written; `force: true` writes over it. `publish`,
+`approval/request` and `approval/approve` answer the draft's `rev` after them as well.
 
 ## assets/upload
 

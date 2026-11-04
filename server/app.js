@@ -59,6 +59,12 @@ const SECURITY = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
+  // Always over HTTPS once seen so (the proxy serves it; plain http, as in tests, ignores it), no
+  // camera, microphone or location, and a window of its own (popups allowed: the Microsoft sign-in
+  // of the setup assistant is one).
+  'Strict-Transport-Security': 'max-age=31536000',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'"
 };
 
@@ -271,6 +277,8 @@ function createApp(opts) {
   // The connections are the local account admin's alone: whoever sets the directory's address
   // gets the passwords people sign in with.
   const adminOnly = (s) => (s.user.local ? '' : 'Only the local account admin can change the server\'s connections.');
+  // Who saved the draft last (since the server started), for the answer to a save that came too late.
+  let draftBy = null;
   const ADMIN_SETTINGS = ['addinUrl', 'clientId', 'tenantId', 'spSite', 'spFolder', 'addinHost', 'requireApproval', 'addinMobile'];
   // Whether a newer version is out (server/updates.js; OSIGN_UPDATE_CHECK=1).
   const updates = createUpdates({ env, version: VERSION, fetchFn, log });
@@ -349,7 +357,8 @@ function createApp(opts) {
     settings.forget(); photos.clear();
     // A version that differs from what was there: kept, with who and the note.
     if (!r.error && r.changed) history.add({ by, message, configJson, images: r.images });
-    return r.error ? r : { changed: r.changed, folder: t.describe() };
+    // The draft's version after it (it was written as published), so the editor goes on from it.
+    return r.error ? r : { changed: r.changed, folder: t.describe(), rev: store.getDraft().rev };
   }
   // The server's connections for the editor: what is set, where from (GUI or .env), never a secret.
   function connectionsAnswer() {
@@ -372,7 +381,8 @@ function createApp(opts) {
   const routes = {
     ping: () => ({}),
     info: (data, s) => ({
-      backend: 'node', version: VERSION, dataDir,
+      // The data volume's path only for the local admin (no one else needs where the server keeps it).
+      backend: 'node', version: VERSION, dataDir: s.user.local ? dataDir : '',
       // Not here yet: AD lookup and export (LDAP), and the add-in's files (Cloudflare Pages).
       features: {
         adLookup: adOn, addinFiles: !!addin.templateDir(env), pickFolder: false, signOut: true,
@@ -411,7 +421,15 @@ function createApp(opts) {
       user: { login: s.user.login, name: s.user.name, local: !!s.user.local, publisher: publisher(s) }
     }),
     'draft/get': () => store.getDraft(),
-    'draft/save': (d) => (publishing ? { error: 'Publishing right now: saved in a moment.' } : store.saveDraft(typeof d.configJson === 'string' ? d.configJson : '')),
+    // Saved from the version it was made from (rev): a newer one there is not written over unless
+    // force; the answer says who saved it last.
+    'draft/save': (d, s) => {
+      if (publishing) return { error: 'Publishing right now: saved in a moment.' };
+      const r = store.saveDraft(typeof d.configJson === 'string' ? d.configJson : '', { rev: typeof d.rev === 'string' ? d.rev : '', force: d.force === true });
+      if (r.conflict) return Object.assign(r, { by: draftBy });
+      if (!r.error) draftBy = { name: s.user.name || s.user.login, at: new Date().toISOString() };
+      return r;
+    },
     'assets/upload': (d) => (publishing ? { error: 'Publishing right now: try again in a moment.' } : store.uploadAsset(d.name, d.data)),
     'assets/delete': (d) => (publishing ? { error: 'Publishing right now: try again in a moment.' } : store.deleteAsset(d.name)),
     'settings/get': () => settings.answer(),
@@ -570,7 +588,8 @@ function createApp(opts) {
       return fail(res, 'The server could not do that: ' + (e && e.message), 500);
     }
     if (logged) audit.add({ who: s.user.login, ip, what: name, ok: !(r && r.error), detail: r && r.error ? r.error : AUDIT[name](data, r || {}) });
-    if (r && r.error) return fail(res, r.error);
+    // A refusal with more to say (a draft changed in the meantime: its version, who saved it) keeps it.
+    if (r && r.error) return r.conflict ? json(res, 200, { ok: false, error: r.error, conflict: true, rev: r.rev, by: r.by || null }) : fail(res, r.error);
     return ok(res, r || {});
   }
 

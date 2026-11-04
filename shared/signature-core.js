@@ -680,6 +680,7 @@
       else if (ids[s.id]) errors.push('Two signatures share the id ' + s.id + '.');
       else ids[s.id] = 1;
       if (s && !String(s.name || '').trim()) errors.push('Signature ' + (i + 1) + ' has no name.');
+      else if (s && String(s.name).length > 200) errors.push('Signature ' + (i + 1) + ': the name is longer than 200 characters.');
       if (s && ((s.validFrom && !DAY.test(s.validFrom)) || (s.validUntil && !DAY.test(s.validUntil)))) errors.push('Signature ' + (i + 1) + ': the campaign\'s days are dates like 2026-12-01.');
       else if (s && s.validFrom && s.validUntil && s.validFrom > s.validUntil) errors.push('Signature ' + (i + 1) + ': the campaign ends before it starts.');
     });

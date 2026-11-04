@@ -112,7 +112,9 @@ function createConnectionRoutes({ connections, connectionsAnswer, settings, cert
       return connectionsAnswer();
     },
     // A sharing link: the folder it leads to (its own address), for the setup assistant.
-    'sp/share': async (d) => {
+    // The assistant's and the connections': the local account admin's, as setting the folder is.
+    'sp/share': async (d, s) => {
+      if (adminOnly(s)) return { error: adminOnly(s) };
       const link = String(d.url || '').trim();
       if (!/^https:\/\/[a-z0-9-]+(-my)?\.sharepoint\.com\/:[a-z]:\//i.test(link)) return { error: 'That is not a sharing link of SharePoint or OneDrive.' };
       if (!live().graph) return { error: 'The server cannot open sharing links before publishing to SharePoint is set up.' };
@@ -127,7 +129,8 @@ function createConnectionRoutes({ connections, connectionsAnswer, settings, cert
       return { webUrl: r.webUrl, name: r.name };
     },
     // Whether the server reaches a SharePoint folder, before it is saved (the setup assistant).
-    'sp/check': async (d) => {
+    'sp/check': async (d, who) => {
+      if (adminOnly(who)) return { error: adminOnly(who) };
       const s = Object.assign(settings.get(), { spSite: String(d.spSite || 'root').trim(), spFolder: String(d.spFolder || '').trim() });
       if (!s.spFolder) return { error: 'Name the folder in the site, like OSign.' };
       const err = checkSettings(s); if (err) return { error: err };

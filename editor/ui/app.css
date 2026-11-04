@@ -1276,3 +1276,8 @@ dialog.fit { width: min(1080px, 96vw); }
 .top .status::before { transform: translateY(-0.5px); flex: none; }
 /* The search field's shortcut as quiet text, not a key in a box. */
 .find-btn kbd { border: 0; background: none; padding: 0; color: var(--muted); font-family: inherit; font-size: 12px; line-height: 1; opacity: .8; }
+/* Tooltips: the text and its key side by side, the text wrapped evenly (no word alone on the last line). */
+.tip { display: flex; align-items: center; gap: 10px; max-width: 380px; width: max-content; }
+.tip[hidden] { display: none; }
+.tip .tip-t { text-wrap: balance; }
+.tip kbd { margin-left: 0; flex: none; white-space: nowrap; }
