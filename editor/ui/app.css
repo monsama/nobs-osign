@@ -1273,3 +1273,4 @@ dialog.fit { width: min(1080px, 96vw); }
 @keyframes st-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .top .status.busy::before { animation: none; } }
 .top button.status { gap: 0; }
+.top .status::before { transform: translateY(-0.5px); flex: none; }
