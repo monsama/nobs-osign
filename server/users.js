@@ -69,9 +69,15 @@ function createUsers({ dataDir, directory, log }) {
       const groups = r.groups.slice().sort(byKey);
       const json = JSON.stringify({ values, groups });
       const old = there[name] ? there[name].json : null;
-      const status = old === null ? 'new' : old === json ? 'unchanged' : 'changed';
-      let oldValues = null;
-      if (status === 'changed') { try { oldValues = JSON.parse(old); } catch (e) { /* not JSON */ } }
+      // Changed is a value or a group that differs: a field added since (missing in the file there)
+      // counts as empty, so it alone does not mark everyone. The file is still written anew on
+      // export when its text differs (write() goes by the text).
+      let oldValues = null, status = old === null ? 'new' : old === json ? 'unchanged' : 'changed';
+      if (status === 'changed') {
+        try { oldValues = JSON.parse(old); } catch (e) { /* not JSON */ }
+        const ov = (oldValues && oldValues.values) || {}, og = ((oldValues && oldValues.groups) || []).slice().sort(byKey);
+        if (oldValues && fields.every((f) => String(ov[f.key] || '') === values[f.key]) && JSON.stringify(og) === JSON.stringify(groups)) { status = 'unchanged'; oldValues = null; }
+      }
       entries.push({ file: name, mail: r.mail, name: r.name || '', status, values, groups, old: oldValues, json });
     }
     const removed = Object.keys(there).filter((n) => !seen.has(n)).sort();

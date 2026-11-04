@@ -51,8 +51,20 @@ signatures at once; photos uploaded already keep their names, so upload them aga
 | Server connections, add-in files, backups, audit log, four eyes | - | - | ✓ |
 
 The **publishing group** is optional (*Settings → Server → Active Directory → Publishing
-group*); empty, everyone in the sign-in group publishes. Membership is read when someone signs in:
-taken out of the group, they keep their rights until they sign in again (at most 12 hours).
+group*); empty, everyone in the sign-in group publishes.
+
+**Giving someone the editor:** add them to the AD group under *Settings → Server → Active
+Directory → Sign-in group* (nested groups count); they sign in with their Windows login. There is
+no list of users in NOBS OSign itself: the AD groups decide.
+
+**Taking it away:** membership is read when someone signs in.
+- With a publishing group set, the server asks AD again, at most once a minute, before anything
+  that publishes (and when the editor loads its info): taken out of the publishing group, someone
+  no longer publishes; taken out of the sign-in group, or gone from AD, they are signed out.
+  AD not reachable: as it was at sign-in.
+- Without a publishing group, rights stay until the session ends: after two hours without using
+  the editor, after 12 hours at most.
+- At once, either way: *Settings → Server → Signed in now* → *Sign out* for that person.
 
 ## Being told when something needs doing
 
