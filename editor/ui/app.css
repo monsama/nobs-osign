@@ -1274,3 +1274,5 @@ dialog.fit { width: min(1080px, 96vw); }
 @media (prefers-reduced-motion: reduce) { .top .status.busy::before { animation: none; } }
 .top button.status { gap: 0; }
 .top .status::before { transform: translateY(-0.5px); flex: none; }
+/* The search field's shortcut as quiet text, not a key in a box. */
+.find-btn kbd { border: 0; background: none; padding: 0; color: var(--muted); font-family: inherit; font-size: 12px; line-height: 1; opacity: .8; }
