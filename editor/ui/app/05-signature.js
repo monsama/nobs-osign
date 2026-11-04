@@ -395,7 +395,7 @@
     changed(); openSig(S.config.signatures[0] ? S.config.signatures[0].id : null);
   });
   document.querySelectorAll('.tab[data-mode]').forEach((t) => t.addEventListener('click', () => setMode(t.dataset.mode)));
-  ['imgW', 'imgAlt', 'imgHref'].forEach((id) => $(id).addEventListener('change', applyImg));
+  ['imgW', 'imgAlt', 'imgHref'].forEach((id) => $(id).addEventListener('change', () => { applyImg(); gripPlace(); }));
   $('imgDone').addEventListener('click', () => { applyImg(); hideImgBar(); });
 
 

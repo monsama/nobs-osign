@@ -1658,3 +1658,34 @@ test('two windows on one draft: the later save does not write over the other one
   } finally { await ctx2.close(); }
   assert.deepEqual(errors, []);
 });
+
+test('an image sized by dragging its corner: the height goes along in its shape, the grip never in the HTML, one step to undo', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p><img src="https://www.example.com/logo.png" width="200" height="100" alt="Logo"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  const frame = page.frameLocator('#design');
+  await frame.locator('img').click();
+  await page.waitForSelector('#imgBar:not([hidden])');
+  const grip = frame.locator('.osign-grip');
+  await grip.waitFor();
+  const b = await grip.boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + 80, b.y + 20, { steps: 6 });
+  await page.mouse.up();
+  const [w, h] = await frame.locator('img').evaluate((i) => [Number(i.getAttribute('width')), Number(i.getAttribute('height'))]);
+  assert.ok(w > 230 && w < 320, 'wider: ' + w);
+  assert.equal(h, Math.round(w / 2), 'in its shape');
+  assert.equal(await page.inputValue('#imgW'), String(w));
+  await page.click('.tab[data-mode=html]');
+  const html = await page.inputValue('#source');
+  assert.doesNotMatch(html, /osign-grip|osign-size/);
+  assert.match(html, new RegExp('width="' + w + '"'));
+  await page.click('.tab[data-mode=design]');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});
