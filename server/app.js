@@ -339,6 +339,11 @@ function createApp(opts) {
     for (const s of (c && c.signatures) || []) {
       if (s && !core.compiledMatches(s.html, s.compiled)) return 'The signature "' + (s.name || s.id) + '" is not as its HTML says (compiled). Open it in the editor and publish again.';
     }
+    // A campaign's banner too, in each of its languages.
+    for (const x of (c && c.campaigns) || []) {
+      const parts = [x].concat(Object.values((x && x.langs) || {}));
+      if (parts.some((p) => p && !core.compiledMatches(p.html, p.compiled))) return 'The campaign "' + (x.name || x.id) + '" is not as its HTML says (compiled). Open it in the editor and publish again.';
+    }
     return '';
   }
   // While publishing, the draft's images and the draft stay as they are (what was checked goes out).
@@ -471,6 +476,11 @@ function createApp(opts) {
     if (adOn && exportAt && lastExport && lastExport.ok === false) out.push({ key: 'adexport:' + lastExport.at, text: 'The daily export of the users from AD failed: ' + lastExport.error });
     const sch = release.routes['schedule/get']().schedule;
     if (sch && sch.error) out.push({ key: 'schedule:' + sch.at, text: 'The publish set for ' + sch.at.slice(0, 16).replace('T', ' ') + ' did not go out: ' + sch.error });
+    // A campaign of what is published ending in 3 days, with none after it for the same signatures.
+    try {
+      const pub = history.latest(), cfg = pub ? JSON.parse(pub) : null;
+      for (const e of core.campaignsEnding(cfg, 3)) out.push({ key: 'campaign:' + e.c.id + ':' + e.c.validUntil, text: 'The campaign "' + (e.c.name || e.c.id) + '" ends ' + (e.left ? 'in ' + e.left + ' day(s), on ' + e.c.validUntil : 'today') + ', and none follows it: plan the next one in the editor (Campaigns), or let the signatures go without a banner.' });
+    } catch (e) { /* no history yet */ }
     return out;
   };
   const notify = createNotify({ dataDir, seal: connections.seal, open: connections.open, problems: problemsNow, log, fetchImpl: fetchFn });

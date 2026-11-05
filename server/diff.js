@@ -51,6 +51,21 @@ function diffConfigs(beforeJson, afterJson) {
     const changed = [...new Set([...fa.keys(), ...fb.keys()])].filter((k) => !same(fa.get(k), fb.get(k))).sort();
     out.push({ kind: 'fields', name: '', detail: changed.join(', ') });
   }
+  // Banner campaigns: added, removed, their banner line by line, their days and rules.
+  const cb = new Map((a.campaigns || []).map((c) => [c.id, c])), ca = new Map((b.campaigns || []).map((c) => [c.id, c]));
+  const crules = (c) => { const r = Object.assign({}, c); delete r.id; delete r.name; delete r.html; delete r.compiled; delete r.design; r.langs = Object.keys(c.langs || {}).sort(); return r; };
+  const banner = (c) => [c.html || ''].concat(Object.keys(c.langs || {}).sort().map((k) => '[' + k + '] ' + ((c.langs[k] || {}).html || ''))).join('\n');
+  for (const [id, c] of ca) {
+    const o = cb.get(id), nm = 'Campaign: ' + (c.name || id);
+    if (!o) { out.push({ kind: 'added', name: nm }); continue; }
+    if ((o.name || '') !== (c.name || '')) out.push({ kind: 'renamed', name: nm, detail: o.name || id });
+    if (banner(o) !== banner(c)) out.push({ kind: 'html', name: nm, lines: lineDiff(lines(banner(o)), lines(banner(c))) });
+    const ro = crules(o), rc = crules(c);
+    const keys = [...new Set([...Object.keys(ro), ...Object.keys(rc)])].filter((k) => !same(ro[k], rc[k])).sort();
+    if (keys.length) out.push({ kind: 'rules', name: nm, detail: keys.join(', ') });
+  }
+  for (const [id, c] of cb) if (!ca.has(id)) out.push({ kind: 'removed', name: 'Campaign: ' + (c.name || id) });
+  if (!same(a.colors || [], b.colors || [])) out.push({ kind: 'options', name: '', detail: 'colors' });
   const oa = a.options || {}, ob = b.options || {};
   const opts = [...new Set([...Object.keys(oa), ...Object.keys(ob)])].filter((k) => !same(oa[k], ob[k])).sort();
   if (opts.length) out.push({ kind: 'options', name: '', detail: opts.join(', ') });

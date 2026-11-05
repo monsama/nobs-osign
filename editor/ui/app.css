@@ -943,7 +943,7 @@ table.users td.none { color: var(--warn, #b45309); font-style: italic; }
 .preview-head .help { margin-right: 4px; }
 .preview-head #pvSource { flex: 0 1 160px; min-width: 90px; }
 .preview-pane { container-type: inline-size; }
-.preview-head:not(:has(#pvAd:not([hidden]))) { flex-wrap: nowrap; }
+.preview-head:not(:has(.pv-ad:not([hidden]))) { flex-wrap: nowrap; }
 .preview-head > * { flex-shrink: 0; }
 .preview-head > #pvSource { flex-shrink: 1; }
 @container (max-width: 430px) { .preview-head { flex-wrap: wrap !important; } }
@@ -1202,7 +1202,7 @@ label.check.block > input[type=radio], label.check.block > input[type=checkbox] 
 .toolbar .tb-hist { margin-left: auto; }
 .toolbar .tb-break { flex-basis: 100%; height: 0; }
 .toolbar { row-gap: 4px; }
-/* Campaigns on a timeline (05-signature.js). */
+/* Campaigns on a timeline (09-campaigns.js). */
 .camp-tl { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
 .camp-axis { position: relative; height: 22px; margin-left: 200px; border-bottom: 1px solid var(--line); }
 .camp-tick { position: absolute; bottom: 3px; font-size: 11px; color: var(--muted); border-left: 1px solid var(--line); padding-left: 4px; white-space: nowrap; }
@@ -1312,3 +1312,52 @@ dialog.fit { width: min(1080px, 96vw); }
 #cellBar input[type=number] { width: 62px !important; }
 .toolbar .tb-align select { margin-left: 6px; }
 .imgbar .bar-done { margin-left: auto; }
+
+/* Campaigns: the timeline and a day beside it, the list and the form of the one selected. */
+.camp-top { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; margin: 8px 0 16px; }
+.camp-top h3, .camp-edit h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.camp-tl-box, .camp-day, .camp-edit, .camp-list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 12px 14px; }
+.camp-day label { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 13px; font-weight: normal; color: var(--muted); }
+.camp-day input { width: auto; }
+.camp-daylist { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.camp-daylist li { display: flex; justify-content: space-between; gap: 8px; }
+.camp-daylist li.off { color: var(--muted); }
+.camp-daylist li span { color: var(--muted); text-align: right; }
+.camp-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+.camp-layout:has(.camp-list .empty-state) { grid-template-columns: 1fr; }
+.camp-list { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
+.camp-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1px solid transparent; background: transparent; padding: 8px 10px; border-radius: var(--r-s); height: auto; }
+.camp-item small { color: var(--muted); font-weight: normal; }
+.camp-item:hover { background: var(--panel-2); }
+.camp-item.on { background: var(--accent-soft); border-color: var(--info-line, var(--accent)); }
+.camp-edit h3 { margin-top: 18px; }
+.camp-edit h3:first-of-type { margin-top: 14px; }
+.camp-when { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.camp-f { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-weight: normal; font-size: 13px; flex-wrap: wrap; }
+.camp-f > span:first-child { min-width: 64px; color: var(--muted); }
+.camp-f input:not([type]), .camp-f textarea { flex: 1; min-width: 200px; }
+.camp-f input[type=date] { width: auto; flex: 0 0 auto; }
+.camp-when .camp-f { flex: 0 1 auto; }
+.camp-when .camp-f:first-child { flex: 1 1 260px; }
+.camp-f select { flex: 0 0 auto; }
+.camp-f input.num { width: 90px !important; flex: 0 0 auto; }
+.camp-f select { width: auto; }
+.camp-f textarea { min-height: 52px; }
+.camp-tpl { margin: 6px 0 8px; }
+.camp-chk { display: flex; align-items: center; gap: 6px; margin: 8px 0; font-weight: normal; font-size: 13px; }
+.camp-chk input, .camp-where input, .camp-sigs input { width: auto; height: auto; }
+.camp-where { display: flex; gap: 18px; font-size: 13px; }
+.camp-where label, .camp-sigs label { font-weight: normal; display: inline-flex; align-items: center; gap: 4px; }
+.camp-sigs { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0 22px; font-size: 13px; }
+.camp-langs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.camp-langs .tab { border-radius: var(--r-s) var(--r-s) 0 0; }
+.camp-lang { display: inline-flex; align-items: center; }
+.camp-lang .x { min-width: 22px; padding: 0 4px; height: 22px; }
+.camp-addlang { width: auto; margin-left: 6px; height: 28px; padding: 0 26px 0 8px; }
+.camp-pv { display: block; width: 100%; height: 220px; border: 1px solid var(--line); border-radius: var(--r-s); background: #fff; margin-top: 10px; }
+.camp-btns { display: flex; gap: 8px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
+.camp-bar.banner { border-style: solid; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.camp-bar.banner.now { background: var(--ok-soft); }
+.camp-bar.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+#viewCampaigns .camp-tl { margin: 0; }
+@media (max-width: 1100px) { .camp-top, .camp-layout { grid-template-columns: 1fr; } }

@@ -17,6 +17,17 @@
     delete c.auth; delete c.assetBaseUrl;
     if (!Array.isArray(c.fields)) c.fields = d.fields;
     c.blocks = (Array.isArray(c.blocks) ? c.blocks : []).filter((b) => b && b.key).map((b) => ({ key: String(b.key), name: String(b.name || b.key), html: String(b.html || '') }));
+    c.colors = (Array.isArray(c.colors) ? c.colors : []).filter((x) => /^#[0-9a-f]{6}$/i.test(x)).slice(0, 16);
+    // Banner campaigns: as the editor reads them (compiled is made again when saving).
+    c.campaigns = (Array.isArray(c.campaigns) ? c.campaigns : []).filter((x) => x && x.id).map((x) => {
+      const n = Object.assign({ name: '', validFrom: '', validUntil: '', html: '', utm: false, signatures: [], position: 'below', newOnly: false, langs: {} }, x);
+      delete n.compiled;
+      n.audience = Object.assign({ departments: [], domains: [], groups: [], everyone: true }, x.audience || {});
+      // Made elsewhere (no form): its HTML as HTML of its own.
+      n.design = n.design && typeof n.design === 'object' ? n.design : { tpl: 'html', html: n.html };
+      n.langs = Object.fromEntries(Object.entries(n.langs || {}).map(([k, v]) => [k, { html: String((v && v.html) || ''), design: v && v.design ? v.design : { tpl: 'html', html: String((v && v.html) || '') } }]));
+      return n;
+    });
     c.signatures = (Array.isArray(c.signatures) ? c.signatures : []).map((s) => {
       const n = Object.assign(core.newSignature(s.id, s.name), s);
       // As written, with its building blocks as {{key}} (html is them put in, for Outlook).

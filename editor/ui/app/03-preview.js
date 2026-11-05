@@ -13,11 +13,25 @@
     return v;
   }
 
+  // The day the preview shows (today, or the one set with the calendar), and its campaign.
+  const pvNow = () => ($('pvDayOn').checked && $('pvDay').value ? new Date($('pvDay').value + 'T12:00:00') : new Date());
+  function pvCampaign(s) {
+    const src = $('pvSource').value, real = (src === 'ad' || src === 'entra') && S.adValues && S.adFrom === src;
+    return core.campaignFor(S.config, s, { now: pvNow(), kind: 'new', anyone: !real, values: real ? S.adValues : previewValues(), from: real ? S.adValues.mail || '' : '', groups: real ? S.adGroups || [] : null });
+  }
+  // A signature compiled for the preview, with the banner of the campaign running that day.
+  function pvCompiled(s) {
+    const c = pvCampaign(s), v = c ? (c.langs && c.langs[core.langOf(previewValues())]) || c : null;
+    return core.fillCampaign(core.compile(sanitize(sigFull(s)), scratchDoc), v ? core.compile(sanitize(v.html || ''), scratchDoc) : '', c && c.position);
+  }
+  $('pvDayOn').addEventListener('change', () => { $('pvDayBox').hidden = !$('pvDayOn').checked; if ($('pvDayOn').checked && !$('pvDay').value) $('pvDay').value = core.today(); if ($('pvDayOn').checked) $('pvDay').focus(); renderPreview(); });
+  $('pvDay').addEventListener('input', renderPreview);
+
   // The signature as the preview shows it (its values, the building blocks put in), with its images
   // inside (data: addresses), as one file: to try it in a mail program without publishing.
   async function exportHtml() {
     const s = sig(); if (!s) return null;
-    const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const html = core.render(pvCompiled(s), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
     const doc = new DOMParser().parseFromString('<!doctype html><body>' + html + '</body>', 'text/html');
     await Promise.all([...doc.querySelectorAll('img[src]')].map(async (img) => {
       // Only the signatures' own images and photos, and only what is an image.
@@ -55,7 +69,7 @@
     $('allLead').textContent = t('With the values: {0}. Change them in the preview (above the preview, left).', src.options[src.selectedIndex].textContent + (src.value === 'ad' || src.value === 'entra' ? ' ' + ($('pvUser').value || '') : ''));
     const values = previewValues();
     $('allList').replaceChildren(...(S.config.signatures.length ? S.config.signatures.map((s) => {
-      const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), values, { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+      const html = core.render(pvCompiled(s), values, { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
       // Its images from this server (signed in): same origin, still no scripts. A photo that is not
       // there goes, as in the preview.
       const frame = el('iframe', { tabindex: '-1', 'aria-hidden': 'true', sandbox: 'allow-same-origin' });
@@ -73,7 +87,7 @@
 
   function renderPreview() {
     const s = sig(); if (!s || S.view !== 'sig') return;
-    const html = core.render(core.compile(sanitize(sigFull(s)), scratchDoc), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const html = core.render(pvCompiled(s), previewValues(), { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
     const asText = $('pvText').checked;
     const greet = asText ? '' : '<p>' + core.escapeHtml(t('Hello,')) + '</p><p>' + core.escapeHtml(t('this is how the signature looks under a message.')) + '</p><p>&nbsp;</p>';
     const body = asText ? '<pre style="font:11pt/1.4 Consolas,monospace;white-space:pre-wrap">' + core.escapeHtml(core.htmlToText(html)) + '</pre>' : greet + html;
@@ -129,6 +143,13 @@
         (open ? t('This signature is open to them.') : t('This signature is NOT open to them.')) + ' ' +
         t('New mail: {0}, replies: {1}.', nm(core.pick(S.config, v, from, 'new', null, g)), nm(core.pick(S.config, v, from, 'reply', null, g)))));
     }
+    // The campaign shown: its banner, or why there is none (on another day: whether the signature is used then).
+    const camp = pvCampaign(s), loc = I18N.lang === 'de' ? 'de-CH' : 'en-GB', onDay = $('pvDayOn').checked && $('pvDay').value;
+    const dayText = onDay ? pvNow().toLocaleDateString(loc) : '';
+    if (onDay && core.isCampaign(s) && !core.inPeriod(s, pvNow())) notes.push(el('div', { class: 'warn' }, t('On {0} this signature is not used (its own days: {1}).', dayText, campaignText(s))));
+    if (camp) notes.push(el('div', null, (onDay ? t('On {0}: the banner of «{1}».', dayText, camp.name) : t('Banner of the campaign «{0}», running now.', camp.name)) + ' ',
+      el('a', { href: '#', onclick: (e) => { e.preventDefault(); campSel = camp.id; goView('campaigns'); } }, t('Open'))));
+    else if (onDay) notes.push(el('div', null, t('On {0}: no campaign banner.', dayText)));
     const none = $('pvSource').value.startsWith('without:') ? $('pvSource').value.slice(8) : '';
     if (none && used.includes(none)) notes.push(emptyFieldNote(s, none));
     $('pvNote').replaceChildren(...notes);
@@ -148,7 +169,7 @@
   }
   // What goes when one field is empty: the lines the preview loses, in words.
   function emptyFieldNote(s, key) {
-    const html = (vals) => core.render(core.compile(sanitize(sigFull(s)), scratchDoc), vals, { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const html = (vals) => core.render(pvCompiled(s), vals, { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
     const without = previewValues(), withIt = Object.assign({}, without, { [key]: (S.config.fields.find((f) => f.key === key) || {}).sample || 'x' });
     const lines = (h) => core.htmlToText(h).split('\n').map((l) => l.trim()).filter(Boolean);
     const a = lines(html(withIt)), b = lines(html(without));

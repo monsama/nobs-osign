@@ -437,3 +437,24 @@ test('signed in stays signed in across a restart (an update): the sessions kept 
     } finally { srv2.close(); }
   } finally { s.srv.close(); }
 });
+
+test('banner campaigns: refused when the banner is not as its HTML says, in the history\'s changes, and told to the webhook when one ends with none after it', async () => {
+  const s = await server();
+  try {
+    const admin = s.as(await s.signIn('admin', 'admin-pw'));
+    const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    const withCamp = (camp) => JSON.stringify(Object.assign(JSON.parse(cfg([{ id: 'a', name: 'A', html: '<p>a</p>' }])), { campaigns: [camp] }));
+    const camp = { id: 'xmas', name: 'Xmas', validFrom: day(-5), validUntil: day(2), html: '<p>Banner</p>', compiled: '<p>Banner</p>', signatures: [] };
+    assert.match((await admin('publish', { configJson: withCamp(Object.assign({}, camp, { compiled: '<p><a href="https://evil.example/">Banner</a></p>' })) })).error, /campaign "Xmas" is not as its HTML says/);
+    assert.match((await admin('publish', { configJson: withCamp(Object.assign({}, camp, { langs: { en: { html: '<p>EN</p>', compiled: '<p>other</p>' } } })) })).error, /campaign "Xmas"/);
+    assert.equal((await admin('publish', { configJson: withCamp(camp) })).ok, true);
+    const now = (await admin('notify/get')).now;
+    assert.ok(now.some((x) => /campaign "Xmas" ends in 2 day\(s\)/.test(x)), now.join('\n'));
+    await admin('publish', { configJson: withCamp(Object.assign({}, camp, { html: '<p>Banner 2</p>', compiled: '<p>Banner 2</p>', validUntil: day(30) })) });
+    assert.ok(!(await admin('notify/get')).now.some((x) => /Xmas/.test(x)), 'not ending soon any more');
+    const [latest] = (await admin('history/list')).versions;
+    const d = (await admin('history/diff', { id: latest.id })).changes;
+    assert.deepEqual(d.map((c) => c.kind + ' ' + c.name), ['html Campaign: Xmas', 'rules Campaign: Xmas']);
+    assert.equal(d[1].detail, 'validUntil');
+  } finally { s.srv.close(); }
+});

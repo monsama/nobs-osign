@@ -29,6 +29,9 @@ Tick each line; note what differs.
 - [ ] A signature limited to an AD group: only its members get it (groups synced to Entra ID).
 - [ ] A language variant: a user with `preferredLanguage` en-US gets it, one with de-CH the other.
 - [ ] A campaign with today's dates wins; one in the past does not.
+- [ ] A banner campaign running today: its banner where the signature has `{{campaign}}` (else
+      below), its image embedded, its link with `utm_campaign`; *new mail only*: not in a reply.
+- [ ] Classic Outlook: the banner also when the signature goes in by itself (pane opened once).
 
 ## Publishing
 

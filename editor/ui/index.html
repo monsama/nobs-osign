@@ -46,7 +46,6 @@
         <button id="btnImportOpen" type="button" hidden>Import templates</button>
         <button id="btnAll" class="icon-btn" title="All signatures side by side, with the preview's values" aria-label="All signatures"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button>
         <button id="btnReplace" class="icon-btn" title="Replace in all signatures (Ctrl+H)" aria-label="Replace in all signatures"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11M12 4l3 3-3 3"/><path d="M20 17H9M12 14l-3 3 3 3"/></svg></button>
-        <button id="btnCampaigns" class="icon-btn" title="Campaigns on a timeline" aria-label="Campaigns" hidden><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg></button>
         <button id="btnNew" class="icon-btn" title="New signature" aria-label="New signature">+</button>
       </span>
     </div>
@@ -59,6 +58,7 @@
     <ul class="nav-list">
       <li><a href="#" data-view="fields" class="nav">Fields <small>placeholders</small></a></li>
       <li><a href="#" data-view="blocks" class="nav">Building blocks <small>disclaimer, banner, address</small></a></li>
+      <li><a href="#" data-view="campaigns" class="nav">Campaigns <small>banners for some days</small></a></li>
       <li><a href="#" data-view="options" class="nav">Add-in <small>behaviour &amp; values</small></a></li>
       <li><a href="#" data-view="users" class="nav">Users <small>values from AD, to check</small></a></li>
       <li><a href="#" data-view="photos" class="nav">Photos <small>one per person</small></a></li>
@@ -179,12 +179,14 @@
               <option value="entra" hidden>Person from Entra ID…</option>
             </select>
             <button type="button" class="help" data-help="hPreview" aria-label="Help">?</button>
+            <span id="pvDayBox" class="pv-ad" hidden><input type="date" id="pvDay" aria-label="The day for the preview"></span>
             <span id="pvAd" class="pv-ad" hidden>
               <input id="pvUser" placeholder="name, user name or mail" autocomplete="off">
               <button id="pvLookup" class="ghost small">Look up</button>
             </span>
             <div class="spacer"></div>
             <span class="zoom" data-zoom="preview" role="group" aria-label="Zoom"><button type="button" class="ghost" data-z="-1" aria-label="Zoom out" title="Zoom out (Ctrl + mouse wheel)">−</button><button type="button" class="ghost zpct" data-z="0" title="Back to 80 %">80 %</button><button type="button" class="ghost" data-z="1" aria-label="Zoom in" title="Zoom in (Ctrl + mouse wheel)">+</button></span>
+            <label class="tgl" title="On another day: the campaigns as they are then"><input type="checkbox" id="pvDayOn"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="sr-only">On another day</span></label>
             <label class="tgl" title="As narrow as a phone (360 pixels): to see where the lines break"><input type="checkbox" id="pvPhone"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg><span class="sr-only">Phone width</span></label>
             <label class="tgl" title="Plain text"><input type="checkbox" id="pvText"><span aria-hidden="true">T</span><span class="sr-only">Plain text</span></label>
             <label class="tgl" title="Dark mode: roughly as Outlook's dark mode shows it to recipients who use it"><input type="checkbox" id="pvDark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span class="sr-only">Dark mode</span></label>
@@ -234,6 +236,22 @@
         Fields (<code>@@mail</code>) work in it too.</p>
       <div id="blockList" class="block-list"></div>
       <div class="field-actions"><button type="button" id="btnAddBlock" class="ghost">+ Add building block</button></div>
+    </section>
+
+    <section id="viewCampaigns" class="view" hidden>
+      <h1>Campaigns</h1>
+      <p class="lead" data-th="campaignsLead">A banner for some days (the holidays, a fair, a webinar), put into the signatures there are: no copy of a
+        signature, so a change to them needs no second one. Where it goes in a signature: <code>{{campaign}}</code>
+        (<i>+ Insert field → Campaign banner</i>); without it, below the signature. It goes out with the next publish.</p>
+      <div class="camp-top">
+        <div class="camp-tl-box"><h3>Timeline</h3><div id="campTimeline" class="camp-tl"></div></div>
+        <div class="camp-day"><h3>On a day</h3><label>What the signatures get on <input type="date" id="campDay"></label><ul id="campDayList" class="camp-daylist"></ul></div>
+      </div>
+      <div class="camp-layout">
+        <div id="campList" class="camp-list"></div>
+        <div id="campEdit" class="camp-edit" hidden></div>
+      </div>
+      <div class="field-actions"><button type="button" id="btnAddCampaign" class="ghost">+ New campaign</button></div>
     </section>
 
     <!-- add-in options -->
@@ -326,6 +344,7 @@
   <span id="stTarget"></span>
   <span id="stSecret" class="sb-pill warn" hidden></span>
   <span id="stTls" class="sb-pill warn" hidden></span>
+  <button type="button" id="stCampaign" class="sb-pill warn" hidden title="Open Campaigns"></button>
   <button type="button" id="stAddin" class="sb-action" hidden><svg class="sb-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><span id="stAddinText"></span></button>
   <button type="button" id="stApproval" class="sb-pill warn" hidden></button>
   <a id="stUpdate" class="sb-pill info" target="_blank" rel="noopener noreferrer" hidden></a>
@@ -388,15 +407,6 @@
     <p id="ntOk" class="where"></p>
     <p id="ntErr" class="err"></p>
     <div class="dlg-foot"><button type="button" id="ntOff" class="ghost danger">Turn off</button><span class="spacer"></span><button type="button" id="ntTest">Send a test</button><button type="button" id="ntSave" class="primary">Save</button><button value="cancel" class="ghost">Close</button></div>
-  </form>
-</dialog>
-
-<dialog id="dlgCampaigns" class="fit">
-  <form method="dialog" class="dlg wide">
-    <h2>Campaigns</h2>
-    <p class="lead" data-th="campLead">Each campaign's days, with today marked. Two for the same people at the same time are marked: check which one they should get. A click opens it.</p>
-    <div id="campTimeline" class="camp-tl"></div>
-    <div class="dlg-foot"><button value="cancel" class="primary">Close</button></div>
   </form>
 </dialog>
 

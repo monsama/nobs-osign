@@ -8,7 +8,7 @@
   // signature (sharp on high-resolution screens), uploaded as a new file and put in their place;
   // the old file stays until removed. Without a width in the signature an image stays as it is.
   async function shrinkUsed() {
-    const all = S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''));
+    const all = S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''), (S.config.campaigns || []).flatMap((c) => [c.html || ''].concat(Object.values(c.langs || {}).map((v) => v.html || ''))));
     const shown = new Map();
     for (const h of all) for (const m of h.matchAll(/<img\b[^>]*>/gi)) {
       const src = (/\ssrc\s*=\s*["']?assets\/([^"'\s>]+)/i.exec(m[0]) || [])[1], w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]);
@@ -27,6 +27,8 @@
           const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
           S.config.signatures.forEach((s) => { s.html = (s.html || '').replace(re, 'assets/' + r.name); });
           (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, 'assets/' + r.name); });
+          // A campaign's banner is made from its form: the image's name there.
+          (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {})).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
         }
         S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]);
         n++; from += f.size; to += small.size;
@@ -167,7 +169,7 @@
     if (!$('setWizRow').hidden) items.push({ kind: t('Go to'), label: t('Setup assistant'), go: () => wizOpen(0) });
     items.push({ kind: t('Go to'), label: t('Load published'), go: () => $('btnLoad').click() });
     items.push({ kind: t('Go to'), label: t('Replace in all signatures'), go: () => openReplace() });
-    if (S.config.signatures.some((s) => core.isCampaign(s))) items.push({ kind: t('Go to'), label: t('Campaigns'), go: () => $('btnCampaigns').click() });
+    items.push({ kind: t('Go to'), label: t('Campaigns'), go: () => goView('campaigns') });
     S.config.fields.forEach((f) => items.push({ kind: t('Field'), label: (f.label || f.key) + (f.label && f.label !== f.key ? ' · @@' + f.key : ''), go: () => { view('fields')(); setTimeout(() => {
       const row = [...document.querySelectorAll('#viewFields tr')].find((tr) => [...tr.querySelectorAll('input')].some((i) => i.value === f.key));
       if (row) { row.scrollIntoView({ block: 'center' }); const i = row.querySelector('input'); if (i) i.focus(); }

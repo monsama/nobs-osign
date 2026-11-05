@@ -19,7 +19,8 @@
     'span.osf.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}' +
     // A building block: its name in a band of its own, as wide as the text.
     'span.osb{display:inline-block;padding:2px .6em;margin:1px 0;border-radius:4px;background:#eaf1fb;color:#1d4ed8;font:600 9pt Arial,sans-serif;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #b6cdf5}' +
-    'span.osb::before{content:"\\25A4  "}span.osb.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}';
+    'span.osb::before{content:"\\25A4  "}span.osb.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}' +
+    'span.osb.campaign{background:#fff6e5;color:#8a5300;box-shadow:inset 0 0 0 1px #f1c27d}span.osb.campaign::before{content:"\\25AD  "}';
 
   // The design editor: a frame of its own, editable, with the app's styles for fields and building blocks.
   function initDesign() {
@@ -72,8 +73,15 @@
   }
   // A building block shown in the design as a chip ({{key}} under it).
   function blockChip(doc, key) {
-    const b = S.config.blocks.find((x) => x.key.toLowerCase() === key.toLowerCase());
     const c = doc.createElement('span');
+    // The place of the campaign banners: no building block, its own chip.
+    if (key.toLowerCase() === 'campaign') {
+      c.className = 'osb campaign'; c.dataset.b = 'campaign'; c.contentEditable = 'false';
+      c.title = '{{campaign}} - ' + t('the banner of a campaign running then goes here (Campaigns); none running: nothing');
+      c.textContent = t('Campaign banner');
+      return c;
+    }
+    const b = S.config.blocks.find((x) => x.key.toLowerCase() === key.toLowerCase());
     c.className = 'osb' + (b ? '' : ' unknown');
     c.dataset.b = b ? b.key : key;
     c.contentEditable = 'false';
@@ -291,10 +299,13 @@
       sel.append(g);
     }
     // Building blocks: not into a building block (one inside another is not put in).
-    if (S.config.blocks.length && !S.blockEdit) {
+    // The place of the campaign banners too (Campaigns), once in a signature.
+    if (!S.blockEdit) {
       const g = el('optgroup', { label: t('Building blocks') });
       S.config.blocks.forEach((b) => g.append(el('option', { value: 'block:' + b.key }, b.name)));
-      sel.append(g);
+      const s = sig();
+      if (!s || !core.hasSlot(s.html)) g.append(el('option', { value: 'block:campaign' }, t('Campaign banner')));
+      if (g.children.length) sel.append(g);
     }
   }
 
@@ -439,7 +450,8 @@
     i.src = '/' + src;
   }
   async function deleteAsset(name) {
-    const used = S.config.signatures.filter((s) => sigFull(s).includes('assets/' + name)).map((s) => s.name);
+    const used = S.config.signatures.filter((s) => sigFull(s).includes('assets/' + name)).map((s) => s.name)
+      .concat((S.config.campaigns || []).filter((c) => [c.html].concat(Object.values(c.langs || {}).map((v) => v.html)).some((h) => String(h || '').includes('assets/' + name))).map((c) => t('campaign «{0}»', c.name)));
     if (used.length && !(await ask(t('{0} is used in: {1}. Remove it anyway?', name, used.join(', ')), t('Remove'), true))) return;
     try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = t(e.message); }
   }

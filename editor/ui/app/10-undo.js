@@ -60,6 +60,8 @@
     if (yf.length < xf.length) return t('field «{0}» removed', (xf.find((f) => !yf.some((g) => g.key === f.key)) || {}).label || '');
     if (JSON.stringify(xf) !== JSON.stringify(yf)) return t('fields');
     if (JSON.stringify(x.blocks || []) !== JSON.stringify(y.blocks || [])) return t('building blocks');
+    if (JSON.stringify(x.campaigns || []) !== JSON.stringify(y.campaigns || [])) return t('campaigns');
+    if (JSON.stringify(x.colors || []) !== JSON.stringify(y.colors || [])) return t('house colours');
     return t('options of the add-in');
   }
   // ↶ and ↷: on or off, their tooltip naming the step.

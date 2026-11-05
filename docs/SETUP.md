@@ -256,9 +256,20 @@ too (step 7).
    minute or two later. Every publish is kept under **History**, with its images, the last 50:
    *Compare* shows what changed (the HTML line by line, who gets it, fields and options), against
    the version before or the draft; *Load into the draft* brings an earlier version back.
-5. **Campaigns**: under *When*, a signature gets its first and last day (e.g. December, for the
-   holidays). On those days it is used instead of the usual default, for whoever it is open to;
-   before and after, the usual one again, by itself. CI-Sign's text blocks with days
+5. **Campaigns** (sidebar → *Campaigns*): a banner for some days, put into the signatures there
+   are. *+ New campaign*, its days, then the banner: *Image with link*, *Text with button*, *Image
+   and text* or *HTML of your own*, with the house colours; *+ Language* for a banner in English,
+   French or Italian (for those with that `preferredLanguage`). *Where*: all signatures or some;
+   a signature with `{{campaign}}` (*+ Insert field → Campaign banner*, new signatures have it) gets
+   it there, the others below or above. *Who*: groups or departments, else everyone. *Link
+   tracking* adds `utm_source=email&utm_medium=signature&utm_campaign=<name>`. *On a day* shows
+   what each signature gets on that day; the calendar in the preview shows a signature on it.
+   One ending in three days with none after it is said in the status bar, and to the webhook
+   (Settings → Server → Notifications). *Copy for next year* makes the next one.
+
+   A signature can also be a campaign of its own: under *When*, its first and last day. On those
+   days it is used instead of the usual default, for whoever it is open to; before and after, the
+   usual one again, by itself. CI-Sign's text blocks with days
    (`{dats …}{date …}` in `__intern.htm`) become such campaigns when imported; text blocks
    without days go straight into the template.
 6. **Four eyes** (Settings → Server, the local `admin`): with *Four eyes* on, *Publish…* asks for approval. A second person signed in with AD sees what would change
