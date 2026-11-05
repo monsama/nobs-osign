@@ -1,0 +1,58 @@
+# Changelog
+
+What changed, in plain words, for whoever runs NOBS OSign. Update with
+`sudo ./scripts/update.sh <version>`. When a version says **add-in changed**, make the add-in files
+again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
+when it says so. The release notes on GitHub say the same for each version.
+
+## 0.9.89
+- Housekeeping: the stylesheet tidied (rules for one selector merged, the cascade kept, checked
+  screen by screen in light and dark), unused rules, texts and code removed.
+- Campaigns: the form split into its parts; typing redraws once it pauses, not at every key.
+- The *Add-in* page in cards, like the campaigns.
+- This changelog, and *Known limits* in the README.
+
+## 0.9.88
+- The campaign form laid out anew: a head with the name and its state, cards for when, banner,
+  where and who, the preview beside. Fixed: a stray "null", and the page stretching below the
+  status bar.
+- Classic Outlook's room measured as the add-in makes the images; what takes it is named;
+  *Save PNG photos as JPEG* for PNGs without transparency.
+
+## 0.9.87 (add-in changed)
+- **The campaign role**: an AD group (Settings → Server → Active Directory → Campaign group) whose
+  members make and publish the campaigns only. The server keeps it so.
+- *On a day → For a person*: one person's signatures and banners on a day.
+- Publishing checks banners: alt text, dark mode, size.
+- `docs/CAMPAIGNS.md`, a short guide for marketing.
+- Image names that are paths once decoded are left out.
+
+## 0.9.86 (add-in changed)
+- Campaigns checked before publishing; banners in turns, on some weekdays; a new one from an
+  earlier one; the ones over folded away.
+- Classic Outlook's 30 KB said in the preview and before publishing; unused images removed.
+- Fields and building blocks dragged in the design; four column layouts.
+- The pane says when a banner goes in with a signature.
+
+## 0.9.85 (add-in changed)
+- **Banner campaigns**: a banner for some days put into the signatures there are (in
+  `{{campaign}}` or below), made without HTML, in other languages, for some signatures or groups,
+  in new mail only, with link tracking. A timeline, the preview on a day, a note when one ends with
+  none after it (status bar and webhook), *Copy for next year*.
+
+## 0.9.84 (add-in changed)
+- House colours, spacing, a bar for a link and for a table cell, an image's corners and place.
+- The preview with one field empty, and at phone width.
+
+## 0.9.83
+- Images sized by dragging their corner; *Original size*.
+
+## 0.9.82
+- A full security check (who may call what, paths, headers); the draft versioned (a save over a
+  newer one asks).
+
+## 0.9.67 - 0.9.81
+- Full-width pages, tooltips, the setup assistant's steps to jump between, notifications to a
+  webhook, replace in all signatures, the phone number format, the add-in in French and Italian,
+  undo for the whole draft (↶ ↷), ⟳ without reloading, sessions list, CSV of users and the audit
+  log, and many smaller fixes.

@@ -243,6 +243,25 @@ Windows PowerShell 5.1.
 | `addin/` | The Outlook add-in: event handler, pane, manifest template, build (`build.mjs`, `fill.mjs`) |
 | `tests/` | Engine, add-in runtime, server API (with stand-ins for AD, SharePoint, Microsoft and Cloudflare), the setup script, editor and pane in a browser |
 
+## Known limits
+
+- **Classic Outlook (Windows)** puts signatures in by itself from a copy the pane keeps in the
+  mailbox, when Outlook refuses the add-in the sign-in there: about 30 KB for all of it (Microsoft's
+  limit for an add-in's settings). Larger, it goes in without its images; *Insert* in the pane puts
+  in everything. The editor says how much a signature takes.
+- **Rounded corners** and a round photo do not show in classic Outlook for Windows (Word draws the
+  mail); there the image stays square.
+- **Dark mode** is Outlook's own: the preview shows it roughly. A dark logo on a transparent
+  background is hard to see there (the publish check says so).
+- **Browsers**: tested in Chromium (Edge, Chrome). Firefox and Safari should work; dragging in the
+  design uses another method there and has not been tried.
+- **A signature limited to AD groups** needs the groups synced to Entra ID (with values from Graph)
+  or the users written from AD (Users).
+- **Photos per person** are files in the `photos` folder, by name; Entra ID's own profile photos are
+  not read.
+
+What changed from version to version: [CHANGELOG.md](CHANGELOG.md).
+
 ## Releases
 
 Each version is a tag (`v0.9.0`) with the server's install files `nobs-osign-server-0.9.0.tar.gz`

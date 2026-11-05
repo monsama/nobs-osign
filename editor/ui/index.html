@@ -261,19 +261,23 @@
     <!-- add-in options -->
     <section id="viewOptions" class="view" hidden>
       <h1>Add-in</h1>
-      <h2>Behaviour</h2>
+      <div class="sect-cards">
+      <section class="sect-card"><h3>Behaviour</h3>
       <label class="check block"><input type="checkbox" id="optDisable"> Switch off Outlook's own signature in the messages the add-in signs, so no mail gets two <button type="button" class="help" data-help="hDisable" aria-label="Help">?</button></label>
       <label class="check block"><input type="checkbox" id="optChoice"> Users may choose which signature they use for new mail and for replies (in the add-in's pane) <button type="button" class="help" data-help="hChoice" aria-label="Help">?</button></label>
       <label class="check block"><input type="checkbox" id="optOwn"> Users may make a signature of their own from a company one, all of it theirs to change (in the add-in's pane) <button type="button" class="help" data-help="hOwn" aria-label="Help">?</button></label>
       <label class="check block"><input type="checkbox" id="optMeetings"> Sign new meetings too</label>
       <label class="check block"><input type="checkbox" id="optNoProfile"> Insert a signature even when the user's details could not be read (the fields stay empty) <button type="button" class="help" data-help="hNoProfile" aria-label="Help">?</button></label>
-      <h2>Where the users' values come from <button type="button" class="help" data-help="hVsrc" aria-label="Help">?</button></h2>
+      </section>
+      <section class="sect-card"><h3>Where the users' values come from <button type="button" class="help" data-help="hVsrc" aria-label="Help">?</button></h3>
       <fieldset class="sources">
         <label class="check block"><input type="radio" name="vsrc" value="graph"> <span data-th="vsrcGraph"><b>Entra ID</b> (Microsoft Graph): each field by its Graph source.</span></label>
         <label class="check block"><input type="radio" name="vsrc" value="mixed"> <span data-th="vsrcMixed"><b>Entra ID and Active Directory</b>: fields with a Graph source from Entra ID, the others (e.g. description, homePhone, info) from AD. Groups from AD.</span></label>
         <label class="check block"><input type="radio" name="vsrc" value="ad"> <span data-th="vsrcAd"><b>Active Directory</b>: every field by its AD attribute. Groups from AD.</span></label>
       </fieldset>
       <p class="lead" id="vsrcServerNote" hidden></p>
+      </section>
+      </div>
     </section>
 
     <!-- users from AD -->

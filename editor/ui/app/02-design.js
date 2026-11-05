@@ -60,7 +60,6 @@
   // stay as they are.
   // A field as people read it: its name (Vorname), or @@key for what is not a field.
   const fieldName = (k) => { const f = S.config.fields.find((x) => x.key === k); return f ? (f.label || f.key) : '@@' + k; };
-  const FIELD_RE = /@@([A-Za-z0-9_]+)/g;
   // A field shown in the design as a chip (@@key under it).
   function fieldChip(doc, key) {
     const f = S.config.fields.find((x) => x.key === key);
