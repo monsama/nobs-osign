@@ -152,8 +152,13 @@
     else if (onDay) notes.push(el('div', null, t('On {0}: no campaign banner.', dayText)));
     // Classic Outlook: what it keeps in the mailbox, when it gets tight.
     if (s.defaultNew || s.defaultReply) {
-      const kb = classicKb(s);
-      if (kb > CLASSIC_KB) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB the mailbox keeps for it. There it goes in without its images (or with Insert in the pane). Smaller images help.', kb, CLASSIC_KB)));
+      const cp = classicParts(s), kb = cp.kb;
+      // What takes the room, and what helps: the images shown smaller (the add-in makes each as
+      // small as it is shown already), a JPEG for a photo, fewer images.
+      const top = cp.images.filter((x) => x.bytes > 2048).slice(0, 3).map((x) => x.name + ' ~' + Math.round(x.bytes / 1024) + ' KB').join(', ');
+      if (kb > CLASSIC_KB) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB the mailbox keeps for it. When classic Outlook refuses the add-in the sign-in where it puts signatures in by itself, it goes in from that copy, without its images (Insert in the pane puts in everything).', kb, CLASSIC_KB),
+        top ? ' ' + t('Most of it: {0}.', top) : '', ' ', t('The add-in already makes each image as small as it is shown: what helps is a smaller width, a JPEG instead of a PNG for photos, or fewer images.'), ' ',
+        cp.images.some((x) => /\.png$/i.test(x.name)) ? el('a', { href: '#', onclick: (e) => { e.preventDefault(); classicHelp(s); } }, t('Save PNG photos as JPEG')) : null));
       else if (kb > CLASSIC_KB * 0.7) notes.push(el('div', null, t('Classic Outlook: about {0} of {1} KB, nearly full.', kb, CLASSIC_KB)));
     }
     const none = $('pvSource').value.startsWith('without:') ? $('pvSource').value.slice(8) : '';

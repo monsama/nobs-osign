@@ -1391,3 +1391,67 @@ body.role-campaigns #btnSettings, body.role-campaigns #btnWizard, body.role-camp
 .camp-daylist li.who { border-bottom: 1px solid var(--line); padding-bottom: 4px; }
 .camp-daylist li .k { color: var(--muted); }
 body.role-campaigns .side-sect { border-top: 0 !important; margin-top: 0 !important; padding-top: 0 !important; }
+
+/* Campaigns, the form: a head with the name and its state, cards on the left, the preview beside. */
+.camp-layout { grid-template-columns: 250px minmax(0, 1fr); }
+.camp-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.camp-list-head { display: flex; gap: 6px; align-items: center; }
+.camp-list-head select { flex: 1; min-width: 0; height: 30px; padding: 0 26px 0 8px; font-size: 12.5px; margin: 0 !important; }
+#viewCampaigns .camp-edit { background: transparent; border: 0; padding: 0; }
+.camp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.camp-head .camp-title { flex: 0 1 420px; font-size: 18px; font-weight: 600; height: 38px; padding: 0 10px; background: transparent; border-color: transparent; }
+.camp-head .camp-title:hover, .camp-head .camp-title:focus { background: var(--panel); border-color: var(--line); }
+.camp-state { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.camp-state.now { color: var(--ok, #16a34a); border-color: var(--ok-line, #86efac); background: var(--ok-soft, transparent); }
+.camp-state.soon { color: var(--accent); border-color: var(--info-line, var(--accent)); background: var(--info-soft, transparent); }
+.camp-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 16px; align-items: start; }
+.camp-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.camp-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px 16px; }
+.camp-card > h3, .camp-side > h3 { margin: 0 0 12px !important; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.camp-side { position: sticky; top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px 16px; }
+.camp-side .camp-pv { height: 300px; margin: 0 0 8px; }
+.camp-side .hint { margin: 0; }
+.camp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.camp-stack { display: flex; flex-direction: column; gap: 5px; font-weight: normal; font-size: 13px; min-width: 0; }
+.camp-stack > span:first-child { color: var(--muted); font-size: 12.5px; }
+.camp-stack input { width: 100%; }
+.camp-days { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--btn); font-size: 12.5px; font-weight: 500; cursor: pointer; color: var(--muted); }
+.chip input { position: absolute; opacity: 0; pointer-events: none; width: 0 !important; }
+.chip:has(input:checked) { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--text); }
+.chip:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+.camp-variant { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; min-height: 30px; flex-wrap: wrap; }
+.camp-lbl { flex: 0 0 90px; color: var(--muted); font-size: 12.5px; }
+.camp-variant .camp-langs { border: 0; margin: 0; gap: 6px; }
+.camp-variant .camp-langs .tab { height: 28px; padding: 0 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; background: var(--btn); }
+.camp-variant .camp-langs .tab.active { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.camp-variant .camp-lang { gap: 0; }
+.camp-variant .camp-lang .x { margin-left: -4px; border-radius: 50%; min-width: 20px; width: 20px; height: 20px; padding: 0; }
+.camp-variant .camp-addlang { margin: 0; height: 28px; }
+.camp-variant .seg { margin: 0; }
+.camp-fields { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 12px; }
+.camp-fields .camp-f { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 10px; margin: 0 0 10px; }
+.camp-fields .camp-f > span:first-child { min-width: 0; color: var(--muted); font-size: 12.5px; }
+.camp-fields .camp-f > :not(span:first-child) { grid-column: 2; }
+.camp-fields .camp-f:has(> :nth-child(3)) { grid-template-columns: 90px auto auto 1fr; }
+.camp-fields .camp-f:has(> :nth-child(3)) > :not(span:first-child) { grid-column: auto; }
+.camp-fields .camp-f input.num { width: 90px !important; }
+.camp-fields .camp-chk { margin: 2px 0 0 100px; }
+.camp-where { margin: 0 0 10px; }
+.camp-where label { gap: 6px; }
+.camp-sigs { margin: 0 0 10px; gap: 6px; }
+.camp-slot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-radius: var(--r-s); background: var(--warn-soft, var(--panel-2)); border: 1px solid var(--warn-line, var(--line)); font-size: 12.5px; margin-bottom: 10px; }
+.camp-slot.ok { background: var(--panel-2); border-color: var(--line); color: var(--muted); }
+.camp-slot details { flex: 1 1 100%; }
+.camp-slot summary { cursor: pointer; font-weight: 600; }
+.camp-slot details .hint { margin: 6px 0 0; }
+.camp-slot-pos { display: inline-flex; align-items: center; gap: 8px; }
+.camp-slot-pos select { width: auto; height: 28px; padding: 0 26px 0 8px; }
+.camp-card .camp-chk { margin: 4px 0 0; gap: 8px; }
+.camp-card > .hint { margin: 0; }
+@media (max-width: 1300px) { .camp-body { grid-template-columns: 1fr; } .camp-side { position: static; } }
+@media (max-width: 700px) { .camp-layout, .camp-grid2 { grid-template-columns: 1fr; } .camp-fields .camp-f, .camp-fields .camp-f:has(> :nth-child(3)) { grid-template-columns: 1fr; } .camp-fields .camp-f > * { grid-column: auto !important; } .camp-fields .camp-chk { margin-left: 0; } }
+.camp-top { align-items: start; }
+.camp-fields .camp-f .unit { color: var(--muted); font-size: 12.5px; }
+/* The hidden inputs of chips and toggles stay inside them (else they stretch the page). */
+.chip, .seg label { position: relative; }

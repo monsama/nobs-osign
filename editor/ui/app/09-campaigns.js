@@ -101,12 +101,12 @@
     const until = input({ type: 'date', 'aria-label': t('Until') }, () => c.validUntil, (v) => { c.validUntil = v; campList(); });
     // Only on some weekdays (none ticked: every day).
     const dayName = (n) => new Date(2026, 0, 4 + n).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB', { weekday: 'short' });
-    const days = el('div', { class: 'camp-days', role: 'group', 'aria-label': t('Only on these weekdays') }, el('span', null, t('Weekdays')),
+    const days = el('div', { class: 'camp-days', role: 'group', 'aria-label': t('Only on these weekdays') },
       ...WEEKDAYS.map((n) => {
         const b = el('input', { type: 'checkbox', 'aria-label': dayName(n) }); b.checked = (c.days || []).includes(n);
         b.addEventListener('change', () => { const set = new Set(c.days || []); if (b.checked) set.add(n); else set.delete(n); c.days = WEEKDAYS.filter((x) => set.has(x)); if (!c.days.length) delete c.days; campChanged(); });
-        return el('label', null, b, dayName(n));
-      }), el('small', { class: 'hint' }, t('none ticked: every day')));
+        return el('label', { class: 'chip' }, b, dayName(n));
+      }));
 
     // The banner: its kind, then its parts.
     const tplNames = { image: t('Image with link'), text: t('Text with button'), imagetext: t('Image and text'), html: t('HTML of your own') };
@@ -135,7 +135,7 @@
         } catch (e) { toast(t(e.message), true); }
       });
       parts.push(row(t('Image'), pick, el('button', { type: 'button', class: 'ghost small', onclick: () => up.click() }, t('Upload…')), up),
-        row(t('Width'), input({ type: 'number', min: 40, max: 800, class: 'num' }, () => d.width, (v) => { d.width = v; }), ' px'),
+        row(t('Width'), input({ type: 'number', min: 40, max: 800, class: 'num' }, () => d.width, (v) => { d.width = v; }), el('span', { class: 'unit' }, 'px')),
         row(t('Alt text'), input({ placeholder: t('what the image says, for those who see no images') }, () => d.alt, (v) => { d.alt = v; })));
     }
     if (d.tpl === 'text' || d.tpl === 'imagetext') {
@@ -191,7 +191,7 @@
     const sigBoxes = targets.length ? el('div', { class: 'camp-sigs' }, sigs.map((s) => {
       const b = el('input', { type: 'checkbox' }); b.checked = targets.includes(s.id);
       b.addEventListener('change', () => { c.signatures = b.checked ? targets.concat([s.id]) : targets.filter((x) => x !== s.id); if (!c.signatures.length) c.signatures = [s.id]; campChanged(); campEditor(); });
-      return el('label', null, b, ' ', s.name || t('(no name)'));
+      return el('label', { class: 'chip' }, b, s.name || t('(no name)'));
     })) : null;
     const meant = targets.length ? sigs.filter((s) => targets.includes(s.id)) : sigs;
     const noSlot = meant.filter((s) => !core.hasSlot(s.html));
@@ -199,13 +199,20 @@
     pos.value = c.position === 'above' ? 'above' : 'below';
     pos.addEventListener('change', () => { c.position = pos.value; campChanged(); });
     const role = !!(S.info && S.info.user && S.info.user.campaigns);
-    const slotNote = noSlot.length ? el('p', { class: 'hint' }, t('Without the place {{campaign}}: {0}. There the banner goes', noSlot.map((s) => s.name).join(', ')), ' ', pos, '. ',
-      role ? t('An editor can put the place into them.') :
+    // Where in them: in the place {{campaign}}; the ones without it, below or above (said in one
+    // line, the names folded).
+    const addPlace = role ? el('small', { class: 'hint' }, t('An editor can put the place into them.')) :
       el('button', { type: 'button', class: 'ghost small', title: t('Puts {{campaign}} at the end of these signatures: then you can move it where it should go'), onclick: () => {
         noSlot.forEach((s) => { s.html = String(s.html || '').replace(/\s*$/, '') + '\n<div>{{campaign}}</div>'; });
         changed(); campEditor(); campPreview();
         toast(t('The place {{campaign}} is in {0} now: move it in the design where the banner should go.', noSlot.map((s) => s.name).join(', ')));
-      } }, t('Add the place to them'))) : el('p', { class: 'hint' }, t('Each of them has the place {{campaign}}: the banner goes there.'));
+      } }, t('Add the place to them'));
+    const slotNote = noSlot.length
+      ? el('div', { class: 'camp-slot' },
+        el('details', null, el('summary', null, noSlot.length === meant.length ? t('None of them has the place {{campaign}}') : t('{0} of {1} without the place {{campaign}}', noSlot.length, meant.length)),
+          el('p', { class: 'hint' }, noSlot.map((x) => x.name).join(', '))),
+        el('span', { class: 'camp-slot-pos' }, t('There the banner goes'), pos), addPlace)
+      : el('div', { class: 'camp-slot ok' }, '✓ ' + t('Each of them has the place {{campaign}}: the banner goes there.'));
 
     // Who: everyone, or groups and departments (as with signatures).
     const a = c.audience;
@@ -223,17 +230,32 @@
       toast(t('Campaign {0} removed.', c.name), false, { label: t('Undo'), run: () => { campaigns().splice(Math.min(i, campaigns().length), 0, c); campSel = c.id; changed({ list: false }); renderCampaignsView(); } });
     } }, t('Remove'));
 
+    const sect = (title, ...kids) => el('section', { class: 'camp-card' }, el('h3', null, title), ...kids.filter((k) => k !== null && k !== undefined));
+    const stack = (label, ...kids) => el('label', { class: 'camp-stack' }, el('span', null, label), ...kids);
+    const state = core.inPeriod(c) && (!c.days || !c.days.length || c.days.includes(new Date().getDay())) ? ['now', t('running')] : isOver(c) ? ['over', t('over')] : ['soon', t('planned')];
+    name.classList.add('camp-title'); name.placeholder = t('Name of the campaign');
     box.replaceChildren(
-      el('div', { class: 'camp-when' }, row(t('Name'), name), row(t('From'), from), row(t('Until'), until)), days,
-      el('h3', null, t('Banner')), langTabs, altTabs, tpls, ...parts,
-      el('iframe', { id: 'campPv', class: 'camp-pv', sandbox: 'allow-same-origin', title: t('Preview'), tabindex: '-1' }),
-      el('h3', null, t('Where')),
-      el('div', { class: 'camp-where' }, el('label', null, all, ' ', t('In all signatures')), el('label', null, some, ' ', t('Only in these:'))), sigBoxes, slotNote,
-      el('label', { class: 'camp-chk' }, input({ type: 'checkbox' }, () => c.newOnly, (v) => { c.newOnly = v; }), ' ', t('Only in new mail, not in replies and forwards')),
-      el('h3', null, t('Who')),
-      el('div', { class: 'camp-when' }, row(t('Groups'), list('groups')), row(t('Departments'), list('departments'))),
-      el('p', { class: 'hint' }, t('Both empty: everyone who gets one of these signatures.')),
-      el('div', { class: 'camp-btns' }, copy, el('span', { class: 'spacer' }), del));
+      el('div', { class: 'camp-head' }, name, el('span', { class: 'camp-state ' + state[0] }, state[1]), el('span', { class: 'spacer' }), copy, del),
+      el('div', { class: 'camp-body' },
+        el('div', { class: 'camp-form' },
+          sect(t('When'),
+            el('div', { class: 'camp-grid2' }, stack(t('From'), from), stack(t('Until'), until)),
+            el('div', { class: 'camp-stack' }, el('span', null, t('Weekdays'), ' ', el('small', { class: 'hint' }, '(' + t('none ticked: every day') + ')')), days)),
+          sect(t('Banner'),
+            el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Language')), langTabs),
+            altTabs ? el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('In turns')), altTabs) : null,
+            el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Kind')), tpls),
+            el('div', { class: 'camp-fields' }, ...parts)),
+          sect(t('Where'),
+            el('div', { class: 'seg camp-where', role: 'radiogroup', 'aria-label': t('Where') }, el('label', null, all, t('In all signatures')), el('label', null, some, t('Only in these'))),
+            sigBoxes, slotNote,
+            el('label', { class: 'camp-chk' }, input({ type: 'checkbox' }, () => c.newOnly, (v) => { c.newOnly = v; }), t('Only in new mail, not in replies and forwards'))),
+          sect(t('Who'),
+            el('div', { class: 'camp-grid2' }, stack(t('Groups'), list('groups')), stack(t('Departments'), list('departments'))),
+            el('p', { class: 'hint' }, t('Both empty: everyone who gets one of these signatures.')))),
+        el('aside', { class: 'camp-side' }, el('h3', null, t('Preview')),
+          el('iframe', { id: 'campPv', class: 'camp-pv', sandbox: 'allow-same-origin', title: t('Preview'), tabindex: '-1' }),
+          el('p', { class: 'hint' }, t('Under the first signature it goes into, with the sample values.')))));
     campPreview();
   }
 
