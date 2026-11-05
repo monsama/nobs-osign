@@ -1774,7 +1774,7 @@ test('preview: one field left empty says which line goes; the phone width', { sk
   await page.waitForFunction(() => /Mobile/.test(document.querySelector('#pvNote').textContent));
   assert.match(await page.textContent('#pvNote'), /Without .*this goes: «Mobile/);
   const pv = page.frameLocator('#preview');
-  await page.waitForFunction(() => !/Mobile/.test(document.querySelector('#preview').contentDocument.body.textContent));
+  await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return !!(d && d.body) && !/Mobile/.test(d.body.textContent); });
   assert.doesNotMatch(await pv.locator('body').textContent(), /Mobile/);
   await page.selectOption('#pvSource', 'sample');
   await page.click('label:has(#pvPhone)');
@@ -1952,15 +1952,43 @@ test('the HTML made lighter: Word\'s and Outlook\'s leftovers out, what shows ke
   const fat = '<table lang="DE-CH" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt">\n   <tr>\n     <td style="mso-line-height-rule:exactly;font-size:10pt;color:#c00;-webkit-text-size-adjust:none"><span><span lang="DE-CH" style="mso-ansi-language:DE-CH">Anna</span></span>   <b>Muster</b></td>\n   </tr>\n</table>';
   await page.fill('#source', fat);
   await page.dispatchEvent('#source', 'input');
-  await page.click('#toolbar button:has-text("Make lighter")');
+  await page.click('#btnSlim');
   const slim = (await page.inputValue('#source')).replace(/\s+/g, ' ');
   assert.doesNotMatch(slim, /mso-|-webkit-|lang=/);
   assert.match(slim, /border-collapse:collapse/);
   assert.match(slim, /font-size:10pt;color:#c00/);
   assert.match(slim, /Anna <b>Muster<\/b>/, 'the space between the words kept');
   // The preview shows the same text.
-  await page.waitForFunction(() => /Anna Muster/.test(document.querySelector('#preview').contentDocument.body.textContent.replace(/\s+/g, ' ')));
+  // The preview may be loading again: its body there only once it is.
+  await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return !!(d && d.body) && /Anna Muster/.test(d.body.textContent.replace(/\s+/g, ' ')); });
   await page.click('.tab[data-mode=design]');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});
+
+test('a PNG logo made smaller with a palette (Shift+Optimize on that image): smaller, still transparent, only that image', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  const logo = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 189; c.height = 60; const g = c.getContext('2d'); g.fillStyle = '#e2001a'; g.font = 'italic bold 44px Arial'; g.fillText('Logo', 4, 46); return c.toDataURL('image/png').split(',')[1]; });
+  const a = await api('assets/upload', { name: 'pal-logo.png', data: logo });
+  const b = await api('assets/upload', { name: 'pal-other.png', data: logo });
+  await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList li a.active');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p><img src="assets/' + a.name + '" width="189" alt="Logo"> <img src="assets/' + b.name + '" width="189" alt="Other"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await page.frameLocator('#design').locator('img[alt=Logo]').dispatchEvent('click');
+  await page.click('#imgOpt', { modifiers: ['Shift'] });
+  await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((x) => /→/.test(x.textContent)), null, { timeout: 8000 });
+  let assets = [];
+  for (let i = 0; i < 30; i++) { assets = (await api('draft/get')).assets; if (!assets.some((x) => x.name === a.name)) break; await new Promise((r) => setTimeout(r, 100)); }
+  const small = assets.find((x) => /^pal-logo/.test(x.name)), other = assets.find((x) => x.name === b.name);
+  assert.ok(small && small.size < a.size, JSON.stringify(assets));
+  assert.equal(other.size, b.size, 'the other image as it was');
+  const alpha = await page.evaluate(async (n) => { const i = new Image(); i.src = '/assets/' + n; await i.decode(); const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight; const g = c.getContext('2d'); g.drawImage(i, 0, 0); return [i.naturalWidth, g.getImageData(0, 0, 1, 1).data[3]]; }, small.name);
+  assert.deepEqual(alpha, [189, 0], 'as wide, the corner still transparent');
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
