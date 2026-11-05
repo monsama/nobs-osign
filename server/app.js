@@ -341,7 +341,7 @@ function createApp(opts) {
     }
     // A campaign's banner too, in each of its languages.
     for (const x of (c && c.campaigns) || []) {
-      const parts = [x].concat(Object.values((x && x.langs) || {}));
+      const parts = [x].concat(Object.values((x && x.langs) || {}), (x && x.more) || []);
       if (parts.some((p) => p && !core.compiledMatches(p.html, p.compiled))) return 'The campaign "' + (x.name || x.id) + '" is not as its HTML says (compiled). Open it in the editor and publish again.';
     }
     return '';

@@ -251,7 +251,7 @@
   // editor reads them, objects whatever the order of their keys, HTML as it shows.
   const stableJson = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => { if (x[key] !== undefined && x[key] !== '') o[key] = x[key]; return o; }, {}) : x));
   // A campaign as it goes out: its banner as it shows (not compiled), its days and rules.
-  const campView = (x) => { const o = Object.assign({}, x); delete o.compiled; delete o.design; o.html = sanitize(o.html || '').replace(/\s+/g, ' ').trim(); o.langs = Object.fromEntries(Object.entries(x.langs || {}).map(([k, v]) => [k, sanitize(v.html || '').replace(/\s+/g, ' ').trim()])); return o; };
+  const campView = (x) => { const o = Object.assign({}, x); delete o.compiled; delete o.design; o.html = sanitize(o.html || '').replace(/\s+/g, ' ').trim(); o.langs = Object.fromEntries(Object.entries(x.langs || {}).map(([k, v]) => [k, sanitize(v.html || '').replace(/\s+/g, ' ').trim()])); o.more = (x.more || []).map((v) => sanitize(v.html || '').replace(/\s+/g, ' ').trim()); return o; };
   const CFG_VIEW = { blocks: (c) => (c.blocks || []).map((b) => [b.key, b.name, sanitize(b.html || '').replace(/\s+/g, ' ').trim()]), fields: (c) => c.fields || [], options: (c) => c.options || {},
     campaigns: (c) => (c.campaigns || []).map(campView), colors: (c) => c.colors || [] };
   function cfgPartChanged(k, pubN) { return !!pubN && stableJson(CFG_VIEW[k](S.config || {})) !== stableJson(CFG_VIEW[k](pubN)); }

@@ -8,7 +8,7 @@
   // signature (sharp on high-resolution screens), uploaded as a new file and put in their place;
   // the old file stays until removed. Without a width in the signature an image stays as it is.
   async function shrinkUsed() {
-    const all = S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''), (S.config.campaigns || []).flatMap((c) => [c.html || ''].concat(Object.values(c.langs || {}).map((v) => v.html || ''))));
+    const all = S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''), (S.config.campaigns || []).flatMap((c) => [c.html || ''].concat(Object.values(c.langs || {}).map((v) => v.html || ''), (c.more || []).map((v) => v.html || ''))));
     const shown = new Map();
     for (const h of all) for (const m of h.matchAll(/<img\b[^>]*>/gi)) {
       const src = (/\ssrc\s*=\s*["']?assets\/([^"'\s>]+)/i.exec(m[0]) || [])[1], w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]);
@@ -28,7 +28,7 @@
           S.config.signatures.forEach((s) => { s.html = (s.html || '').replace(re, 'assets/' + r.name); });
           (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, 'assets/' + r.name); });
           // A campaign's banner is made from its form: the image's name there.
-          (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {})).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
+          (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
         }
         S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]);
         n++; from += f.size; to += small.size;
@@ -60,6 +60,63 @@
     const gone = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && dark[n] === true)))];
     if (gone.length) out.push(['warn', t('Dark image on a transparent background, hard to see in dark mode: {0}. A light edge, or a background of its own, helps.', gone.join(', ')), null, t('Hard to see in dark mode: {0}', gone.length === 1 ? gone[0] : t('{0} images', gone.length))]);
     return out;
+  }
+  // What would go wrong with the banner campaigns not over yet.
+  function campaignChecks(c) {
+    const out = [], day = core.today(), list = (c.campaigns || []).filter((x) => !x.validUntil || x.validUntil >= day);
+    const parts = (x) => [x].concat(x.more || [], Object.values(x.langs || {}));
+    const nm = (xs) => xs.map((x) => '«' + (x.name || x.id) + '»').join(', ');
+    const empty = list.filter((x) => parts(x).some((p) => !String(p.html || '').replace(/<[^>]*>/g, '').trim() && !/<img\b/i.test(p.html || '')));
+    if (empty.length) out.push(['warn', t('Campaigns with an empty banner (no image, no text): {0}.', nm(empty)), null, t('Empty banner: {0}', empty.length)]);
+    const imgs = (h) => [...String(h || '').matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+    const wide = list.filter((x) => parts(x).some((p) => imgs(p.html).some((i) => Number((/\swidth\s*=\s*["']?(\d+)/i.exec(i) || [])[1]) > 600)));
+    if (wide.length) out.push(['warn', t('Banners wider than 600 pixels (too wide on phones): {0}.', nm(wide)), null, t('Banner too wide: {0}', wide.length)]);
+    const badLink = list.filter((x) => parts(x).some((p) => /href\s*=\s*["']http:\/\//i.test(p.html || '') || ((p.design || {}).tpl !== 'html' && (p.design || {}).link && !/^(https:|mailto:|tel:)/i.test(p.design.link.trim()) && p.design.link.trim() !== 'https://')));
+    if (badLink.length) out.push(['warn', t('Banner links that are not https:// (or mailto:, tel:): {0}.', nm(badLink)), null, t('Banner links: {0}', badLink.length)]);
+    const noImg = [...new Set(list.flatMap((x) => parts(x).flatMap((p) => [...String(p.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1]))))].filter((n) => !S.assets.some((a) => a.name === n));
+    if (noImg.length) out.push(['warn', t('Banner images not in the draft: {0}.', noImg.join(', ')), null, t('Banner images missing: {0}', noImg.length)]);
+    const ids = new Set(c.signatures.map((x) => x.id));
+    const lost = list.filter((x) => (x.signatures || []).length && (x.signatures || []).every((id) => !ids.has(id)));
+    if (lost.length) out.push(['warn', t('Campaigns for signatures that are gone (nobody gets them): {0}.', nm(lost)), null, t('Campaigns without signatures: {0}', lost.length)]);
+    // Two at the same time for the same signatures and people: one of them is shown.
+    const range = (x) => [x.validFrom || '0000', x.validUntil || '9999'];
+    const key = (x) => JSON.stringify([(x.signatures || []).slice().sort(), audienceText(x), x.newOnly ? 1 : 0, (x.days || []).join()]);
+    const clash = list.filter((x) => list.some((o) => o !== x && key(o) === key(x) && range(x)[0] <= range(o)[1] && range(o)[0] <= range(x)[1]));
+    if (clash.length) out.push(['warn', t('Campaigns at the same time for the same signatures and people, only one of them shows: {0}. Change the days, or choose other signatures.', nm(clash)), null, t('Campaigns at the same time: {0}', clash.length)]);
+    const over = (c.campaigns || []).filter((x) => x.validUntil && x.validUntil < day);
+    if (over.length) out.push(['good', t('Campaigns over: {0}. They can be removed (Campaigns → Over).', nm(over)), null, t('Campaigns over: {0}', over.length)]);
+    return out;
+  }
+  // The images of the draft nothing uses (signatures, building blocks, campaigns, their forms).
+  function unusedImages() {
+    const c = S.config, text = c.signatures.map((s) => sigFull(s)).concat((c.blocks || []).map((b) => b.html || ''),
+      (c.campaigns || []).flatMap((x) => [x].concat(x.more || [], Object.values(x.langs || {})).flatMap((p) => [p.html || '', 'assets/' + ((p.design || {}).img || '') + '"'])));
+    const all = text.join('\n');
+    return (S.assets || []).map((a) => a.name).filter((n) => !all.includes('assets/' + n + '"') && !all.includes('assets/' + n + "'") && !all.includes('assets/' + n + '?'));
+  }
+  $('imgUnused').addEventListener('click', async () => { await removeUnused(); renderImageList(); });
+  async function removeUnused() {
+    const names = unusedImages(); let n = 0;
+    for (const name of names) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); n++; } catch (e) { /* that one stays */ } }
+    changed({ list: false });
+    toast(t('{0} unused images removed from the draft.', n));
+  }
+  // Classic Outlook keeps the signatures that go in by themselves in the mailbox's settings
+  // (about 30 KB, keepForClassic in the add-in): roughly what one takes there, with the banner
+  // running now and its images as files (made a bit smaller there, so it is an upper bound).
+  const CLASSIC_KB = 30;
+  function classicKb(s) {
+    const size = (n) => { const a = (S.assets || []).find((x) => x.name === n); return a ? a.size || 0 : 0; };
+    const c = core.campaignFor(S.config, s, { anyone: true, kind: 'new' });
+    const banner = c ? [c].concat(c.more || []).map((x) => x.html || '').join('') : '';
+    const html = sigFull(s) + banner;
+    const names = [...new Set([...html.matchAll(/src="assets\/([^"?]+)/g)].map((m) => m[1]))];
+    const photos = /src="photos\//.test(html) ? 8 * 1024 : 0;
+    return Math.round((html.length * 1.3 + names.reduce((n, x) => n + size(x) * 4 / 3, 0) + photos) / 1024);
+  }
+  // The defaults (what goes in by itself) too large for that.
+  function classicHeavy() {
+    return S.config.signatures.filter((s) => s.defaultNew || s.defaultReply).map((s) => ({ s, kb: classicKb(s) })).filter((x) => x.kb > CLASSIC_KB);
   }
   // Whether an image is dark lines on nothing (a logo that disappears on a dark background):
   // looked at once, in the background; the check above says it the next time it is shown.
@@ -107,7 +164,8 @@
     const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     if (unknown.length) out.push(['warn', t('Unknown placeholders, left as typed: {0}', unknown.map((k) => '@@' + k).join(', ')), null, t('Unknown placeholders: {0}', unknown.length)]);
-    const noBlock = [...new Set(c.signatures.flatMap((s) => core.blocksIn(s.html)))];
+    // {{campaign}} is the campaigns' place, no building block.
+    const noBlock = [...new Set(c.signatures.flatMap((s) => core.blocksIn(s.html)))].filter((k) => k.toLowerCase() !== 'campaign');
     if (noBlock.length) out.push(['warn', t('Unknown building blocks, left as typed: {0}', noBlock.map((k) => '{{' + k + '}}').join(', ')), null, t('Unknown building blocks: {0}', noBlock.length)]);
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
     if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map(fieldName).join(', ')), null, t('Fields empty in Outlook: {0}', noGraph.length)]);
@@ -120,6 +178,11 @@
     const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
     if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', ')), null, t('Images missing in the draft: {0}', missing.length)]);
     signatureChecks(c).forEach((x) => out.push(x));
+    campaignChecks(c).forEach((x) => out.push(x));
+    const big = classicHeavy();
+    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. Smaller images help.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
+    const unused = unusedImages();
+    if (unused.length) out.push(['good', t('Images in the draft that nothing uses: {0}. They go out all the same.', unused.join(', ')), { label: t('Remove them'), fn: removeUnused }, t('Unused images: {0}', unused.length)]);
     // Who would get nothing, as read from AD under Users.
     if (S.snap && S.snap.users && S.snap.users.length) {
       const g = whoGets(S.snap.users), none = S.snap.users.filter((u) => !g.get(u).new).length;
@@ -233,7 +296,7 @@
         el('ul', { class: 'checks chk-sub' }, ...items))));
     } else if (!bad.length) out.push(el('li', { class: 'good' }, el('b', null, t('Ready to publish.'))));
     if (good.length) out.push(el('li', { class: 'good chk-ok' }, good.map((g) => g[3] || g[1]).join(' · '),
-      el('details', { class: 'chk' }, el('summary', null, t('details')), ...good.map((g) => el('p', null, g[1])))));
+      el('details', { class: 'chk' }, el('summary', null, t('details')), ...good.map((g) => el('p', null, g[1], g[2] ? ' ' : null, g[2] ? actBtn(g[2]) : null)))));
     $('pubChecks').replaceChildren(...out);
   }
   $('btnPublish').addEventListener('click', async () => {

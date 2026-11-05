@@ -251,7 +251,7 @@
         <div id="campList" class="camp-list"></div>
         <div id="campEdit" class="camp-edit" hidden></div>
       </div>
-      <div class="field-actions"><button type="button" id="btnAddCampaign" class="ghost">+ New campaign</button></div>
+      <div class="field-actions"><button type="button" id="btnAddCampaign" class="ghost">+ New campaign</button><select id="campFrom" aria-label="A new campaign from an earlier one" title="Its banner, signatures and rules again, from today on"><option value="">From an earlier one…</option></select></div>
     </section>
 
     <!-- add-in options -->
@@ -842,7 +842,7 @@
     <p class="btn-row"><label class="filepick small">Upload an image… <input type="file" id="imgFile" accept=".png,.jpg,.jpeg,.gif"></label>
       <button type="button" id="imgPerson" class="small" title="Each person's own photo from the photos folder (Photos)">Photo per person</button></p>
     <p id="imgErr" class="err"></p>
-    <div class="dlg-foot"><button value="cancel" class="ghost">Cancel</button></div>
+    <div class="dlg-foot"><button type="button" id="imgUnused" class="ghost small danger" hidden></button><span class="spacer"></span><button value="cancel" class="ghost">Cancel</button></div>
   </form>
 </dialog>
 

@@ -105,7 +105,7 @@
     // A campaign's banner, in each language: made safe and compiled for the add-in, the form
     // (design) kept for the editor.
     (c.campaigns || []).forEach((x) => {
-      [x].concat(Object.values(x.langs || {})).forEach((v) => { v.html = sanitize(v.html || ''); v.compiled = core.compile(v.html, scratchDoc); });
+      [x].concat(Object.values(x.langs || {}), x.more || []).forEach((v) => { v.html = sanitize(v.html || ''); v.compiled = core.compile(v.html, scratchDoc); });
     });
     return c;
   }

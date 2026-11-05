@@ -265,7 +265,18 @@ too (step 7).
    tracking* adds `utm_source=email&utm_medium=signature&utm_campaign=<name>`. *On a day* shows
    what each signature gets on that day; the calendar in the preview shows a signature on it.
    One ending in three days with none after it is said in the status bar, and to the webhook
-   (Settings → Server → Notifications). *Copy for next year* makes the next one.
+   (Settings → Server → Notifications). *Copy for next year* makes the next one, *From an earlier
+   one…* (beside *+ New campaign*) one from today on. *Weekdays* limits it to some days (a webinar
+   on Thursdays); *+ Banner in turns* adds banners that take turns, mail by mail. Campaigns over
+   are folded under *Over*. *Publish…* checks them too: an empty banner, one wider than 600 pixels,
+   links that are not https, images missing, signatures gone, two at the same time.
+
+   **Classic Outlook** keeps what goes in by itself in the mailbox (about 30 KB): the preview says
+   when a default signature (with its banner) gets near that, and *Publish…* when one is over.
+   Images nothing uses are listed there too, and in the image dialog (*Remove … unused*).
+
+   In the design, fields and building blocks (the banner's place too) are moved by dragging them;
+   the columns button offers four layouts (logo left or right, with a line, three columns).
 
    A signature can also be a campaign of its own: under *When*, its first and last day. On those
    days it is used instead of the usual default, for whoever it is open to; before and after, the

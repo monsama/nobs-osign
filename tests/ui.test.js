@@ -1835,3 +1835,81 @@ test('a banner campaign made without HTML: in its place in the signature, in the
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('campaigns checked before publishing, unused images removed, columns in layouts, fields dragged, weekdays and banners in turns', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  // Columns: a layout from the menu.
+  await page.frameLocator('#design').locator('body').click();
+  await page.click('#toolbar button[aria-label^="Columns"]');
+  await page.click('.tbl-menu [data-tbl=right]');
+  await page.click('.tab[data-mode=html]');
+  assert.match(await page.inputValue('#source'), /<td style="padding:0 14px 0 0;vertical-align:top;font-family:Arial[^"]*">\s*<b>@@givenName @@sn<\/b>[\s\S]*<td style="vertical-align:top">\s*Logo/);
+  // A field dragged before another line's text.
+  await page.fill('#source', '<p>Eins @@givenName</p><p>Zwei</p><div>{{campaign}}</div>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  const fr = page.frameLocator('#design');
+  await fr.locator('span.osf').dragTo(fr.locator('p', { hasText: 'Zwei' }), { targetPosition: { x: 1, y: 6 } });
+  await page.click('.tab[data-mode=html]');
+  const moved = (await page.inputValue('#source')).replace(/\s+/g, '');
+  assert.match(moved, /^<p>Eins(&nbsp;)?<\/p><p>[^<]*@@givenName[^<]*<\/p>/, moved);
+  assert.equal(moved.match(/<p>([^<]*)<\/p>/g)[1].replace(/@@givenName|<\/?p>/g, ''), 'Zwei', 'into the line, its text whole');
+  await page.click('.tab[data-mode=design]');
+  // The banner's place dragged above the first line.
+  await fr.locator('span.osb.campaign').dragTo(fr.locator('p', { hasText: 'Eins' }), { targetPosition: { x: 5, y: 2 } });
+  await page.click('.tab[data-mode=html]');
+  assert.match(await page.inputValue('#source'), /^<div>\s*\{\{campaign\}\}\s*<\/div>\s*<p>\s*Eins/);
+  await page.click('.tab[data-mode=design]');
+
+  // A campaign with weekdays and a second banner in turns; an empty banner and a too wide one are said.
+  await page.click('a.nav[data-view=campaigns]');
+  await page.click('#viewCampaigns .empty-state button');
+  const form = page.locator('#campEdit');
+  await form.locator('.camp-days input').first().check();
+  await form.locator('button:has-text("+ Banner in turns")').click();
+  assert.equal(await form.locator('.camp-alts .tab').count(), 2);
+  await form.locator('label:has(input[value=text])').click();
+  await form.locator('textarea[aria-label=Text]').fill('Zweiter Banner');
+  assert.match(await page.textContent('#campList'), /2 banners in turns/);
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  let checks = await page.textContent('#pubChecks');
+  assert.match(checks, /empty banner/);
+  assert.doesNotMatch(checks, /Unknown building blocks/, '{{campaign}} is no building block');
+  await page.click('#dlgPublish button[value=cancel]');
+
+  // An image nothing uses: said, and removed in one go.
+  await api('assets/upload', { name: 'unbenutzt.png', data: PNG.toString('base64') });
+  await page.click('#ghRefresh').catch(() => {});
+  await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  await page.waitForFunction(() => /unbenutzt/.test(document.querySelector('#pubChecks').textContent), null, { timeout: 5000 });
+  checks = await page.textContent('#pubChecks');
+  assert.match(checks, /nothing uses: .*unbenutzt\.png/);
+  await page.click('#pubChecks .chk-ok > details > summary');
+  await page.click('#pubChecks button:has-text("Remove them")');
+  await page.waitForFunction(() => !/unbenutzt/.test(document.querySelector('#pubChecks').textContent) || true);
+  await page.click('#dlgPublish button[value=cancel]');
+  for (let i = 0; i < 30 && (await api('draft/get')).assets.some((a) => a.name === 'unbenutzt.png'); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(!(await api('draft/get')).assets.some((a) => a.name === 'unbenutzt.png'));
+
+  // From an earlier one: a new one from today, with its banners.
+  await page.click('a.nav[data-view=campaigns]');
+  await page.focus('#campFrom');
+  const first = await page.locator('#campFrom option').nth(1).getAttribute('value');
+  await page.selectOption('#campFrom', first);
+  assert.equal(await page.locator('#campList .camp-item').count(), 2);
+  assert.equal(await page.locator('#campEdit .camp-alts .tab').count(), 2);
+  // Keyboard: down the list.
+  await page.locator('#campList .camp-item').first().focus();
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await page.evaluate(() => document.activeElement.classList.contains('camp-item')), true);
+  // Away again.
+  await page.click('#campEdit button.danger'); await page.click('#campEdit button.danger');
+  await page.click('#sigList li a');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});

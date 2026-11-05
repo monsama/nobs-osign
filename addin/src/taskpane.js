@@ -48,6 +48,7 @@ const DE = {
   'Your signature is saved. Pick it above for new mail or replies, or insert it here.': 'Ihre Signatur ist gespeichert. Wählen Sie sie oben für neue Mails oder Antworten, oder fügen Sie sie hier ein.',
   'Your own signature, from {0}': 'Ihre eigene Signatur, aus {0}',
   'Your variant of {0}': 'Ihre Variante von {0}',
+  'with the banner «{0}»': 'mit dem Banner «{0}»',
   'Edit': 'Bearbeiten',
   'Delete': 'Löschen',
   'Save': 'Speichern',
@@ -166,6 +167,9 @@ function renderList(list) {
     const tags = document.createElement('small');
     tags.textContent = s.own ? t('Your own signature, from {0}', names[s.variantOf] || '') : s.variantOf ? t('Your variant of {0}', names[s.variantOf] || '')
       : [s.defaultNew ? t('new mail') : '', s.defaultReply ? t('replies') : ''].filter(Boolean).join(', ');
+    // A campaign running today: its banner goes in with it, said so it is no surprise.
+    const camp = withBanner(s), cn = camp && camp.campaign ? ((full || cfg).campaigns || []).find((c) => c.id === camp.campaign) : null;
+    if (cn) tags.textContent += (tags.textContent ? ' · ' : '') + t('with the banner «{0}»', cn.name || '');
     const left = document.createElement('div'); left.append(name, document.createElement('br'), tags);
     const btn = button(t('Insert'), async () => {
       btn.disabled = true;

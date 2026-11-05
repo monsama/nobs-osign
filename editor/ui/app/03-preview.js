@@ -150,6 +150,12 @@
     if (camp) notes.push(el('div', null, (onDay ? t('On {0}: the banner of «{1}».', dayText, camp.name) : t('Banner of the campaign «{0}», running now.', camp.name)) + ' ',
       el('a', { href: '#', onclick: (e) => { e.preventDefault(); campSel = camp.id; goView('campaigns'); } }, t('Open'))));
     else if (onDay) notes.push(el('div', null, t('On {0}: no campaign banner.', dayText)));
+    // Classic Outlook: what it keeps in the mailbox, when it gets tight.
+    if (s.defaultNew || s.defaultReply) {
+      const kb = classicKb(s);
+      if (kb > CLASSIC_KB) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB the mailbox keeps for it. There it goes in without its images (or with Insert in the pane). Smaller images help.', kb, CLASSIC_KB)));
+      else if (kb > CLASSIC_KB * 0.7) notes.push(el('div', null, t('Classic Outlook: about {0} of {1} KB, nearly full.', kb, CLASSIC_KB)));
+    }
     const none = $('pvSource').value.startsWith('without:') ? $('pvSource').value.slice(8) : '';
     if (none && used.includes(none)) notes.push(emptyFieldNote(s, none));
     $('pvNote').replaceChildren(...notes);

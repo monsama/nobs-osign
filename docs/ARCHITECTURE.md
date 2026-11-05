@@ -58,6 +58,8 @@ will get.
     "design": { "tpl": "image", "img": "xmas.png", "width": 400, "link": "https://…" },
     "utm": true, "signatures": [],                 // none: all signatures
     "position": "below", "newOnly": false,         // where without {{campaign}}; not in replies
+    "days": [4],                                   // only on these weekdays (0 Sunday … 6 Saturday)
+    "more": [ { "html": "…", "compiled": "…", "design": {} } ],  // banners taking turns, mail by mail
     "audience": { "groups": [], "departments": [], "domains": [], "everyone": true },
     "langs": { "en": { "html": "…", "compiled": "…", "design": {} } }
   } ]

@@ -212,3 +212,26 @@
     apply();
     $('pvPhone').addEventListener('change', () => { try { if ($('pvPhone').checked) localStorage.setItem('osign.phone', '1'); else localStorage.removeItem('osign.phone'); } catch (e) { /* no storage */ } apply(); });
   })();
+
+  // The columns button: a small menu of layouts (logo left or right, with a line, three columns).
+  function tableTool(btn) {
+    const pop = el('div', { class: 'pal tbl-menu', hidden: true, role: 'menu', 'aria-label': t('Columns') });
+    const close = () => { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    Object.entries(TABLES).forEach(([k, v]) => {
+      const b = el('button', { type: 'button', role: 'menuitem', class: 'tbl-opt', 'data-tbl': k }, el('span', { class: 'tbl-ic tbl-' + k, 'aria-hidden': 'true' }), t(v[0]));
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+      b.addEventListener('click', () => { close(); insertTable(k); });
+      pop.append(b);
+    });
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.addEventListener('click', () => { if (!pop.hidden) { close(); return; } pop.hidden = false; btn.setAttribute('aria-expanded', 'true'); const f = pop.querySelector('button'); if (f && document.activeElement === btn) f.focus(); });
+    pop.addEventListener('keydown', (e) => {
+      const items = [...pop.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+      if (e.key === 'Escape') { close(); btn.focus(); }
+    });
+    const wrap = el('span', { class: 'pal-wrap' }, btn, pop);
+    document.addEventListener('mousedown', (e) => { if (!pop.hidden && !wrap.contains(e.target)) close(); });
+    if (designReady) designReady.then(() => ddoc.addEventListener('mousedown', () => { if (!pop.hidden) close(); }));
+    return wrap;
+  }

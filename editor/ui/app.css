@@ -1361,3 +1361,24 @@ dialog.fit { width: min(1080px, 96vw); }
 .camp-bar.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 #viewCampaigns .camp-tl { margin: 0; }
 @media (max-width: 1100px) { .camp-top, .camp-layout { grid-template-columns: 1fr; } }
+
+/* The columns menu: a sketch of each layout beside its name. */
+.tbl-menu { width: 230px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.toolbar .tbl-menu button.tbl-opt { justify-content: flex-start; gap: 10px; width: 100%; height: 34px; padding: 0 8px; font-size: 13px; color: var(--text); }
+.tbl-ic { width: 34px; height: 20px; border: 1px solid var(--line); border-radius: 3px; flex: 0 0 auto; background: linear-gradient(90deg, var(--accent-soft) 0 34%, transparent 34%), repeating-linear-gradient(180deg, transparent 0 4px, var(--muted) 4px 5px) 45% 50% / 50% 60% no-repeat; }
+.tbl-ic.tbl-right { background: linear-gradient(270deg, var(--accent-soft) 0 34%, transparent 34%), repeating-linear-gradient(180deg, transparent 0 4px, var(--muted) 4px 5px) 10% 50% / 50% 60% no-repeat; }
+.tbl-ic.tbl-line { background: linear-gradient(90deg, var(--accent-soft) 0 30%, var(--accent) 30% 36%, transparent 36%), repeating-linear-gradient(180deg, transparent 0 4px, var(--muted) 4px 5px) 90% 50% / 50% 60% no-repeat; }
+.tbl-ic.tbl-three { background: linear-gradient(90deg, var(--accent-soft) 0 28%, transparent 28% 36%, var(--panel-2) 36% 64%, transparent 64% 70%, var(--panel-2) 70%); }
+.camp-days { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 8px 0 2px; font-size: 13px; }
+.camp-days > span:first-child { min-width: 64px; color: var(--muted); }
+.camp-days label { display: inline-flex; align-items: center; gap: 3px; font-weight: normal; }
+.camp-days input { width: auto; height: auto; }
+.camp-alts { border-bottom: 0; margin: 2px 0 6px; }
+.camp-alts .tab { font-size: 12.5px; padding: 3px 10px; }
+.camp-fold { text-align: left; border: 0; background: transparent; color: var(--muted); font-size: 12.5px; padding: 8px 10px 4px; height: auto; }
+.camp-fold:hover { color: var(--text); }
+.camp-item:focus-visible, .camp-fold:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+#campFrom { width: auto; margin-left: 8px; }
+.pal.tbl-menu { left: auto; right: 0; width: 250px; }
+.camp-item { white-space: normal; width: 100%; }
+.camp-item small { white-space: normal; line-height: 1.35; }

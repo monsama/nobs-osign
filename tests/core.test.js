@@ -408,3 +408,17 @@ test('the configuration check knows campaigns, house colours and the reserved {{
   assert.match(core.validate(Object.assign({}, base, { colors: ['red'] }))[0], /house colours/);
   assert.match(core.validate(Object.assign({}, base, { blocks: [{ key: 'Campaign', name: 'x', html: '' }] }))[0], /\{\{campaign\}\}/);
 });
+
+test('banner campaigns: only on their weekdays; several banners take turns (one in the person\'s language is that one)', () => {
+  const cfg = { campaigns: [{ id: 'w', name: 'Webinar', compiled: 'A', more: [{ compiled: 'B' }, { compiled: 'C' }], days: [4], signatures: [], langs: { fr: { compiled: 'FR' } } }] };
+  const s = { id: 's', compiled: '{{campaign}}' };
+  const thu = new Date('2026-11-05T12:00:00'), fri = new Date('2026-11-06T12:00:00');
+  assert.equal(core.withCampaign(cfg, s, { now: fri }).compiled, '');
+  assert.deepEqual([0, 1, 2, 3].map((turn) => core.withCampaign(cfg, s, { now: thu, turn }).compiled), ['<div>A</div>', '<div>B</div>', '<div>C</div>', '<div>A</div>']);
+  const seen = new Set(); for (let i = 0; i < 60; i++) seen.add(core.withCampaign(cfg, s, { now: thu }).compiled);
+  assert.equal(seen.size, 3, 'by chance, each in time');
+  assert.equal(core.withCampaign(cfg, s, { now: thu, turn: 1, values: { preferredLanguage: 'fr-CH' } }).compiled, '<div>FR</div>');
+  const base = { schemaVersion: core.SCHEMA_VERSION, fields: [], signatures: [] };
+  assert.match(core.validate(Object.assign({}, base, { campaigns: [{ id: 'x', days: [7] }] }))[0], /weekdays/);
+  assert.match(core.validate(Object.assign({}, base, { campaigns: [{ id: 'x', more: new Array(10).fill({}) }] }))[0], /take turns/);
+});
