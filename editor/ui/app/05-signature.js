@@ -250,7 +250,10 @@
   // A part of the configuration other than the signatures, against what is published: both as the
   // editor reads them, objects whatever the order of their keys, HTML as it shows.
   const stableJson = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, key) => { if (x[key] !== undefined && x[key] !== '') o[key] = x[key]; return o; }, {}) : x));
-  const CFG_VIEW = { blocks: (c) => (c.blocks || []).map((b) => [b.key, b.name, sanitize(b.html || '').replace(/\s+/g, ' ').trim()]), fields: (c) => c.fields || [], options: (c) => c.options || {} };
+  // A campaign as it goes out: its banner as it shows (not compiled), its days and rules.
+  const campView = (x) => { const o = Object.assign({}, x); delete o.compiled; delete o.design; o.html = sanitize(o.html || '').replace(/\s+/g, ' ').trim(); o.langs = Object.fromEntries(Object.entries(x.langs || {}).map(([k, v]) => [k, sanitize(v.html || '').replace(/\s+/g, ' ').trim()])); return o; };
+  const CFG_VIEW = { blocks: (c) => (c.blocks || []).map((b) => [b.key, b.name, sanitize(b.html || '').replace(/\s+/g, ' ').trim()]), fields: (c) => c.fields || [], options: (c) => c.options || {},
+    campaigns: (c) => (c.campaigns || []).map(campView), colors: (c) => c.colors || [] };
   function cfgPartChanged(k, pubN) { return !!pubN && stableJson(CFG_VIEW[k](S.config || {})) !== stableJson(CFG_VIEW[k](pubN)); }
   // The draft the same in content as what is published (whatever way it is saved): then nothing
   // waits to go out, also after undoing a change.
@@ -259,7 +262,7 @@
     const sigs = S.config.signatures || [];
     if (sigs.length !== S.pub.size || sigs.map((s) => s.id).join() !== [...S.pub.keys()].join()) return false;
     if (sigs.some((s) => sigState(s) !== 'same')) return false;
-    return !['fields', 'blocks', 'options'].some((k) => cfgPartChanged(k, S.pubCfg));
+    return !['fields', 'blocks', 'options', 'campaigns', 'colors'].some((k) => cfgPartChanged(k, S.pubCfg));
   }
   async function openChanges() {
     flushSource();
@@ -293,7 +296,7 @@
     // building blocks, its options in another order), the HTML as it shows: only a real change counts.
     const pubN = pubCfg ? normalize(JSON.parse(JSON.stringify(pubCfg))) : null;
     const part = (k) => cfgPartChanged(k, pubN);
-    const other = [part('fields') && t('Fields'), part('blocks') && t('Building blocks'), part('options') && t('Add-in')].filter(Boolean);
+    const other = [part('fields') && t('Fields'), part('blocks') && t('Building blocks'), part('campaigns') && t('Campaigns'), part('colors') && t('House colours'), part('options') && t('Add-in')].filter(Boolean);
     if (other.length) rows.push(row('chg', other.join(', '), t('Changed too: they go out with the next publish.')));
     // Nothing to show while the status says otherwise: the same in content, saved another way.
     const none = S.dirty ? t('Nothing to see: the draft is the same as what is published, only saved another way (e.g. by a newer version). Publishing again makes them one.') : t('Nothing: the draft is as published.');
@@ -399,35 +402,3 @@
   $('imgDone').addEventListener('click', () => { applyImg(); hideImgBar(); });
 
 
-  // Campaigns on a timeline: from today (or the first one) to the last day, a month per tick; the
-  // ones for the same people at the same time marked.
-  function renderCampaigns() {
-    const camps = S.config.signatures.filter((s) => core.isCampaign(s));
-    const DAY = 86400000, day = (x) => Date.parse(x + 'T00:00:00');
-    const now = new Date(); const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) + now.getTimezoneOffset() * 60000;
-    const froms = camps.map((s) => (s.validFrom ? day(s.validFrom) : null)).filter((x) => x !== null);
-    const untils = camps.map((s) => (s.validUntil ? day(s.validUntil) + DAY : null)).filter((x) => x !== null);
-    const start = Math.min(today - 7 * DAY, ...froms), end = Math.max(today + 60 * DAY, ...untils);
-    const span = end - start, pct = (x) => (100 * (x - start) / span).toFixed(2) + '%';
-    const loc = I18N.lang === 'de' ? 'de-CH' : 'en-GB';
-    const range = (s) => [s.validFrom ? day(s.validFrom) : start, s.validUntil ? day(s.validUntil) + DAY : end];
-    const clash = (a, b) => a !== b && audienceText(a) === audienceText(b) && (a.language || '') === (b.language || '') && range(a)[0] < range(b)[1] && range(b)[0] < range(a)[1];
-    const ticks = [];
-    for (let d = new Date(start); d.getTime() <= end; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
-      const m = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-      if (m >= start) ticks.push(el('span', { class: 'camp-tick', style: 'left:' + pct(m) }, new Date(m).toLocaleDateString(loc, { month: 'short', year: '2-digit' })));
-    }
-    const fmt = (x) => (x ? new Date(day(x)).toLocaleDateString(loc) : '…');
-    $('campTimeline').replaceChildren(
-      el('div', { class: 'camp-axis' }, ...ticks, el('span', { class: 'camp-today', style: 'left:' + pct(today), title: t('Today') })),
-      ...camps.map((s) => {
-        const [a, b] = range(s), over = camps.some((o) => clash(s, o));
-        const bar = el('button', { type: 'button', class: 'camp-bar' + (core.inPeriod(s) ? ' now' : b <= today ? ' past' : '') + (over ? ' clash' : ''),
-          style: 'left:' + pct(a) + ';width:calc(' + pct(b) + ' - ' + pct(a) + ')',
-          title: fmt(s.validFrom) + ' - ' + fmt(s.validUntil) + ' · ' + audienceText(s) + (over ? ' · ' + t('at the same time as another one for the same people') : ''),
-          onclick: () => { $('dlgCampaigns').close(); openSig(s.id); } });
-        return el('div', { class: 'camp-row' }, el('span', { class: 'camp-name' }, s.name || t('(no name)')), el('div', { class: 'camp-track' }, bar, el('span', { class: 'camp-today', style: 'left:' + pct(today) })));
-      }),
-      ...(camps.length ? [] : [el('p', { class: 'muted' }, t('No campaigns: a signature becomes one with its days under When.'))]));
-  }
-  $('btnCampaigns').addEventListener('click', () => { renderCampaigns(); $('dlgCampaigns').showModal(); });

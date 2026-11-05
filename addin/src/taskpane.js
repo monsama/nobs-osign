@@ -116,6 +116,8 @@ function renderChoice(list) {
   $('choice').hidden = false;
 }
 
+// A signature with today's campaign banner in it, as it goes into this message.
+const withBanner = (s) => (s ? core.withCampaign(full || cfg, s, { values: user.values, from, groups: user.groups, kind: info.kind }) : s);
 const PAGE = (body) => '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:8px 10px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}a{pointer-events:none;cursor:default}</style></head><body>' + body + '</body></html>';
 // A signature shown as it goes in, in a frame of its own (nothing in it runs).
 function previewFrame(sig, title) {
@@ -132,7 +134,7 @@ function previewFrame(sig, title) {
       mark.forEach((k) => { uv[k] = '\u2063' + (vals[k] || '') + '\u2064' + k + '\u2065'; });
       shown = Object.assign({}, s, { userValues: Object.assign({}, s.userValues || {}, uv) });
     }
-    return previewHtml(shown, user.values).then((h) => {
+    return previewHtml(withBanner(shown), user.values).then((h) => {
       if (mark && mark.length) {
         const labels = {}; (cfg.fields || []).forEach((f) => { labels[f.key] = f.label || f.key; });
         // In a tag (href="mailto:@@mail"): the value only; in the text: marked.
@@ -167,7 +169,7 @@ function renderList(list) {
     const left = document.createElement('div'); left.append(name, document.createElement('br'), tags);
     const btn = button(t('Insert'), async () => {
       btn.disabled = true;
-      try { await insertSignature(Office.context.mailbox.item, cfg, s, user.values, info.html, { interactive: true }); message(t('Inserted: {0}', s.name)); }
+      try { await insertSignature(Office.context.mailbox.item, cfg, withBanner(s), user.values, info.html, { interactive: true }); message(t('Inserted: {0}', s.name)); }
       catch (e) { message(t('Outlook did not take the signature: {0}', e.message || e), true); }
       finally { btn.disabled = false; }
     });

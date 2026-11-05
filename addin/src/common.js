@@ -504,16 +504,18 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     at: cfg.updated || '',
     cfg: { schemaVersion: cfg.schemaVersion, updated: cfg.updated, options: cfg.options, fields, signatures: sigs.map((x) => {
       const o = {}; keep.forEach((k) => { if (x[k] !== undefined) o[k] = x[k]; }); if (!o.compiled) o.compiled = x.html; return o;
-    }) },
+    }), campaigns: classicCampaigns(cfg, values) },
     images: {}
   };
-  // sigs come most needed first: the later ones go when not all fit.
+  // sigs come most needed first: the later ones go when not all fit (the banners first).
+  if (JSON.stringify(copy).length > room) copy.cfg.campaigns = [];
   while (copy.cfg.signatures.length > 1 && JSON.stringify(copy).length > room) copy.cfg.signatures.pop();
   if (JSON.stringify(copy).length > room) { console.log('OSign: the signatures do not fit into the mailbox settings for classic Outlook.'); return { kept: false, images: 0, left: 0 }; }
   sigs = sigs.slice(0, copy.cfg.signatures.length);
   // The images, each as small as it is shown; the smallest first, as many as fit.
   const wanted = [];
-  for (const sg of sigs) {
+  const banners = (copy.cfg.campaigns || []).map((c) => ({ compiled: core.campaignHtml(c, values) }));
+  for (const sg of sigs.concat(banners)) {
     const html = renderHtml(sg, values);
     for (const r of core.localImages(html)) {
       const key = r.dir + '/' + r.name;
@@ -552,6 +554,17 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     return { kept: false, images: 0, left: 0 };
   }
   return { kept: true, images: Object.keys(copy.images).length, left, signatures: copy.cfg.signatures.length };
+}
+// The banner campaigns not yet over, as far as the event handler needs them (the banner in the
+// user's language only).
+function classicCampaigns(cfg, values) {
+  const day = new Date().toISOString().slice(0, 10), lang = String((values || {}).preferredLanguage || '').split(/[-_]/)[0].toLowerCase();
+  return (cfg.campaigns || []).filter((c) => !c.validUntil || c.validUntil >= day).map((c) => {
+    const o = { id: c.id, compiled: core.campaignHtml(c, values) };
+    ['validFrom', 'validUntil', 'signatures', 'position', 'newOnly', 'audience'].forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; });
+    if (lang && c.langs && c.langs[lang]) o.langs = { [lang]: { compiled: c.langs[lang].compiled || c.langs[lang].html } };
+    return o;
+  });
 }
 function classicCopy() { const c = readRoaming(CLASSIC_KEY); return c && c.cfg && Array.isArray(c.cfg.signatures) ? c : null; }
 

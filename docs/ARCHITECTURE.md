@@ -30,6 +30,10 @@ will get.
   `assets/…` and `photos/…` where the editor serves them. The add-in leaves those paths and embeds
   the images instead (`localImages()` lists them).
 - `pick(config, values, from, kind, prefs)` decides which signature, as the README describes.
+- `withCampaign(config, sig, ctx)` puts the banner of the campaign running that day into it:
+  where it has `{{campaign}}`, else below (or above) it; none running, `{{campaign}}` goes.
+  `campaignFor()` picks the campaign (its days, signatures, audience, new mail only, the person's
+  language), `withUtm()` adds the link tracking, `campaignsEnding()` finds the ones about to end.
 
 ## `signatures.json`
 
@@ -46,6 +50,16 @@ will get.
     "defaultNew": true, "defaultReply": false, "removeEmptyLines": true,
     "audience": { "groups": [], "departments": [], "domains": [] },
     "validFrom": "", "validUntil": ""              // a campaign's days (YYYY-MM-DD), or always
+  } ],
+  "colors": ["#1d4ed8"],                           // the house colours (the editor's palette)
+  "campaigns": [ {                                 // banner campaigns (09-campaigns.js)
+    "id": "c-xmas", "name": "Weihnachten 2026", "validFrom": "2026-12-01", "validUntil": "2026-12-31",
+    "html": "<div>…</div>", "compiled": "…",        // the banner, made from design
+    "design": { "tpl": "image", "img": "xmas.png", "width": 400, "link": "https://…" },
+    "utm": true, "signatures": [],                 // none: all signatures
+    "position": "below", "newOnly": false,         // where without {{campaign}}; not in replies
+    "audience": { "groups": [], "departments": [], "domains": [], "everyone": true },
+    "langs": { "en": { "html": "…", "compiled": "…", "design": {} } }
   } ]
 }
 ```
@@ -98,7 +112,7 @@ topic, each given what it needs from it: `routes-publish.js` (publishing, four e
 `/ui/app.js` (one IIFE: `01-base.js` opens it, `11-start.js` closes it): the state, saving and the
 list (`01`), the design editor and its undo (`02-design.js`), its tools: house colours, spacing, the bars for a link, a cell and an image's place (`02-tools.js`), the preview (`03`), photos (`04`), signatures
 and what is published (`05`), import (`06`), fields, options and users (`07`), building blocks and
-Settings (`08`), the setup assistant (`09`), publishing, search and the dialogs (`10-publish.js`),
+Settings (`08`), banner campaigns (`09-campaigns.js`), the setup assistant (`09-wizard.js`), publishing, search and the dialogs (`10-publish.js`),
 replace in all signatures (`10-replace.js`), undo for the whole draft and ⟳ (`10-undo.js`), and
 the start (`11`). `editor/ui/i18n.js` holds the German; the page is written in English.
 

@@ -102,6 +102,11 @@
       s.html = sanitize(core.expandBlocks(own, c.blocks));
       s.compiled = core.compile(s.html, scratchDoc);
     });
+    // A campaign's banner, in each language: made safe and compiled for the add-in, the form
+    // (design) kept for the editor.
+    (c.campaigns || []).forEach((x) => {
+      [x].concat(Object.values(x.langs || {})).forEach((v) => { v.html = sanitize(v.html || ''); v.compiled = core.compile(v.html, scratchDoc); });
+    });
     return c;
   }
 
@@ -300,7 +305,6 @@
     const fq = ($('sigFilter').value || '').trim().toLowerCase();
     const fit = (s) => !fq || String(s.name || '').toLowerCase().includes(fq);
     $('sigFilterRow').hidden = S.config.signatures.length < 8 && !fq;
-    $('btnCampaigns').hidden = !S.config.signatures.some((s) => core.isCampaign(s));
     assigned.filter(fit).forEach((s) => ul.append(item(s, false)));
     // Only both kinds make a group worth folding: else the list as it is.
     if (!assigned.length) unassigned.filter(fit).forEach((s) => ul.append(item(s, false)));
@@ -381,6 +385,7 @@
   function renderStatusBar() {
     const n = S.config.signatures.length;
     $('stSigs').textContent = n === 1 ? t('1 signature') : t('{0} signatures', n);
+    campEndingNote();
     const f = (S.info && S.info.features) || {};
     $('stTarget').textContent = !S.settings ? '' : onServer()
       ? (f.publishTarget === 'sharepoint' ? t('Publishes to {0}', S.settings.folder) : t('Publishes into the server\'s own folder (not SharePoint)'))
@@ -427,7 +432,7 @@
   }
   function goView(view) {
     show(view);
-    if (view === 'fields') renderFields(); else if (view === 'users') renderUsers(); else if (view === 'options') renderOptions(); else if (view === 'photos') renderPhotos(); else if (view === 'blocks') renderBlocks();
+    if (view === 'fields') renderFields(); else if (view === 'users') renderUsers(); else if (view === 'options') renderOptions(); else if (view === 'photos') renderPhotos(); else if (view === 'blocks') renderBlocks(); else if (view === 'campaigns') renderCampaignsView();
   }
   addEventListener('popstate', (e) => {
     const st = e.state;
@@ -454,6 +459,7 @@
     $('viewUsers').hidden = view !== 'users';
     $('viewPhotos').hidden = view !== 'photos';
     $('viewBlocks').hidden = view !== 'blocks';
+    $('viewCampaigns').hidden = view !== 'campaigns';
     $('viewEmpty').hidden = view !== 'empty';
     renderList();
     navStep();
@@ -536,7 +542,9 @@
     const name = from ? from.name + ' ' + t('(copy)') : (S.config.signatures.length ? t('New signature') : t('Main signature'));
     const s = from ? JSON.parse(JSON.stringify(from)) : core.newSignature('', name);
     s.id = newId(name); s.name = name;
-    if (from) { s.defaultNew = false; s.defaultReply = false; } else { s.html = html || STARTER; addMissingFields([s]); s.defaultNew = !S.config.signatures.some((x) => x.defaultNew); s.defaultReply = !S.config.signatures.some((x) => x.defaultReply); }
+    if (from) { s.defaultNew = false; s.defaultReply = false; } else { s.html = html || STARTER;
+      // The place for the campaign banners, at the end (moved where it should go, or taken out).
+      if (!core.hasSlot(s.html)) s.html = s.html.replace(/\s*$/, '') + '\n<div>{{campaign}}</div>'; addMissingFields([s]); s.defaultNew = !S.config.signatures.some((x) => x.defaultNew); s.defaultReply = !S.config.signatures.some((x) => x.defaultReply); }
     S.config.signatures.push(s);
     changed();
     openSig(s.id);

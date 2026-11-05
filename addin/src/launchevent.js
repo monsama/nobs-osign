@@ -60,7 +60,8 @@ async function sign(event, what) {
       return;
     }
     const from = await fromAddress(item);
-    const sig = core.pick(cfg, user.values, from, info.kind, getPrefs(), user.groups);
+    // The banner of a campaign running today put in (core.withCampaign).
+    const sig = core.withCampaign(cfg, core.pick(cfg, user.values, from, info.kind, getPrefs(), user.groups), { values: user.values, from, groups: user.groups, kind: info.kind });
     // A changed sender may have no signature where the first one had: then the old one goes.
     if (!sig && what !== 'fromChanged') { log('no signature is meant for ' + (from || 'this sender') + ' (' + info.kind + ').'); return; }
     await insertSignature(item, cfg, sig, user.values, info.html);

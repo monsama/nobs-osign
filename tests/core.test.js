@@ -353,3 +353,58 @@ test('a field written as a phone number: alike for everyone, the rest left as it
   const c = core.defaultConfig(); c.fields[0].format = 'shouting';
   assert.ok(core.validate(c).some((e) => /unknown format/.test(e)));
 });
+
+test('banner campaigns: in their place or below, only on their days, for whom and where they are meant, in the person\'s language', () => {
+  const cfg = { campaigns: [
+    { id: 'xmas', name: 'Weihnachten 2026', validFrom: '2026-12-01', validUntil: '2026-12-31', compiled: '<a href="https://ex.ch/">X</a>', signatures: [], langs: { en: { compiled: 'XMAS' } } },
+    { id: 'fair', name: 'Messe', validFrom: '2027-03-01', validUntil: '2027-03-05', compiled: 'FAIR', signatures: ['s2'], position: 'above', newOnly: true, audience: { groups: ['Sales'] } }
+  ] };
+  const s1 = { id: 's1', compiled: '<p>Anna</p><div>{{campaign}}</div>' }, s2 = { id: 's2', compiled: '<p>Ben</p>' };
+  const dec = new Date('2026-12-10T12:00:00'), mar = new Date('2027-03-02T12:00:00');
+  assert.equal(core.withCampaign(cfg, s1, { now: dec }).compiled, '<p>Anna</p><div><a href="https://ex.ch/">X</a></div>');
+  assert.equal(core.withCampaign(cfg, s1, { now: dec, values: { preferredLanguage: 'en-GB' } }).compiled, '<p>Anna</p><div>XMAS</div>');
+  // Over: the place goes, nothing else changes; a signature without the place stays as it is.
+  assert.equal(core.withCampaign(cfg, s1, { now: new Date('2027-01-05T12:00:00') }).compiled, '<p>Anna</p>');
+  assert.equal(core.withCampaign(cfg, s2, { now: dec }).compiled, '<p>Ben</p><div><a href="https://ex.ch/">X</a></div>', 'no place: below it');
+  assert.equal(core.withCampaign(cfg, s2, { now: new Date('2027-01-05T12:00:00') }), s2, 'none running, no place: as it is');
+  // Only in s2, above it, in new mail, for Sales.
+  assert.equal(core.withCampaign(cfg, s2, { now: mar, kind: 'new', groups: ['Sales'] }).compiled, '<div>FAIR</div><p>Ben</p>');
+  assert.equal(core.withCampaign(cfg, s2, { now: mar, kind: 'reply', groups: ['Sales'] }).compiled, '<p>Ben</p>');
+  assert.equal(core.withCampaign(cfg, s2, { now: mar, kind: 'new', groups: ['HR'] }).compiled, '<p>Ben</p>');
+  assert.equal(core.withCampaign(cfg, s1, { now: mar, kind: 'new', groups: ['Sales'] }).compiled, '<p>Anna</p>');
+  // A user's variant of s2 gets it as s2 does.
+  assert.equal(core.withCampaign(cfg, { id: 'v1', variantOf: 's2', compiled: '<p>B</p>' }, { now: mar, kind: 'new', groups: ['Sales'] }).compiled, '<div>FAIR</div><p>B</p>');
+  // The editor's preview: whoever it is for.
+  assert.equal(core.campaignFor(cfg, s2, { now: mar, kind: 'new', anyone: true }).id, 'fair');
+  // Rendered: the banner's fields are filled too.
+  assert.equal(core.render(core.fillCampaign('<p>@@givenName</p>{{campaign}}', '<b>@@givenName</b>'), { givenName: 'Anna' }), '<p>Anna</p><div><b>Anna</b></div>');
+});
+
+test('banner links tell the web statistics where the visit came from, once however often it is made', () => {
+  const h = '<a href="https://ex.ch/a?q=1&amp;r=2#top">A</a> <a href="mailto:x@ex.ch">M</a>';
+  const once = core.withUtm(h, 'Weihnachten 2026 – Zürich');
+  assert.equal(once, '<a href="https://ex.ch/a?q=1&amp;r=2&amp;utm_source=email&amp;utm_medium=signature&amp;utm_campaign=weihnachten-2026-zurich#top">A</a> <a href="mailto:x@ex.ch">M</a>');
+  assert.equal(core.withUtm(once, 'Weihnachten 2026 – Zürich'), once);
+  assert.match(core.withUtm(once, 'Ostern'), /utm_campaign=ostern#top/);
+  assert.doesNotMatch(core.withUtm(once, 'Ostern'), /weihnachten/);
+});
+
+test('a campaign ending soon with none after it is told; one followed by the next is not', () => {
+  const cfg = { campaigns: [
+    { id: 'a', name: 'A', validFrom: '2026-12-01', validUntil: '2026-12-31', signatures: [] },
+    { id: 'b', name: 'B', validFrom: '2026-11-01', validUntil: '2026-12-30', signatures: ['s1'] },
+    { id: 'c', name: 'C', validFrom: '2026-12-31', validUntil: '2027-01-15', signatures: ['s1'] }
+  ] };
+  const e = core.campaignsEnding(cfg, 3, new Date('2026-12-29T09:00:00'));
+  assert.deepEqual(e.map((x) => [x.c.id, x.left]), [['a', 2]]);
+  assert.deepEqual(core.campaignsEnding(cfg, 3, new Date('2026-12-20T09:00:00')), []);
+});
+
+test('the configuration check knows campaigns, house colours and the reserved {{campaign}}', () => {
+  const base = { schemaVersion: core.SCHEMA_VERSION, fields: [], signatures: [] };
+  assert.deepEqual(core.validate(Object.assign({}, base, { campaigns: [{ id: 'x', name: 'X', validFrom: '2026-12-01', validUntil: '2026-12-31' }], colors: ['#1d4ed8'] })), []);
+  assert.match(core.validate(Object.assign({}, base, { campaigns: [{ id: 'x', name: 'X', validFrom: '2026-12-31', validUntil: '2026-12-01' }] }))[0], /ends before it starts/);
+  assert.match(core.validate(Object.assign({}, base, { campaigns: [{ id: 'x' }, { id: 'x' }] }))[0], /share the id/);
+  assert.match(core.validate(Object.assign({}, base, { colors: ['red'] }))[0], /house colours/);
+  assert.match(core.validate(Object.assign({}, base, { blocks: [{ key: 'Campaign', name: 'x', html: '' }] }))[0], /\{\{campaign\}\}/);
+});

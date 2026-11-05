@@ -498,6 +498,93 @@
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Banner campaigns (config.campaigns): a banner for some days, put into signatures that are
+  // there anyway, so a campaign is no copy of a signature. A signature says where with
+  // {{campaign}} (on a line of its own); without it, the banner goes below (or above) it all.
+  // { id, name, validFrom, validUntil, html, compiled, signatures: [ids] (none: all),
+  //   position: 'below'|'above', newOnly, audience (as a signature's; none: everyone),
+  //   langs: { en: { html, compiled }, … } (the banner in a language: for those who speak it) }
+  // ---------------------------------------------------------------------------------------------
+  var SLOT_RE = /<(p|div)\b[^>]*>\s*\{\{campaign\}\}\s*<\/\1>|\{\{campaign\}\}/gi;
+  function hasSlot(html) { SLOT_RE.lastIndex = 0; var r = SLOT_RE.test(String(html || '')); SLOT_RE.lastIndex = 0; return r; }
+  // The campaign running for this signature and person on that day, or null. ctx: { values, from,
+  // groups, kind ('new'|'reply'), now, anyone (true: who it is for not looked at: the editor's preview) }.
+  function campaignFor(config, sig, ctx) {
+    ctx = ctx || {};
+    var list = (config && config.campaigns) || [], best = null, bestScore = -Infinity, lang = langOf(ctx.values);
+    if (!sig) return null;
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (!c || !inPeriod(c, ctx.now)) continue;
+      if (c.newOnly && ctx.kind === 'reply') continue;
+      var targets = c.signatures || [];
+      if (targets.length && targets.indexOf(sig.id) < 0 && targets.indexOf(sig.variantOf) < 0) continue;
+      if (!ctx.anyone && !isAvailable({ audience: c.audience || {} }, ctx.values, ctx.from, ctx.groups, ctx.now)) continue;
+      var a = c.audience || {};
+      var score = (c.langs && lang && c.langs[lang] ? 16 : 0) + (isCampaign(c) ? 0 : -8) + (lowerList(a.domains).length ? 4 : 0) + (lowerList(a.groups).length ? 2 : 0) + (lowerList(a.departments).length ? 1 : 0);
+      if (score > bestScore) { best = c; bestScore = score; }
+    }
+    return best;
+  }
+  // The banner's HTML (compiled) in the person's language, or the one for all.
+  function campaignHtml(c, values) {
+    if (!c) return '';
+    var lang = langOf(values), v = c.langs && lang && c.langs[lang];
+    if (v) return String(v.compiled || v.html || '');
+    return String(c.compiled || c.html || '');
+  }
+  // A signature's compiled HTML with the banner in its place (or below / above), or its place gone.
+  function fillCampaign(compiled, banner, position) {
+    var html = String(compiled || ''), b = String(banner || '');
+    if (hasSlot(html)) return html.replace(SLOT_RE, function () { return b ? '<div>' + b + '</div>' : ''; });
+    if (!b) return html;
+    return position === 'above' ? '<div>' + b + '</div>' + html : html + '<div>' + b + '</div>';
+  }
+  // The signature as it goes out on that day: a copy with the banner put in (or its place empty).
+  function withCampaign(config, sig, ctx) {
+    if (!sig) return sig;
+    var base = sig.compiled || sig.html || '';
+    var c = campaignFor(config, sig, ctx);
+    if (!c && !hasSlot(base)) return sig;
+    var out = {};
+    for (var k in sig) if (Object.prototype.hasOwnProperty.call(sig, k)) out[k] = sig[k];
+    out.compiled = fillCampaign(base, campaignHtml(c, ctx && ctx.values), c && c.position);
+    out.campaign = c ? c.id : '';
+    return out;
+  }
+  // A link in a banner with what tells the web statistics where the visit came from (utm_…):
+  // made again each time, so it never goes in twice.
+  function campaignSlug(name) {
+    return String(name || 'campaign').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'campaign';
+  }
+  function withUtm(html, name) {
+    var slug = campaignSlug(name);
+    return String(html || '').replace(/(\shref\s*=\s*")(https?:\/\/[^"]*)(")/gi, function (all, pre, url, post) {
+      var hash = '', at = url.indexOf('#');
+      if (at >= 0) { hash = url.slice(at); url = url.slice(0, at); }
+      var q = url.indexOf('?'), path = q >= 0 ? url.slice(0, q) : url;
+      var keep = (q >= 0 ? url.slice(q + 1).replace(/&amp;/g, '&').split('&') : []).filter(function (x) { return x && !/^utm_(source|medium|campaign)=/i.test(x); });
+      keep.push('utm_source=email', 'utm_medium=signature', 'utm_campaign=' + slug);
+      return pre + path + '?' + keep.join('&amp;') + hash + post;
+    });
+  }
+  // Campaigns that end within `days` with none after them for the same signatures: [{ c, left }].
+  function campaignsEnding(config, days, now) {
+    var d = today(now), list = (config && config.campaigns) || [], out = [];
+    var plus = function (day, n) { var x = new Date(day + 'T12:00:00'); x.setDate(x.getDate() + n); return today(x); };
+    list.forEach(function (c) {
+      if (!c || !DAY.test(String(c.validUntil || '')) || c.validUntil < d || !inPeriod(c, now)) return;
+      var left = Math.round((Date.parse(c.validUntil + 'T12:00:00') - Date.parse(d + 'T12:00:00')) / 86400000);
+      if (left > days) return;
+      var next = plus(c.validUntil, 1);
+      var same = function (o) { return JSON.stringify((o.signatures || []).slice().sort()) === JSON.stringify((c.signatures || []).slice().sort()); };
+      var follows = list.some(function (o) { return o !== c && same(o) && (!o.validFrom || o.validFrom <= next) && (!o.validUntil || o.validUntil >= next); });
+      if (!follows) out.push({ c: c, left: left });
+    });
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // A user's own variants: a copy of a company signature under a name of their own, with their own
   // text in the fields the editor marked "editable in the add-in" (a greeting, a line of their
   // own). Layout, images and every other field stay the company's. Kept in the user's mailbox.
@@ -670,12 +757,23 @@
     });
     var bkeys = {};
     (config.blocks || []).forEach(function (b, i) {
-      if (!b || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(b.key || '')) errors.push('Building block ' + (i + 1) + ': its name in a signature ({{name}}) holds letters, digits, - and _, starting with a letter.');
+      if (b && String(b.key || '').toLowerCase() === 'campaign') errors.push('{{campaign}} is the place of the campaign banners: a building block cannot be called so.');
+      else if (!b || !/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(b.key || '')) errors.push('Building block ' + (i + 1) + ': its name in a signature ({{name}}) holds letters, digits, - and _, starting with a letter.');
       else if (bkeys[String(b.key).toLowerCase()]) errors.push('The building block {{' + b.key + '}} is there twice.');
       else bkeys[String(b.key).toLowerCase()] = 1;
     });
     // The house colours (the editor's palette): #rrggbb, at most 16.
     if (config.colors !== undefined && (!Array.isArray(config.colors) || config.colors.length > 16 || config.colors.some(function (c) { return !/^#[0-9a-f]{6}$/i.test(String(c)); }))) errors.push('The house colours are up to 16 colours like #1d4ed8.');
+    var cids = {};
+    (config.campaigns || []).forEach(function (c, i) {
+      var nm = c && c.name ? '«' + c.name + '»' : String(i + 1);
+      if (!c || !/^[A-Za-z0-9_-]{1,64}$/.test(c.id || '')) errors.push('Campaign ' + (i + 1) + ' has no valid id.');
+      else if (cids[c.id]) errors.push('Two campaigns share the id ' + c.id + '.');
+      else cids[c.id] = 1;
+      if (c && ((c.validFrom && !DAY.test(c.validFrom)) || (c.validUntil && !DAY.test(c.validUntil)))) errors.push('Campaign ' + nm + ': its days are dates like 2026-12-01.');
+      else if (c && c.validFrom && c.validUntil && c.validFrom > c.validUntil) errors.push('Campaign ' + nm + ' ends before it starts.');
+      if (c && c.position && c.position !== 'below' && c.position !== 'above') errors.push('Campaign ' + nm + ': unknown position ' + c.position + '.');
+    });
     var ids = {};
     (config.signatures || []).forEach(function (s, i) {
       if (!s || !/^[A-Za-z0-9_-]{1,64}$/.test(s.id || '')) errors.push('Signature ' + (i + 1) + ' has no valid id.');
@@ -737,6 +835,14 @@
     isAvailable: isAvailable,
     inPeriod: inPeriod,
     isCampaign: isCampaign,
+    hasSlot: hasSlot,
+    campaignFor: campaignFor,
+    campaignHtml: campaignHtml,
+    fillCampaign: fillCampaign,
+    withCampaign: withCampaign,
+    withUtm: withUtm,
+    campaignSlug: campaignSlug,
+    campaignsEnding: campaignsEnding,
     forNobody: forNobody,
     PHOTO_DEFAULT: PHOTO_DEFAULT,
     today: today,

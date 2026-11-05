@@ -125,8 +125,16 @@ limited to **AD groups** (nested groups count), departments or sender domains. F
 2. Otherwise the default for that kind of message is used. When several defaults apply, the one for
    fewer people wins: sender domain before group before department before everyone.
 
-A signature can also be a **campaign**: on its days only (say, December), and then it wins over the
-usual default; before and after, the usual one comes back by itself.
+**Campaigns** are banners for some days (the holidays, a fair, a webinar), put into the signatures
+there are, so no signature is copied for them. Made under *Campaigns* without HTML (an image with a
+link, a line of text with a button, an image beside a text, or HTML of your own), in other languages
+too, for all signatures or some, below them or where a signature has `{{campaign}}`, for everyone or
+some groups, and in new mail only if you like. Links can carry `utm_campaign` for the web
+statistics. A timeline shows their days, *On a day* what each signature gets then, the status bar
+(and the webhook) says when one ends with none after it, and *Copy for next year* makes the next one.
+
+A signature can also be a campaign of its own: on its days only (say, December), and then it wins
+over the usual default; before and after, the usual one comes back by itself.
 
 Outlook's own signature is switched off for messages the add-in signs (an option in the editor), so
 a mail never gets two.

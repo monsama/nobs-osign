@@ -415,3 +415,40 @@ test('in a German Outlook, what went wrong is said in German', async () => {
   assert.ok(n, 'a notice');
   assert.match(n[2], /^OSign hat keine Signatur eingefügt; mehr unter Signaturen\. Signaturen suchen: SharePoint lässt Sie den Ordner OSign nicht lesen/);
 });
+
+test('a banner campaign running today goes in where the signature has its place, with its image; none running: the place goes; a reply without it when it is for new mail only', async () => {
+  const today = core.today(new Date());
+  const banner = (c) => {
+    c.signatures[1] = sig('short', 'Short', '<p>@@givenName</p><div>{{campaign}}</div>', { defaultReply: true });
+    c.campaigns = [{ id: 'xmas', name: 'Xmas', validFrom: today, validUntil: today, html: '<a href="https://ex.ch/"><img src="assets/logo.png" width="300"></a>', compiled: '<a href="https://ex.ch/"><img src="assets/logo.png" width="300"></a>', signatures: [], newOnly: false }];
+  };
+  // The reply signature, with its place: the banner there, its image embedded.
+  let r = runtime({ config: makeConfig(banner), composeType: 'reply' });
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r)[1], '<p>Anna</p><div><a href="https://ex.ch/"><img src="cid:osign-assets-logo.png" width="300"></a></div>');
+  // New mail, the standard signature without a place: below it.
+  r = runtime({ config: makeConfig(banner) });
+  await r.fire('onNewMessageComposeHandler');
+  assert.match(setCall(r)[1], /<\/p><div><a href="https:\/\/ex\.ch\/"><img src="cid:osign-assets-logo\.png" width="300"><\/a><\/div>$/);
+  // New mail only: a reply without it, its place gone.
+  r = runtime({ config: makeConfig((c) => { banner(c); c.campaigns[0].newOnly = true; }), composeType: 'reply' });
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r)[1], '<p>Anna</p>');
+  // Over: the place goes.
+  r = runtime({ config: makeConfig((c) => { banner(c); c.campaigns[0].validFrom = c.campaigns[0].validUntil = '2020-01-01'; }), composeType: 'reply' });
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r)[1], '<p>Anna</p>');
+});
+
+test('classic Outlook: a banner campaign kept with the copy in the mailbox goes in too', async () => {
+  const config = makeConfig();
+  const std = config.signatures[0];
+  const roaming = {
+    'osign.profile': JSON.stringify({ at: Date.now() - 60 * 60 * 1000, values: { givenName: 'Anna', sn: 'Muster', mobile: '', sAMAccountName: 'mustera', mail: 'anna@example.com' }, groups: [], groupsFor: 'graph\n' }),
+    'osign.classic': JSON.stringify({ at: config.updated, cfg: { schemaVersion: config.schemaVersion, options: config.options, fields: [], signatures: [{ id: std.id, name: std.name, compiled: '<p>@@givenName</p>{{campaign}}', defaultNew: true, audience: std.audience }],
+      campaigns: [{ id: 'c', compiled: '<b>BANNER</b>', signatures: [] }] }, images: {} })
+  };
+  const r = runtime({ signInFails: true, roaming, platform: 'PC' });
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(setCall(r)[1], '<p>Anna</p><div><b>BANNER</b></div>');
+});

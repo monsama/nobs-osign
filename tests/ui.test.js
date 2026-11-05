@@ -1783,3 +1783,55 @@ test('preview: one field left empty says which line goes; the phone width', { sk
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('a banner campaign made without HTML: in its place in the signature, in the preview on its days, saved compiled, copied for next year', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  const name = await page.inputValue('#sigName');
+  // A new signature has the place for the banners, as a chip of its own.
+  await page.frameLocator('#design').locator('span.osb.campaign').waitFor();
+  await page.click('a.nav[data-view=campaigns]');
+  await page.waitForSelector('#viewCampaigns:not([hidden])');
+  await page.click('#viewCampaigns .empty-state button');
+  const form = page.locator('#campEdit');
+  await form.locator('input[aria-label=Name]').fill('Messe 2026');
+  await form.locator('label:has(input[value=text])').click();
+  await form.locator('textarea[aria-label=Text]').fill('Besuchen Sie uns an der Messe');
+  await form.locator('input[placeholder^="e.g. Sign up"]').fill('Termin buchen');
+  await form.locator('input[placeholder="https://"]').fill('https://www.example.com/messe');
+  await form.locator('input[placeholder="https://"]').dispatchEvent('input');
+  // Its preview: under the signature, the link with what tells the statistics where it came from.
+  await page.waitForFunction(() => /Termin buchen/.test(document.querySelector('#campPv').srcdoc));
+  assert.match(await page.locator('#campPv').evaluate((f) => f.srcdoc), /href="https:\/\/www\.example\.com\/messe\?utm_source=email&amp;utm_medium=signature&amp;utm_campaign=messe-2026"/);
+  assert.match(await page.textContent('#campDayList'), new RegExp(name + '.*banner «Messe 2026»'));
+  // In the signature's preview, with a note saying whose banner it is.
+  await page.click('#sigList li a');
+  await page.waitForFunction(() => /Termin buchen/.test(document.querySelector('#preview').srcdoc));
+  assert.match(await page.textContent('#pvNote'), /Messe 2026/);
+  // On a day after it: none.
+  await page.click('label:has(#pvDayOn)');
+  const later = new Date(); later.setDate(later.getDate() + 40);
+  await page.fill('#pvDay', later.toISOString().slice(0, 10));
+  await page.waitForFunction(() => !/Termin buchen/.test(document.querySelector('#preview').srcdoc));
+  assert.match(await page.textContent('#pvNote'), /no campaign banner/);
+  await page.click('label:has(#pvDayOn)');
+  // Saved: its form, the HTML made of it, compiled for the add-in.
+  let c;
+  for (let i = 0; i < 40; i++) { c = JSON.parse((await api('draft/get')).configJson || '{}'); if ((c.campaigns || []).length && /Termin/.test(c.campaigns[0].compiled || '')) break; await new Promise((r) => setTimeout(r, 100)); }
+  assert.equal(c.campaigns[0].name, 'Messe 2026');
+  assert.equal(c.campaigns[0].design.tpl, 'text');
+  assert.match(c.campaigns[0].compiled, /Termin buchen/);
+  assert.deepEqual(require('../shared/signature-core.js').validate(c), []);
+  // Copied for next year: the year in the name, its days a year later.
+  await page.click('a.nav[data-view=campaigns]');
+  await page.click('#campEdit button:has-text("Copy for next year")');
+  assert.equal(await page.locator('#campEdit input[aria-label=Name]').inputValue(), 'Messe 2027');
+  assert.equal(await page.locator('#campList .camp-item').count(), 2);
+  await page.click('#campEdit button.danger');
+  await page.click('#campEdit button.danger');
+  assert.equal(await page.locator('#campList .camp-item').count(), 0);
+  await page.click('#sigList li a');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});

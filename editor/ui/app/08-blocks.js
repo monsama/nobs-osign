@@ -10,7 +10,7 @@
   function blockKey(name) {
     const base = String(name || 'block').normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase().slice(0, 30) || 'block';
     let k = /^[a-z]/.test(base) ? base : 'b-' + base, i = 2;
-    const taken = (x) => S.config.blocks.some((b) => b.key.toLowerCase() === x);
+    const taken = (x) => x === 'campaign' || S.config.blocks.some((b) => b.key.toLowerCase() === x);
     const first = k; while (taken(k)) k = first + '-' + i++;
     return k;
   }
@@ -38,6 +38,7 @@
       key.addEventListener('change', () => {
         const nk = key.value.trim().replace(/^\{\{|\}\}$/g, '');
         if (!/^[A-Za-z][A-Za-z0-9_-]{0,39}$/.test(nk)) { toast(t('A building block\'s name is letters, digits, - and _, starting with a letter.'), true); key.value = b.key; return; }
+        if (nk.toLowerCase() === 'campaign') { toast(t('{{campaign}} is the place of the campaign banners: give the building block another name.'), true); key.value = b.key; return; }
         if (S.config.blocks.some((x) => x !== b && x.key.toLowerCase() === nk.toLowerCase())) { toast(t('{{{0}}} is already a building block.', nk), true); key.value = b.key; return; }
         // The signatures that use it go along.
         const re = new RegExp('\\{\\{' + b.key.replace(/[-]/g, '\\-') + '\\}\\}', 'gi');
