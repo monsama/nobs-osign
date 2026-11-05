@@ -155,6 +155,8 @@
   const adRequest = (c) => ({ fields: core.adFields(c).map((f) => ({ key: f.key, ad: f.ad })), groups: core.groupsUsed(c) });
   S.snap = null; S.snapMatches = false;
   async function loadSnapshot() {
+    // The users read from AD are the editors' (the campaign role does not see them).
+    if (S.info && S.info.user && S.info.user.campaigns) { S.snap = null; S.snapMatches = false; return; }
     try { const r = await api('ad/snapshot', adRequest(S.config)); S.snap = r.snapshot; S.snapMatches = !!r.matches; }
     catch (e) { S.snap = null; S.snapMatches = false; }
   }

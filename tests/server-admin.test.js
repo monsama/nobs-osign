@@ -23,9 +23,10 @@ const cfg = (sigs, options) => JSON.stringify({ schemaVersion: 1, options: optio
 
 let ad, ldapUrl, release;
 test.before(async () => {
-  ad = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [] }, people: {
+  ad = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [], 'NOBS-OSign-Marketing': [] }, people: {
     anna: { pw: 'anna-pw', name: 'Anna Muster', mail: 'anna@example.ch', groups: ['NOBS-OSign-Admins'] },
-    beat: { pw: 'beat-pw', name: 'Beat Beispiel', mail: 'beat@example.ch', groups: ['NOBS-OSign-Admins'] }
+    beat: { pw: 'beat-pw', name: 'Beat Beispiel', mail: 'beat@example.ch', groups: ['NOBS-OSign-Admins'] },
+    mara: { pw: 'mara-pw', name: 'Mara Marketing', mail: 'mara@example.ch', groups: ['NOBS-OSign-Marketing'] }
   } });
   ldapUrl = await ad.listen();
   // GitHub's latest release, as the update check asks for it.
@@ -456,5 +457,50 @@ test('banner campaigns: refused when the banner is not as its HTML says, in the 
     const d = (await admin('history/diff', { id: latest.id })).changes;
     assert.deepEqual(d.map((c) => c.kind + ' ' + c.name), ['html Campaign: Xmas', 'rules Campaign: Xmas']);
     assert.equal(d[1].detail, 'validUntil');
+  } finally { s.srv.close(); }
+});
+
+test('the campaign role: only the campaigns of the draft change, it publishes them on what is published, and never removes a signature\'s image', async () => {
+  const s = await server({ OSIGN_LDAP_CAMPAIGN_GROUP: 'NOBS-OSign-Marketing' });
+  try {
+    const admin = s.as(await s.signIn('admin', 'admin-pw'));
+    // Without the group set, mara does not get in.
+    const mara = s.as(await s.signIn('mara', 'mara-pw'));
+    assert.equal((await mara('info')).user.campaigns, true);
+    const sigs = (html) => JSON.parse(cfg([{ id: 'a', name: 'A', html, isDefaultNew: true }]));
+    await admin('assets/upload', { name: 'logo.png', data: PNG.toString('base64') });
+    assert.equal((await admin('publish', { configJson: JSON.stringify(sigs('<p>published <img src="assets/logo.png"></p>')) })).ok, true);
+    // The editors go on in the draft, not published yet.
+    await admin('draft/save', { configJson: JSON.stringify(sigs('<p>draft of the editors</p>')) });
+    // What mara sends: her campaign, and a signature changed (that part is not kept).
+    const camp = { id: 'c1', name: 'Fair', html: '<p><img src="assets/fair.png"></p>', compiled: '<p><img src="assets/fair.png"></p>', signatures: [] };
+    const sent = Object.assign(sigs('<p>mara was here</p>'), { campaigns: [camp], fields: [{ key: 'x' }] });
+    const d0 = await mara('draft/get');
+    assert.equal((await mara('draft/save', { configJson: JSON.stringify(sent), rev: d0.rev })).ok, true);
+    const draft = JSON.parse((await admin('draft/get')).configJson);
+    assert.equal(draft.signatures[0].html, '<p>draft of the editors</p>');
+    assert.deepEqual(draft.fields, []);
+    assert.equal(draft.campaigns[0].name, 'Fair');
+    // Her banner's image missing: refused; uploaded: published on what is published.
+    assert.match((await mara('publish', { configJson: JSON.stringify(sent) })).error, /fair\.png/);
+    assert.equal((await mara('assets/upload', { name: 'fair.png', data: PNG.toString('base64') })).ok, true);
+    const p = await mara('publish', { configJson: JSON.stringify(sent) });
+    assert.equal(p.ok, true, p.error);
+    const out = JSON.parse((await admin('published/get')).configJson);
+    assert.equal(out.signatures[0].html, '<p>published <img src="assets/logo.png"></p>', 'what was published, not the editors\' draft');
+    assert.equal(out.campaigns[0].id, 'c1');
+    const kept = (await admin('history/list')).versions[0];
+    assert.equal(kept.images, 2, 'the published logo and the banner');
+    assert.match((await admin('history/list')).versions[0].by, /Mara Marketing \(campaigns\)/);
+    // The draft of the editors stays theirs.
+    assert.equal(JSON.parse((await admin('draft/get')).configJson).signatures[0].html, '<p>draft of the editors</p>');
+    // A signature's image: not hers to remove; the rest of the API not hers at all.
+    await admin('draft/save', { configJson: JSON.stringify(Object.assign(sigs('<p><img src="assets/logo.png"></p>'), { campaigns: [camp] })) });
+    assert.match((await mara('assets/delete', { name: 'logo.png' })).error, /A signature uses this image/);
+    assert.match((await mara('settings/save', { settings: {} })).error, /campaigns only/);
+    assert.match((await mara('history/restore', { id: 'x' })).error, /campaigns only/);
+    // Four eyes on: an editor publishes.
+    await admin('settings/save', { settings: { requireApproval: 'on' } });
+    assert.match((await mara('publish', { configJson: JSON.stringify(sent) })).error, /approval/);
   } finally { s.srv.close(); }
 });

@@ -47,6 +47,7 @@ const FIELDS = {
   ldapBase: { env: 'OSIGN_LDAP_BASE', check: (v) => (DN.test(v) ? '' : 'Where the users are is a DN, like OU=Users,DC=example,DC=ch.') },
   ldapGroup: { env: 'OSIGN_LDAP_GROUP', check: (v) => (DN.test(v) ? '' : 'The sign-in group is its name, like NOBS-OSign-Admins.') },
   ldapPublishGroup: { env: 'OSIGN_LDAP_PUBLISH_GROUP', check: (v) => (DN.test(v) ? '' : 'The publishing group is its name, like NOBS-OSign-Publish.') },
+  ldapCampaignGroup: { env: 'OSIGN_LDAP_CAMPAIGN_GROUP', check: (v) => (DN.test(v) ? '' : 'The campaign group is its name, like NOBS-OSign-Marketing.') },
   ldapLoginAttr: { env: 'OSIGN_LDAP_LOGIN_ATTR', check: (v) => (/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(v) ? '' : 'The login attribute is the name of one attribute, such as sAMAccountName.') },
   ldapServiceDn: { env: 'OSIGN_LDAP_SERVICE_DN', check: (v) => (DN.test(v) ? '' : 'The service account is its login, like svc-osign.') },
   ldapDirectoryBase: { env: 'OSIGN_LDAP_DIRECTORY_BASE', check: (v) => (DN.test(v) ? '' : 'Where users and groups are read is a DN, like DC=example,DC=ch.') },

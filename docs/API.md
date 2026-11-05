@@ -301,3 +301,18 @@ approved. The file name is the mail address in lower case, characters other than
 ## quit
 
 Stops the server. → `{ ok }`
+
+## The campaign role
+
+A session of a member of the campaign group (`OSIGN_LDAP_CAMPAIGN_GROUP`, not in the sign-in group)
+has `info.user.campaigns: true` and may call `info`, `ping`, `draft/get`, `draft/save`,
+`assets/upload`, `assets/delete`, `published/get`, `publish`, `approval/get`, `approval/request`,
+`history/list`, `history/diff`, `settings/get`, `schedule/get`, `ad/users`, `ad/lookup`,
+`entra/users`, `entra/lookup` and `photos/list`; anything else answers 403 *Your role makes the
+campaigns only*. For it:
+- `draft/save` keeps only `campaigns` of the `configJson` sent, in the draft as it is (with `rev`).
+- `assets/delete` refuses an image a signature or building block of the draft uses.
+- `publish` publishes the last published configuration with the `campaigns` sent, the published
+  images and the campaigns' own from the draft (`draft` untouched); refused with four eyes on, and
+  before anything was published. `approval/request` says so.
+

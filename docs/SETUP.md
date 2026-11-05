@@ -275,6 +275,10 @@ too (step 7).
    when a default signature (with its banner) gets near that, and *Publish…* when one is over.
    Images nothing uses are listed there too, and in the image dialog (*Remove … unused*).
 
+   *On a day* → *For a person* shows one person's signatures and banners on that day (a test run
+   before a big campaign). Marketing can get a role of its own for the campaigns only
+   ([ADMIN.md](ADMIN.md), *The campaign role*); a short guide for them: [CAMPAIGNS.md](CAMPAIGNS.md).
+
    In the design, fields and building blocks (the banner's place too) are moved by dragging them;
    the columns button offers four layouts (logo left or right, with a line, three columns).
 

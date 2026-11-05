@@ -198,7 +198,9 @@
     const pos = el('select', { 'aria-label': t('Where in the signature') }, el('option', { value: 'below' }, t('below the signature')), el('option', { value: 'above' }, t('above the signature')));
     pos.value = c.position === 'above' ? 'above' : 'below';
     pos.addEventListener('change', () => { c.position = pos.value; campChanged(); });
+    const role = !!(S.info && S.info.user && S.info.user.campaigns);
     const slotNote = noSlot.length ? el('p', { class: 'hint' }, t('Without the place {{campaign}}: {0}. There the banner goes', noSlot.map((s) => s.name).join(', ')), ' ', pos, '. ',
+      role ? t('An editor can put the place into them.') :
       el('button', { type: 'button', class: 'ghost small', title: t('Puts {{campaign}} at the end of these signatures: then you can move it where it should go'), onclick: () => {
         noSlot.forEach((s) => { s.html = String(s.html || '').replace(/\s*$/, '') + '\n<div>{{campaign}}</div>'; });
         changed(); campEditor(); campPreview();
@@ -250,10 +252,43 @@
     frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:12px 14px;font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#222;zoom:.85}p{margin:0}table{border-collapse:collapse}</style></head><body>' + (html || '<p style="color:#888">' + core.escapeHtml(t('No signature yet.')) + '</p>') + '</body></html>';
   }
 
+  // A test run for one person (from AD or Entra ID): on that day, which signature they get for new
+  // mail and for replies, with which banner, and whether it fits classic Outlook.
+  let campPerson = null;
+  async function campWhoLookup() {
+    const q = $('campWho').value.trim(); if (!q) return;
+    const entra = !(S.info && S.info.features && S.info.features.adLookup) && onServer() && S.info.features.publishTarget === 'sharepoint';
+    try {
+      const r = entra ? await api('entra/lookup', { query: q, fields: S.config.fields.map((f) => ({ key: f.key, graph: f.graph })) })
+        : await api('ad/lookup', { query: q, fields: S.config.fields.map((f) => ({ key: f.key, ad: f.ad })) });
+      campPerson = { name: r.displayName, values: r.values || {}, groups: r.groups || [] };
+      $('campWhoOff').hidden = false; campDayTable();
+    } catch (e) { toast(t(e.message), true); }
+  }
+  suggest($('campWho'), {
+    fetch: async (q) => ((S.info && S.info.features && S.info.features.adLookup) ? (await api('ad/users', { query: q })).users : onServer() && S.info.features.publishTarget === 'sharepoint' ? (await api('entra/users', { query: q })).users : []).map(person),
+    pick: () => campWhoLookup()
+  });
+  $('campWhoGo').addEventListener('click', campWhoLookup);
+  $('campWho').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); campWhoLookup(); } });
+  $('campWhoOff').addEventListener('click', () => { campPerson = null; $('campWho').value = ''; $('campWhoOff').hidden = true; campDayTable(); });
+  function campPersonRows(now) {
+    const v = campPerson.values, from = v.mail || '', rows = [el('li', { class: 'who' }, el('b', null, campPerson.name || t('(no name)')))];
+    for (const kind of ['new', 'reply']) {
+      const s = core.pick(S.config, v, from, kind, null, campPerson.groups, now);
+      const c = s ? core.campaignFor(S.config, s, { now, kind, values: v, from, groups: campPerson.groups }) : null;
+      const kb = s ? classicKb(s) : 0;
+      rows.push(el('li', { class: s ? '' : 'off' }, el('span', { class: 'k' }, kind === 'new' ? t('New mail') : t('Replies')),
+        el('span', null, !s ? t('no signature') : s.name + (c ? ' · ' + t('banner «{0}»', c.name) : ' · ' + t('no banner')) + (kb > CLASSIC_KB ? ' · ' + t('too large for classic Outlook (~{0} KB)', kb) : ''))));
+    }
+    return rows;
+  }
+
   // What each signature gets on a day: its banner, or none.
   function campDayTable() {
     const box = $('campDayList'); if (!box) return;
     const day = $('campDay').value || core.today(), now = new Date(day + 'T12:00:00');
+    if (campPerson) { box.replaceChildren(...campPersonRows(now)); return; }
     const rows = S.config.signatures.map((s) => {
       const on = core.inPeriod(s, now), c = on ? core.campaignFor(S.config, s, { now, anyone: true, kind: 'new' }) : null;
       return el('li', { class: on ? '' : 'off' }, el('b', null, s.name || t('(no name)')), ' ',

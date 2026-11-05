@@ -21,7 +21,10 @@ const MEMBER = ['ad/departments', 'ad/groups', 'ad/lookup', 'ad/read', 'ad/snaps
   'approval/cancel', 'approval/get', 'approval/request', 'assets/delete', 'assets/upload', 'deploy/status', 'draft/get', 'draft/save',
   'entra/lookup', 'entra/users', 'history/diff', 'history/list', 'history/restore', 'load-published', 'photos/fetch', 'photos/list',
   'published/get', 'published/revert', 'schedule/get', 'server/tls', 'settings/get', 'settings/save', 'info', 'ping'];
-const DENIED = /Only the local|local account admin|publishing group|Only whoever|may not|not allowed/i;
+const DENIED = /Only the local|local account admin|publishing group|Only whoever|may not|not allowed|campaigns only/i;
+// The campaign role (OSIGN_LDAP_CAMPAIGN_GROUP): these and nothing else.
+const CAMPAIGN = ['ad/lookup', 'ad/users', 'approval/get', 'approval/request', 'assets/delete', 'assets/upload', 'draft/get', 'draft/save', 'entra/lookup', 'entra/users',
+  'history/diff', 'history/list', 'info', 'photos/list', 'ping', 'publish', 'published/get', 'schedule/get', 'settings/get'];
 
 function routesInCode() {
   const dir = path.join(__dirname, '..', 'server');
@@ -38,14 +41,15 @@ test('every route of the API has its place, and each role gets exactly its own',
   assert.deepEqual([...known].filter((r) => !inCode.includes(r)).sort(), [], 'ACCESS names routes the code no longer has');
 
   const BASE = 'DC=example,DC=ch', SERVICE = { dn: 'CN=svc-osign,OU=Service,DC=example,DC=ch', pw: 'svc-pw' };
-  const ad = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [], 'NOBS-OSign-Pub': [] }, people: {
+  const ad = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [], 'NOBS-OSign-Pub': [], 'NOBS-OSign-Marketing': [] }, people: {
+    mar: { pw: 'mar-pw', name: 'Mar', mail: 'mar@example.ch', groups: ['NOBS-OSign-Marketing'] },
     mem: { pw: 'mem-pw', name: 'Mem', mail: 'mem@example.ch', groups: ['NOBS-OSign-Admins'] },
     pub: { pw: 'pub-pw', name: 'Pub', mail: 'pub@example.ch', groups: ['NOBS-OSign-Admins', 'NOBS-OSign-Pub'] } } });
   const ldapUrl = await ad.listen();
   const env = { OSIGN_DATA: fs.mkdtempSync(path.join(os.tmpdir(), 'osign-authz-')), OSIGN_PUBLISH_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'osign-authz-pub-')),
     OSIGN_SECURE_COOKIE: '0', OSIGN_ADMIN_PASSWORD: 'admin-pw', OSIGN_APP_KEY: 'authz-key',
     OSIGN_LDAP_URL: ldapUrl, OSIGN_LDAP_ALLOW_PLAIN: '1', OSIGN_LDAP_BIND: 'cn={login}@example.ch,' + BASE, OSIGN_LDAP_BASE: 'OU=Users,' + BASE,
-    OSIGN_LDAP_GROUP: 'CN=NOBS-OSign-Admins,OU=Groups,' + BASE, OSIGN_LDAP_PUBLISH_GROUP: 'CN=NOBS-OSign-Pub,OU=Groups,' + BASE,
+    OSIGN_LDAP_GROUP: 'CN=NOBS-OSign-Admins,OU=Groups,' + BASE, OSIGN_LDAP_PUBLISH_GROUP: 'CN=NOBS-OSign-Pub,OU=Groups,' + BASE, OSIGN_LDAP_CAMPAIGN_GROUP: 'NOBS-OSign-Marketing',
     OSIGN_LDAP_SERVICE_DN: SERVICE.dn, OSIGN_LDAP_SERVICE_PASSWORD: SERVICE.pw };
   const srv = http.createServer(createApp({ log: { info() {}, warn() {}, error() {} }, env }));
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
@@ -68,6 +72,14 @@ test('every route of the API has its place, and each role gets exactly its own',
         if (!may.includes(role) && got !== 'denied') wrong.push(route + ': let ' + role + ' through');
       }
     }
+    // The campaign role: its routes, and every other one refused.
+    const mar = await signIn('mar', 'mar-pw');
+    for (const route of inCode) {
+      const got = await call(route, mar);
+      if (CAMPAIGN.includes(route) && got !== 'through') wrong.push(route + ': refused to the campaign role');
+      if (!CAMPAIGN.includes(route) && got !== 'denied') wrong.push(route + ': let the campaign role through');
+    }
+    assert.deepEqual(CAMPAIGN.filter((r) => !inCode.includes(r)), [], 'the campaign role names routes the code no longer has');
     assert.deepEqual(wrong, []);
   } finally { srv.close(); ad.close(); }
 });

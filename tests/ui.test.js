@@ -1913,3 +1913,32 @@ test('campaigns checked before publishing, unused images removed, columns in lay
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('a test run for one person: their signatures and banners on a day; a banner without alt text is said', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.click('a.nav[data-view=campaigns]');
+  await page.click('#viewCampaigns .empty-state button');
+  const form = page.locator('#campEdit');
+  await form.locator('label:has(input[value=html])').click();
+  await form.locator('textarea[aria-label=HTML]').fill('<p><img src="https://www.example.com/b.png" width="300"></p>');
+  // For a person: who they are, which signature for new mail and replies, with which banner.
+  await page.fill('#campWho', 'anna');
+  await page.click('#campWhoGo');
+  await page.waitForSelector('#campDayList li.who');
+  const run = await page.textContent('#campDayList');
+  assert.match(run, /Anna Muster/);
+  assert.match(run, /New mail.*(banner «Holidays|no signature)/);
+  await page.click('#campWhoOff');
+  assert.equal(await page.locator('#campDayList li.who').count(), 0);
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  await page.waitForFunction(() => /alt/.test(document.querySelector('#pubChecks').textContent));
+  assert.match(await page.textContent('#pubChecks'), /Banner images without a text for when images are blocked/);
+  await page.click('#dlgPublish button[value=cancel]');
+  await page.click('#campEdit button.danger');
+  await page.click('#sigList li a');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});

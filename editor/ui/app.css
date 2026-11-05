@@ -1382,3 +1382,12 @@ dialog.fit { width: min(1080px, 96vw); }
 .pal.tbl-menu { left: auto; right: 0; width: 250px; }
 .camp-item { white-space: normal; width: 100%; }
 .camp-item small { white-space: normal; line-height: 1.35; }
+
+/* The campaign role: the campaigns, nothing to edit besides (the server keeps nothing else). */
+body.role-campaigns .side-sect:first-child, body.role-campaigns .nav-list li:not(:has(a[data-view=campaigns])), body.role-campaigns .side-sect:not(:has(a[data-view=campaigns])),
+body.role-campaigns #btnSettings, body.role-campaigns #btnWizard, body.role-campaigns #wizSep { display: none !important; }
+.camp-day .pick { display: flex; gap: 4px; width: 100%; }
+.camp-day .pick input { flex: 1; min-width: 0; }
+.camp-daylist li.who { border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.camp-daylist li .k { color: var(--muted); }
+body.role-campaigns .side-sect { border-top: 0 !important; margin-top: 0 !important; padding-top: 0 !important; }

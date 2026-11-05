@@ -249,6 +249,8 @@
       S.config = normalize(null);
       buildToolbar();
       applyDraft(draft);
+      // The campaign role: the campaigns only (the server keeps nothing else it sends).
+      if (info.user && info.user.campaigns) { document.body.classList.add('role-campaigns'); goView('campaigns'); }
       loadSnapshot();
       loadApproval();
       loadTls();

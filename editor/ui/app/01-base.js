@@ -450,6 +450,8 @@
 
   // One view shown (signature, fields, …), the others hidden.
   function show(view) {
+    // The campaign role sees the campaigns only.
+    if (S.info && S.info.user && S.info.user.campaigns) view = 'campaigns';
     S.view = view;
     // Away from the editor: no building block edited in it any more.
     if (view !== 'sig') { S.blockEdit = null; document.body.classList.remove('editing-block'); }

@@ -387,7 +387,9 @@
     var out = [], re = /<img\b[^>]*>/gi, m;
     while ((m = re.exec(String(html || '')))) {
       var src = imgSrc(m[0]), mm = /^(assets|photos)\/([^/?#]+)$/i.exec(src);
-      if (mm) out.push({ tag: m[0], src: src, dir: mm[1].toLowerCase(), name: decodeName(mm[2]) });
+      // A name that is a path once decoded (%2F, ..) is none: never a file outside the folder.
+      var nm = mm ? decodeName(mm[2]) : '';
+      if (mm && !/[\\/]|^\.\.?$|\.\./.test(nm)) out.push({ tag: m[0], src: src, dir: mm[1].toLowerCase(), name: nm });
     }
     return out;
   }
