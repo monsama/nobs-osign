@@ -279,7 +279,7 @@
   // The server's connections (AD, Graph, Cloudflare), set by the local account admin: what is
   // saved wins over .env, an empty field takes .env's value (its placeholder). Secrets are only
   // ever sent, never shown: the server says where each comes from.
-  const CONN_FIELDS = ['ldapUrl', 'adDomain', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapPublishGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'adAttributes', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
+  const CONN_FIELDS = ['ldapUrl', 'adDomain', 'ldapStartTls', 'ldapBind', 'ldapBase', 'ldapGroup', 'ldapPublishGroup', 'ldapCampaignGroup', 'ldapLoginAttr', 'ldapServiceDn', 'ldapDirectoryBase', 'adExportAt', 'adAttributes', 'graphTenantId', 'graphClientId', 'cfAccountId', 'cfProject'];
   const CONN_SECRETS = ['ldapServicePassword', 'cfApiToken'];
   let connDrop = {}, connCa;
   function day(iso) { return iso ? new Date(iso).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') : ''; }

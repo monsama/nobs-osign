@@ -292,7 +292,8 @@ function createApp(opts) {
   // Who publishes and approves: with a publishing group set, only its members (and the local admin).
   const publisher = (s) => !!(s && s.user && (s.user.local || s.user.publisher !== false));
   // Approval needed for this person: four eyes on, or not one who publishes.
-  const needsApprovalFor = (s) => needsApproval() || !publisher(s);
+  // The campaign role publishes its campaigns itself, unless four eyes is on.
+  const needsApprovalFor = (s) => needsApproval() || (!publisher(s) && !(s && s.user && s.user.campaigns));
   // Taken out of the publishing group (or the sign-in group), someone loses publishing at once, not
   // with their next sign-in: asked again of AD (with the service account) before what publishes,
   // at most once a minute per session. AD not reachable: as it was at sign-in.
@@ -305,8 +306,8 @@ function createApp(opts) {
     try {
       const r = await lookup(dir, login, []);
       const mine = r.groups.map((g) => g.toLowerCase());
-      const signIn = mine.includes(cnOf(ldapCfg.group));
-      return { signIn, publisher: signIn && (!ldapCfg.publishGroup || mine.includes(cnOf(ldapCfg.publishGroup))) };
+      const inGroup = mine.includes(cnOf(ldapCfg.group)), signIn = inGroup || (!!ldapCfg.campaignGroup && mine.includes(cnOf(ldapCfg.campaignGroup)));
+      return { signIn, campaigns: !inGroup && signIn, publisher: inGroup && (!ldapCfg.publishGroup || mine.includes(cnOf(ldapCfg.publishGroup))) };
     } catch (e) {
       if (/^No user /.test(e.message)) return { signIn: false, publisher: false };
       log.warn('roles: could not ask AD about ' + login + ': ' + e.message);
@@ -321,12 +322,14 @@ function createApp(opts) {
   }
   // Whether someone signed in with AD still publishes, and may still sign in: asked of AD at most once a minute.
   async function recheckPublisher(s) {
-    if (!s || !s.user || s.user.local || !ldapCfg.publishGroup || !adOn) return;
+    if (!s || !s.user || s.user.local || !(ldapCfg.publishGroup || ldapCfg.campaignGroup || s.user.campaigns) || !adOn) return;
     if (s.user.publisherAt && Date.now() - s.user.publisherAt < 60000) return;
     const r = await adRoles(s.user.login);
     if (!r) return;
     const was = s.user.publisher;
     s.user.publisher = r.publisher; s.user.publisherAt = Date.now();
+    // Moved into the sign-in group, or out of it into the campaign group: the role follows.
+    s.user.campaigns = !!r.campaigns;
     // Gone from AD, or out of the sign-in group: signed out.
     if (!r.signIn) { s.user.gone = true; log.info('roles: ' + s.user.login + ' is no longer allowed to sign in: signed out'); }
     else if (was !== s.user.publisher) log.info('roles: ' + s.user.login + (s.user.publisher ? ' publishes again' : ' no longer publishes'));
@@ -423,7 +426,7 @@ function createApp(opts) {
         // The key the passwords and the certificate's key are kept with (secrets/app_key).
         keyOk: connections.keyOk()
       },
-      user: { login: s.user.login, name: s.user.name, local: !!s.user.local, publisher: publisher(s) }
+      user: { login: s.user.login, name: s.user.name, local: !!s.user.local, publisher: publisher(s), campaigns: !!s.user.campaigns }
     }),
     'draft/get': () => store.getDraft(),
     // Saved from the version it was made from (rev): a newer one there is not written over unless
@@ -526,6 +529,57 @@ function createApp(opts) {
   };
   Object.assign(AUDIT, release.audit, backups.audit);
 
+  // The campaign role (OSIGN_LDAP_CAMPAIGN_GROUP): what it may ask for. Its own draft/save,
+  // assets/delete and publish (campaignRoutes) touch nothing but the campaigns: the rest of the
+  // draft stays as the editors left it, whatever is sent.
+  const CAMPAIGN_ROUTES = new Set(['info', 'ping', 'draft/get', 'draft/save', 'assets/upload', 'assets/delete', 'published/get', 'publish', 'approval/get',
+    'history/list', 'history/diff', 'settings/get', 'schedule/get', 'ad/users', 'ad/lookup', 'entra/users', 'entra/lookup', 'photos/list', 'approval/request']);
+  const campaignsOf = (text) => { let c; try { c = JSON.parse(text); } catch (e) { return null; } return c && typeof c === 'object' && Array.isArray(c.campaigns) ? c.campaigns : c && typeof c === 'object' ? [] : null; };
+  // The images a list of campaigns shows (their HTML in every part).
+  const campaignImages = (list) => [...new Set((list || []).flatMap((x) => [x].concat(Object.values((x && x.langs) || {}), (x && x.more) || []))
+    .flatMap((p) => [...String((p && p.html) || '').matchAll(/src="assets\/([^"?#]+)"/g)].map((m) => m[1])))];
+  const campaignRoutes = {
+    // The campaigns sent, into the draft as it is: nothing else of what was sent is kept.
+    'draft/save': (d, s) => {
+      if (publishing) return { error: 'Publishing right now: saved in a moment.' };
+      const camps = campaignsOf(typeof d.configJson === 'string' ? d.configJson : '');
+      if (!camps) return { error: 'The request is not valid JSON.' };
+      const now = store.getDraft();
+      let cur; try { cur = now.configJson ? JSON.parse(now.configJson) : null; } catch (e) { cur = null; }
+      if (!cur) return { error: 'There is no draft yet: an editor makes the signatures first.' };
+      cur.campaigns = camps;
+      const r = store.saveDraft(JSON.stringify(cur), { rev: typeof d.rev === 'string' ? d.rev : '', force: d.force === true });
+      if (r.conflict) return Object.assign(r, { by: draftBy });
+      if (!r.error) draftBy = { name: s.user.name || s.user.login, at: new Date().toISOString() };
+      return r;
+    },
+    // Only an image no signature or building block of the draft uses.
+    'assets/delete': (d) => {
+      if (publishing) return { error: 'Publishing right now: try again in a moment.' };
+      let cur = {}; try { cur = JSON.parse(store.getDraft().configJson || '{}'); } catch (e) { cur = {}; }
+      const text = JSON.stringify([(cur.signatures || []).map((x) => [x.html, x.source]), (cur.blocks || []).map((b) => b.html)]);
+      if (text.includes('assets/' + String(d.name || ''))) return { error: 'A signature uses this image: only an editor removes it.' };
+      return store.deleteAsset(d.name);
+    },
+    'approval/request': () => ({ error: 'Publishing needs a second person\'s approval here: an editor publishes the draft, with your campaigns in it.' }),
+    // What is published, with these campaigns: the signatures, fields and options as they went out
+    // last (not the editors' draft), the images as published and the campaigns' own from the draft.
+    publish: async (d, s) => {
+      if (needsApproval()) return { error: 'Publishing needs a second person\'s approval here: an editor publishes the draft, with your campaigns in it.' };
+      const camps = campaignsOf(typeof d.configJson === 'string' ? d.configJson : '');
+      if (!camps) return { error: 'The request is not valid JSON.' };
+      const last = history.latest();
+      if (!last) return { error: 'Nothing is published yet: an editor publishes the signatures first.' };
+      const cfg = JSON.parse(last);
+      cfg.campaigns = camps;
+      const images = new Map();
+      for (const n of Object.keys(history.latestImages())) { const b = history.latestImage(n); if (b) images.set(n, b); }
+      const draft = store.draftImages();
+      for (const n of campaignImages(camps)) { if (draft.has(n)) images.set(n, draft.get(n)); else if (!images.has(n)) return { error: 'The image ' + n + ' of a campaign is not in the draft.' }; }
+      return publishNow(JSON.stringify(cfg), (s.user.name || s.user.login) + ' (campaigns)', d.message || 'Campaigns', { images, draft: false });
+    }
+  };
+
   // What only Windows, OneDrive or (for now) the PowerShell editor can do: said plainly.
   const NOT_HERE = {
     'pick-folder': 'Choosing a folder needs Windows.',
@@ -585,7 +639,10 @@ function createApp(opts) {
     }
 
     if (Object.prototype.hasOwnProperty.call(NOT_HERE, name)) return fail(res, NOT_HERE[name]);
-    const fn = Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
+    // The campaign role: the campaigns, their images and what reading them needs; nothing else.
+    if (s.user.campaigns && !CAMPAIGN_ROUTES.has(name)) return fail(res, 'Your role makes the campaigns only: this is for the editors.', 403);
+    const fn = s.user.campaigns && Object.prototype.hasOwnProperty.call(campaignRoutes, name) ? campaignRoutes[name]
+      : Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
     if (!fn) return fail(res, 'unknown', 404);
     let r;
     // What publishes or goes live at once: whether they are still in the publishing group, asked now.

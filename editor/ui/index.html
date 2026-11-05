@@ -245,7 +245,9 @@
         (<i>+ Insert field → Campaign banner</i>); without it, below the signature. It goes out with the next publish.</p>
       <div class="camp-top">
         <div class="camp-tl-box"><h3>Timeline</h3><div id="campTimeline" class="camp-tl"></div></div>
-        <div class="camp-day"><h3>On a day</h3><label>What the signatures get on <input type="date" id="campDay"></label><ul id="campDayList" class="camp-daylist"></ul></div>
+        <div class="camp-day"><h3>On a day</h3><label>What the signatures get on <input type="date" id="campDay"></label>
+          <label>For a person <span class="pick"><input id="campWho" placeholder="name, user name or mail" autocomplete="off"><button type="button" id="campWhoGo" class="small">Look up</button><button type="button" id="campWhoOff" class="small ghost" hidden title="Back to all signatures">×</button></span></label>
+          <ul id="campDayList" class="camp-daylist"></ul></div>
       </div>
       <div class="camp-layout">
         <div id="campList" class="camp-list"></div>
@@ -697,6 +699,9 @@
         <label for="cn_ldapPublishGroup">Publishing group</label>
         <div><input id="cn_ldapPublishGroup" data-ph="optional" autocomplete="off">
           <small>(optional: only its members publish and approve; the others edit and ask for approval. Empty: everyone in the sign-in group publishes)</small></div>
+        <label for="cn_ldapCampaignGroup">Campaign group</label>
+        <div><input id="cn_ldapCampaignGroup" data-ph="optional" autocomplete="off">
+          <small>(optional: its members sign in for the campaigns only, the banners and their images, and publish them on what is published. Nothing else of the draft)</small></div>
         <label for="cn_ldapServiceDn">Service account</label>
         <div><input id="cn_ldapServiceDn" data-ph="svc-osign" autocomplete="off">
           <small>(its login. A plain domain user is enough: it only reads)</small></div>

@@ -131,7 +131,8 @@ link, a line of text with a button, an image beside a text, or HTML of your own)
 too, for all signatures or some, below them or where a signature has `{{campaign}}`, for everyone or
 some groups, and in new mail only if you like. Links can carry `utm_campaign` for the web
 statistics. A timeline shows their days, *On a day* what each signature gets then, the status bar
-(and the webhook) says when one ends with none after it, and *Copy for next year* makes the next one.
+(and the webhook) says when one ends with none after it, and *Copy for next year* makes the next one. Marketing can have a role of its own for the campaigns only;
+the short guide for them is [docs/CAMPAIGNS.md](docs/CAMPAIGNS.md).
 
 A signature can also be a campaign of its own: on its days only (say, December), and then it wins
 over the usual default; before and after, the usual one comes back by itself.

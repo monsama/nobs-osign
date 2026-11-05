@@ -83,6 +83,16 @@
     const key = (x) => JSON.stringify([(x.signatures || []).slice().sort(), audienceText(x), x.newOnly ? 1 : 0, (x.days || []).join()]);
     const clash = list.filter((x) => list.some((o) => o !== x && key(o) === key(x) && range(x)[0] <= range(o)[1] && range(o)[0] <= range(x)[1]));
     if (clash.length) out.push(['warn', t('Campaigns at the same time for the same signatures and people, only one of them shows: {0}. Change the days, or choose other signatures.', nm(clash)), null, t('Campaigns at the same time: {0}', clash.length)]);
+    // A banner's image: a text for blocked images, visible in dark mode, not heavy in every mail.
+    const bimgs = (x) => parts(x).flatMap((p) => imgs(p.html));
+    const noAlt = list.filter((x) => bimgs(x).some((i) => !/\salt\s*=\s*["'][^"']+["']/i.test(i)));
+    if (noAlt.length) out.push(['warn', t('Banner images without a text for when images are blocked (alt): {0}. Without it, those recipients see nothing of the banner.', nm(noAlt)), null, t('Banner without alt text: {0}', noAlt.length)]);
+    const nameOf = (i) => (/src="assets\/([^"?#]+)"/.exec(i) || [])[1];
+    const size = (n) => { const a = S.assets.find((z) => z.name === n); return a ? a.size || 0 : 0; };
+    const heavy = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && size(n) > 100 * 1024))];
+    if (heavy.length) out.push(['warn', t('Large banner images (over 100 KB), in every mail while the campaign runs: {0}.', heavy.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }, t('Large banner images: {0}', heavy.length)]);
+    const darkOnes = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && dark[n] === true))];
+    if (darkOnes.length) out.push(['warn', t('Dark banner image on a transparent background, hard to see in dark mode: {0}. A background of its own helps.', darkOnes.join(', ')), null, t('Banner hard to see in dark mode: {0}', darkOnes.length)]);
     const over = (c.campaigns || []).filter((x) => x.validUntil && x.validUntil < day);
     if (over.length) out.push(['good', t('Campaigns over: {0}. They can be removed (Campaigns → Over).', nm(over)), null, t('Campaigns over: {0}', over.length)]);
     return out;

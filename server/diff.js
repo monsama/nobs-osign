@@ -52,7 +52,8 @@ function diffConfigs(beforeJson, afterJson) {
     out.push({ kind: 'fields', name: '', detail: changed.join(', ') });
   }
   // Banner campaigns: added, removed, their banner line by line, their days and rules.
-  const cb = new Map((a.campaigns || []).map((c) => [c.id, c])), ca = new Map((b.campaigns || []).map((c) => [c.id, c]));
+  const camps = (x) => (Array.isArray(x.campaigns) ? x.campaigns : []).filter((c) => c && typeof c === 'object');
+  const cb = new Map(camps(a).map((c) => [c.id, c])), ca = new Map(camps(b).map((c) => [c.id, c]));
   const crules = (c) => { const r = Object.assign({}, c); delete r.id; delete r.name; delete r.html; delete r.compiled; delete r.design; delete r.more; r.langs = Object.keys(c.langs || {}).sort(); return r; };
   const banner = (c) => [c.html || ''].concat((c.more || []).map((x, i) => '[' + (i + 2) + '] ' + ((x || {}).html || '')), Object.keys(c.langs || {}).sort().map((k) => '[' + k + '] ' + ((c.langs[k] || {}).html || ''))).join('\n');
   for (const [id, c] of ca) {

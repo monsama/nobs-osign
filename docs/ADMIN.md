@@ -66,6 +66,19 @@ no list of users in NOBS OSign itself: the AD groups decide.
   the editor, after 12 hours at most.
 - At once, either way: *Settings → Server → Signed in now* → *Sign out* for that person.
 
+**The campaign role** (optional, *Settings → Server → Active Directory → Campaign group*): its
+members, when they are not in the sign-in group, sign in for the campaigns only. They see the
+*Campaigns* page and nothing else, and the server enforces it:
+- Their saves change the draft's campaigns and nothing else; what else they send is dropped.
+- They upload images, and remove only images no signature or building block uses.
+- *Publish* puts their campaigns on what is published (the signatures, fields and options as they
+  went out last, with those images), never the editors' unpublished draft. History shows it as
+  "<name> (campaigns)".
+- With four eyes on they do not publish: an editor publishes the draft, their campaigns in it.
+- Every other route of the API is refused to them (`tests/authz.test.js` checks each one).
+Moved into the sign-in group, they are editors from their next request on (asked of AD at most
+once a minute). For the people who make the banners: [CAMPAIGNS.md](CAMPAIGNS.md).
+
 ## Being told when something needs doing
 
 *Settings → Server → Notifications*: a webhook (in Teams: the channel → *Workflows* → *Post to a

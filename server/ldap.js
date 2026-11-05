@@ -53,6 +53,9 @@ function ldapConfig(env) {
     // Optional: only its members (and the local account admin) publish and approve; the other
     // members of the sign-in group edit the draft and ask for approval.
     publishGroup: env.OSIGN_LDAP_PUBLISH_GROUP || '',
+    // Optional: its members (not in the sign-in group) make the campaigns only: banners and their
+    // images, nothing else of the draft; they publish campaigns alone (server/app.js).
+    campaignGroup: env.OSIGN_LDAP_CAMPAIGN_GROUP || '',
     loginAttr: env.OSIGN_LDAP_LOGIN_ATTR || 'sAMAccountName',
     caFile: env.OSIGN_LDAP_CA || '',
     startTls: env.OSIGN_LDAP_STARTTLS === '1',
@@ -178,7 +181,14 @@ async function ldapLogin(c, login, password) {
       publisher = pg ? (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(canonical) + ')' + chain(pg) + ')', ['cn'])).length > 0
         : (entry.attrs.memberof || []).some((g) => cnOf(g).toLowerCase() === c.publishGroup.toLowerCase());
     }
-    return { login: canonical, name: (entry.attrs.displayname || [])[0] || canonical, allowed, publisher };
+    // Not in the sign-in group, in the campaign group: in, for the campaigns only.
+    let campaigns = false;
+    if (!allowed && c.campaignGroup) {
+      const cg = await groupDn(client, c, c.campaignGroup);
+      campaigns = cg ? (await search(client, c.searchBase, '(&(' + attr + '=' + escapeFilter(canonical) + ')' + chain(cg) + ')', ['cn'])).length > 0
+        : (entry.attrs.memberof || []).some((g) => cnOf(g).toLowerCase() === c.campaignGroup.toLowerCase());
+    }
+    return { login: canonical, name: (entry.attrs.displayname || [])[0] || canonical, allowed: allowed || campaigns, campaigns, publisher: allowed && publisher };
   } catch (e) {
     if (e instanceof InvalidCredentialsError) return null;
     throw e;
