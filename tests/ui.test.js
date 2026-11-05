@@ -1867,7 +1867,8 @@ test('campaigns checked before publishing, unused images removed, columns in lay
   await page.click('a.nav[data-view=campaigns]');
   await page.click('#viewCampaigns .empty-state button');
   const form = page.locator('#campEdit');
-  await form.locator('.camp-days input').first().check();
+  await form.locator('.camp-days label.chip').first().click();
+  assert.equal(await form.locator('.camp-days input').first().isChecked(), true);
   await form.locator('button:has-text("+ Banner in turns")').click();
   assert.equal(await form.locator('.camp-alts .tab').count(), 2);
   await form.locator('label:has(input[value=text])').click();

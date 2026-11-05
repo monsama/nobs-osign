@@ -115,15 +115,83 @@
   // (about 30 KB, keepForClassic in the add-in): roughly what one takes there, with the banner
   // running now and its images as files (made a bit smaller there, so it is an upper bound).
   const CLASSIC_KB = 30;
-  function classicKb(s) {
+  // What an image takes there: as the pane makes it (taskpane.js shrink: 1.5 times as wide as it
+  // is shown, JPEG/PNG again at 0.82, as base64), measured once in the background; until then
+  // the file as it is.
+  const classicImg = {};
+  function classicMeasure(name, shown) {
+    const k = name + '@' + shown;
+    if (k in classicImg) return;
+    classicImg[k] = null;
+    const a = (S.assets || []).find((x) => x.name === name);
+    const type = /\.png$/i.test(name) ? 'image/png' : /\.jpe?g$/i.test(name) ? 'image/jpeg' : '';
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const file = a ? Math.ceil((a.size || 0) / 3) * 4 : 0;
+        if (!type) { classicImg[k] = file; return; }
+        const want = Math.min(img.naturalWidth, Math.max(1, (shown || img.naturalWidth) * 1.5));
+        const cv = document.createElement('canvas'); cv.width = Math.round(want); cv.height = Math.round(img.naturalHeight * want / img.naturalWidth);
+        const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, cv.width, cv.height);
+        const b64 = (cv.toDataURL(type, 0.82).split(',')[1] || '').length;
+        classicImg[k] = file && file < b64 ? file : b64;
+      } catch (e) { classicImg[k] = a ? a.size * 4 / 3 : 0; }
+      schedulePreview();
+    };
+    img.onerror = () => { classicImg[k] = 0; };
+    img.src = '/assets/' + encodeURIComponent(name);
+  }
+  // Roughly what one signature takes there (its HTML, its images as there, a photo), and its images.
+  function classicParts(s) {
     const size = (n) => { const a = (S.assets || []).find((x) => x.name === n); return a ? a.size || 0 : 0; };
     const c = core.campaignFor(S.config, s, { anyone: true, kind: 'new' });
     const banner = c ? [c].concat(c.more || []).map((x) => x.html || '').join('') : '';
-    const html = sigFull(s) + banner;
-    const names = [...new Set([...html.matchAll(/src="assets\/([^"?]+)/g)].map((m) => m[1]))];
+    const html = sigFull(s) + banner, seen = new Map();
+    for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
+      const n = (/src="assets\/([^"?#]+)"/i.exec(m[0]) || [])[1]; if (!n || seen.has(n)) continue;
+      const w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0;
+      classicMeasure(n, w);
+      const v = classicImg[n + '@' + w];
+      seen.set(n, { name: n, bytes: typeof v === 'number' ? v : size(n) * 4 / 3, exact: typeof v === 'number' });
+    }
     const photos = /src="photos\//.test(html) ? 8 * 1024 : 0;
-    return Math.round((html.length * 1.3 + names.reduce((n, x) => n + size(x) * 4 / 3, 0) + photos) / 1024);
+    const images = [...seen.values()].sort((x, y) => y.bytes - x.bytes);
+    return { kb: Math.round((html.length * 1.3 + images.reduce((n, x) => n + x.bytes, 0) + photos) / 1024), images };
   }
+  function classicKb(s) { return classicParts(s).kb; }
+  // The way to fit: each PNG of the signature (and its banner) with no transparent pixel becomes a
+  // JPEG (a photo or a banner is much smaller so), the signatures, building blocks and campaigns
+  // then name the JPEG. One with transparency (a logo) stays: a JPEG would give it a box.
+  async function classicHelp(s) {
+    const pngs = classicParts(s).images.map((x) => x.name).filter((n) => /\.png$/i.test(n));
+    let n = 0, from = 0, to = 0;
+    for (const name of pngs) {
+      try {
+        const img = new Image();
+        await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = '/assets/' + encodeURIComponent(name); });
+        const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+        const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, cv.width, cv.height).data;
+        let clear = false; for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { clear = true; break; }
+        if (clear) continue;
+        const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.86));
+        const was = ((S.assets || []).find((x) => x.name === name) || {}).size || 0;
+        if (!blob || (was && blob.size >= was)) continue;
+        const data = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = no; fr.readAsDataURL(blob); });
+        const r = await api('assets/upload', { name: name.replace(/\.png$/i, '.jpg'), data });
+        S.assets = S.assets.filter((x) => x.name !== r.name).concat([{ name: r.name, size: r.size }]);
+        const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
+        S.config.signatures.forEach((x) => { x.html = (x.html || '').replace(re, 'assets/' + r.name); });
+        (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, 'assets/' + r.name); });
+        (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
+        n++; from += was; to += blob.size;
+      } catch (e) { /* that one stays */ }
+    }
+    if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
+    toast(n ? t('{0} image(s) saved as JPEG: {1} → {2}. The note in the preview says what classic Outlook needs now.', n, kb2(from), kb2(to))
+      : t('No image here can become a JPEG (the PNGs have transparency, or are smaller as they are). What still helps: a smaller width, or fewer images.'), !n);
+  }
+  const kb2 = (n) => (n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
   // The defaults (what goes in by itself) too large for that.
   function classicHeavy() {
     return S.config.signatures.filter((s) => s.defaultNew || s.defaultReply).map((s) => ({ s, kb: classicKb(s) })).filter((x) => x.kb > CLASSIC_KB);
@@ -190,7 +258,7 @@
     signatureChecks(c).forEach((x) => out.push(x));
     campaignChecks(c).forEach((x) => out.push(x));
     const big = classicHeavy();
-    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. Smaller images help.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
+    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. What helps: a smaller width, a JPEG instead of a PNG for photos, or fewer images.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), big.some((x) => classicParts(x.s).images.some((i) => /\.png$/i.test(i.name))) ? { label: t('Save PNG photos as JPEG'), fn: async () => { for (const x of big) await classicHelp(x.s); } } : null, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
     const unused = unusedImages();
     if (unused.length) out.push(['good', t('Images in the draft that nothing uses: {0}. They go out all the same.', unused.join(', ')), { label: t('Remove them'), fn: removeUnused }, t('Unused images: {0}', unused.length)]);
     // Who would get nothing, as read from AD under Users.

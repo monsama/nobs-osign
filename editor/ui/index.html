@@ -250,10 +250,12 @@
           <ul id="campDayList" class="camp-daylist"></ul></div>
       </div>
       <div class="camp-layout">
-        <div id="campList" class="camp-list"></div>
+        <div class="camp-col">
+          <div class="camp-list-head"><button type="button" id="btnAddCampaign" class="primary small">+ New campaign</button><select id="campFrom" aria-label="A new campaign from an earlier one" title="Its banner, signatures and rules again, from today on"><option value="">From an earlier one…</option></select></div>
+          <div id="campList" class="camp-list"></div>
+        </div>
         <div id="campEdit" class="camp-edit" hidden></div>
       </div>
-      <div class="field-actions"><button type="button" id="btnAddCampaign" class="ghost">+ New campaign</button><select id="campFrom" aria-label="A new campaign from an earlier one" title="Its banner, signatures and rules again, from today on"><option value="">From an earlier one…</option></select></div>
     </section>
 
     <!-- add-in options -->
