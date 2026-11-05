@@ -383,17 +383,18 @@ function render() {
   if (isClassicOutlook()) keepClassic();
 }
 
-// An image as small as it is shown (twice that, for sharp screens, at most), in its own type:
+// An image as small as it is shown (1.5 times that, for sharp screens, at most), in its own type:
 // a PNG stays a PNG (it may be transparent), a JPEG is saved again at good quality; a GIF as it is.
-async function shrink(img, shown) {
+// step: a stronger one when it does not fit (CLASSIC_SQUEEZE): narrower, a JPEG at a lower quality.
+async function shrink(img, shown, step) {
   if (!/^image\/(png|jpeg)$/.test(img.type)) return img;
   const el = new Image();
   await new Promise((res, rej) => { el.onload = res; el.onerror = rej; el.src = 'data:' + img.type + ';base64,' + img.b64; });
-  const want = Math.min(el.naturalWidth, Math.max(1, (shown || el.naturalWidth) * 1.5));
+  const want = Math.min(el.naturalWidth, Math.max(1, (shown || el.naturalWidth) * (step ? step.scale : 1.5)));
   const w = Math.round(want), h = Math.round(el.naturalHeight * want / el.naturalWidth);
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(el, 0, 0, w, h);
-  const b64 = c.toDataURL(img.type, 0.82).split(',')[1] || '';
+  const b64 = c.toDataURL(img.type, step ? step.quality : 0.82).split(',')[1] || '';
   return b64 && b64.length < img.b64.length ? { b64 } : img;
 }
 // Classic Outlook: what would go in by itself, kept in the mailbox for its event handler.

@@ -258,3 +258,33 @@ test('a signature of one\'s own (when the editor allows it): all of it changed i
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
+
+test('classic Outlook: an image too large for the mailbox is made smaller step by step for that copy, so it still goes in', { skip }, async () => {
+  const dir = await buildTestAddin();
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
+  try {
+    // A banner hard to make small (noise), 900 pixels wide, shown 300 wide.
+    const maker = await browser.newPage();
+    const jpg = Buffer.from(await maker.evaluate(() => { const c = document.createElement('canvas'); c.width = 900; c.height = 500; const g = c.getContext('2d'); const d = g.createImageData(900, 500); for (let i = 0; i < d.data.length; i += 4) { d.data[i] = Math.random() * 255; d.data[i + 1] = Math.random() * 255; d.data[i + 2] = Math.random() * 255; d.data[i + 3] = 255; } g.putImageData(d, 0, 0); return c.toDataURL('image/jpeg', 0.9).split(',')[1]; }), 'base64');
+    await maker.close();
+    const c = JSON.parse(JSON.stringify(cfg));
+    c.signatures[0].html = '<p><b>@@givenName @@sn</b></p><p><img src="assets/logo.png"></p><p><img src="assets/banner.jpg" width="300"></p>';
+    c.signatures[0].compiled = core.compile(c.signatures[0].html, doc);
+    const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(c), 'assets/logo.png': PNG, 'assets/banner.jpg': jpg }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+    const page = await openPane(browser, dir, graph, 'en-US', 'PC');
+    await page.waitForFunction(() => !!window.__roaming['osign.classic'], null, { timeout: 15000 });
+    const kept = JSON.parse(await page.evaluate(() => window.__roaming['osign.classic']));
+    assert.ok(jpg.length * 4 / 3 > 30 * 1024, 'the banner alone is more than the room');
+    assert.ok(kept.images['assets/banner.jpg'], 'the banner is in the copy, made smaller');
+    assert.ok(kept.images['assets/banner.jpg'].b64.length < jpg.length * 4 / 3 / 3);
+    assert.ok(kept.images['assets/logo.png'], 'the logo too');
+    const all = await page.evaluate(() => Object.entries(window.__roaming).reduce((n, [k, v]) => n + k.length + String(v).length, 0));
+    assert.ok(all < 32 * 1024, all);
+  } finally { await browser.close(); }
+});
+
+test('the steps an image is made smaller by for classic Outlook are the same in the add-in and in the editor\'s estimate', () => {
+  const steps = (file) => (/CLASSIC_SQUEEZE = (\[[^\]]+\])/.exec(fs.readFileSync(path.join(__dirname, '..', file), 'utf8')) || [])[1];
+  assert.ok(steps('addin/src/common.js'));
+  assert.equal(steps('editor/ui/app/10-publish.js'), steps('addin/src/common.js'));
+});

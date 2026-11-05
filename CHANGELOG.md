@@ -5,6 +5,16 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.91 (add-in changed)
+- *Optimize* in the image bar: the image clicked, for the web (Shift+click: smaller still). The
+  note on classic Outlook in the preview and the publish check offer the same for all images.
+- **Classic Outlook: what does not fit is made smaller for it**, step by step (narrower, a JPEG at
+  a lower quality), only in the copy in the mailbox: every other Outlook, and *Insert* in the pane,
+  gets the images as they are. The preview says when this happens, and warns only when even that
+  is not enough.
+- The note on classic Outlook says which images it goes without there (the add-in keeps the text
+  and the smallest images first, as many as fit), not "without its images".
+
 ## 0.9.90
 - *Optimize for the web* in the image dialog (and in the publish checks): every image shown as
   small as it is shown (twice that, for sharp screens), PNGs without transparency as JPEG; the

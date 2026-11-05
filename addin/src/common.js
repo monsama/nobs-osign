@@ -492,7 +492,11 @@ const ROAMING_ROOM = 30 * 1024;
 export function isClassicOutlook() {
   try { const d = Office.context.diagnostics; return !!d && d.platform === 'PC'; } catch (e) { return false; }
 }
-// shrink(image, shownWidth) → a smaller { b64, type } or the same; only the pane has the canvas for it.
+// The steps an image is made smaller by when it does not fit into classic Outlook's copy: its
+// width against the width shown, and a JPEG's quality (a PNG only gets narrower). The same in the
+// editor's estimate (10-publish.js, CLASSIC_SQUEEZE).
+export const CLASSIC_SQUEEZE = [{ scale: 1, quality: 0.7 }, { scale: 1, quality: 0.55 }, { scale: 0.8, quality: 0.5 }, { scale: 0.65, quality: 0.45 }];
+// shrink(image, shownWidth, step) → a smaller { b64, type } or the same; only the pane has the canvas for it.
 export async function keepForClassic(cfg, sigs, values, shrink) {
   const used = [PREFS_KEY, VARIANTS_KEY, PROFILE_KEY].reduce((n, k) => { try { const v = roaming() && roaming().get(k); return n + (v ? String(v).length + k.length : 0); } catch (e) { return n; } }, 0);
   const room = ROAMING_ROOM - used;
@@ -532,15 +536,22 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     const img = images[w.key]; if (!img) continue;
     let s2 = img;
     try { if (shrink) s2 = Object.assign({}, img, await shrink(img, w.width)); } catch (e) { /* as it is */ }
-    small.push([w.key, s2]);
+    small.push([w.key, s2, w]);
   }
   small.sort((a, b) => a[1].b64.length - b[1].b64.length);
-  let size = JSON.stringify(copy).length, left = 0;
-  for (const [key, img] of small) {
-    const add = key.length + img.b64.length + img.file.length + 40;
-    if (size + add > room) { left++; continue; }
-    copy.images[key] = { b64: img.b64, type: img.type, file: img.file };
-    size += add;
+  let size = JSON.stringify(copy).length, left = 0, squeezed = 0;
+  const cost = (key, img) => key.length + img.b64.length + img.file.length + 40;
+  for (const [key, img, w] of small) {
+    // Too large as it is: made smaller step by step, for this copy only (the mail from the pane,
+    // and every other Outlook, has the image as it is), until it fits or the last step is done.
+    let cur = img;
+    for (let l = 0; shrink && size + cost(key, cur) > room && l < CLASSIC_SQUEEZE.length; l++) {
+      try { const x = Object.assign({}, images[key], await shrink(images[key], w.width, CLASSIC_SQUEEZE[l])); if (x.b64 && x.b64.length < cur.b64.length) cur = x; } catch (e) { break; }
+    }
+    if (size + cost(key, cur) > room) { left++; continue; }
+    if (cur !== img) squeezed++;
+    copy.images[key] = { b64: cur.b64, type: cur.type, file: cur.file };
+    size += cost(key, cur);
   }
   const text = JSON.stringify(copy);
   let had = '';
@@ -553,7 +564,7 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     console.log('OSign: the mailbox did not keep the signatures for classic Outlook.');
     return { kept: false, images: 0, left: 0 };
   }
-  return { kept: true, images: Object.keys(copy.images).length, left, signatures: copy.cfg.signatures.length };
+  return { kept: true, images: Object.keys(copy.images).length, left, squeezed, signatures: copy.cfg.signatures.length };
 }
 // The banner campaigns not yet over, as far as the event handler needs them (the banner in the
 // user's language only).
