@@ -7,6 +7,7 @@
  */
 'use strict';
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const { createStore, ASSET_TYPES } = require('./store');
 const { createSettings } = require('./settings');
@@ -726,7 +727,11 @@ function createApp(opts) {
           try { bytes = await photo(core.PHOTO_DEFAULT + path.extname(name).toLowerCase()); } catch (e) { bytes = null; }
         }
         if (!bytes) return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
-        return send(res, 200, ASSET_TYPES[path.extname(name).toLowerCase()], bytes, { 'Cache-Control': 'private, max-age=300' });
+        // Asked again each time (a photo or the placeholder changed under Photos shows at once in
+        // the preview), sent again only when it changed.
+        const tag = '"' + crypto.createHash('sha1').update(bytes).digest('hex').slice(0, 20) + '"';
+        if (String(req.headers['if-none-match'] || '') === tag) { res.writeHead(304, Object.assign({ ETag: tag, 'Cache-Control': 'private, no-cache' }, SECURITY)); return res.end(); }
+        return send(res, 200, ASSET_TYPES[path.extname(name).toLowerCase()], bytes, { 'Cache-Control': 'private, no-cache', ETag: tag });
       }
       return send(res, 404, 'text/plain; charset=utf-8', '404 Not Found');
     } catch (e) {

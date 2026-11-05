@@ -1423,3 +1423,7 @@ body.role-campaigns .side-sect { border-top: 0 !important; margin-top: 0 !import
 .camp-kind .seg label { padding: 0 10px; white-space: nowrap; }
 .camp-kind .camp-lbl { flex: none; }
 .camp-kind .seg label { padding: 0 9px; font-size: 12.5px; }
+/* The bars above the design: every control on one middle line (a select in a label has no margin of its own here). */
+.imgbar label { margin: 0; }
+.imgbar select, .imgbar input, .imgbar button { margin: 0 !important; vertical-align: middle; }
+.imgbar select { color: var(--text); }
