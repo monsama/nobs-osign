@@ -5,6 +5,14 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.93
+- **Images: really smaller files.** A PNG (a logo, an icon) is saved with a palette, at most 256
+  colours, as pngquant or TinyPNG do it, and keeps its transparency: *Optimize* only when nothing
+  that shows changes, *Smaller still* (Shift+click) with the 256 most used colours. A logo of 7 KB
+  is about 3 KB so.
+- *Optimize* on one image says what it gained, or why there was nothing to gain.
+- *Make lighter* is in the bar with *Design / HTML*, always in view.
+
 ## 0.9.92
 - *Make lighter* in the HTML tab (and from the note on classic Outlook): what Word, Outlook and
   browsers leave in a signature and shows nothing (mso-… and other leftover styles, `lang`, empty

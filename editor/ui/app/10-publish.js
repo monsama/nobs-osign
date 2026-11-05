@@ -17,14 +17,14 @@
       if (src && w && (!opts || !opts.only || opts.only === src)) shown.set(src, Math.max(shown.get(src) || 0, w));
     }
     let n = 0, from = 0, to = 0;
-    const renamed = {};
+    const renamed = {}, done = [];
     for (const [name, w] of shown) {
       try {
         const blob = await (await fetch('/assets/' + encodeURIComponent(name), { credentials: 'same-origin' })).blob();
         const f = new File([blob], name, { type: blob.type || (/\.png$/i.test(name) ? 'image/png' : 'image/jpeg') });
         // Strong: as wide as shown (not twice that, for sharp screens), JPEGs at a lower quality.
         const strong = !!(opts && opts.strong);
-        const small = await shrinkUpload(f, Math.max(48, (strong ? 1 : 2) * w), strong ? { quality: 0.72, always: true } : null);
+        const small = await shrinkUpload(f, Math.max(48, (strong ? 1 : 2) * w), strong ? { quality: 0.72, always: true, palette: 'lossy' } : { palette: 'exact' });
         if (!small.shrunk || small.size >= f.size) continue;
         const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(small); });
         const r = await api('assets/upload', { name: freshName(name), data });
@@ -39,12 +39,12 @@
         S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]);
         // Saved under another name (an image is never written over): the old one, used by nothing now, goes.
         if (r.name !== name && unusedImages().includes(name)) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); } catch (e) { /* it stays */ } }
-        n++; from += f.size; to += small.size;
+        n++; from += f.size; to += small.size; done.push({ name: r.name, from: f.size, to: small.size });
       } catch (e) { /* that one stays */ }
     }
     if (n) reopenChanged();
     if (!(opts && opts.quiet)) toast(n ? t('{0} images made smaller: {1} → {2}.', n, kb(from), kb(to)) : t('The images are as small as they are shown already.'));
-    return { n, from, to, renamed };
+    return { n, from, to, renamed, done };
   }
   // For the web, in one go: each image shown as small as it is shown (twice that, for sharp
   // screens), and each PNG without a transparent pixel (a photo, a banner) as a JPEG.
@@ -52,7 +52,7 @@
     flushSource();
     // What the images used weigh, before and after.
     const weight = () => { const names = new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+)"/gi)].map((m) => m[1]))); return (S.assets || []).filter((x) => names.has(x.name)).reduce((n, x) => n + (x.size || 0), 0); };
-    const before = weight();
+    const before = weight(), oneBefore = opts && opts.only ? ((S.assets || []).find((x) => x.name === opts.only) || {}).size : 0;
     const only = opts && opts.only;
     const a = await shrinkUsed({ quiet: true, strong: !!(opts && opts.strong), only });
     // The one image (only): under the name it has after it was made smaller.
@@ -60,6 +60,14 @@
     const pngs = [...new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+\.png)"/gi)].map((m) => m[1])))].filter((n) => !now || n === now);
     const b = await pngToJpeg(pngs, opts && opts.strong ? 0.72 : 0.86);
     const n = a.n + b.n;
+    // One image (from its bar): said by its name, also when there was nothing to gain.
+    if (only) {
+      const was = ((S.assets || []).find((x) => x.name === only) || {}).size, last = (b.done || [])[0] || (a.done || [])[0];
+      toast(n ? t('{0}: {1} → {2}.', last ? last.name : only, kb2(oneBefore || was || 0), kb2(last ? last.to : 0))
+        : /\.png$/i.test(only) ? t('{0} is as small as it gets without changes you would see. Shift+click on Optimize: smaller still, with fewer colours.', only)
+          : t('{0} is as small as it gets at this width. Shift+click on Optimize: smaller still.', only));
+      return n;
+    }
     toast(n ? t('Images optimized for the web: {0} made smaller, {1} saved as JPEG; {2} → {3}.', a.n, b.n, kb2(before), kb2(weight()))
       : t('The images are as small as they are shown already.'));
     return n;
@@ -185,6 +193,7 @@
     if (saved > 0) reopenChanged();
     toast(saved > 0 ? t('HTML made lighter by {0}: nothing that shows changed (Undo brings it back).', kb2(saved)) : t('The HTML is as light as it gets without changing what shows.'));
   }
+  $('btnSlim').addEventListener('click', () => slimAll());
   async function removeUnused() {
     const names = unusedImages(); let n = 0;
     for (const name of names) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); n++; } catch (e) { /* that one stays */ } }
@@ -261,6 +270,7 @@
   // These PNGs as JPEGs where they have no transparent pixel (a logo with one stays).
   async function pngToJpeg(pngs, quality) {
     let n = 0, from = 0, to = 0;
+    const done = [];
     for (const name of pngs) {
       try {
         const img = new Image();
@@ -282,11 +292,11 @@
         (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
         // The PNG, now used by nothing, out of the draft (it would go out all the same).
         if (unusedImages().includes(name)) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((x) => x.name !== name); } catch (e) { /* it stays */ } }
-        n++; from += was; to += blob.size;
+        n++; from += was; to += blob.size; done.push({ name: r.name, from: was, to: blob.size });
       } catch (e) { /* that one stays */ }
     }
     if (n) reopenChanged();
-    return { n, from, to };
+    return { n, from, to, done };
   }
   const kb2 = (n) => (n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
   // The defaults (what goes in by itself) too large for that.

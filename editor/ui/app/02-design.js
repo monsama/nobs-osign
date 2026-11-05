@@ -294,16 +294,13 @@
     const fmt = el('button', { type: 'button', class: 'html-only', title: t('Indent the HTML again (Alt+Shift+F)') }, t('Format'));
     fmt.addEventListener('click', formatSource);
     fmt.style.display = S.mode === 'html' ? '' : 'none';
-    // The HTML lighter: what Word, Outlook and browsers leave in it, nothing that shows (10-publish.js).
-    const slim = el('button', { type: 'button', class: 'html-only', title: t('Takes out what shows nothing (mso-… and other leftover styles from Word or Outlook, empty spans, runs of spaces): lighter mails, more room in classic Outlook') }, t('Make lighter'));
-    slim.addEventListener('click', () => slimAll());
-    slim.style.display = S.mode === 'html' ? '' : 'none';
+
     // Two lines, at any width: what to insert, the font and Undo/Redo (at the right) on the first,
     // the formatting on the second. In groups that wrap as a whole on a narrow screen.
     const g = (cls, ...kids) => el('span', { class: 'tb-g ' + cls }, ...kids);
     const hist = g('tb-hist', btn('undo', 'Undo (Ctrl+Z)', () => histStep(-1), 'undo'), btn('redo', 'Redo (Ctrl+Y)', () => histStep(1), 'redo'));
     tb.append(
-      g('tb-keep', fieldSel, fmt, slim), sep(), g('tb-font', fontSel, sizeSel, color, paletteTool(color)), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
+      g('tb-keep', fieldSel, fmt), sep(), g('tb-font', fontSel, sizeSel, color, paletteTool(color)), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
       g('tb-style', btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline')), sep(),
       g('tb-align', btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), spacingTool()), sep(),
       g('tb-insert', btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), tableTool(btn('table', 'Columns (logo beside the text)', () => {})), btn('hr', 'Line', () => exec('insertHorizontalRule')), btn('clear', 'Clear formatting', () => exec('removeFormat')))
@@ -540,7 +537,9 @@
   // A person's photo is shown small (about 100 pixels): 400 wide is plenty.
   const PHOTO_MAX_W = 400;
   // An image made as small as a signature needs before it is uploaded.
-  // opts.quality: a JPEG's (0.86, else); opts.always: saved again even when it is the right size.
+  // opts.quality: a JPEG's (0.86, else); opts.always: saved again even when it is the right size;
+  // opts.palette: a PNG tried with a palette too ('exact': only when it has 256 colours or fewer,
+  // so nothing changes; 'lossy': its 256 most used), the smallest of them kept (02-png.js).
   async function shrinkUpload(f, maxW, opts) {
     const q = (opts && opts.quality) || 0.86;
     if (!/^image\/(png|jpeg)$/.test(f.type) || typeof createImageBitmap !== 'function') return f;
@@ -548,11 +547,20 @@
     try { bmp = await createImageBitmap(f); } catch (e) { return f; }
     const scale = Math.min(1, (maxW || IMG_MAX_W) / bmp.width);
     // A PNG of the right size stays as it is; a JPEG is saved again only when it is large.
-    if (scale === 1 && (f.type === 'image/png' || (f.size <= 150 * 1024 && !(opts && opts.always)))) return f;
+    const pal = f.type === 'image/png' && opts && opts.palette;
+    if (scale === 1 && !pal && (f.type === 'image/png' || (f.size <= 150 * 1024 && !(opts && opts.always)))) return f;
     const c = document.createElement('canvas');
     c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
     const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
-    const blob = await new Promise((res) => c.toBlob(res, f.type, q));
+    let blob = await new Promise((res) => c.toBlob(res, f.type, q));
+    if (pal) {
+      // A palette: exact (unchanged pixels) first; lossy only when asked for.
+      try {
+        const data = g.getImageData(0, 0, c.width, c.height);
+        const p1 = await palettePng(data, false), p2 = !p1 && pal === 'lossy' ? await palettePng(data, true) : null;
+        for (const p of [p1, p2]) if (p && (!blob || p.size < blob.size)) blob = p;
+      } catch (e) { /* the canvas one */ }
+    }
     if (!blob || blob.size >= f.size) return f;
     const out = new File([blob], f.name, { type: f.type });
     out.shrunk = { from: f.size, to: blob.size, w: bmp.width, w2: c.width };
