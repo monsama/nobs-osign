@@ -674,6 +674,8 @@
       else if (bkeys[String(b.key).toLowerCase()]) errors.push('The building block {{' + b.key + '}} is there twice.');
       else bkeys[String(b.key).toLowerCase()] = 1;
     });
+    // The house colours (the editor's palette): #rrggbb, at most 16.
+    if (config.colors !== undefined && (!Array.isArray(config.colors) || config.colors.length > 16 || config.colors.some(function (c) { return !/^#[0-9a-f]{6}$/i.test(String(c)); }))) errors.push('The house colours are up to 16 colours like #1d4ed8.');
     var ids = {};
     (config.signatures || []).forEach(function (s, i) {
       if (!s || !/^[A-Za-z0-9_-]{1,64}$/.test(s.id || '')) errors.push('Signature ' + (i + 1) + ' has no valid id.');

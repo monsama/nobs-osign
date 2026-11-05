@@ -145,8 +145,25 @@
             <button type="button" id="imgOrig" class="ghost small" title="As large as the image is, 600 pixels at most">Original size</button>
             <label>Alt text <input id="imgAlt"></label>
             <label>Link <input id="imgHref" placeholder="https://"></label>
+            <label title="Rounded corners and a round photo are not shown in classic Outlook for Windows: there the image stays square.">Corners <select id="imgRound"><option value="">Square</option><option value="6">Rounded</option><option value="50%">Round</option></select></label>
+            <span class="ialign" role="group" aria-label="Place the image"><button type="button" class="ghost small" data-ialign="left" title="Image at the left">Left</button><button type="button" class="ghost small" data-ialign="center" title="Image in the middle">Centre</button><button type="button" class="ghost small" data-ialign="right" title="Image at the right">Right</button></span>
             <span id="imgPh" class="img-ph" hidden><span class="img-ph-l">Placeholder (all signatures):</span><img id="imgPhThumb" alt="" hidden><span id="imgPhNone" class="ph-none">-</span><button type="button" id="imgPhChange" class="small">Change…</button></span>
             <button id="imgDone" class="ghost small">Done</button>
+          </div>
+          <div id="linkBar" class="imgbar" hidden>
+            <span>Link</span>
+            <label>Address <input id="linkHref" placeholder="https://" class="wide"></label>
+            <button type="button" id="linkOpen" class="ghost small" title="Open the address in a new tab">Open</button>
+            <button type="button" id="linkRemove" class="ghost small" title="The text stays, the link goes">Remove link</button>
+            <button type="button" id="linkDone" class="ghost small bar-done">Done</button>
+          </div>
+          <div id="cellBar" class="imgbar" hidden>
+            <span>Table cell</span>
+            <label>Content <select id="cellV"><option value="top">at the top</option><option value="middle">in the middle</option><option value="bottom">at the bottom</option></select></label>
+            <label title="Empty: as wide as its content">Width <input id="cellW" type="number" min="0" max="800" step="1"> px</label>
+            <label title="Space between this cell and the next">Space right <input id="cellGap" type="number" min="0" max="80" step="1"> px</label>
+            <label title="A thin line around every cell of this table"><input type="checkbox" id="cellLines"> Lines</label>
+            <button type="button" id="cellDone" class="ghost small bar-done">Done</button>
           </div>
           <iframe id="design" class="design" title="Signature editor"></iframe>
           <textarea id="source" class="source" spellcheck="false" hidden aria-label="HTML"></textarea>
@@ -157,6 +174,7 @@
             <select id="pvSource" aria-label="Values for the preview">
               <option value="sample">Sample values</option>
               <option value="empty">All fields empty</option>
+              <optgroup id="pvWithout" label="Sample values, one field empty" hidden></optgroup>
               <option value="ad">User from Active Directory…</option>
               <option value="entra" hidden>Person from Entra ID…</option>
             </select>
@@ -167,6 +185,7 @@
             </span>
             <div class="spacer"></div>
             <span class="zoom" data-zoom="preview" role="group" aria-label="Zoom"><button type="button" class="ghost" data-z="-1" aria-label="Zoom out" title="Zoom out (Ctrl + mouse wheel)">−</button><button type="button" class="ghost zpct" data-z="0" title="Back to 80 %">80 %</button><button type="button" class="ghost" data-z="1" aria-label="Zoom in" title="Zoom in (Ctrl + mouse wheel)">+</button></span>
+            <label class="tgl" title="As narrow as a phone (360 pixels): to see where the lines break"><input type="checkbox" id="pvPhone"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg><span class="sr-only">Phone width</span></label>
             <label class="tgl" title="Plain text"><input type="checkbox" id="pvText"><span aria-hidden="true">T</span><span class="sr-only">Plain text</span></label>
             <label class="tgl" title="Dark mode: roughly as Outlook's dark mode shows it to recipients who use it"><input type="checkbox" id="pvDark"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span class="sr-only">Dark mode</span></label>
             <button type="button" id="pvCopy" class="icon-btn ghost" title="Copy as HTML, with these values and the images in it: to paste into Outlook or a test mail" aria-label="Copy as HTML"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></button>

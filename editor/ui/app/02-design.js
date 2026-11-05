@@ -238,9 +238,9 @@
     const g = (cls, ...kids) => el('span', { class: 'tb-g ' + cls }, ...kids);
     const hist = g('tb-hist', btn('undo', 'Undo (Ctrl+Z)', () => histStep(-1), 'undo'), btn('redo', 'Redo (Ctrl+Y)', () => histStep(1), 'redo'));
     tb.append(
-      g('tb-keep', fieldSel, fmt), sep(), g('tb-font', fontSel, sizeSel, color), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
+      g('tb-keep', fieldSel, fmt), sep(), g('tb-font', fontSel, sizeSel, color, paletteTool(color)), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
       g('tb-style', btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline')), sep(),
-      g('tb-align', btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight')), sep(),
+      g('tb-align', btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), spacingTool()), sep(),
       g('tb-insert', btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), btn('table', 'Two columns (logo beside the text)', insertTable), btn('hr', 'Line', () => exec('insertHorizontalRule')), btn('clear', 'Clear formatting', () => exec('removeFormat')))
     );
   }
@@ -347,13 +347,14 @@
       $('imgAlt').value = selImg.getAttribute('alt') || '';
       const a = selImg.closest('a'); $('imgHref').value = a ? a.getAttribute('href') : '';
       $('imgBar').hidden = false;
+      imgToolsShow(selImg);
       gripShow();
-    } else hideImgBar();
+    } else { hideImgBar(); onToolClick(e.target); }
   }
   function hideImgBar() {
     if (selImg) { selImg.classList.remove('sel'); if (!selImg.className) selImg.removeAttribute('class'); }
     selImg = null; $('imgBar').hidden = true;
-    gripHide();
+    gripHide(); hideToolBars();
   }
   // Sizing an image by its corner: dragged, its width follows (the height in its shape), shown as
   // it goes; let go, it is one step to undo. 16 to 800 pixels, as the width box allows.

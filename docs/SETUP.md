@@ -244,7 +244,14 @@ too (step 7).
    Add-in view shows how its last run went.
 3. **Preview**: sample values, all fields empty, or a real person: *User from Active Directory…*
    (with the service account), or *Person from Entra ID…* (when the setup script gave the server
-   `User.Read.All`).
+   `User.Read.All`). *Sample values, one field empty* (e.g. *Without Mobile*) says which line goes
+   for whoever has no value there; the phone button shows the signature 360 pixels wide.
+
+   In the design, a click on an image, a link or a table cell opens its bar: an image's width
+   (or drag its corner), *Original size*, corners and its place in the line; a link's address;
+   a cell's alignment, width, space to the right and lines. *Spacing* sets the line spacing and
+   the space below a paragraph. The arrow beside the text colour keeps the **house colours**,
+   one click for every signature. Rounded corners do not show in classic Outlook for Windows.
 4. **Publish** (Ctrl+Enter). The dialog lists what would go wrong first. New messages use it a
    minute or two later. Every publish is kept under **History**, with its images, the last 50:
    *Compare* shows what changed (the HTML line by line, who gets it, fields and options), against
