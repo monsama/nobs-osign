@@ -48,7 +48,13 @@
     (c.more || []).forEach((v) => { v.html = bannerHtml(v.design || {}, c); });
   }
   const pickCamp = (id) => { campSel = id; campLang = ''; campAlt = 0; };
-  const campChanged = () => { const c = campById(campSel); if (c) campBuild(c); changed({ list: false }); campList(); campTimeline(); campPreview(); campDayTable(); renderStatusBar(); };
+  // A change: kept at once (made into HTML, saved a moment later); what shows it drawn again now
+  // (a click) or once typing pauses (campSoon: the list, timeline, preview and day not at every key).
+  let campTimer = null;
+  const campRedraw = () => { clearTimeout(campTimer); campTimer = null; campList(); campTimeline(); campPreview(); campDayTable(); renderStatusBar(); };
+  const campKeep = () => { const c = campById(campSel); if (c) campBuild(c); changed({ list: false, preview: false }); };
+  const campChanged = () => { campKeep(); campRedraw(); };
+  const campSoon = () => { campKeep(); clearTimeout(campTimer); campTimer = setTimeout(campRedraw, 250); };
 
   // ---- the view --------------------------------------------------------------------------------
   function renderCampaignsView() {
@@ -82,7 +88,8 @@
     if (n) n.focus();
   });
 
-  // The form of the campaign selected.
+  // The form of the campaign selected: its head, then a card each for when, the banner, where and
+  // who (campWhen … campWho), the preview beside. f: the helpers the cards share.
   function campEditor() {
     const box = $('campEdit'), c = campById(campSel);
     box.hidden = !c;
@@ -92,11 +99,52 @@
     c.more = Array.isArray(c.more) ? c.more : [];
     if (campLang || campAlt > c.more.length) campAlt = 0;
     const d = campLang ? c.langs[campLang].design : campAlt ? c.more[campAlt - 1].design : c.design;
-    const input = (attrs, get, set) => { const i = el('input', attrs); i.value = get() == null ? '' : get(); i.addEventListener(attrs.type === 'checkbox' ? 'change' : 'input', () => { set(attrs.type === 'checkbox' ? i.checked : i.value); campChanged(); }); if (attrs.type === 'checkbox') i.checked = !!get(); return i; };
+    const f = campHelpers();
+    box.replaceChildren(campHead(c, f),
+      el('div', { class: 'camp-body' },
+        el('div', { class: 'camp-form' }, campWhen(c, f), campBanner(c, d, f), campWhere(c, f), campWho(c, f)),
+        el('aside', { class: 'camp-side' }, el('h3', null, t('Preview')),
+          el('iframe', { id: 'campPv', class: 'camp-pv', sandbox: 'allow-same-origin', title: t('Preview'), tabindex: '-1' }),
+          el('p', { class: 'hint' }, t('Under the first signature it goes into, with the sample values.')))));
+    campPreview();
+  }
+  // What the cards are made of: a field (typing redraws once it pauses), a label beside or above
+  // it, a card.
+  function campHelpers() {
+    const input = (attrs, get, set) => {
+      const i = el('input', attrs); i.value = get() == null ? '' : get();
+      const box = attrs.type === 'checkbox';
+      i.addEventListener(box ? 'change' : 'input', () => { set(box ? i.checked : i.value); if (box) campChanged(); else campSoon(); });
+      if (box) i.checked = !!get();
+      return i;
+    };
     const row = (label, ...kids) => el('label', { class: 'camp-f' }, el('span', null, label), ...kids);
+    const stack = (label, ...kids) => el('label', { class: 'camp-stack' }, el('span', null, label), ...kids);
+    const sect = (title, ...kids) => el('section', { class: 'camp-card' }, el('h3', null, title), ...kids.filter((k) => k !== null && k !== undefined));
+    return { input, row, stack, sect };
+  }
+  // The head: the name, whether it runs, and to copy or remove it.
+  function campHead(c, f) {
+    const name = f.input({ 'aria-label': t('Name'), class: 'camp-title', placeholder: t('Name of the campaign') }, () => c.name, (v) => { c.name = v; });
+    const copy = el('button', { type: 'button', class: 'ghost', title: t('The same campaign one year later (the year in its name too)'), onclick: () => {
+      const n = JSON.parse(JSON.stringify(c)), y = (x) => { if (!x) return x; const dd = new Date(x + 'T12:00:00'); dd.setFullYear(dd.getFullYear() + 1); return core.today(dd); };
+      n.name = /\b(19|20)\d\d\b/.test(c.name) ? c.name.replace(/\b((?:19|20)\d\d)\b/g, (m) => String(Number(m) + 1)) : c.name + ' ' + t('(next year)');
+      n.id = newId('c-' + n.name); n.validFrom = y(c.validFrom); n.validUntil = y(c.validUntil);
+      campaigns().push(n); pickCamp(n.id); campBuild(n); changed({ list: false }); renderCampaignsView();
+      toast(t('Copied for next year: {0}, {1}.', n.name, campaignText(n) || t('always')));
+    } }, t('Copy for next year'));
+    const del = el('button', { type: 'button', class: 'ghost danger', onclick: () => {
+      const i = campaigns().indexOf(c); campaigns().splice(i, 1); campSel = null; changed({ list: false }); renderCampaignsView();
+      toast(t('Campaign {0} removed.', c.name), false, { label: t('Undo'), run: () => { campaigns().splice(Math.min(i, campaigns().length), 0, c); campSel = c.id; changed({ list: false }); renderCampaignsView(); } });
+    } }, t('Remove'));
 
+    const state = core.inPeriod(c) && (!c.days || !c.days.length || c.days.includes(new Date().getDay())) ? ['now', t('running')] : isOver(c) ? ['over', t('over')] : ['soon', t('planned')];
+    return el('div', { class: 'camp-head' }, name, el('span', { class: 'camp-state ' + state[0] }, state[1]), el('span', { class: 'spacer' }), copy, del);
+  }
+  // When: its first and last day, and the weekdays.
+  function campWhen(c, f) {
+    const { input } = f;
     // When
-    const name = input({ 'aria-label': t('Name') }, () => c.name, (v) => { c.name = v; campList(); });
     const from = input({ type: 'date', 'aria-label': t('From') }, () => c.validFrom, (v) => { c.validFrom = v; campList(); });
     const until = input({ type: 'date', 'aria-label': t('Until') }, () => c.validUntil, (v) => { c.validUntil = v; campList(); });
     // Only on some weekdays (none ticked: every day).
@@ -108,6 +156,13 @@
         return el('label', { class: 'chip' }, b, dayName(n));
       }));
 
+    return f.sect(t('When'),
+      el('div', { class: 'camp-grid2' }, f.stack(t('From'), from), f.stack(t('Until'), until)),
+      el('div', { class: 'camp-stack' }, el('span', null, t('Weekdays'), ' ', el('small', { class: 'hint' }, '(' + t('none ticked: every day') + ')')), days));
+  }
+  // The banner: its language and the ones in turns, its kind, its parts.
+  function campBanner(c, d, f) {
+    const { input, row } = f;
     // The banner: its kind, then its parts.
     const tplNames = { image: t('Image with link'), text: t('Text with button'), imagetext: t('Image and text'), html: t('HTML of your own') };
     const tpls = el('div', { class: 'seg camp-tpl', role: 'radiogroup', 'aria-label': t('Kind of banner') }, CAMP_TPL.map((k) => {
@@ -140,19 +195,19 @@
     }
     if (d.tpl === 'text' || d.tpl === 'imagetext') {
       const ta = el('textarea', { rows: 2, 'aria-label': t('Text') }); ta.value = d.text || '';
-      ta.addEventListener('input', () => { d.text = ta.value; campChanged(); });
+      ta.addEventListener('input', () => { d.text = ta.value; campSoon(); });
       const col = el('select', { 'aria-label': t('Colour') }, [...new Set(houseColours().concat([d.color || '#1d4ed8']))].map((x) => el('option', { value: x, style: 'color:' + x }, '■ ' + x)));
       col.value = d.color || '#1d4ed8';
       const own = el('input', { type: 'color', 'aria-label': t('Another colour'), value: /^#[0-9a-f]{6}$/i.test(d.color || '') ? d.color : '#1d4ed8' });
       col.addEventListener('change', () => { d.color = col.value; own.value = col.value; campChanged(); });
-      own.addEventListener('input', () => { d.color = own.value; campChanged(); });
+      own.addEventListener('input', () => { d.color = own.value; campSoon(); });
       own.addEventListener('change', () => campEditor());
       parts.push(row(t('Text'), ta), row(t('Button'), input({ placeholder: t('e.g. Sign up now (empty: none)') }, () => d.button, (v) => { d.button = v; })),
         row(t('Colour'), col, own, houseColours().length ? null : el('small', { class: 'hint' }, t('House colours: the arrow beside the text colour in the editor.'))));
     }
     if (d.tpl === 'html') {
       const ta = el('textarea', { rows: 6, class: 'mono', 'aria-label': t('HTML') }); ta.value = d.html || '';
-      ta.addEventListener('input', () => { d.html = ta.value; campChanged(); });
+      ta.addEventListener('input', () => { d.html = ta.value; campSoon(); });
       parts.push(row(t('HTML'), ta));
     }
     if (d.tpl !== 'html') {
@@ -182,6 +237,15 @@
       langTabs.append(add);
     }
 
+    return f.sect(t('Banner'),
+      el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Language')), langTabs),
+      altTabs ? el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('In turns')), altTabs) : null,
+      el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Kind')), tpls),
+      el('div', { class: 'camp-fields' }, ...parts));
+  }
+  // Where: in which signatures, where in them, in new mail only.
+  function campWhere(c, f) {
+    const { input } = f;
     // Where: which signatures, where in them, only in new mail.
     const sigs = S.config.signatures, targets = c.signatures || [];
     const all = el('input', { type: 'radio', name: 'campWhere' }), some = el('input', { type: 'radio', name: 'campWhere' });
@@ -214,49 +278,21 @@
         el('span', { class: 'camp-slot-pos' }, t('There the banner goes'), pos), addPlace)
       : el('div', { class: 'camp-slot ok' }, '✓ ' + t('Each of them has the place {{campaign}}: the banner goes there.'));
 
+    return f.sect(t('Where'),
+      el('div', { class: 'seg camp-where', role: 'radiogroup', 'aria-label': t('Where') }, el('label', null, all, t('In all signatures')), el('label', null, some, t('Only in these'))),
+      sigBoxes, slotNote,
+      el('label', { class: 'camp-chk' }, input({ type: 'checkbox' }, () => c.newOnly, (v) => { c.newOnly = v; }), t('Only in new mail, not in replies and forwards')));
+  }
+  // Who: groups and departments, or everyone.
+  function campWho(c, f) {
+    const { input } = f;
     // Who: everyone, or groups and departments (as with signatures).
     const a = c.audience;
     const list = (k) => input({ placeholder: k === 'groups' ? t('e.g. Sales, Marketing') : t('e.g. Sales') }, () => (a[k] || []).join(', '), (v) => { a[k] = v.split(',').map((x) => x.trim()).filter(Boolean); a.everyone = !(a.groups || []).length && !(a.departments || []).length; });
 
-    const copy = el('button', { type: 'button', class: 'ghost', title: t('The same campaign one year later (the year in its name too)'), onclick: () => {
-      const n = JSON.parse(JSON.stringify(c)), y = (x) => { if (!x) return x; const dd = new Date(x + 'T12:00:00'); dd.setFullYear(dd.getFullYear() + 1); return core.today(dd); };
-      n.name = /\b(19|20)\d\d\b/.test(c.name) ? c.name.replace(/\b((?:19|20)\d\d)\b/g, (m) => String(Number(m) + 1)) : c.name + ' ' + t('(next year)');
-      n.id = newId('c-' + n.name); n.validFrom = y(c.validFrom); n.validUntil = y(c.validUntil);
-      campaigns().push(n); pickCamp(n.id); campBuild(n); changed({ list: false }); renderCampaignsView();
-      toast(t('Copied for next year: {0}, {1}.', n.name, campaignText(n) || t('always')));
-    } }, t('Copy for next year'));
-    const del = el('button', { type: 'button', class: 'ghost danger', onclick: () => {
-      const i = campaigns().indexOf(c); campaigns().splice(i, 1); campSel = null; changed({ list: false }); renderCampaignsView();
-      toast(t('Campaign {0} removed.', c.name), false, { label: t('Undo'), run: () => { campaigns().splice(Math.min(i, campaigns().length), 0, c); campSel = c.id; changed({ list: false }); renderCampaignsView(); } });
-    } }, t('Remove'));
-
-    const sect = (title, ...kids) => el('section', { class: 'camp-card' }, el('h3', null, title), ...kids.filter((k) => k !== null && k !== undefined));
-    const stack = (label, ...kids) => el('label', { class: 'camp-stack' }, el('span', null, label), ...kids);
-    const state = core.inPeriod(c) && (!c.days || !c.days.length || c.days.includes(new Date().getDay())) ? ['now', t('running')] : isOver(c) ? ['over', t('over')] : ['soon', t('planned')];
-    name.classList.add('camp-title'); name.placeholder = t('Name of the campaign');
-    box.replaceChildren(
-      el('div', { class: 'camp-head' }, name, el('span', { class: 'camp-state ' + state[0] }, state[1]), el('span', { class: 'spacer' }), copy, del),
-      el('div', { class: 'camp-body' },
-        el('div', { class: 'camp-form' },
-          sect(t('When'),
-            el('div', { class: 'camp-grid2' }, stack(t('From'), from), stack(t('Until'), until)),
-            el('div', { class: 'camp-stack' }, el('span', null, t('Weekdays'), ' ', el('small', { class: 'hint' }, '(' + t('none ticked: every day') + ')')), days)),
-          sect(t('Banner'),
-            el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Language')), langTabs),
-            altTabs ? el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('In turns')), altTabs) : null,
-            el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Kind')), tpls),
-            el('div', { class: 'camp-fields' }, ...parts)),
-          sect(t('Where'),
-            el('div', { class: 'seg camp-where', role: 'radiogroup', 'aria-label': t('Where') }, el('label', null, all, t('In all signatures')), el('label', null, some, t('Only in these'))),
-            sigBoxes, slotNote,
-            el('label', { class: 'camp-chk' }, input({ type: 'checkbox' }, () => c.newOnly, (v) => { c.newOnly = v; }), t('Only in new mail, not in replies and forwards'))),
-          sect(t('Who'),
-            el('div', { class: 'camp-grid2' }, stack(t('Groups'), list('groups')), stack(t('Departments'), list('departments'))),
-            el('p', { class: 'hint' }, t('Both empty: everyone who gets one of these signatures.')))),
-        el('aside', { class: 'camp-side' }, el('h3', null, t('Preview')),
-          el('iframe', { id: 'campPv', class: 'camp-pv', sandbox: 'allow-same-origin', title: t('Preview'), tabindex: '-1' }),
-          el('p', { class: 'hint' }, t('Under the first signature it goes into, with the sample values.')))));
-    campPreview();
+    return f.sect(t('Who'),
+      el('div', { class: 'camp-grid2' }, f.stack(t('Groups'), list('groups')), f.stack(t('Departments'), list('departments'))),
+      el('p', { class: 'hint' }, t('Both empty: everyone who gets one of these signatures.')));
   }
 
   // The banner under the first signature it is meant for, with the sample values.
