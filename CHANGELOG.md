@@ -5,6 +5,15 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.90
+- *Optimize for the web* in the image dialog (and in the publish checks): every image shown as
+  small as it is shown (twice that, for sharp screens), PNGs without transparency as JPEG; the
+  originals no longer used go from the draft. *Smaller still*: as wide as shown and more
+  compressed, for the lightest mails and the most room in classic Outlook.
+- The preview shows a photo or placeholder changed under Photos at once (it was kept for five
+  minutes by the browser).
+- The bars above the design (image, link, table cell): every control on one middle line.
+
 ## 0.9.89
 - Housekeeping: the stylesheet tidied (rules for one selector merged, the cascade kept, checked
   screen by screen in light and dark), unused rules, texts and code removed.

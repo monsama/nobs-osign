@@ -7,8 +7,10 @@
   // The images the signatures use, made as small as they are shown: twice the width they have in a
   // signature (sharp on high-resolution screens), uploaded as a new file and put in their place;
   // the old file stays until removed. Without a width in the signature an image stays as it is.
-  async function shrinkUsed() {
-    const all = S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''), (S.config.campaigns || []).flatMap((c) => [c.html || ''].concat(Object.values(c.langs || {}).map((v) => v.html || ''), (c.more || []).map((v) => v.html || ''))));
+  // The images the signatures, building blocks and campaigns show.
+  const usedHtml = () => S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''), (S.config.campaigns || []).flatMap((c) => [c.html || ''].concat(Object.values(c.langs || {}).map((v) => v.html || ''), (c.more || []).map((v) => v.html || ''))));
+  async function shrinkUsed(opts) {
+    const all = usedHtml();
     const shown = new Map();
     for (const h of all) for (const m of h.matchAll(/<img\b[^>]*>/gi)) {
       const src = (/\ssrc\s*=\s*["']?assets\/([^"'\s>]+)/i.exec(m[0]) || [])[1], w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]);
@@ -19,7 +21,9 @@
       try {
         const blob = await (await fetch('/assets/' + encodeURIComponent(name), { credentials: 'same-origin' })).blob();
         const f = new File([blob], name, { type: blob.type || (/\.png$/i.test(name) ? 'image/png' : 'image/jpeg') });
-        const small = await shrinkUpload(f, Math.max(48, 2 * w));
+        // Strong: as wide as shown (not twice that, for sharp screens), JPEGs at a lower quality.
+        const strong = !!(opts && opts.strong);
+        const small = await shrinkUpload(f, Math.max(48, (strong ? 1 : 2) * w), strong ? { quality: 0.72, always: true } : null);
         if (!small.shrunk || small.size >= f.size) continue;
         const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(small); });
         const r = await api('assets/upload', { name, data });
@@ -31,11 +35,28 @@
           (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
         }
         S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]);
+        // Saved under another name (an image is never written over): the old one, used by nothing now, goes.
+        if (r.name !== name && unusedImages().includes(name)) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); } catch (e) { /* it stays */ } }
         n++; from += f.size; to += small.size;
       } catch (e) { /* that one stays */ }
     }
     if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
-    toast(n ? t('{0} images made smaller: {1} → {2}.', n, kb(from), kb(to)) : t('The images are as small as they are shown already.'));
+    if (!(opts && opts.quiet)) toast(n ? t('{0} images made smaller: {1} → {2}.', n, kb(from), kb(to)) : t('The images are as small as they are shown already.'));
+    return { n, from, to };
+  }
+  // For the web, in one go: each image shown as small as it is shown (twice that, for sharp
+  // screens), and each PNG without a transparent pixel (a photo, a banner) as a JPEG.
+  async function optimizeImages(opts) {
+    // What the images used weigh, before and after.
+    const weight = () => { const names = new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+)"/gi)].map((m) => m[1]))); return (S.assets || []).filter((x) => names.has(x.name)).reduce((n, x) => n + (x.size || 0), 0); };
+    const before = weight();
+    const a = await shrinkUsed({ quiet: true, strong: !!(opts && opts.strong) });
+    const pngs = [...new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+\.png)"/gi)].map((m) => m[1])))];
+    const b = await pngToJpeg(pngs, opts && opts.strong ? 0.72 : 0.86);
+    const n = a.n + b.n;
+    toast(n ? t('Images optimized for the web: {0} made smaller, {1} saved as JPEG; {2} → {3}.', a.n, b.n, kb2(before), kb2(weight()))
+      : t('The images are as small as they are shown already.'));
+    return n;
   }
   // "3 signatures", or the name when it is one.
   const count = (list) => (list.length === 1 ? String(list[0].name || list[0]) : t('{0} signatures', list.length));
@@ -46,7 +67,7 @@
     const attr = (tag, a) => (new RegExp('\\s' + a + '\\s*=\\s*["\']?([^"\'\\s>]*)', 'i').exec(tag) || [])[1] || '';
     const size = (n) => { const a = S.assets.find((x) => x.name === n); return a ? a.size || 0 : 0; };
     const big = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && size(n) > 100 * 1024)))];
-    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }, t('Large images: {0}', big.length)]);
+    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Optimize for the web'), fn: optimizeImages }, t('Large images: {0}', big.length)]);
     const noAlt = names((s) => imgs(s).some((i) => !/photos\//.test(attr(i, 'src')) && !/\salt\s*=\s*["'][^"']+["']/i.test(i)));
     if (noAlt.length) out.push(['warn', t('Images without a text for when images are blocked (alt): {0}. Image bar → alt text, e.g. the company name for the logo.', noAlt.join(', ')), null, t('Images without alt text: {0}', count(noAlt))]);
     const tooWide = (s) => imgs(s).some((i) => Number(attr(i, 'width')) > 600) ||
@@ -90,7 +111,7 @@
     const nameOf = (i) => (/src="assets\/([^"?#]+)"/.exec(i) || [])[1];
     const size = (n) => { const a = S.assets.find((z) => z.name === n); return a ? a.size || 0 : 0; };
     const heavy = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && size(n) > 100 * 1024))];
-    if (heavy.length) out.push(['warn', t('Large banner images (over 100 KB), in every mail while the campaign runs: {0}.', heavy.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make them smaller'), fn: shrinkUsed }, t('Large banner images: {0}', heavy.length)]);
+    if (heavy.length) out.push(['warn', t('Large banner images (over 100 KB), in every mail while the campaign runs: {0}.', heavy.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Optimize for the web'), fn: optimizeImages }, t('Large banner images: {0}', heavy.length)]);
     const darkOnes = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && dark[n] === true))];
     if (darkOnes.length) out.push(['warn', t('Dark banner image on a transparent background, hard to see in dark mode: {0}. A background of its own helps.', darkOnes.join(', ')), null, t('Banner hard to see in dark mode: {0}', darkOnes.length)]);
     const over = (c.campaigns || []).filter((x) => x.validUntil && x.validUntil < day);
@@ -105,6 +126,11 @@
     return (S.assets || []).map((a) => a.name).filter((n) => !all.includes('assets/' + n + '"') && !all.includes('assets/' + n + "'") && !all.includes('assets/' + n + '?'));
   }
   $('imgUnused').addEventListener('click', async () => { await removeUnused(); renderImageList(); });
+  // Optimize: sharp (twice as wide as shown), or smaller still (as wide as shown, more compressed).
+  [['imgOptimize', false, 'Optimize for the web'], ['imgOptimizeMore', true, 'Smaller still']].forEach(([id, strong, label]) => $(id).addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = t('Optimizing…');
+    try { await optimizeImages({ strong }); } finally { b.disabled = false; b.textContent = t(label); renderImageList(); }
+  }));
   async function removeUnused() {
     const names = unusedImages(); let n = 0;
     for (const name of names) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); n++; } catch (e) { /* that one stays */ } }
@@ -163,7 +189,12 @@
   // JPEG (a photo or a banner is much smaller so), the signatures, building blocks and campaigns
   // then name the JPEG. One with transparency (a logo) stays: a JPEG would give it a box.
   async function classicHelp(s) {
-    const pngs = classicParts(s).images.map((x) => x.name).filter((n) => /\.png$/i.test(n));
+    const r = await pngToJpeg(classicParts(s).images.map((x) => x.name).filter((n) => /\.png$/i.test(n)));
+    toast(r.n ? t('{0} image(s) saved as JPEG: {1} → {2}. The note in the preview says what classic Outlook needs now.', r.n, kb2(r.from), kb2(r.to))
+      : t('No image here can become a JPEG (the PNGs have transparency, or are smaller as they are). What still helps: a smaller width, or fewer images.'), !r.n);
+  }
+  // These PNGs as JPEGs where they have no transparent pixel (a logo with one stays).
+  async function pngToJpeg(pngs, quality) {
     let n = 0, from = 0, to = 0;
     for (const name of pngs) {
       try {
@@ -174,7 +205,7 @@
         const d = g.getImageData(0, 0, cv.width, cv.height).data;
         let clear = false; for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { clear = true; break; }
         if (clear) continue;
-        const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.86));
+        const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', quality || 0.86));
         const was = ((S.assets || []).find((x) => x.name === name) || {}).size || 0;
         if (!blob || (was && blob.size >= was)) continue;
         const data = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = no; fr.readAsDataURL(blob); });
@@ -184,12 +215,13 @@
         S.config.signatures.forEach((x) => { x.html = (x.html || '').replace(re, 'assets/' + r.name); });
         (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, 'assets/' + r.name); });
         (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
+        // The PNG, now used by nothing, out of the draft (it would go out all the same).
+        if (unusedImages().includes(name)) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((x) => x.name !== name); } catch (e) { /* it stays */ } }
         n++; from += was; to += blob.size;
       } catch (e) { /* that one stays */ }
     }
     if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
-    toast(n ? t('{0} image(s) saved as JPEG: {1} → {2}. The note in the preview says what classic Outlook needs now.', n, kb2(from), kb2(to))
-      : t('No image here can become a JPEG (the PNGs have transparency, or are smaller as they are). What still helps: a smaller width, or fewer images.'), !n);
+    return { n, from, to };
   }
   const kb2 = (n) => (n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
   // The defaults (what goes in by itself) too large for that.

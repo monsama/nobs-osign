@@ -527,17 +527,19 @@
   // A person's photo is shown small (about 100 pixels): 400 wide is plenty.
   const PHOTO_MAX_W = 400;
   // An image made as small as a signature needs before it is uploaded.
-  async function shrinkUpload(f, maxW) {
+  // opts.quality: a JPEG's (0.86, else); opts.always: saved again even when it is the right size.
+  async function shrinkUpload(f, maxW, opts) {
+    const q = (opts && opts.quality) || 0.86;
     if (!/^image\/(png|jpeg)$/.test(f.type) || typeof createImageBitmap !== 'function') return f;
     let bmp;
     try { bmp = await createImageBitmap(f); } catch (e) { return f; }
     const scale = Math.min(1, (maxW || IMG_MAX_W) / bmp.width);
     // A PNG of the right size stays as it is; a JPEG is saved again only when it is large.
-    if (scale === 1 && (f.type === 'image/png' || f.size <= 150 * 1024)) return f;
+    if (scale === 1 && (f.type === 'image/png' || (f.size <= 150 * 1024 && !(opts && opts.always)))) return f;
     const c = document.createElement('canvas');
     c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
     const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
-    const blob = await new Promise((res) => c.toBlob(res, f.type, 0.86));
+    const blob = await new Promise((res) => c.toBlob(res, f.type, q));
     if (!blob || blob.size >= f.size) return f;
     const out = new File([blob], f.name, { type: f.type });
     out.shrunk = { from: f.size, to: blob.size, w: bmp.width, w2: c.width };

@@ -207,6 +207,18 @@ test('photos: a real image under a user\'s name goes into photos/ of the folder'
   const r = await api('photos/upload', { name: 'mustera.png', data: PNG.toString('base64') });
   assert.equal(r.name, 'mustera.png');
   assert.ok(fs.readFileSync(path.join(publishDir, 'photos', 'mustera.png')).equals(PNG));
+  // Served to the preview: asked again each time, sent again only when it changed (a photo changed
+  // under Photos shows at once).
+  const first = await request('/photos/mustera.png', { headers: { Cookie: admin } });
+  assert.equal(first.status, 200);
+  assert.match(first.headers['cache-control'], /no-cache/);
+  assert.ok(first.headers.etag);
+  assert.equal((await request('/photos/mustera.png', { headers: { Cookie: admin, 'If-None-Match': first.headers.etag } })).status, 304);
+  const other = Buffer.concat([PNG, Buffer.from([0])]);
+  await api('photos/upload', { name: 'mustera.png', data: other.toString('base64') });
+  const again = await request('/photos/mustera.png', { headers: { Cookie: admin, 'If-None-Match': first.headers.etag } });
+  assert.equal(again.status, 200, 'changed: sent again');
+  assert.ok(again.body.equals(other));
   // Listed, and removed again.
   assert.deepEqual((await api('photos/list')).photos.map((p) => p.name), ['mustera.png']);
   assert.equal((await api('photos/delete', { name: '../signatures.json' })).ok, false);
