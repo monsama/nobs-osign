@@ -27,7 +27,7 @@
         const small = await shrinkUpload(f, Math.max(48, (strong ? 1 : 2) * w), strong ? { quality: 0.72, always: true } : null);
         if (!small.shrunk || small.size >= f.size) continue;
         const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(small); });
-        const r = await api('assets/upload', { name, data });
+        const r = await api('assets/upload', { name: freshName(name), data });
         if (r.name !== name) {
           renamed[name] = r.name;
           const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
@@ -42,13 +42,14 @@
         n++; from += f.size; to += small.size;
       } catch (e) { /* that one stays */ }
     }
-    if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
+    if (n) reopenChanged();
     if (!(opts && opts.quiet)) toast(n ? t('{0} images made smaller: {1} → {2}.', n, kb(from), kb(to)) : t('The images are as small as they are shown already.'));
     return { n, from, to, renamed };
   }
   // For the web, in one go: each image shown as small as it is shown (twice that, for sharp
   // screens), and each PNG without a transparent pixel (a photo, a banner) as a JPEG.
   async function optimizeImages(opts) {
+    flushSource();
     // What the images used weigh, before and after.
     const weight = () => { const names = new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+)"/gi)].map((m) => m[1]))); return (S.assets || []).filter((x) => names.has(x.name)).reduce((n, x) => n + (x.size || 0), 0); };
     const before = weight();
@@ -136,6 +137,54 @@
     const b = e.currentTarget; b.disabled = true; b.textContent = t('Optimizing…');
     try { await optimizeImages({ strong }); } finally { b.disabled = false; b.textContent = t(label); renderImageList(); }
   }));
+  // After the signatures' HTML changed here: the HTML tab shows the new one (else reopening would
+  // take the old text in it for a change), saved, the signature open again.
+  function reopenChanged() {
+    if (S.mode === 'html' && sig()) showSource(sig().html);
+    changed();
+    if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId);
+  }
+  // The name an image is saved again under: without the -2, -3 an earlier save gave it (the server
+  // never writes over a file, so each save would add one), when that name is free.
+  function freshName(name) {
+    const base = name.replace(/(?:-\d+)+(\.[A-Za-z0-9]+)$/, '$1');
+    return (S.assets || []).some((a) => a.name === base) ? name : base;
+  }
+  // A signature's HTML made lighter, nothing that shows changed: what Word, Outlook and browsers
+  // leave in it when copied (mso-…, -webkit-… and other default styles, lang, empty spans), and
+  // runs of spaces and line breaks. Answers the HTML and how many bytes it saved.
+  const DEAD_STYLE = /^(mso-|-webkit-|orphans$|widows$|font-variant-ligatures$|font-variant-caps$|text-decoration-thickness$|text-decoration-style$|text-decoration-color$|caret-color$|font-kerning$)/i;
+  function slimHtml(html) {
+    const tpl = document.createElement('template'); tpl.innerHTML = String(html || '');
+    const all = [...tpl.content.querySelectorAll('*')];
+    for (const n of all) {
+      n.removeAttribute('lang');
+      if (n.hasAttribute('style')) {
+        const keep = String(n.getAttribute('style')).split(';').map((d) => d.trim()).filter(Boolean).filter((d) => {
+          const p = d.split(':')[0].trim();
+          return !DEAD_STYLE.test(p) && !/^\s*(initial|unset)\s*$/i.test(d.slice(d.indexOf(':') + 1));
+        });
+        if (keep.length) n.setAttribute('style', keep.join(';')); else n.removeAttribute('style');
+      }
+    }
+    // A span with nothing on it says nothing: its content in its place.
+    for (const n of [...tpl.content.querySelectorAll('span')]) if (!n.attributes.length) n.replaceWith(...n.childNodes);
+    let out = tpl.innerHTML;
+    // Whitespace: between block tags it shows nothing; elsewhere one space is what shows.
+    out = out.replace(/>\s+<(\/?(?:table|tbody|thead|tr|td|th|p|div|ul|ol|li|br)\b)/gi, '><$1').replace(/(<\/?(?:table|tbody|thead|tr|td|th|p|div|ul|ol|li)\b[^>]*>)\s+/gi, '$1').replace(/[ \t\r\n]{2,}/g, ' ');
+    return { html: out, saved: String(html || '').length - out.length };
+  }
+  // Every signature and building block made lighter (one step to undo).
+  function slimAll() {
+    // What was typed in the HTML tab first; after, the tab shows the lighter HTML (else reopening
+    // the signature would take the old text in the tab for a change).
+    flushSource();
+    let saved = 0;
+    for (const s of S.config.signatures) { const r = slimHtml(s.html); if (r.saved > 0) { s.html = r.html; saved += r.saved; } }
+    for (const b of S.config.blocks || []) { const r = slimHtml(b.html); if (r.saved > 0) { b.html = r.html; saved += r.saved; } }
+    if (saved > 0) reopenChanged();
+    toast(saved > 0 ? t('HTML made lighter by {0}: nothing that shows changed (Undo brings it back).', kb2(saved)) : t('The HTML is as light as it gets without changing what shows.'));
+  }
   async function removeUnused() {
     const names = unusedImages(); let n = 0;
     for (const name of names) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); n++; } catch (e) { /* that one stays */ } }
@@ -203,7 +252,7 @@
       else if (used + x.least <= room) { used += x.least; squeezed.push(x.name); }
       else missing.push(x.name);
     }
-    return { kb: Math.round((text + images.reduce((n, x) => n + x.bytes, 0) + photos) / 1024), images, missing, squeezed, textFits: text <= room };
+    return { kb: Math.round((text + images.reduce((n, x) => n + x.bytes, 0) + photos) / 1024), images, missing, squeezed, textFits: text <= room, textKb: Math.round(text / 1024), photoKb: Math.round(photos / 1024) };
   }
   function classicKb(s) { return classicParts(s).kb; }
   // The way to fit: each PNG of the signature (and its banner) with no transparent pixel becomes a
@@ -225,7 +274,7 @@
         const was = ((S.assets || []).find((x) => x.name === name) || {}).size || 0;
         if (!blob || (was && blob.size >= was)) continue;
         const data = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = no; fr.readAsDataURL(blob); });
-        const r = await api('assets/upload', { name: name.replace(/\.png$/i, '.jpg'), data });
+        const r = await api('assets/upload', { name: freshName(name.replace(/\.png$/i, '.jpg')), data });
         S.assets = S.assets.filter((x) => x.name !== r.name).concat([{ name: r.name, size: r.size }]);
         const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
         S.config.signatures.forEach((x) => { x.html = (x.html || '').replace(re, 'assets/' + r.name); });
@@ -236,7 +285,7 @@
         n++; from += was; to += blob.size;
       } catch (e) { /* that one stays */ }
     }
-    if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
+    if (n) reopenChanged();
     return { n, from, to };
   }
   const kb2 = (n) => (n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');

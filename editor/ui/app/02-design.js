@@ -294,12 +294,16 @@
     const fmt = el('button', { type: 'button', class: 'html-only', title: t('Indent the HTML again (Alt+Shift+F)') }, t('Format'));
     fmt.addEventListener('click', formatSource);
     fmt.style.display = S.mode === 'html' ? '' : 'none';
+    // The HTML lighter: what Word, Outlook and browsers leave in it, nothing that shows (10-publish.js).
+    const slim = el('button', { type: 'button', class: 'html-only', title: t('Takes out what shows nothing (mso-… and other leftover styles from Word or Outlook, empty spans, runs of spaces): lighter mails, more room in classic Outlook') }, t('Make lighter'));
+    slim.addEventListener('click', () => slimAll());
+    slim.style.display = S.mode === 'html' ? '' : 'none';
     // Two lines, at any width: what to insert, the font and Undo/Redo (at the right) on the first,
     // the formatting on the second. In groups that wrap as a whole on a narrow screen.
     const g = (cls, ...kids) => el('span', { class: 'tb-g ' + cls }, ...kids);
     const hist = g('tb-hist', btn('undo', 'Undo (Ctrl+Z)', () => histStep(-1), 'undo'), btn('redo', 'Redo (Ctrl+Y)', () => histStep(1), 'redo'));
     tb.append(
-      g('tb-keep', fieldSel, fmt), sep(), g('tb-font', fontSel, sizeSel, color, paletteTool(color)), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
+      g('tb-keep', fieldSel, fmt, slim), sep(), g('tb-font', fontSel, sizeSel, color, paletteTool(color)), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
       g('tb-style', btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline')), sep(),
       g('tb-align', btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), spacingTool()), sep(),
       g('tb-insert', btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), tableTool(btn('table', 'Columns (logo beside the text)', () => {})), btn('hr', 'Line', () => exec('insertHorizontalRule')), btn('clear', 'Clear formatting', () => exec('removeFormat')))

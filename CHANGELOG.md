@@ -5,6 +5,15 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.92
+- *Make lighter* in the HTML tab (and from the note on classic Outlook): what Word, Outlook and
+  browsers leave in a signature and shows nothing (mso-… and other leftover styles, `lang`, empty
+  spans, runs of spaces) taken out. Often the text, not the images, is what fills classic
+  Outlook's room.
+- The note on classic Outlook says what the room goes to: text, photo, images.
+- An image optimized again keeps its name (no more -2-2-2).
+- Fixed: optimizing images, or the HTML, with the HTML tab open put the old text back.
+
 ## 0.9.91 (add-in changed)
 - *Optimize* in the image bar: the image clicked, for the web (Shift+click: smaller still). The
   note on classic Outlook in the preview and the publish check offer the same for all images.

@@ -1943,3 +1943,24 @@ test('a test run for one person: their signatures and banners on a day; a banner
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('the HTML made lighter: Word\'s and Outlook\'s leftovers out, what shows kept, one step to undo', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.click('.tab[data-mode=html]');
+  const fat = '<table lang="DE-CH" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt">\n   <tr>\n     <td style="mso-line-height-rule:exactly;font-size:10pt;color:#c00;-webkit-text-size-adjust:none"><span><span lang="DE-CH" style="mso-ansi-language:DE-CH">Anna</span></span>   <b>Muster</b></td>\n   </tr>\n</table>';
+  await page.fill('#source', fat);
+  await page.dispatchEvent('#source', 'input');
+  await page.click('#toolbar button:has-text("Make lighter")');
+  const slim = (await page.inputValue('#source')).replace(/\s+/g, ' ');
+  assert.doesNotMatch(slim, /mso-|-webkit-|lang=/);
+  assert.match(slim, /border-collapse:collapse/);
+  assert.match(slim, /font-size:10pt;color:#c00/);
+  assert.match(slim, /Anna <b>Muster<\/b>/, 'the space between the words kept');
+  // The preview shows the same text.
+  await page.waitForFunction(() => /Anna Muster/.test(document.querySelector('#preview').contentDocument.body.textContent.replace(/\s+/g, ' ')));
+  await page.click('.tab[data-mode=design]');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});
