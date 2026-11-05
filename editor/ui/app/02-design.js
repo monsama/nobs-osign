@@ -20,7 +20,7 @@
     // A building block: its name in a band of its own, as wide as the text.
     'span.osb{display:inline-block;padding:2px .6em;margin:1px 0;border-radius:4px;background:#eaf1fb;color:#1d4ed8;font:600 9pt Arial,sans-serif;cursor:default;user-select:all;box-shadow:inset 0 0 0 1px #b6cdf5}' +
     'span.osb::before{content:"\\25A4  "}span.osb.unknown{background:#fff;color:#b42318;box-shadow:inset 0 0 0 1px #f0b4ad}' +
-    'span.osb.campaign{background:#fff6e5;color:#8a5300;box-shadow:inset 0 0 0 1px #f1c27d}span.osb.campaign::before{content:"\\25AD  "}';
+    'span.osf,span.osb{cursor:grab}.dragging{opacity:.4}span.osb.campaign{background:#fff6e5;color:#8a5300;box-shadow:inset 0 0 0 1px #f1c27d}span.osb.campaign::before{content:"\\25AD  "}';
 
   // The design editor: a frame of its own, editable, with the app's styles for fields and building blocks.
   function initDesign() {
@@ -37,6 +37,7 @@
         ddoc.addEventListener('mouseup', updateToolbarState);
         ddoc.addEventListener('click', onDesignClick);
         ddoc.addEventListener('paste', onPaste);
+        chipDrag();
         resolve();
       }, { once: true });
     });
@@ -66,7 +67,7 @@
     const c = doc.createElement('span');
     c.className = 'osf' + (f ? '' : ' unknown');
     c.dataset.f = key;
-    c.contentEditable = 'false';
+    c.contentEditable = 'false'; c.draggable = true;
     c.title = '@@' + key + (f ? '' : ' - ' + t('not a field'));
     c.textContent = f ? (f.label || f.key) : '@@' + key;
     return c;
@@ -76,7 +77,7 @@
     const c = doc.createElement('span');
     // The place of the campaign banners: no building block, its own chip.
     if (key.toLowerCase() === 'campaign') {
-      c.className = 'osb campaign'; c.dataset.b = 'campaign'; c.contentEditable = 'false';
+      c.className = 'osb campaign'; c.dataset.b = 'campaign'; c.contentEditable = 'false'; c.draggable = true;
       c.title = '{{campaign}} - ' + t('the banner of a campaign running then goes here (Campaigns); none running: nothing');
       c.textContent = t('Campaign banner');
       return c;
@@ -84,7 +85,7 @@
     const b = S.config.blocks.find((x) => x.key.toLowerCase() === key.toLowerCase());
     c.className = 'osb' + (b ? '' : ' unknown');
     c.dataset.b = b ? b.key : key;
-    c.contentEditable = 'false';
+    c.contentEditable = 'false'; c.draggable = true;
     c.title = '{{' + key + '}}' + (b ? ' - ' + t('building block, changed under Building blocks') : ' - ' + t('not a building block'));
     c.textContent = b ? b.name : '{{' + key + '}}';
     return c;
@@ -123,6 +124,59 @@
     copy.querySelectorAll('span.osb[data-b]').forEach((c) => c.replaceWith(ddoc.createTextNode('{{' + c.dataset.b + '}}')));
     copy.querySelectorAll('img.sel').forEach((i) => { i.classList.remove('sel'); if (!i.className) i.removeAttribute('class'); });
     return copy.innerHTML;
+  }
+
+  // A field or building block dragged to another place in the design: a field into the text where
+  // it is let go; a building block on a line of its own (the banner's place too) before or after
+  // the line it is let go on. One step to undo.
+  function chipDrag() {
+    let drag = null;
+    const CHIP = 'span.osf, span.osb';
+    ddoc.addEventListener('dragstart', (e) => {
+      // The text in the chip is what the browser says was dragged.
+      const n = e.target && e.target.nodeType === 3 ? e.target.parentNode : e.target;
+      const c = n && n.closest && n.closest(CHIP);
+      if (!c) return;
+      drag = c; c.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', c.dataset.f ? '@@' + c.dataset.f : '{{' + c.dataset.b + '}}');
+    });
+    ddoc.addEventListener('dragend', () => { if (drag) drag.classList.remove('dragging'); drag = null; });
+    ddoc.addEventListener('dragover', (e) => { if (drag) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
+    ddoc.addEventListener('drop', (e) => {
+      if (!drag) return;
+      e.preventDefault();
+      const c = drag; drag = null; c.classList.remove('dragging');
+      let r = null;
+      if (ddoc.caretRangeFromPoint) r = ddoc.caretRangeFromPoint(e.clientX, e.clientY);
+      else if (ddoc.caretPositionFromPoint) { const p = ddoc.caretPositionFromPoint(e.clientX, e.clientY); if (p) { r = ddoc.createRange(); r.setStart(p.offsetNode, p.offset); r.collapse(true); } }
+      if (!r || !ddoc.body.contains(r.startContainer) || c.contains(r.startContainer)) return;
+      const line = c.parentNode;
+      const alone = line !== ddoc.body && /^(DIV|P)$/.test(line.nodeName) && line.childElementCount === 1 && line.textContent.trim() === c.textContent.trim();
+      if (c.classList.contains('osb') && alone) {
+        // The line it goes next to: the one in the body (or in a cell) where it is let go.
+        let n = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentNode;
+        while (n && n.parentNode && n.parentNode !== ddoc.body && !/^T[DH]$/.test(n.parentNode.nodeName)) n = n.parentNode;
+        if (!n || n === line || n === ddoc.body || line.contains(n)) return;
+        const box = n.getBoundingClientRect();
+        if (e.clientY < box.top + box.height / 2) n.before(line); else n.after(line);
+      } else {
+        // Let go between two lines (the body, a row): at the start of the line after (or the end of the one before).
+        const box = r.startContainer, off = r.startOffset;
+        if (box.nodeType === 1 && /^(BODY|TABLE|TBODY|TR)$/.test(box.nodeName)) {
+          const after = box.childNodes[off], before = box.childNodes[off - 1];
+          const n = after && after.nodeType === 1 && after !== c ? after : before;
+          if (n && n.nodeType === 1 && n !== c) { r.selectNodeContents(n); r.collapse(n === after); }
+        }
+        const inChip = (x) => (x.nodeType === 1 ? x : x.parentNode).closest(CHIP);
+        const other = inChip(r.startContainer);
+        if (other) { r.setStartAfter(other); r.collapse(true); }
+        r.insertNode(c);
+        // A line left empty by it goes.
+        if (alone && !line.textContent.trim() && !line.querySelector('img, table')) line.remove();
+      }
+      onDesignInput();
+    });
   }
 
   // Typing in the design: back into the signature's HTML, made safe.
@@ -249,7 +303,7 @@
       g('tb-keep', fieldSel, fmt), sep(), g('tb-font', fontSel, sizeSel, color, paletteTool(color)), hist, el('span', { class: 'tb-break', 'aria-hidden': 'true' }),
       g('tb-style', btn('bold', 'Bold (Ctrl+B)', () => exec('bold'), 'bold'), btn('italic', 'Italic (Ctrl+I)', () => exec('italic'), 'italic'), btn('underline', 'Underline (Ctrl+U)', () => exec('underline'), 'underline')), sep(),
       g('tb-align', btn('left', 'Align left', () => exec('justifyLeft'), 'justifyLeft'), btn('center', 'Centre', () => exec('justifyCenter'), 'justifyCenter'), btn('right', 'Align right', () => exec('justifyRight'), 'justifyRight'), spacingTool()), sep(),
-      g('tb-insert', btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), btn('table', 'Two columns (logo beside the text)', insertTable), btn('hr', 'Line', () => exec('insertHorizontalRule')), btn('clear', 'Clear formatting', () => exec('removeFormat')))
+      g('tb-insert', btn('link', 'Link', makeLink), btn('unlink', 'Remove link', () => exec('unlink')), btn('image', 'Image', openImageDialog), tableTool(btn('table', 'Columns (logo beside the text)', () => {})), btn('hr', 'Line', () => exec('insertHorizontalRule')), btn('clear', 'Clear formatting', () => exec('removeFormat')))
     );
   }
 
@@ -336,11 +390,17 @@
     exec('createLink', url.trim());
   }
 
-  function insertTable() {
-    insertHtml('<table cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' +
-      '<td style="padding:0 14px 0 0;vertical-align:top">Logo</td>' +
-      '<td style="vertical-align:top;font-family:Arial,sans-serif;font-size:10pt"><b>@@givenName @@sn</b><br>@@title<br>Mobile @@mobile<br>@@mail</td>' +
-      '</tr></table><p><br></p>');
+  // Columns: the logo beside the text in a table (as Outlook lays it out), in a few layouts.
+  const TD_TEXT = 'vertical-align:top;font-family:Arial,sans-serif;font-size:10pt';
+  const PERSON = '<b>@@givenName @@sn</b><br>@@title<br>Mobile @@mobile<br>@@mail';
+  const TABLES = {
+    left: ['Logo left, text right', '<td style="padding:0 14px 0 0;vertical-align:top">Logo</td><td style="' + TD_TEXT + '">' + PERSON + '</td>'],
+    right: ['Text left, logo right', '<td style="padding:0 14px 0 0;' + TD_TEXT + '">' + PERSON + '</td><td style="vertical-align:top">Logo</td>'],
+    line: ['Logo, a line, the text', '<td style="padding:0 12px 0 0;vertical-align:top;border-right:2px solid #2f6fde">Logo</td><td style="padding:0 0 0 12px;' + TD_TEXT + '">' + PERSON + '</td>'],
+    three: ['Three columns', '<td style="padding:0 14px 0 0;vertical-align:top">Logo</td><td style="padding:0 14px 0 0;' + TD_TEXT + '"><b>@@givenName @@sn</b><br>@@title</td><td style="' + TD_TEXT + '">Mobile @@mobile<br>@@mail</td>']
+  };
+  function insertTable(kind) {
+    insertHtml('<table cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>' + TABLES[kind || 'left'][1] + '</tr></table><p><br></p>');
   }
 
   // Selected image: width, alt text and a link, in a bar above the editor.
@@ -431,6 +491,11 @@
   function renderImageList() {
     const box = $('imgList'); box.textContent = '';
     if (!S.assets.length) box.append(el('p', { class: 'lead' }, t('No images yet.')));
+    // The ones nothing uses: away in one go.
+    const unused = unusedImages();
+    $('imgUnused').hidden = !unused.length;
+    $('imgUnused').textContent = t('Remove {0} unused', unused.length);
+    $('imgUnused').title = unused.join(', ');
     S.assets.forEach((a) => {
       const del = el('span', { class: 'del', title: t('Remove from the draft'), role: 'button', onclick: (e) => { e.stopPropagation(); deleteAsset(a.name); } }, t('remove'));
       box.append(el('button', { type: 'button', onclick: () => { $('dlgImage').close(); insertImage('assets/' + a.name); } },
@@ -451,7 +516,7 @@
   }
   async function deleteAsset(name) {
     const used = S.config.signatures.filter((s) => sigFull(s).includes('assets/' + name)).map((s) => s.name)
-      .concat((S.config.campaigns || []).filter((c) => [c.html].concat(Object.values(c.langs || {}).map((v) => v.html)).some((h) => String(h || '').includes('assets/' + name))).map((c) => t('campaign «{0}»', c.name)));
+      .concat((S.config.campaigns || []).filter((c) => [c.html].concat(Object.values(c.langs || {}).map((v) => v.html), (c.more || []).map((v) => v.html)).some((h) => String(h || '').includes('assets/' + name))).map((c) => t('campaign «{0}»', c.name)));
     if (used.length && !(await ask(t('{0} is used in: {1}. Remove it anyway?', name, used.join(', ')), t('Remove'), true))) return;
     try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); renderImageList(); changed({ list: false }); } catch (e) { $('imgErr').textContent = t(e.message); }
   }

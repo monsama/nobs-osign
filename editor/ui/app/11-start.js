@@ -26,6 +26,8 @@
       // Made elsewhere (no form): its HTML as HTML of its own.
       n.design = n.design && typeof n.design === 'object' ? n.design : { tpl: 'html', html: n.html };
       n.langs = Object.fromEntries(Object.entries(n.langs || {}).map(([k, v]) => [k, { html: String((v && v.html) || ''), design: v && v.design ? v.design : { tpl: 'html', html: String((v && v.html) || '') } }]));
+      n.more = (Array.isArray(n.more) ? n.more : []).filter(Boolean).map((v) => ({ html: String(v.html || ''), design: v.design ? v.design : { tpl: 'html', html: String(v.html || '') } }));
+      if (!Array.isArray(n.days) || !n.days.length) delete n.days;
       return n;
     });
     c.signatures = (Array.isArray(c.signatures) ? c.signatures : []).map((s) => {

@@ -516,6 +516,8 @@
     for (var i = 0; i < list.length; i++) {
       var c = list[i];
       if (!c || !inPeriod(c, ctx.now)) continue;
+      // Only on some days of the week (0 Sunday … 6 Saturday), as the user's clock has it.
+      if (c.days && c.days.length && c.days.indexOf((ctx.now instanceof Date ? ctx.now : new Date()).getDay()) < 0) continue;
       if (c.newOnly && ctx.kind === 'reply') continue;
       var targets = c.signatures || [];
       if (targets.length && targets.indexOf(sig.id) < 0 && targets.indexOf(sig.variantOf) < 0) continue;
@@ -526,12 +528,15 @@
     }
     return best;
   }
-  // The banner's HTML (compiled) in the person's language, or the one for all.
-  function campaignHtml(c, values) {
+  // The banner's HTML (compiled) in the person's language, or the one for all; with banners that
+  // take turns (c.more), one of them: `turn` (a number) says which, else by chance, per mail.
+  function campaignHtml(c, values, turn) {
     if (!c) return '';
     var lang = langOf(values), v = c.langs && lang && c.langs[lang];
     if (v) return String(v.compiled || v.html || '');
-    return String(c.compiled || c.html || '');
+    var all = [c].concat((c.more || []).filter(function (x) { return x && (x.compiled || x.html); }));
+    var i = typeof turn === 'number' ? Math.abs(Math.floor(turn)) % all.length : Math.floor(Math.random() * all.length);
+    return String(all[i].compiled || all[i].html || '');
   }
   // A signature's compiled HTML with the banner in its place (or below / above), or its place gone.
   function fillCampaign(compiled, banner, position) {
@@ -548,7 +553,7 @@
     if (!c && !hasSlot(base)) return sig;
     var out = {};
     for (var k in sig) if (Object.prototype.hasOwnProperty.call(sig, k)) out[k] = sig[k];
-    out.compiled = fillCampaign(base, campaignHtml(c, ctx && ctx.values), c && c.position);
+    out.compiled = fillCampaign(base, campaignHtml(c, ctx && ctx.values, ctx && ctx.turn), c && c.position);
     out.campaign = c ? c.id : '';
     return out;
   }
@@ -773,6 +778,8 @@
       if (c && ((c.validFrom && !DAY.test(c.validFrom)) || (c.validUntil && !DAY.test(c.validUntil)))) errors.push('Campaign ' + nm + ': its days are dates like 2026-12-01.');
       else if (c && c.validFrom && c.validUntil && c.validFrom > c.validUntil) errors.push('Campaign ' + nm + ' ends before it starts.');
       if (c && c.position && c.position !== 'below' && c.position !== 'above') errors.push('Campaign ' + nm + ': unknown position ' + c.position + '.');
+      if (c && c.days !== undefined && (!Array.isArray(c.days) || c.days.some(function (d) { return d !== Math.floor(d) || d < 0 || d > 6; }))) errors.push('Campaign ' + nm + ': its weekdays are 0 (Sunday) to 6 (Saturday).');
+      if (c && c.more !== undefined && (!Array.isArray(c.more) || c.more.length > 9)) errors.push('Campaign ' + nm + ': up to 10 banners take turns.');
     });
     var ids = {};
     (config.signatures || []).forEach(function (s, i) {

@@ -7,7 +7,10 @@
   // ---------------------------------------------------------------------------------------------
   const CAMP_LANGS = { de: 'Deutsch', en: 'English', fr: 'Français', it: 'Italiano' };
   const CAMP_TPL = ['image', 'text', 'imagetext', 'html'];
-  let campSel = null, campLang = '';
+  // campAlt: which of the banners taking turns the form shows (0: the first).
+  let campSel = null, campLang = '', campAlt = 0, campPast = false;
+  const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
+  const isOver = (c) => !!c.validUntil && c.validUntil < core.today();
   const campaigns = () => (S.config.campaigns = Array.isArray(S.config.campaigns) ? S.config.campaigns : []);
   const campById = (id) => campaigns().find((c) => c.id === id) || null;
   const okLink = (u) => /^(https?:|mailto:|tel:)/i.test(String(u || '').trim());
@@ -42,8 +45,10 @@
   function campBuild(c) {
     c.html = bannerHtml(c.design || {}, c);
     Object.values(c.langs || {}).forEach((v) => { v.html = bannerHtml(v.design || {}, c); });
+    (c.more || []).forEach((v) => { v.html = bannerHtml(v.design || {}, c); });
   }
-  const campChanged = () => { const c = campById(campSel); if (c) campBuild(c); changed({ list: false }); campTimeline(); campPreview(); campDayTable(); renderStatusBar(); };
+  const pickCamp = (id) => { campSel = id; campLang = ''; campAlt = 0; };
+  const campChanged = () => { const c = campById(campSel); if (c) campBuild(c); changed({ list: false }); campList(); campTimeline(); campPreview(); campDayTable(); renderStatusBar(); };
 
   // ---- the view --------------------------------------------------------------------------------
   function renderCampaignsView() {
@@ -59,9 +64,23 @@
       box.replaceChildren(emptyState('blocks', t('No banner campaigns yet.'), t('A banner for some days (the holidays, a fair, a webinar) in the signatures there are: no copy of a signature.'), [t('+ New campaign'), () => $('btnAddCampaign').click()]));
       return;
     }
-    box.replaceChildren(...list.map((c) => el('button', { type: 'button', class: 'camp-item' + (c.id === campSel ? ' on' : ''), 'aria-pressed': String(c.id === campSel), onclick: () => { campSel = c.id; campLang = ''; campList(); campEditor(); } },
-      el('b', null, c.name || t('(no name)')), el('small', null, [campaignText(c) || t('always'), core.inPeriod(c) ? t('running') : (c.validUntil && c.validUntil < core.today()) ? t('over') : ''].filter(Boolean).join(' · ')))));
+    const item = (c) => el('button', { type: 'button', class: 'camp-item' + (c.id === campSel ? ' on' : ''), 'aria-pressed': String(c.id === campSel), 'data-camp': c.id, onclick: () => { pickCamp(c.id); campList(); campEditor(); campTimeline(); } },
+      el('b', null, c.name || t('(no name)')), el('small', null, [campaignText(c) || t('always'), core.inPeriod(c) ? t('running') : isOver(c) ? t('over') : '', (c.more || []).length ? t('{0} banners in turns', c.more.length + 1) : ''].filter(Boolean).join(' · ')));
+    // The ones over, folded away (the one selected stays in view).
+    const now = list.filter((c) => !isOver(c)), past = list.filter(isOver);
+    const open = campPast || past.some((c) => c.id === campSel);
+    const fold = past.length ? el('button', { type: 'button', class: 'camp-fold', 'aria-expanded': String(open), onclick: () => { campPast = !open; campList(); campTimeline(); } }, (open ? '▾ ' : '▸ ') + t('Over ({0})', past.length)) : null;
+    box.replaceChildren(...now.map(item), ...(fold ? [fold] : []), ...(open ? past.map(item) : []));
   }
+  // Up and down in the list: the next campaign (as in the list of signatures).
+  $('campList').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const items = [...$('campList').querySelectorAll('.camp-item, .camp-fold')], i = items.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const n = items[Math.max(0, Math.min(items.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+    if (n) n.focus();
+  });
 
   // The form of the campaign selected.
   function campEditor() {
@@ -70,7 +89,9 @@
     if (!c) { box.replaceChildren(); return; }
     c.design = c.design || { tpl: 'image' }; c.langs = c.langs || {}; c.audience = c.audience || { everyone: true };
     if (campLang && !c.langs[campLang]) campLang = '';
-    const d = campLang ? c.langs[campLang].design : c.design;
+    c.more = Array.isArray(c.more) ? c.more : [];
+    if (campLang || campAlt > c.more.length) campAlt = 0;
+    const d = campLang ? c.langs[campLang].design : campAlt ? c.more[campAlt - 1].design : c.design;
     const input = (attrs, get, set) => { const i = el('input', attrs); i.value = get() == null ? '' : get(); i.addEventListener(attrs.type === 'checkbox' ? 'change' : 'input', () => { set(attrs.type === 'checkbox' ? i.checked : i.value); campChanged(); }); if (attrs.type === 'checkbox') i.checked = !!get(); return i; };
     const row = (label, ...kids) => el('label', { class: 'camp-f' }, el('span', null, label), ...kids);
 
@@ -78,6 +99,14 @@
     const name = input({ 'aria-label': t('Name') }, () => c.name, (v) => { c.name = v; campList(); });
     const from = input({ type: 'date', 'aria-label': t('From') }, () => c.validFrom, (v) => { c.validFrom = v; campList(); });
     const until = input({ type: 'date', 'aria-label': t('Until') }, () => c.validUntil, (v) => { c.validUntil = v; campList(); });
+    // Only on some weekdays (none ticked: every day).
+    const dayName = (n) => new Date(2026, 0, 4 + n).toLocaleDateString(I18N.lang === 'de' ? 'de-CH' : 'en-GB', { weekday: 'short' });
+    const days = el('div', { class: 'camp-days', role: 'group', 'aria-label': t('Only on these weekdays') }, el('span', null, t('Weekdays')),
+      ...WEEKDAYS.map((n) => {
+        const b = el('input', { type: 'checkbox', 'aria-label': dayName(n) }); b.checked = (c.days || []).includes(n);
+        b.addEventListener('change', () => { const set = new Set(c.days || []); if (b.checked) set.add(n); else set.delete(n); c.days = WEEKDAYS.filter((x) => set.has(x)); if (!c.days.length) delete c.days; campChanged(); });
+        return el('label', null, b, dayName(n));
+      }), el('small', { class: 'hint' }, t('none ticked: every day')));
 
     // The banner: its kind, then its parts.
     const tplNames = { image: t('Image with link'), text: t('Text with button'), imagetext: t('Image and text'), html: t('HTML of your own') };
@@ -136,10 +165,16 @@
 
     // Languages: the banner for all, and one per language for those who have it in Entra ID / AD.
     const langTabs = el('div', { class: 'camp-langs', role: 'tablist', 'aria-label': t('Language') },
-      el('button', { type: 'button', role: 'tab', class: 'tab' + (!campLang ? ' active' : ''), 'aria-selected': String(!campLang), onclick: () => { campLang = ''; campEditor(); campPreview(); } }, t('All languages')),
+      el('button', { type: 'button', role: 'tab', class: 'tab' + (!campLang ? ' active' : ''), 'aria-selected': String(!campLang), onclick: () => { campLang = ''; campAlt = 0; campEditor(); campPreview(); } }, t('All languages')),
       ...Object.keys(c.langs).map((k) => el('span', { class: 'camp-lang' },
         el('button', { type: 'button', role: 'tab', class: 'tab' + (campLang === k ? ' active' : ''), 'aria-selected': String(campLang === k), onclick: () => { campLang = k; campEditor(); campPreview(); } }, CAMP_LANGS[k] || k),
         el('button', { type: 'button', class: 'ghost small x', title: t('Remove this language'), 'aria-label': t('Remove this language'), onclick: () => { delete c.langs[k]; campLang = ''; campChanged(); campEditor(); } }, '×'))));
+    // Banners that take turns, mail by mail (for all languages; one in a language is that one).
+    const altTabs = campLang ? null : el('div', { class: 'camp-langs camp-alts', role: 'tablist', 'aria-label': t('Banners in turns') },
+      ...[c.design].concat(c.more.map((x) => x.design)).map((x, i) => el('span', { class: 'camp-lang' },
+        el('button', { type: 'button', role: 'tab', class: 'tab' + (campAlt === i ? ' active' : ''), 'aria-selected': String(campAlt === i), onclick: () => { campAlt = i; campEditor(); } }, t('Banner {0}', i + 1)),
+        i ? el('button', { type: 'button', class: 'ghost small x', title: t('Remove this banner'), 'aria-label': t('Remove this banner'), onclick: () => { c.more.splice(i - 1, 1); campAlt = 0; campChanged(); campEditor(); } }, '×') : null)),
+      c.more.length < 9 ? el('button', { type: 'button', class: 'ghost small', title: t('Another banner: they take turns, mail by mail'), onclick: () => { c.more.push({ design: JSON.parse(JSON.stringify(d)), html: '' }); campAlt = c.more.length; campChanged(); campEditor(); } }, t('+ Banner in turns')) : null);
     const missing = Object.keys(CAMP_LANGS).filter((k) => !c.langs[k]);
     if (missing.length) {
       const add = el('select', { 'aria-label': t('+ Language'), class: 'camp-addlang' }, el('option', { value: '' }, t('+ Language')), missing.map((k) => el('option', { value: k }, CAMP_LANGS[k])));
@@ -178,7 +213,7 @@
       const n = JSON.parse(JSON.stringify(c)), y = (x) => { if (!x) return x; const dd = new Date(x + 'T12:00:00'); dd.setFullYear(dd.getFullYear() + 1); return core.today(dd); };
       n.name = /\b(19|20)\d\d\b/.test(c.name) ? c.name.replace(/\b((?:19|20)\d\d)\b/g, (m) => String(Number(m) + 1)) : c.name + ' ' + t('(next year)');
       n.id = newId('c-' + n.name); n.validFrom = y(c.validFrom); n.validUntil = y(c.validUntil);
-      campaigns().push(n); campSel = n.id; campLang = ''; campBuild(n); changed({ list: false }); renderCampaignsView();
+      campaigns().push(n); pickCamp(n.id); campBuild(n); changed({ list: false }); renderCampaignsView();
       toast(t('Copied for next year: {0}, {1}.', n.name, campaignText(n) || t('always')));
     } }, t('Copy for next year'));
     const del = el('button', { type: 'button', class: 'ghost danger', onclick: () => {
@@ -187,8 +222,8 @@
     } }, t('Remove'));
 
     box.replaceChildren(
-      el('div', { class: 'camp-when' }, row(t('Name'), name), row(t('From'), from), row(t('Until'), until)),
-      el('h3', null, t('Banner')), langTabs, tpls, ...parts,
+      el('div', { class: 'camp-when' }, row(t('Name'), name), row(t('From'), from), row(t('Until'), until)), days,
+      el('h3', null, t('Banner')), langTabs, altTabs, tpls, ...parts,
       el('iframe', { id: 'campPv', class: 'camp-pv', sandbox: 'allow-same-origin', title: t('Preview'), tabindex: '-1' }),
       el('h3', null, t('Where')),
       el('div', { class: 'camp-where' }, el('label', null, all, ' ', t('In all signatures')), el('label', null, some, ' ', t('Only in these:'))), sigBoxes, slotNote,
@@ -206,7 +241,8 @@
     const meant = (c.signatures || []).length ? S.config.signatures.filter((s) => c.signatures.includes(s.id)) : S.config.signatures;
     const s = meant[0], values = {};
     S.config.fields.forEach((f) => { values[f.key] = core.formatValue(f, f.sample || ''); });
-    const banner = core.compile(sanitize(campLang && c.langs[campLang] ? c.langs[campLang].html : c.html), scratchDoc);
+    const shown = campLang && c.langs[campLang] ? c.langs[campLang] : campAlt && (c.more || [])[campAlt - 1] ? c.more[campAlt - 1] : c;
+    const banner = core.compile(sanitize(shown.html || ''), scratchDoc);
     const base = s ? core.compile(sanitize(sigFull(s)), scratchDoc) : '';
     const html = core.render(core.fillCampaign(base, banner, c.position), values, { assetBase: '/', removeEmptyLines: !s || s.removeEmptyLines !== false });
     // A person's photo that is not there goes, as in the preview.
@@ -228,8 +264,9 @@
 
   // Signature campaigns (a whole signature for some days) and banner campaigns on one timeline.
   function campTimeline() {
-    const camps = S.config.signatures.filter((s) => core.isCampaign(s)).map((s) => ({ kind: 'sig', o: s }))
-      .concat(campaigns().map((c) => ({ kind: 'banner', o: c })));
+    // The ones over only when unfolded (or selected): the timeline is about what comes.
+    const camps = S.config.signatures.filter((s) => core.isCampaign(s) && (campPast || !isOver(s))).map((s) => ({ kind: 'sig', o: s }))
+      .concat(campaigns().filter((c) => campPast || !isOver(c) || c.id === campSel).map((c) => ({ kind: 'banner', o: c })));
     const DAY = 86400000, day = (x) => Date.parse(x + 'T00:00:00');
     const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const froms = camps.map((x) => (x.o.validFrom ? day(x.o.validFrom) : null)).filter((x) => x !== null);
@@ -254,7 +291,8 @@
         const bar = el('button', { type: 'button', class: 'camp-bar' + (x.kind === 'banner' ? ' banner' : '') + (core.inPeriod(s) ? ' now' : b <= today ? ' past' : '') + (over ? ' clash' : '') + (x.kind === 'banner' && s.id === campSel ? ' sel' : ''),
           style: 'left:' + pct(a) + ';width:calc(' + pct(b) + ' - ' + pct(a) + ')',
           title: fmt(s.validFrom) + ' - ' + fmt(s.validUntil) + ' · ' + (x.kind === 'banner' ? t('banner') : t('whole signature')) + ' · ' + audienceText(s) + (over ? ' · ' + t('at the same time as another one for the same people') : ''),
-          onclick: () => { if (x.kind === 'sig') openSig(s.id); else { campSel = s.id; campLang = ''; campList(); campEditor(); campTimeline(); } } });
+          'aria-label': (s.name || t('(no name)')) + ': ' + fmt(s.validFrom) + ' - ' + fmt(s.validUntil),
+          onclick: () => { if (x.kind === 'sig') openSig(s.id); else { pickCamp(s.id); campList(); campEditor(); campTimeline(); } } });
         return el('div', { class: 'camp-row' }, el('span', { class: 'camp-name', title: s.name }, (x.kind === 'banner' ? '▭ ' : '✉ ') + (s.name || t('(no name)'))), el('div', { class: 'camp-track' }, bar, el('span', { class: 'camp-today', style: 'left:' + pct(today) })));
       }),
       ...(camps.length ? [] : [el('p', { class: 'muted' }, t('No campaigns yet.'))]));
@@ -271,7 +309,22 @@
 
   $('btnAddCampaign').addEventListener('click', () => {
     const c = newCampaign(campaigns().length ? t('New campaign') : t('Holidays {0}', new Date().getFullYear()));
-    campaigns().push(c); campSel = c.id; campLang = ''; campBuild(c); changed({ list: false }); renderCampaignsView();
+    campaigns().push(c); pickCamp(c.id); campBuild(c); changed({ list: false }); renderCampaignsView();
     const n = $('campEdit').querySelector('input'); if (n) { n.focus(); n.select(); }
+  });
+  // A new one from an earlier one: its banner, signatures and rules, its days from today on (as long).
+  $('campFrom').addEventListener('focus', () => {
+    const sel = $('campFrom');
+    sel.replaceChildren(el('option', { value: '' }, t('From an earlier one…')), ...campaigns().slice().reverse().map((c) => el('option', { value: c.id }, c.name || t('(no name)'))));
+  });
+  $('campFrom').addEventListener('change', () => {
+    const o = campById($('campFrom').value); $('campFrom').value = ''; if (!o) return;
+    const n = JSON.parse(JSON.stringify(o)), len = o.validFrom && o.validUntil ? Math.round((Date.parse(o.validUntil) - Date.parse(o.validFrom)) / 86400000) : 13;
+    const d = new Date(); n.validFrom = core.today(d); d.setDate(d.getDate() + len); n.validUntil = core.today(d);
+    n.name = /\b(19|20)\d\d\b/.test(o.name || '') ? o.name.replace(/\b(19|20)\d\d\b/, String(new Date().getFullYear())) : (o.name || '') + ' ' + t('(copy)');
+    if (n.name === o.name) n.name += ' ' + t('(copy)');
+    n.id = newId('c-' + n.name);
+    campaigns().push(n); pickCamp(n.id); campBuild(n); changed({ list: false }); renderCampaignsView();
+    toast(t('Made from «{0}»: {1}.', o.name, campaignText(n)));
   });
   $('campDay').addEventListener('input', campDayTable);

@@ -514,7 +514,7 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
   sigs = sigs.slice(0, copy.cfg.signatures.length);
   // The images, each as small as it is shown; the smallest first, as many as fit.
   const wanted = [];
-  const banners = (copy.cfg.campaigns || []).map((c) => ({ compiled: core.campaignHtml(c, values) }));
+  const banners = (copy.cfg.campaigns || []).flatMap((c) => [c].concat(c.more || []).map((x) => ({ compiled: x.compiled })));
   for (const sg of sigs.concat(banners)) {
     const html = renderHtml(sg, values);
     for (const r of core.localImages(html)) {
@@ -560,8 +560,10 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
 function classicCampaigns(cfg, values) {
   const day = new Date().toISOString().slice(0, 10), lang = String((values || {}).preferredLanguage || '').split(/[-_]/)[0].toLowerCase();
   return (cfg.campaigns || []).filter((c) => !c.validUntil || c.validUntil >= day).map((c) => {
-    const o = { id: c.id, compiled: core.campaignHtml(c, values) };
-    ['validFrom', 'validUntil', 'signatures', 'position', 'newOnly', 'audience'].forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; });
+    const o = { id: c.id, compiled: core.campaignHtml(c, values, 0) };
+    ['validFrom', 'validUntil', 'signatures', 'position', 'newOnly', 'audience', 'days'].forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; });
+    // Banners that take turns: each with its HTML (not in a language of its own: that one only).
+    if (!o.langs && (c.more || []).length) o.more = c.more.map((x) => ({ compiled: x.compiled || x.html || '' }));
     if (lang && c.langs && c.langs[lang]) o.langs = { [lang]: { compiled: c.langs[lang].compiled || c.langs[lang].html } };
     return o;
   });
