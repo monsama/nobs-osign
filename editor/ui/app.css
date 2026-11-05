@@ -1359,8 +1359,8 @@ body.role-campaigns .side-sect { border-top: 0 !important; margin-top: 0 !import
 .camp-state.soon { color: var(--accent); border-color: var(--info-line, var(--accent)); background: var(--info-soft, transparent); }
 .camp-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 16px; align-items: start; }
 .camp-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.camp-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px 16px; }
-.camp-card > h3, .camp-side > h3 { margin: 0 0 12px !important; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.camp-card, .sect-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px 16px; }
+.camp-card > h3, .camp-side > h3, .sect-card > h3, .camp-tl-box > h3, .camp-day > h3 { margin: 0 0 12px !important; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .camp-side { position: sticky; top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px 16px; }
 .camp-side .camp-pv { height: 300px; margin: 0 0 8px; }
 .camp-side .hint { margin: 0; }
@@ -1408,3 +1408,18 @@ body.role-campaigns .side-sect { border-top: 0 !important; margin-top: 0 !import
 .camp-fields .camp-f .unit { color: var(--muted); font-size: 12.5px; }
 /* The hidden inputs of chips and toggles stay inside them (else they stretch the page). */
 .chip, .seg label { position: relative; }
+
+/* Cards of settings in a view (Add-in): one card a topic, each choice a row of its own. */
+.sect-cards { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; }
+.sect-card > h3 { display: flex; align-items: center; gap: 6px; }
+.sect-card .check.block { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 0; border-top: 1px solid var(--line); line-height: 1.45; }
+.sect-card > h3 + .check.block, .sect-card fieldset .check.block:first-child { border-top: 0; padding-top: 0; }
+.sect-card .check.block input { margin-top: 3px; flex: 0 0 auto; }
+.sect-card fieldset { border: 0; margin: 0; padding: 0; }
+.sect-card .lead { margin: 10px 0 0; }
+/* The kind of banner: its four choices on one line, under their label. */
+.camp-kind { flex-direction: column; align-items: flex-start; gap: 6px; }
+.camp-kind .seg { flex-wrap: nowrap; max-width: 100%; }
+.camp-kind .seg label { padding: 0 10px; white-space: nowrap; }
+.camp-kind .camp-lbl { flex: none; }
+.camp-kind .seg label { padding: 0 9px; font-size: 12.5px; }

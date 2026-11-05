@@ -240,7 +240,7 @@
     return f.sect(t('Banner'),
       el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Language')), langTabs),
       altTabs ? el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('In turns')), altTabs) : null,
-      el('div', { class: 'camp-variant' }, el('span', { class: 'camp-lbl' }, t('Kind')), tpls),
+      el('div', { class: 'camp-variant camp-kind' }, el('span', { class: 'camp-lbl' }, t('Kind')), tpls),
       el('div', { class: 'camp-fields' }, ...parts));
   }
   // Where: in which signatures, where in them, in new mail only.
