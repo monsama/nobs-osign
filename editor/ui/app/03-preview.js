@@ -5,8 +5,11 @@
   function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(renderPreview, 150); }
 
   function previewValues() {
-    const src = $('pvSource').value, v = {};
+    // "Sample values, one field empty" (without:key): the sample values, that one left empty.
+    const pick = $('pvSource').value, none = pick.startsWith('without:') ? pick.slice(8) : '', src = none ? 'sample' : pick, v = {};
     S.config.fields.forEach((f) => { v[f.key] = core.formatValue(f, src === 'sample' ? (f.sample || '') : (src === 'ad' || src === 'entra') && S.adValues && S.adFrom === src ? (S.adValues[f.key] || '') : ''); });
+    // One field empty, the others as they are: which line goes without it.
+    if (none && Object.prototype.hasOwnProperty.call(v, none)) v[none] = '';
     return v;
   }
 
@@ -126,7 +129,34 @@
         (open ? t('This signature is open to them.') : t('This signature is NOT open to them.')) + ' ' +
         t('New mail: {0}, replies: {1}.', nm(core.pick(S.config, v, from, 'new', null, g)), nm(core.pick(S.config, v, from, 'reply', null, g)))));
     }
+    const none = $('pvSource').value.startsWith('without:') ? $('pvSource').value.slice(8) : '';
+    if (none && used.includes(none)) notes.push(emptyFieldNote(s, none));
     $('pvNote').replaceChildren(...notes);
+    fillEmptyPick(s, used);
+  }
+  // "Sample values, one field empty": the fields this signature uses, to leave one of them out.
+  // One gone from the signature: back to the sample values.
+  function fillEmptyPick(s, used) {
+    const src = $('pvSource'), group = $('pvWithout'), keep = src.value, keys = used.filter((k) => fieldKeys().includes(k));
+    const names = keys.map((k) => k + '=' + fieldName(k)).join();
+    if (group.dataset.keys === names) return;
+    group.dataset.keys = names;
+    group.label = t('Sample values, one field empty');
+    group.replaceChildren(...keys.map((k) => el('option', { value: 'without:' + k }, t('Without {0}', fieldName(k)))));
+    group.hidden = !keys.length;
+    if (keep.startsWith('without:')) { src.value = keys.includes(keep.slice(8)) ? keep : 'sample'; if (src.value !== keep) schedulePreview(); }
+  }
+  // What goes when one field is empty: the lines the preview loses, in words.
+  function emptyFieldNote(s, key) {
+    const html = (vals) => core.render(core.compile(sanitize(sigFull(s)), scratchDoc), vals, { assetBase: '/', removeEmptyLines: s.removeEmptyLines !== false });
+    const without = previewValues(), withIt = Object.assign({}, without, { [key]: (S.config.fields.find((f) => f.key === key) || {}).sample || 'x' });
+    const lines = (h) => core.htmlToText(h).split('\n').map((l) => l.trim()).filter(Boolean);
+    const a = lines(html(withIt)), b = lines(html(without));
+    // Fewer lines without it: those are what goes (a line kept just lacks the value).
+    const gone = b.length < a.length ? a.filter((l) => !b.includes(l)).slice(0, a.length - b.length) : [];
+    if (s.removeEmptyLines === false) return el('div', null, t('Without {0}: its lines stay, empty (this signature keeps empty lines).', fieldName(key)));
+    if (!gone.length) return el('div', null, t('Without {0}: no line goes, only the value is missing.', fieldName(key)));
+    return el('div', null, t('Without {0}, this goes: {1}', fieldName(key), gone.map((l) => '«' + l + '»').join(', ')));
   }
 
   $('pvSource').addEventListener('change', () => {

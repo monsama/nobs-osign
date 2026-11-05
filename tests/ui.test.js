@@ -1689,3 +1689,97 @@ test('an image sized by dragging its corner: the height goes along in its shape,
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('editor tools: a link\'s bar, a table cell\'s bar, an image\'s corners and place, spacing, house colours', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p><a href="https://www.example.com/">Web</a> text</p><table><tr><td>A</td><td>B</td></tr></table><p><img src="https://www.example.com/p.png" width="100" height="80" alt=""></p><p>Line one</p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  const frame = page.frameLocator('#design');
+  const html = async () => { await page.click('.tab[data-mode=html]'); const v = await page.inputValue('#source'); await page.click('.tab[data-mode=design]'); return v; };
+
+  // A link: its address changed in its bar, then the link removed (the text stays).
+  await frame.locator('a').click();
+  await page.waitForSelector('#linkBar:not([hidden])');
+  assert.equal(await page.inputValue('#linkHref'), 'https://www.example.com/');
+  await page.fill('#linkHref', 'javascript:alert(1)'); await page.dispatchEvent('#linkHref', 'change');
+  assert.equal(await frame.locator('a').getAttribute('href'), 'https://www.example.com/', 'no javascript: link');
+  await page.fill('#linkHref', 'https://www.example.org/'); await page.dispatchEvent('#linkHref', 'change');
+  assert.equal(await frame.locator('a').getAttribute('href'), 'https://www.example.org/');
+  await page.click('#linkRemove');
+  assert.equal(await frame.locator('a').count(), 0);
+  assert.match(await html(), /Web text/);
+
+  // A table cell: its content in the middle, a width, space to the right, lines around the cells.
+  await frame.locator('td').first().click();
+  await page.waitForSelector('#cellBar:not([hidden])');
+  assert.equal(await page.isHidden('#linkBar'), true);
+  await page.selectOption('#cellV', 'middle');
+  await page.fill('#cellW', '120'); await page.dispatchEvent('#cellW', 'change');
+  await page.fill('#cellGap', '14'); await page.dispatchEvent('#cellGap', 'change');
+  await page.check('#cellLines');
+  const td = await frame.locator('td').first().evaluate((c) => ({ v: c.style.verticalAlign, w: c.getAttribute('width'), pr: c.style.paddingRight, b: c.style.border }));
+  assert.deepEqual(td, { v: 'middle', w: '120', pr: '14px', b: '1px solid rgb(208, 213, 221)' });
+  assert.match(await frame.locator('td').nth(1).getAttribute('style'), /border/);
+
+  // An image: round (as high as wide), then in the middle of its line.
+  await frame.locator('img').click();
+  await page.waitForSelector('#imgBar:not([hidden])');
+  assert.equal(await page.isHidden('#cellBar'), true);
+  await page.selectOption('#imgRound', '50%');
+  assert.equal(await frame.locator('img').evaluate((i) => i.style.borderRadius + ' ' + i.getAttribute('height')), '50% 100');
+  await page.click('[data-ialign=center]');
+  assert.equal(await frame.locator('img').evaluate((i) => i.parentNode.style.textAlign), 'center');
+  assert.equal(await page.getAttribute('[data-ialign=center]', 'class').then((c) => /\bon\b/.test(c)), true);
+
+  // Spacing: the line selected gets a line height, then space below.
+  await frame.locator('p', { hasText: 'Line one' }).click();
+  const spacing = page.locator('#toolbar select[aria-label=Spacing]');
+  await spacing.selectOption('lh:1.5');
+  await spacing.selectOption('mb:8');
+  assert.equal(await frame.locator('p', { hasText: 'Line one' }).evaluate((p) => p.style.lineHeight + ' ' + p.style.marginBottom), '1.5 8px');
+
+  // House colours: one added from the colour box, kept in the draft, then used on the text.
+  await page.evaluate(() => { const c = document.querySelector('#toolbar input[type=color]'); c.value = '#1d4ed8'; });
+  await page.click('#toolbar .pal-btn');
+  await page.click('.pal .pal-add');
+  assert.equal(await page.locator('.pal .pal-row .sw').first().getAttribute('aria-label'), '#1d4ed8');
+  await page.keyboard.press('Escape');
+  await frame.locator('p', { hasText: 'Line one' }).click({ clickCount: 3 });
+  await page.click('#toolbar .pal-btn');
+  await page.click('.pal .sw[aria-label="#1d4ed8"]');
+  assert.match(await html(), /color:\s*(rgb\(29, 78, 216\)|#1d4ed8)/);
+  // Removed again, so the other tests see no house colours.
+  await page.click('#toolbar .pal-btn');
+  await page.locator('.pal .sw[aria-label="#1d4ed8"]').hover();
+  await page.click('.pal .sw[aria-label="#1d4ed8"] .x');
+  assert.equal(await page.locator('.pal .pal-none').count(), 1);
+  await page.keyboard.press('Escape');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});
+
+test('preview: one field left empty says which line goes; the phone width', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>@@givenName @@sn<br>Mobile @@mobile<br>@@mail</p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.waitForSelector('#pvWithout:not([hidden]) option[value="without:mobile"]', { state: 'attached' });
+  await page.selectOption('#pvSource', 'without:mobile');
+  await page.waitForFunction(() => /Mobile/.test(document.querySelector('#pvNote').textContent));
+  assert.match(await page.textContent('#pvNote'), /Without .*this goes: «Mobile/);
+  const pv = page.frameLocator('#preview');
+  await page.waitForFunction(() => !/Mobile/.test(document.querySelector('#preview').contentDocument.body.textContent));
+  assert.doesNotMatch(await pv.locator('body').textContent(), /Mobile/);
+  await page.selectOption('#pvSource', 'sample');
+  await page.click('label:has(#pvPhone)');
+  assert.equal(await page.locator('.mail').evaluate((m) => m.classList.contains('phone') && Math.round(document.querySelector('#preview').getBoundingClientRect().width) <= 360), true);
+  await page.click('label:has(#pvPhone)');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});
