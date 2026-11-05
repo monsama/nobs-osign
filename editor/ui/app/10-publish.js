@@ -14,9 +14,10 @@
     const shown = new Map();
     for (const h of all) for (const m of h.matchAll(/<img\b[^>]*>/gi)) {
       const src = (/\ssrc\s*=\s*["']?assets\/([^"'\s>]+)/i.exec(m[0]) || [])[1], w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]);
-      if (src && w) shown.set(src, Math.max(shown.get(src) || 0, w));
+      if (src && w && (!opts || !opts.only || opts.only === src)) shown.set(src, Math.max(shown.get(src) || 0, w));
     }
     let n = 0, from = 0, to = 0;
+    const renamed = {};
     for (const [name, w] of shown) {
       try {
         const blob = await (await fetch('/assets/' + encodeURIComponent(name), { credentials: 'same-origin' })).blob();
@@ -28,6 +29,7 @@
         const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(small); });
         const r = await api('assets/upload', { name, data });
         if (r.name !== name) {
+          renamed[name] = r.name;
           const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
           S.config.signatures.forEach((s) => { s.html = (s.html || '').replace(re, 'assets/' + r.name); });
           (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, 'assets/' + r.name); });
@@ -42,7 +44,7 @@
     }
     if (n) { changed(); if (S.view === 'sig' && S.sigId && !S.blockEdit) openSig(S.sigId); }
     if (!(opts && opts.quiet)) toast(n ? t('{0} images made smaller: {1} → {2}.', n, kb(from), kb(to)) : t('The images are as small as they are shown already.'));
-    return { n, from, to };
+    return { n, from, to, renamed };
   }
   // For the web, in one go: each image shown as small as it is shown (twice that, for sharp
   // screens), and each PNG without a transparent pixel (a photo, a banner) as a JPEG.
@@ -50,8 +52,11 @@
     // What the images used weigh, before and after.
     const weight = () => { const names = new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+)"/gi)].map((m) => m[1]))); return (S.assets || []).filter((x) => names.has(x.name)).reduce((n, x) => n + (x.size || 0), 0); };
     const before = weight();
-    const a = await shrinkUsed({ quiet: true, strong: !!(opts && opts.strong) });
-    const pngs = [...new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+\.png)"/gi)].map((m) => m[1])))];
+    const only = opts && opts.only;
+    const a = await shrinkUsed({ quiet: true, strong: !!(opts && opts.strong), only });
+    // The one image (only): under the name it has after it was made smaller.
+    const now = only && a.renamed && a.renamed[only] ? a.renamed[only] : only;
+    const pngs = [...new Set(usedHtml().flatMap((h) => [...h.matchAll(/src="assets\/([^"?#]+\.png)"/gi)].map((m) => m[1])))].filter((n) => !now || n === now);
     const b = await pngToJpeg(pngs, opts && opts.strong ? 0.72 : 0.86);
     const n = a.n + b.n;
     toast(n ? t('Images optimized for the web: {0} made smaller, {1} saved as JPEG; {2} → {3}.', a.n, b.n, kb2(before), kb2(weight()))
@@ -145,8 +150,10 @@
   // is shown, JPEG/PNG again at 0.82, as base64), measured once in the background; until then
   // the file as it is.
   const classicImg = {};
-  function classicMeasure(name, shown) {
-    const k = name + '@' + shown;
+  // The steps the add-in makes an image smaller by when it does not fit there (common.js, the same).
+  const CLASSIC_SQUEEZE = [{ scale: 1, quality: 0.7 }, { scale: 1, quality: 0.55 }, { scale: 0.8, quality: 0.5 }, { scale: 0.65, quality: 0.45 }];
+  function classicMeasure(name, shown, step) {
+    const k = name + '@' + shown + (step ? '@' + step.scale + '/' + step.quality : '');
     if (k in classicImg) return;
     classicImg[k] = null;
     const a = (S.assets || []).find((x) => x.name === name);
@@ -156,10 +163,10 @@
       try {
         const file = a ? Math.ceil((a.size || 0) / 3) * 4 : 0;
         if (!type) { classicImg[k] = file; return; }
-        const want = Math.min(img.naturalWidth, Math.max(1, (shown || img.naturalWidth) * 1.5));
+        const want = Math.min(img.naturalWidth, Math.max(1, (shown || img.naturalWidth) * (step ? step.scale : 1.5)));
         const cv = document.createElement('canvas'); cv.width = Math.round(want); cv.height = Math.round(img.naturalHeight * want / img.naturalWidth);
         const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, cv.width, cv.height);
-        const b64 = (cv.toDataURL(type, 0.82).split(',')[1] || '').length;
+        const b64 = (cv.toDataURL(type, step ? step.quality : 0.82).split(',')[1] || '').length;
         classicImg[k] = file && file < b64 ? file : b64;
       } catch (e) { classicImg[k] = a ? a.size * 4 / 3 : 0; }
       schedulePreview();
@@ -177,22 +184,31 @@
       const n = (/src="assets\/([^"?#]+)"/i.exec(m[0]) || [])[1]; if (!n || seen.has(n)) continue;
       const w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0;
       classicMeasure(n, w);
-      const v = classicImg[n + '@' + w];
-      seen.set(n, { name: n, bytes: typeof v === 'number' ? v : size(n) * 4 / 3, exact: typeof v === 'number' });
+      const last = CLASSIC_SQUEEZE[CLASSIC_SQUEEZE.length - 1];
+      classicMeasure(n, w, last);
+      const v = classicImg[n + '@' + w], vs = classicImg[n + '@' + w + '@' + last.scale + '/' + last.quality];
+      const bytes = typeof v === 'number' ? v : size(n) * 4 / 3;
+      seen.set(n, { name: n, bytes, least: typeof vs === 'number' ? Math.min(vs, bytes) : bytes, exact: typeof v === 'number' });
     }
     const photos = /src="photos\//.test(html) ? 8 * 1024 : 0;
     const images = [...seen.values()].sort((x, y) => y.bytes - x.bytes);
-    return { kb: Math.round((html.length * 1.3 + images.reduce((n, x) => n + x.bytes, 0) + photos) / 1024), images };
+    // As the add-in fills the room (keepForClassic): the text first, then the images, smallest
+    // first, as many as fit; the ones that do not are left out there.
+    const text = html.length * 1.3, room = CLASSIC_KB * 1024;
+    let used = text + photos;
+    const missing = [], squeezed = [];
+    for (const x of images.slice().reverse()) {
+      if (used + x.bytes <= room) used += x.bytes;
+      // Made smaller there, step by step, till it fits (the last step's size here).
+      else if (used + x.least <= room) { used += x.least; squeezed.push(x.name); }
+      else missing.push(x.name);
+    }
+    return { kb: Math.round((text + images.reduce((n, x) => n + x.bytes, 0) + photos) / 1024), images, missing, squeezed, textFits: text <= room };
   }
   function classicKb(s) { return classicParts(s).kb; }
   // The way to fit: each PNG of the signature (and its banner) with no transparent pixel becomes a
   // JPEG (a photo or a banner is much smaller so), the signatures, building blocks and campaigns
   // then name the JPEG. One with transparency (a logo) stays: a JPEG would give it a box.
-  async function classicHelp(s) {
-    const r = await pngToJpeg(classicParts(s).images.map((x) => x.name).filter((n) => /\.png$/i.test(n)));
-    toast(r.n ? t('{0} image(s) saved as JPEG: {1} → {2}. The note in the preview says what classic Outlook needs now.', r.n, kb2(r.from), kb2(r.to))
-      : t('No image here can become a JPEG (the PNGs have transparency, or are smaller as they are). What still helps: a smaller width, or fewer images.'), !r.n);
-  }
   // These PNGs as JPEGs where they have no transparent pixel (a logo with one stays).
   async function pngToJpeg(pngs, quality) {
     let n = 0, from = 0, to = 0;
@@ -226,7 +242,7 @@
   const kb2 = (n) => (n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
   // The defaults (what goes in by itself) too large for that.
   function classicHeavy() {
-    return S.config.signatures.filter((s) => s.defaultNew || s.defaultReply).map((s) => ({ s, kb: classicKb(s) })).filter((x) => x.kb > CLASSIC_KB);
+    return S.config.signatures.filter((s) => s.defaultNew || s.defaultReply).map((s) => ({ s, kb: classicKb(s), p: classicParts(s) })).filter((x) => x.kb > CLASSIC_KB && (x.p.missing.length || !x.p.textFits));
   }
   // Whether an image is dark lines on nothing (a logo that disappears on a dark background):
   // looked at once, in the background; the check above says it the next time it is shown.
@@ -290,7 +306,7 @@
     signatureChecks(c).forEach((x) => out.push(x));
     campaignChecks(c).forEach((x) => out.push(x));
     const big = classicHeavy();
-    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. What helps: a smaller width, a JPEG instead of a PNG for photos, or fewer images.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), big.some((x) => classicParts(x.s).images.some((i) => /\.png$/i.test(i.name))) ? { label: t('Save PNG photos as JPEG'), fn: async () => { for (const x of big) await classicHelp(x.s); } } : null, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
+    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. What helps: a smaller width, a JPEG instead of a PNG for photos, or fewer images.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), { label: t('Optimize for the web'), fn: optimizeImages }, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
     const unused = unusedImages();
     if (unused.length) out.push(['good', t('Images in the draft that nothing uses: {0}. They go out all the same.', unused.join(', ')), { label: t('Remove them'), fn: removeUnused }, t('Unused images: {0}', unused.length)]);
     // Who would get nothing, as read from AD under Users.

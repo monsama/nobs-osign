@@ -247,8 +247,9 @@ Windows PowerShell 5.1.
 
 - **Classic Outlook (Windows)** puts signatures in by itself from a copy the pane keeps in the
   mailbox, when Outlook refuses the add-in the sign-in there: about 30 KB for all of it (Microsoft's
-  limit for an add-in's settings). Larger, it goes in without its images; *Insert* in the pane puts
-  in everything. The editor says how much a signature takes.
+  limit for an add-in's settings). What does not fit is made smaller for that copy, step by step;
+  what still does not fit is left out there (the largest image first). *Insert* in the pane puts
+  in everything. The editor says how much a signature takes, and what happens to it there.
 - **Rounded corners** and a round photo do not show in classic Outlook for Windows (Word draws the
   mail); there the image stays square.
 - **Dark mode** is Outlook's own: the preview shows it roughly. A dark logo on a transparent

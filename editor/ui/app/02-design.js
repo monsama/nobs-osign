@@ -436,6 +436,15 @@
     grip.style.left = (x + selImg.offsetWidth) + 'px'; grip.style.top = (y + selImg.offsetHeight) + 'px';
     gripSize.style.left = (x + selImg.offsetWidth + 10) + 'px'; gripSize.style.top = (y + selImg.offsetHeight - 8) + 'px';
   }
+  // Optimize this image (Shift: smaller still); the others stay as they are.
+  $('imgOpt').addEventListener('click', async (e) => {
+    const src = selImg && (/^assets\/([^"?#]+)$/.exec(selImg.getAttribute('src') || '') || [])[1];
+    if (!src) { toast(t('Only an image stored with the signatures (uploaded here) can be optimized.'), true); return; }
+    if (!selImg.getAttribute('width')) { toast(t('Give the image a width first: it is made as small as it is shown.'), true); return; }
+    onDesignInput();
+    const b = $('imgOpt'); b.disabled = true; b.textContent = t('Optimizing…');
+    try { await optimizeImages({ only: decodeURIComponent(src), strong: e.shiftKey }); } finally { b.disabled = false; b.textContent = t('Optimize'); }
+  });
   $('imgOrig').addEventListener('click', () => { if (!selImg || !selImg.naturalWidth) return; $('imgW').value = Math.min(600, selImg.naturalWidth); applyImg(); gripPlace(); });
   // The grip goes along when the text around moves the image (typing, the window's width).
   window.addEventListener('resize', () => gripPlace());

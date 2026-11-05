@@ -153,12 +153,13 @@
     // Classic Outlook: what it keeps in the mailbox, when it gets tight.
     if (s.defaultNew || s.defaultReply) {
       const cp = classicParts(s), kb = cp.kb;
-      // What takes the room, and what helps: the images shown smaller (the add-in makes each as
-      // small as it is shown already), a JPEG for a photo, fewer images.
-      const top = cp.images.filter((x) => x.bytes > 2048).slice(0, 3).map((x) => x.name + ' ~' + Math.round(x.bytes / 1024) + ' KB').join(', ');
-      if (kb > CLASSIC_KB) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB the mailbox keeps for it. When classic Outlook refuses the add-in the sign-in where it puts signatures in by itself, it goes in from that copy, without its images (Insert in the pane puts in everything).', kb, CLASSIC_KB),
-        top ? ' ' + t('Most of it: {0}.', top) : '', ' ', t('The add-in already makes each image as small as it is shown: what helps is a smaller width, a JPEG instead of a PNG for photos, or fewer images.'), ' ',
-        cp.images.some((x) => /\.png$/i.test(x.name)) ? el('a', { href: '#', onclick: (e) => { e.preventDefault(); classicHelp(s); } }, t('Save PNG photos as JPEG')) : null));
+      // Said as it will be there: without which images (the largest first), or not at all.
+      const act = el('span', null, ' ', el('a', { href: '#', onclick: (e) => { e.preventDefault(); optimizeImages(); } }, t('Optimize the images for the web')), ' · ',
+        el('a', { href: '#', onclick: (e) => { e.preventDefault(); optimizeImages({ strong: true }); } }, t('smaller still')));
+      if (kb > CLASSIC_KB && !cp.textFits) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: even the text of this signature is more than the {0} KB its mailbox keeps: there it is not put in by itself, only with Insert in the pane.', CLASSIC_KB)));
+      else if (kb > CLASSIC_KB && cp.missing.length) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB its mailbox keeps. When it puts the signature in by itself, it goes without: {2}. The rest fits; Insert in the pane puts in everything.', kb, CLASSIC_KB, cp.missing.map((x) => x + ' (~' + Math.round((cp.images.find((y) => y.name === x) || {}).bytes / 1024) + ' KB)').join(', ')), act));
+      // It fits with those images made smaller there: said, nothing to do.
+      else if (kb > CLASSIC_KB) notes.push(el('div', null, t('Classic Outlook: about {0} KB; so that all of it fits into the {1} KB its mailbox keeps, the add-in makes {2} smaller there (only there: every other Outlook gets them as they are).', kb, CLASSIC_KB, cp.squeezed.join(', '))));
       else if (kb > CLASSIC_KB * 0.7) notes.push(el('div', null, t('Classic Outlook: about {0} of {1} KB, nearly full.', kb, CLASSIC_KB)));
     }
     const none = $('pvSource').value.startsWith('without:') ? $('pvSource').value.slice(8) : '';
