@@ -1774,7 +1774,7 @@ test('preview: one field left empty says which line goes; the phone width', { sk
   await page.waitForFunction(() => /Mobile/.test(document.querySelector('#pvNote').textContent));
   assert.match(await page.textContent('#pvNote'), /Without .*this goes: «Mobile/);
   const pv = page.frameLocator('#preview');
-  await page.waitForFunction(() => !/Mobile/.test(document.querySelector('#preview').contentDocument.body.textContent));
+  await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return !!(d && d.body) && !/Mobile/.test(d.body.textContent); });
   assert.doesNotMatch(await pv.locator('body').textContent(), /Mobile/);
   await page.selectOption('#pvSource', 'sample');
   await page.click('label:has(#pvPhone)');
@@ -1959,7 +1959,8 @@ test('the HTML made lighter: Word\'s and Outlook\'s leftovers out, what shows ke
   assert.match(slim, /font-size:10pt;color:#c00/);
   assert.match(slim, /Anna <b>Muster<\/b>/, 'the space between the words kept');
   // The preview shows the same text.
-  await page.waitForFunction(() => /Anna Muster/.test(document.querySelector('#preview').contentDocument.body.textContent.replace(/\s+/g, ' ')));
+  // The preview may be loading again: its body there only once it is.
+  await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return !!(d && d.body) && /Anna Muster/.test(d.body.textContent.replace(/\s+/g, ' ')); });
   await page.click('.tab[data-mode=design]');
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
