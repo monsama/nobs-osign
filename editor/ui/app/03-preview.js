@@ -156,9 +156,7 @@
       // Said as it will be there: without which images (the largest first), or not at all.
       // What the room goes to, and what helps with each.
       const share = ' ' + t('Of it: text ~{0} KB, photo ~{1} KB, images ~{2} KB.', cp.textKb, cp.photoKb, Math.round(cp.images.reduce((n, x) => n + x.bytes, 0) / 1024));
-      const act = el('span', null, share, ' ', el('a', { href: '#', onclick: (e) => { e.preventDefault(); optimizeImages(); } }, t('Optimize the images for the web')), ' · ',
-        el('a', { href: '#', onclick: (e) => { e.preventDefault(); optimizeImages({ strong: true }); } }, t('smaller still')),
-        cp.textKb >= 6 ? ' · ' : null, cp.textKb >= 6 ? el('a', { href: '#', onclick: (e) => { e.preventDefault(); slimAll(); } }, t('make the HTML lighter')) : null);
+      const act = el('span', null, share, ' ', el('a', { href: '#', class: 'classic-prep', onclick: (e) => { e.preventDefault(); prepareClassic(); } }, t('Prepare for classic Outlook')));
       if (kb > CLASSIC_KB && !cp.textFits) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: even the text of this signature is more than the {0} KB its mailbox keeps: there it is not put in by itself, only with Insert in the pane.', CLASSIC_KB), act));
       else if (kb > CLASSIC_KB && cp.missing.length) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB its mailbox keeps. When it puts the signature in by itself, it goes without: {2}. The rest fits; Insert in the pane puts in everything.', kb, CLASSIC_KB, cp.missing.map((x) => x + ' (~' + Math.round((cp.images.find((y) => y.name === x) || {}).bytes / 1024) + ' KB)').join(', ')), act));
       // It fits with those images made smaller there: said, nothing to do.
