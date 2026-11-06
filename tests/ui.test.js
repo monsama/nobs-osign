@@ -1944,51 +1944,43 @@ test('a test run for one person: their signatures and banners on a day; a banner
   assert.deepEqual(errors, []);
 });
 
-test('the HTML made lighter: Word\'s and Outlook\'s leftovers out, what shows kept, one step to undo', { skip }, async () => {
+test('one way to make a signature ready for classic Outlook: the HTML lighter, the images optimized (a GIF as a PNG, a photo as a JPEG), then said whether it fits', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('html[data-ready="1"]');
   await page.click('#btnNew'); await page.click('[data-tpl=compact]');
-  await page.click('.tab[data-mode=html]');
-  const fat = '<table lang="DE-CH" style="border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt">\n   <tr>\n     <td style="mso-line-height-rule:exactly;font-size:10pt;color:#c00;-webkit-text-size-adjust:none"><span><span lang="DE-CH" style="mso-ansi-language:DE-CH">Anna</span></span>   <b>Muster</b></td>\n   </tr>\n</table>';
-  await page.fill('#source', fat);
-  await page.dispatchEvent('#source', 'input');
-  await page.click('#btnSlim');
-  const slim = (await page.inputValue('#source')).replace(/\s+/g, ' ');
-  assert.doesNotMatch(slim, /mso-|-webkit-|lang=/);
-  assert.match(slim, /border-collapse:collapse/);
-  assert.match(slim, /font-size:10pt;color:#c00/);
-  assert.match(slim, /Anna <b>Muster<\/b>/, 'the space between the words kept');
-  // The preview shows the same text.
-  // The preview may be loading again: its body there only once it is.
-  await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return !!(d && d.body) && /Anna Muster/.test(d.body.textContent.replace(/\s+/g, ' ')); });
-  await page.click('.tab[data-mode=design]');
-  await page.click('#btnDel'); await page.click('#askOk');
-  assert.deepEqual(errors, []);
-});
-
-test('a PNG logo made smaller with a palette (Shift+Optimize on that image): smaller, still transparent, only that image', { skip }, async () => {
-  await page.goto(url);
-  await page.waitForSelector('html[data-ready="1"]');
-  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
-  const logo = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 189; c.height = 60; const g = c.getContext('2d'); g.fillStyle = '#e2001a'; g.font = 'italic bold 44px Arial'; g.fillText('Logo', 4, 46); return c.toDataURL('image/png').split(',')[1]; });
-  const a = await api('assets/upload', { name: 'pal-logo.png', data: logo });
-  const b = await api('assets/upload', { name: 'pal-other.png', data: logo });
+  // A photo too large for classic Outlook (noise, no transparency), a GIF icon shown small, Word's leftovers.
+  const photo = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 600; c.height = 320; const g = c.getContext('2d'); const d = g.createImageData(600, 320); for (let i = 0; i < d.data.length; i += 4) { d.data[i] = (i * 7) % 255; d.data[i + 1] = (i / 13) % 255; d.data[i + 2] = Math.random() * 255; d.data[i + 3] = 255; } g.putImageData(d, 0, 0); return c.toDataURL('image/png').split(',')[1]; });
+  const big = await api('assets/upload', { name: 'prep-photo.png', data: photo });
+  const gif = await api('assets/upload', { name: 'prep-icon.gif', data: fs.readFileSync(path.join(__dirname, 'support', 'icon.gif')).toString('base64') });
   await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
   await page.click('#sigList li a.active');
+  // The note is for what goes in by itself: the signature a default (other tests may have left one).
+  if (!(await page.isChecked('#sigNew'))) await page.click('label:has(#sigNew)');
   await page.click('.tab[data-mode=html]');
-  await page.fill('#source', '<p><img src="assets/' + a.name + '" width="189" alt="Logo"> <img src="assets/' + b.name + '" width="189" alt="Other"></p>');
+  await page.fill('#source', '<table lang="DE-CH" style="border-collapse:collapse;mso-table-lspace:0pt"><tr><td style="mso-line-height-rule:exactly;font-size:10pt"><span><span lang="DE-CH">Anna</span></span>   <b>Muster</b></td></tr></table>' +
+    '<p><img src="assets/' + gif.name + '" width="20" alt="Icon"> <img src="assets/' + big.name + '" width="400" alt="Banner"></p>');
   await page.dispatchEvent('#source', 'input');
   await page.click('.tab[data-mode=design]');
-  await page.frameLocator('#design').locator('img[alt=Logo]').dispatchEvent('click');
-  await page.click('#imgOpt', { modifiers: ['Shift'] });
-  await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((x) => /→/.test(x.textContent)), null, { timeout: 8000 });
-  let assets = [];
-  for (let i = 0; i < 30; i++) { assets = (await api('draft/get')).assets; if (!assets.some((x) => x.name === a.name)) break; await new Promise((r) => setTimeout(r, 100)); }
-  const small = assets.find((x) => /^pal-logo/.test(x.name)), other = assets.find((x) => x.name === b.name);
-  assert.ok(small && small.size < a.size, JSON.stringify(assets));
-  assert.equal(other.size, b.size, 'the other image as it was');
-  const alpha = await page.evaluate(async (n) => { const i = new Image(); i.src = '/assets/' + n; await i.decode(); const c = document.createElement('canvas'); c.width = i.naturalWidth; c.height = i.naturalHeight; const g = c.getContext('2d'); g.drawImage(i, 0, 0); return [i.naturalWidth, g.getImageData(0, 0, 1, 1).data[3]]; }, small.name);
-  assert.deepEqual(alpha, [189, 0], 'as wide, the corner still transparent');
+  // The note says it is too large, and offers the one way.
+  await page.waitForSelector('#pvNote a.classic-prep', { timeout: 10000 });
+  await page.click('#pvNote a.classic-prep');
+  await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((x) => /Ready for classic Outlook|Still too large/.test(x.textContent)), null, { timeout: 30000 });
+  // Ready; or, with other default signatures from the tests before still too large, not this one.
+  const said = await page.evaluate(() => [...document.querySelectorAll('.toast')].map((x) => x.textContent).join(' | '));
+  const mine = await page.inputValue('#sigName');
+  assert.ok(/Ready for classic Outlook/.test(said) || !new RegExp('Still too large for classic Outlook:[^.]*\\b' + mine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(said), said);
+  await page.click('.tab[data-mode=html]');
+  const html = (await page.inputValue('#source')).replace(/\s+/g, ' ');
+  assert.doesNotMatch(html, /mso-|lang=/, 'the HTML lighter');
+  assert.match(html, /Anna <b>Muster<\/b>/, 'what shows kept');
+  assert.match(html, /prep-icon\.png/, 'the GIF a PNG now');
+  assert.match(html, /prep-photo\.jpg/, 'the photo a JPEG now');
+  const assets = (await api('draft/get')).assets;
+  assert.ok(!assets.some((x) => x.name === gif.name || x.name === big.name), 'the originals gone: ' + JSON.stringify(assets));
+  assert.ok(assets.find((x) => x.name === 'prep-icon.png').size < gif.size);
+  // Fits now: no warning on classic Outlook any more.
+  await page.click('.tab[data-mode=design]');
+  await page.waitForFunction(() => !document.querySelector('#pvNote a.classic-prep'), null, { timeout: 10000 });
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });

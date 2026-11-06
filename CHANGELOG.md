@@ -5,6 +5,15 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.94
+- **One way to get a signature ready for classic Outlook:** *Prepare for classic Outlook*, in the
+  note in the preview (and *Optimize for Outlook* in the publish checks). It makes the HTML
+  lighter, optimizes the images (as small as shown, a still GIF as a PNG, a PNG with a palette, a
+  photo as a JPEG), takes them smaller still when that is not enough, and says whether it fits now
+  or which image still does not. The separate buttons (*Optimize* in the image bar, *Optimize for
+  the web* and *Smaller still* in the image dialog, *Make lighter*) are gone.
+- GIFs are optimized too (icons were left as they were).
+
 ## 0.9.93
 - **Images: really smaller files.** A PNG (a logo, an icon) is saved with a palette, at most 256
   colours, as pngquant or TinyPNG do it, and keeps its transparency: *Optimize* only when nothing
