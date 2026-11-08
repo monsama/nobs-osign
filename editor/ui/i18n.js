@@ -985,6 +985,8 @@
     'The file is not the image its name says.': 'Die Datei ist nicht das Bild, das ihr Name sagt.',
     'Only who asked for it, or the local account admin, can withdraw it.': 'Zurückziehen kann sie nur, wer sie angefragt hat, oder der lokale Admin.',
     'User to look up': 'Gesuchte Person',
+    'Deployed': 'Verteilt',
+    'the local account admin sees why': 'der lokale Admin sieht, warum',
     'Something went wrong on the server.': 'Auf dem Server ist etwas schiefgegangen.',
     'A signature uses this image too, so an editor publishes it': 'Dieses Bild verwendet auch eine Signatur, darum veröffentlicht es jemand mit Bearbeitungsrechten',
     'The draft holds 500 images already, the most it can: remove the ones no signature uses first.': 'Der Entwurf hat schon 500 Bilder, mehr geht nicht: zuerst die entfernen, die keine Signatur verwendet.',

@@ -159,11 +159,11 @@
         const st = await api('deploy/status'), x = st.last;
         if (!x) return { state: 'off', text: S.info.user && S.info.user.local ? t('Not checked yet: "Check…" downloads a script that only reads where the add-in is deployed (run it as a Global or Exchange administrator).') : t('Not checked yet: the local account admin can check it here.') };
         const when = new Date(x.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB');
-        if (x.error) return { state: 'bad', text: t('The check on {0} stopped: {1}', when, x.error) };
+        if (x.error) return { state: 'bad', text: t('The check on {0} stopped: {1}', when, t(x.error)) };
         const m = x.summary;
         if (!m.found) return { state: 'bad', text: t('Not deployed (checked {0}): Microsoft 365 admin center → Settings → Integrated apps → Upload custom apps, with the manifest address.', when) };
-        const who = m.everyone ? t('everyone') : m.assigned || t('nobody named');
-        const parts = [t('Deployed to: {0}', who)];
+        // To whom: for the local admin only.
+        const parts = [m.hidden ? t('Deployed') : t('Deployed to: {0}', m.everyone ? t('everyone') : m.assigned || t('nobody named'))];
         if (m.version) parts.push(t('version {0}', m.version));
         parts.push(t('checked {0}', when));
         // The manifest's version is the add-in files' (0.9.26 → 0.9.26.0).
