@@ -338,6 +338,56 @@ test('compiled says what html says: the same text, no address or tag of its own 
   assert.equal(core.compiledMatches(html, compiled.replace('<b>', '<script>x()</script><b>')), false);
 });
 
+test('compiled must have the same elements in the same order: swapped links or a comment Outlook reads are refused', () => {
+  const doc = new JSDOM('').window.document;
+  const html = '<p><a href="https://a.example">Shop</a> <a href="https://b.example">Help</a></p>';
+  const compiled = core.compile(html, doc);
+  assert.equal(core.compiledMatches(html, compiled), true);
+  // The same tags, texts and addresses, but each link going where the other one says.
+  const swapped = compiled.replace('https://a.example', 'TMP').replace('https://b.example', 'https://a.example').replace('TMP', 'https://b.example');
+  assert.notEqual(swapped, compiled);
+  assert.equal(core.compiledMatches(html, swapped), false);
+  // The attributes of two elements traded: the same attr=value counts, not on the same element.
+  const h2 = '<p><img src="assets/a.png" alt="A"><img src="assets/b.png" alt="B"></p>';
+  assert.equal(core.compiledMatches(h2, '<p><img src="assets/a.png" alt="B"><img src="assets/b.png" alt="A"></p>'), false);
+  // Content in a comment Outlook (Word) shows, or any other comment compile() does not write.
+  assert.equal(core.compiledMatches(html, compiled + '<!--[if mso]><img src="https://t.example/p.gif"><![endif]-->'), false);
+  assert.equal(core.compiledMatches(html, compiled + '<!-- note -->'), false);
+  assert.equal(core.compiledMatches(html, compiled + '<![if !mso]>x<![endif]>'), false);
+  assert.equal(core.compiledMatches(html, '<!--sig-if:x--><p><a href="https://a.example">Shop</a> <a href="https://b.example">Help</a></p><!--/sig-if-->'), true, 'the line marks are compile()\'s own');
+  // Text moved out of a link, or a link closed elsewhere: the same words, other elements.
+  assert.equal(core.compiledMatches('<p><a href="x">Shop</a> now</p>', '<p><a href="x">Shop now</a></p>'), false);
+  // A tag that does not end.
+  assert.equal(core.compiledMatches(html, compiled + '<img src="x'), false);
+});
+
+test('compiled made from real signatures still matches their html', () => {
+  const doc = new JSDOM('').window.document;
+  const sigs = [
+    // A table layout as the editor writes it, with a photo, field lines, a banner and a mailto link.
+    '<table cellpadding="0" cellspacing="0" style="font-family: Arial; font-size: 10pt"><tr><td valign="top"><img src="photos/@@sAMAccountName.jpg" width="80" alt=""></td>' +
+      '<td style="padding-left: 12px">@@givenName @@sn<br>@@title<br>Tel @@telephoneNumber<br>Mobile @@mobile<br><a href="mailto:@@mail" style="color: #0a5">@@mail</a></td></tr>' +
+      '<tr><td colspan="2" nowrap><img src="assets/banner.png" alt="Banner &amp; more"></td></tr></table>',
+    // Paragraphs, entities and a non-breaking space, a boolean attribute and single quotes.
+    '<p>Freundliche Grüsse&nbsp;- Kind regards</p><p style=\'margin:0\'>@@givenName&nbsp;@@sn | <b>NOBS &amp; Co.</b> &lt;AG&gt;</p><div>@@street<br>@@postalCode @@l</div><p>Fixed</p>',
+    // CI-Sign's way: a font holding the lines.
+    '<div><font face="Arial">@@info<br><br><img src="assets/logo.png"></font></div>',
+    // A list and a heading.
+    '<h3>@@company</h3><ul><li>@@department</li><li>Phone @@telephoneNumber</li></ul>'
+  ];
+  sigs.forEach((html) => {
+    const compiled = core.compile(html, doc);
+    assert.equal(core.compiledMatches(html, compiled), true, html);
+    // As the editor stores it: html already put through the browser once, then compiled.
+    const d = doc.createElement('div'); d.innerHTML = html;
+    assert.equal(core.compiledMatches(d.innerHTML, core.compile(d.innerHTML, doc)), true, html);
+  });
+  // A building block put in, and a script compile() strips.
+  const block = core.expandBlocks('<p>@@givenName</p><p>{{disc}}</p>', [{ key: 'disc', html: '<p><small>Confidential</small></p>' }]);
+  assert.equal(core.compiledMatches(block, core.compile(block, doc)), true);
+  assert.equal(core.compiledMatches('<p>x</p><script>y()</script>', core.compile('<p>x</p><script>y()</script>', doc)), true);
+});
+
 test('a field written as a phone number: alike for everyone, the rest left as it is', () => {
   const p = core.formatPhone;
   assert.equal(p('079 123 45 67'), '+41 79 123 45 67');
@@ -421,4 +471,18 @@ test('banner campaigns: only on their weekdays; several banners take turns (one 
   const base = { schemaVersion: core.SCHEMA_VERSION, fields: [], signatures: [] };
   assert.match(core.validate(Object.assign({}, base, { campaigns: [{ id: 'x', days: [7] }] }))[0], /weekdays/);
   assert.match(core.validate(Object.assign({}, base, { campaigns: [{ id: 'x', more: new Array(10).fill({}) }] }))[0], /take turns/);
+});
+
+test('a value that goes into an address is taken only as a web, mail or phone address, or a relative one', () => {
+  const r = (h, v) => core.render(core.compile(h, doc), v);
+  assert.equal(r('<p><a href="@@w">@@w</a></p>', { w: 'javascript:alert(1)' }), '<p><a href="">javascript:alert(1)</a></p>');
+  assert.equal(r('<p><a href="@@w">x</a></p>', { w: 'java\tscript:alert(1)' }), '<p><a href="">x</a></p>');
+  assert.equal(r('<p><a href="@@w">x</a></p>', { w: ' data:text/html,<b>x</b>' }), '<p><a href="">x</a></p>');
+  assert.equal(r('<p><img src="@@w"></p>', { w: 'data:image/png;base64,AA' }), '<p></p>');
+  assert.equal(r('<p><a href="@@w">x</a></p>', { w: 'https://ex.ch/' }), '<p><a href="https://ex.ch/">x</a></p>');
+  assert.equal(r('<p><a href="@@w">x</a></p>', { w: 'www.ex.ch' }), '<p><a href="www.ex.ch">x</a></p>');
+  assert.equal(r('<p><a href="mailto:@@mail">@@mail</a> <a href="tel:@@mobile">@@mobile</a></p>', { mail: 'a@b.ch', mobile: '+41 79 000 00 00' }),
+    '<p><a href="mailto:a@b.ch">a@b.ch</a> <a href="tel:+41 79 000 00 00">+41 79 000 00 00</a></p>');
+  // In the text, the same value stays as it is (escaped).
+  assert.equal(r('<p title="@@w">@@w</p>', { w: 'javascript:x' }), '<p title="javascript:x">javascript:x</p>');
 });

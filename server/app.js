@@ -51,6 +51,10 @@ const PHOTO_PLACEHOLDER = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 const MAX_BODY = 4 * 1024 * 1024;
 // A backup brought back may be larger: the history with its images.
 const MAX_BACKUP_BODY = 96 * 1024 * 1024;
+// Without a sign-in only small bodies: a login is a name and a password; the setup and deployment
+// scripts send their result (a few ids, or up to 40 properties of at most 500 characters each).
+const MAX_OPEN_BODY = 16 * 1024;
+const MAX_SCRIPT_BODY = 64 * 1024;
 
 // Never inside another site's frame, never read as another type; the page loads nothing but its
 // own files, plus images from https (an image a signature links to, shown in the preview). It
@@ -120,6 +124,17 @@ function sameSite(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
   try { return new URL(origin).host === String(req.headers.host || ''); } catch (e) { return false; }
+}
+
+// Whether an error that reached the top was written by this server to be read (new Error('…'),
+// as the server's own parts throw them: "Cloudflare refused the API token", "No user x in Active
+// Directory"), or says something unexpected that is not for the browser: a bug (TypeError), a
+// file or network error of the system (with its code, ENOENT, ECONNRESET), a library's own error
+// class. Those are in the server's log only. An error may say so itself with expose: true.
+function saidOnPurpose(e) {
+  if (!(e instanceof Error) || typeof e.message !== 'string' || !e.message) return false;
+  if (e.expose === true) return true;
+  return Object.getPrototypeOf(e) === Error.prototype && e.code === undefined && e.errno === undefined && e.syscall === undefined;
 }
 
 // Who is asking: the shared proxy (Caddy) puts the client's address in X-Forwarded-For, replacing
@@ -295,9 +310,11 @@ function createApp(opts) {
   // Approval needed for this person: four eyes on, or not one who publishes.
   // The campaign role publishes its campaigns itself, unless four eyes is on.
   const needsApprovalFor = (s) => needsApproval() || (!publisher(s) && !(s && s.user && s.user.campaigns));
-  // Taken out of the publishing group (or the sign-in group), someone loses publishing at once, not
-  // with their next sign-in: asked again of AD (with the service account) before what publishes,
-  // at most once a minute per session. AD not reachable: as it was at sign-in.
+  // Taken out of the publishing group (or the sign-in group), or with the account disabled, someone
+  // loses publishing (or the sign-in) at once, not with their next sign-in: asked again of AD (with
+  // the service account) before what publishes at most once a minute per session, before anything
+  // else at most every five minutes. AD not reachable: as it was at sign-in.
+  const RECHECK_MS = 60 * 1000, RECHECK_OTHER_MS = 5 * 60 * 1000;
   const RECHECK = new Set(['info', 'approval/get', 'publish', 'approval/request', 'approval/approve', 'ad/export', 'photos/upload', 'photos/delete', 'photos/list',
     'schedule/set', 'schedule/cancel']);
   const cnOf = (g) => { const m = /^CN=((?:\\,|[^,])+)/i.exec(String(g || '')); return (m ? m[1].replace(/\\,/g, ',') : String(g || '')).trim().toLowerCase(); };
@@ -305,7 +322,7 @@ function createApp(opts) {
   // group); signIn false for an account that is gone; null when AD cannot be asked.
   async function adRoles(login) {
     try {
-      const r = await lookup(dir, login, []);
+      const r = await lookup(dir, login, [], { activeOnly: true });
       const mine = r.groups.map((g) => g.toLowerCase());
       const inGroup = mine.includes(cnOf(ldapCfg.group)), signIn = inGroup || (!!ldapCfg.campaignGroup && mine.includes(cnOf(ldapCfg.campaignGroup)));
       return { signIn, campaigns: !inGroup && signIn, publisher: inGroup && (!ldapCfg.publishGroup || mine.includes(cnOf(ldapCfg.publishGroup))) };
@@ -321,12 +338,19 @@ function createApp(opts) {
     const r = await adRoles(login);
     return r ? r.publisher : null;
   }
-  // Whether someone signed in with AD still publishes, and may still sign in: asked of AD at most once a minute.
-  async function recheckPublisher(s) {
-    if (!s || !s.user || s.user.local || !(ldapCfg.publishGroup || ldapCfg.campaignGroup || s.user.campaigns) || !adOn) return;
-    if (s.user.publisherAt && Date.now() - s.user.publisherAt < 60000) return;
-    const r = await adRoles(s.user.login);
-    if (!r) return;
+  // Whether someone signed in with AD still publishes, and may still sign in: asked of AD at most
+  // once in maxAge per session (whenever the server can read AD, publishing group or not). The
+  // local admin is not in AD and is never asked about. Requests that come at the same time wait
+  // for the one question.
+  const rechecking = new Map();
+  async function recheckPublisher(s, maxAge) {
+    if (!s || !s.user || s.user.local || !adOn) return;
+    if (s.user.publisherAt && Date.now() - s.user.publisherAt < (maxAge || RECHECK_MS)) return;
+    const asked = s.user.publisherAt || 0;
+    if (!rechecking.has(s.id)) rechecking.set(s.id, adRoles(s.user.login).finally(() => rechecking.delete(s.id)));
+    const r = await rechecking.get(s.id);
+    // Not known, or taken in already by a request that waited for the same answer.
+    if (!r || (s.user.publisherAt || 0) !== asked) return;
     const was = s.user.publisher;
     s.user.publisher = r.publisher; s.user.publisherAt = Date.now();
     // Moved into the sign-in group, or out of it into the campaign group: the role follows.
@@ -575,8 +599,18 @@ function createApp(opts) {
       cfg.campaigns = camps;
       const images = new Map();
       for (const n of Object.keys(history.latestImages())) { const b = history.latestImage(n); if (b) images.set(n, b); }
+      // An image already published goes out as published: a campaign never changes what a
+      // signature shows (an image of the same name uploaded to the draft waits for an editor).
+      // Only an image that is new, and that no published signature or building block names,
+      // comes from the draft.
       const draft = store.draftImages();
-      for (const n of campaignImages(camps)) { if (draft.has(n)) images.set(n, draft.get(n)); else if (!images.has(n)) return { error: 'The image ' + n + ' of a campaign is not in the draft.' }; }
+      const signed = JSON.stringify([(cfg.signatures || []).map((x) => [x && x.html, x && x.source, x && x.compiled]), (cfg.blocks || []).map((b) => b && b.html)]);
+      for (const n of campaignImages(camps)) {
+        if (images.has(n)) continue;
+        if (signed.includes('assets/' + n)) return { error: 'A signature uses this image too, so an editor publishes it: ' + n };
+        if (!draft.has(n)) return { error: 'The image ' + n + ' of a campaign is not in the draft.' };
+        images.set(n, draft.get(n));
+      }
       return publishNow(JSON.stringify(cfg), (s.user.name || s.user.login) + ' (campaigns)', d.message || 'Campaigns', { images, draft: false });
     }
   };
@@ -598,7 +632,9 @@ function createApp(opts) {
     const s = open ? null : auth.session(req);
     if (!open && !s) return fail(res, 'Not signed in.', 401);
     let data = {};
-    try { const body = await readBody(req, (name === 'backup/restore' || name === 'backup/check') && s && s.user.local ? MAX_BACKUP_BODY : MAX_BODY); data = body ? JSON.parse(body) : {}; } catch (e) {
+    const max = open ? (name === 'setup/finish' || name === 'deploy/finish' ? MAX_SCRIPT_BODY : MAX_OPEN_BODY)
+      : (name === 'backup/restore' || name === 'backup/check') && s.user.local ? MAX_BACKUP_BODY : MAX_BODY;
+    try { const body = await readBody(req, max); data = body ? JSON.parse(body) : {}; } catch (e) {
       if (e.status === 413) return fail(res, 'The request is too large.', 413);
       return fail(res, 'The request is not valid JSON.');
     }
@@ -646,14 +682,15 @@ function createApp(opts) {
       : Object.prototype.hasOwnProperty.call(routes, name) ? routes[name] : null;
     if (!fn) return fail(res, 'unknown', 404);
     let r;
-    // What publishes or goes live at once: whether they are still in the publishing group, asked now.
-    if (RECHECK.has(name)) await recheckPublisher(s);
+    // Whether they are still in the groups and their account is not disabled: asked again before
+    // every request (what publishes or goes live at once more often), the answer kept for a while.
+    await recheckPublisher(s, RECHECK.has(name) ? RECHECK_MS : RECHECK_OTHER_MS);
     if (s.user.gone) { auth.logout(req); return fail(res, 'You are not in the group that may use NOBS OSign any more.', 401); }
     const logged = Object.prototype.hasOwnProperty.call(AUDIT, name);
     try { r = await fn(data, s, ip); } catch (e) {
       log.error('api ' + name + ': ' + (e && e.stack || e));
       if (logged) audit.add({ who: s.user.login, ip, what: name, ok: false, detail: String(e && e.message) });
-      return fail(res, 'The server could not do that: ' + (e && e.message), 500);
+      return fail(res, saidOnPurpose(e) ? 'The server could not do that: ' + e.message : 'Something went wrong on the server.', 500);
     }
     if (logged) audit.add({ who: s.user.login, ip, what: name, ok: !(r && r.error), detail: r && r.error ? r.error : AUDIT[name](data, r || {}) });
     // A refusal with more to say (a draft changed in the meantime: its version, who saved it) keeps it.

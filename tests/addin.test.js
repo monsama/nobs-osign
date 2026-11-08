@@ -19,8 +19,9 @@ const fakeGraph = require('./support/fake-graph.js');
 const doc = new JSDOM('').window.document;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
 const JPG = Buffer.from('ffd8ffe000104a46494600010100000100010000ffd9', 'hex');
-let bundle, siteBundle, idsBundle;
+let bundle, siteBundle, idsBundle, upperSiteBundle;
 test.before(async () => {
+  upperSiteBundle = fs.readFileSync(path.join(await buildTestAddin('contoso.sharepoint.com:/Sites/Signatures:'), 'launchevent.js'), 'utf8');
   bundle = fs.readFileSync(path.join(await buildTestAddin(), 'launchevent.js'), 'utf8');
   siteBundle = fs.readFileSync(path.join(await buildTestAddin('contoso.sharepoint.com:/sites/Signatures:'), 'launchevent.js'), 'utf8');
   idsBundle = fs.readFileSync(path.join(await buildTestAddin('contoso.sharepoint.com:/sites/Signatures:', { drive: 'b!drive-1', item: 'OSIGN-ITEM' }), 'launchevent.js'), 'utf8');
@@ -45,7 +46,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang, runtimeStorage, platform } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang, runtimeStorage, platform, failing, saveFails, upperSite } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -84,7 +85,7 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
       requirements: { isSetSupported: () => true },
       diagnostics: { platform: platform || 'OfficeOnline' },
       displayLanguage: lang || 'en-US',
-      roamingSettings: { get: (k) => settings[k], set: (k, v) => { settings[k] = v; }, saveAsync: (cb) => cb && cb({ status: 'succeeded' }) },
+      roamingSettings: { get: (k) => settings[k], set: (k, v) => { settings[k] = v; }, remove: (k) => { delete settings[k]; }, saveAsync: (cb) => cb && cb({ status: saveFails ? 'failed' : 'succeeded' }) },
       mailbox: { item, userProfile: { displayName: 'Anna Muster', emailAddress: 'anna@example.com' } }
     }
   };
@@ -94,14 +95,24 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
   });
   // The sign-in's time limit (the only one this long) runs out at once in the tests.
   const fastTimeout = (fn, ms) => setTimeout(fn, ms >= 15000 ? 5 : ms);
-  const sandbox = { Office, console: { log: (m) => calls.push(['log', String(m)]) }, setTimeout: fastTimeout, clearTimeout, fetch: graph.fetch, __osignSignInFails: !!signInFails, __osignSignInHangs: !!signInHangs };
+  // failing(url): 'network' (fetch fails, as with no network), a status to answer, or nothing.
+  const fetch = async (url, init) => {
+    const f = failing && failing(url);
+    if (f === 'network') { graph.requests.push(url); throw new TypeError('Failed to fetch'); }
+    if (f) { graph.requests.push(url); return { ok: false, status: f, json: async () => ({}), text: async () => '', arrayBuffer: async () => new ArrayBuffer(0) }; }
+    return graph.fetch(url, init);
+  };
+  const sandbox = { Office, console: { log: (m) => calls.push(['log', String(m)]) }, setTimeout: fastTimeout, clearTimeout, fetch, __osignSignInHangs: !!signInHangs };
+  // How often the sign-in was asked (the stand-in reads this once each time).
+  const signIns = { n: 0 };
+  Object.defineProperty(sandbox, '__osignSignInFails', { get: () => { signIns.n++; return !!signInFails; } });
   // OfficeRuntime.storage, when the test gives one (classic Outlook's event runtime has it).
   if (runtimeStorage) sandbox.OfficeRuntime = { storage: { getItem: async (k) => (k in runtimeStorage ? runtimeStorage[k] : null), setItem: async (k, v) => { runtimeStorage[k] = v; } } };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(byIds ? idsBundle : site ? siteBundle : bundle, sandbox, { filename: 'launchevent.js' });
+  vm.runInContext(upperSite ? upperSiteBundle : byIds ? idsBundle : site ? siteBundle : bundle, sandbox, { filename: 'launchevent.js' });
   const fire = (name) => new Promise((resolve) => handlers[name]({ completed: () => resolve() }));
-  return { calls, graph, handlers, fire, settings, atts };
+  return { calls, graph, handlers, fire, settings, atts, signIns };
 }
 const setCall = (r) => r.calls.find((c) => c[0] === 'set');
 
@@ -451,4 +462,104 @@ test('classic Outlook: a banner campaign kept with the copy in the mailbox goes 
   const r = runtime({ signInFails: true, roaming, platform: 'PC' });
   await r.fire('onNewMessageComposeHandler');
   assert.equal(setCall(r)[1], '<p>Anna</p><div><b>BANNER</b></div>');
+});
+
+test('signed in, but SharePoint cannot be read now (offline, busy): the images kept before still go in', async () => {
+  const runtimeStorage = {};
+  const first = runtime({ runtimeStorage });
+  await first.fire('onNewMessageComposeHandler');
+  assert.match(setCall(first)[1], /cid:osign-assets-logo\.png/);
+  // The listing answers 503, the photo cannot be found, every download fails as with no network.
+  const failing = (u) => (/assets:\/children/.test(u) ? 503 : /photos\//.test(u) ? 429 : /download\.example/.test(u) ? 'network' : null);
+  const r = runtime({ runtimeStorage, roaming: first.settings, failing });
+  await r.fire('onNewMessageComposeHandler');
+  const set = setCall(r);
+  assert.ok(set, r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+  assert.equal(set[1], '<p><b>Anna Muster</b></p><p><img src="cid:osign-assets-logo.png" width="90"><img src="cid:osign-photos-mustera.jpg" width="100"></p>');
+  const attached = Object.fromEntries(r.calls.filter((c) => c[0] === 'attach').map((c) => [c[1], c[2]]));
+  assert.equal(attached['osign-assets-logo.png'], PNG.toString('base64'));
+  assert.equal(attached['osign-photos-mustera.jpg'], JPG.toString('base64'));
+  // Kept nowhere: the image is left out, the signature still goes in.
+  const r2 = runtime({ runtimeStorage: {}, failing: (u) => (/assets:\/children/.test(u) ? 503 : null) });
+  await r2.fire('onNewMessageComposeHandler');
+  assert.match(setCall(r2)[1], /^<p><b>Anna Muster<\/b><\/p><p><img src="cid:osign-photos-mustera\.jpg" width="100"><\/p>$/);
+});
+
+test('no network: said as that, in Outlook\'s language', async () => {
+  for (const [lang, rx] of [['en-US', /Finding the signatures: cannot be reached\./], ['de-CH', /Signaturen suchen: nicht erreichbar\./], ['fr-CH', /Recherche des signatures : impossible à joindre\./], ['it-CH', /Ricerca delle firme: non raggiungibile\./]]) {
+    const notices = {};
+    const r = runtime({ notices, lang, failing: () => 'network' });
+    await r.fire('onNewMessageComposeHandler');
+    assert.ok(!setCall(r));
+    assert.match(notices.osign.message, rx, lang);
+  }
+});
+
+test('the text the handler shows when the details could not be read, with no error to say, is translated', async () => {
+  // The text the handler falls back on is in the translations.
+  const { LANG } = await import(path.join(__dirname, '..', 'addin', 'src', 'lang.js'));
+  const common = fs.readFileSync(path.join(__dirname, '..', 'addin', 'src', 'common.js'), 'utf8');
+  assert.match(common, /\[\/\^your details could not be read\\\.\$\/, 'Ihre Angaben konnten nicht gelesen werden\.'\]/);
+  assert.ok(LANG.fr.msg.includes('Vos données n\'ont pas pu être lues.'));
+  assert.ok(LANG.it.msg.includes('Non è stato possibile leggere i suoi dati.'));
+});
+
+test('a sign-in without a window that failed is not tried again for each thing one message reads', async () => {
+  const runtimeStorage = {};
+  const first = runtime({ runtimeStorage });
+  await first.fire('onNewMessageComposeHandler');
+  const r = runtime({ runtimeStorage, roaming: first.settings, signInFails: true });
+  await r.fire('onNewMessageComposeHandler');
+  assert.ok(setCall(r), 'from the copies kept before');
+  assert.equal(r.signIns.n, 1);
+  // The next message, a moment later: not tried again either.
+  await r.fire('onNewMessageComposeHandler');
+  assert.equal(r.signIns.n, 1);
+});
+
+test('a setting the mailbox refuses is not left in memory, so later saves are not refused with it', async () => {
+  const r = runtime({ saveFails: true, roaming: { 'osign.prefs': JSON.stringify({ new: 'short', reply: '' }) } });
+  await r.fire('onNewMessageComposeHandler');
+  assert.ok(setCall(r));
+  assert.equal(r.settings['osign.profile'], undefined);
+  assert.equal(r.settings['osign.prefs'], JSON.stringify({ new: 'short', reply: '' }));
+});
+
+test('the site as written in any case (Sites, ROOT): found as fill.mjs accepts it', async () => {
+  const r = runtime({ upperSite: true, site: 'contoso.sharepoint.com:/sites/Signatures:' });
+  await r.fire('onNewMessageComposeHandler');
+  assert.match(setCall(r)[1], /Anna Muster/, r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+  assert.ok(r.graph.requests.includes('https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/Signatures:?$select=id'), r.graph.requests.join('\n'));
+});
+
+test('the manifest names the add-in in German, French and Italian, for each of their locales', () => {
+  const xml = fs.readFileSync(path.join(__dirname, '..', 'addin', 'manifest.template.xml'), 'utf8');
+  const d = new JSDOM(xml, { contentType: 'text/xml' }).window.document;
+  assert.equal(d.getElementsByTagName('parsererror').length, 0);
+  const locales = ['de-DE', 'de-CH', 'fr-FR', 'fr-CH', 'it-IT', 'it-CH'];
+  const over = (el) => Object.fromEntries([...el.children].filter((x) => x.localName === 'Override').map((x) => [x.getAttribute('Locale'), x.getAttribute('Value')]));
+  const desc = over(d.getElementsByTagName('Description')[0]);
+  const strings = Object.fromEntries([...d.getElementsByTagName('bt:String')].map((x) => [x.getAttribute('id'), over(x)]));
+  for (const o of [desc, strings['Pane.Label'], strings['Pane.Tooltip']]) {
+    assert.deepEqual(Object.keys(o).sort(), locales.slice().sort());
+    assert.equal(o['de-CH'], o['de-DE']); assert.equal(o['fr-CH'], o['fr-FR']); assert.equal(o['it-CH'], o['it-IT']);
+  }
+  assert.equal(strings['Pane.Label']['fr-FR'], 'Signatures');
+  assert.equal(strings['Pane.Label']['it-IT'], 'Firme');
+});
+
+test('signature HTML put into the pane: nothing in it runs or loads from a strange address', async () => {
+  const { safeNodes, safeUrl } = await import(path.join(__dirname, '..', 'addin', 'src', 'safehtml.js'));
+  const d = new JSDOM('<!doctype html><body></body>').window.document;
+  const clean = (h) => { const box = d.createElement('div'); box.replaceChildren(...safeNodes(h, d)); return box.innerHTML; };
+  assert.equal(clean('<p style="color:red" onclick="x()">Hi <b onmouseover="y()">you</b></p><style>p{margin:0}</style>'), '<p style="color:red">Hi <b>you</b></p><style>p{margin:0}</style>');
+  assert.equal(clean('<script>x()</script><iframe src="https://x"></iframe><object data="x"></object><embed src="x"><p>ok</p>'), '<p>ok</p>');
+  assert.equal(clean('<a href="java\tscript:alert(1)">a</a><a href=" &#106;avascript:alert(1)">b</a><a href="data:text/html,<b>x</b>">c</a>'), '<a>a</a><a>b</a><a>c</a>');
+  assert.equal(clean('<a href="https://ex.ch/">a</a><a href="mailto:a@b.ch">b</a><a href="tel:+41">c</a><a href="kontakt.html">d</a><img src="data:image/png;base64,AA" data-osign-src="assets/logo.png"><img src="cid:x">'),
+    '<a href="https://ex.ch/">a</a><a href="mailto:a@b.ch">b</a><a href="tel:+41">c</a><a href="kontakt.html">d</a><img src="data:image/png;base64,AA" data-osign-src="assets/logo.png"><img src="cid:x">');
+  // Read differently a second time (noscript): it is never written as text again.
+  assert.equal(clean('<noscript><p title="</noscript><img src=x onerror=alert(1)>"></p></noscript><i>x</i>'), '<i>x</i>');
+  assert.equal(clean('<p style="width:expression(alert(1))">x</p><svg><a xlink:href="javascript:alert(1)"><text>t</text></a></svg>'), '<p>x</p><svg><a><text>t</text></a></svg>');
+  for (const bad of ['javascript:x', 'JaVaScRiPt:x', 'vbscript:x', '\u0001javascript:x', 'java\nscript:x', 'data:text/html,x', 'data:application/x', 'file:///c:/x']) assert.equal(safeUrl(bad), false, JSON.stringify(bad));
+  for (const ok of ['https://x', 'http://x', 'mailto:a@b', 'tel:+41', 'cid:a', 'data:image/png;base64,AA', 'assets/logo.png', '#top', '']) assert.equal(safeUrl(ok), true, ok);
 });

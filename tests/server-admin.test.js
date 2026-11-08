@@ -145,6 +145,18 @@ test('nobody who is not signed in makes the server read a large body', async () 
     const r = await fetch(s.at + '/api/backup/restore', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: await s.signIn('anna', 'anna-pw') }, body: big }).catch(() => ({ status: 'reset' }));
     assert.ok(r.status === 413 || r.status === 'reset', String(r.status));
     assert.equal((await anna('info')).user.login, 'anna');
+    // What answers without a sign-in reads small bodies only: a login of 20 KB, a script's result of 100 KB.
+    const post = (name, body) => fetch(s.at + '/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }).catch(() => ({ status: 'reset' }));
+    for (const name of ['login', 'login-methods', 'logout']) {
+      const r2 = await post(name, JSON.stringify({ login: 'x'.repeat(20 * 1024) }));
+      assert.ok(r2.status === 413 || r2.status === 'reset', name + ': ' + r2.status);
+    }
+    for (const name of ['setup/finish', 'deploy/finish']) {
+      const r2 = await post(name, JSON.stringify({ token: 'x', error: 'x'.repeat(100 * 1024) }));
+      assert.ok(r2.status === 413 || r2.status === 'reset', name + ': ' + r2.status);
+      assert.equal((await post(name, JSON.stringify({ token: 'x', error: 'x'.repeat(30 * 1024) }))).status, 403, name + ': 30 KB is read');
+    }
+    assert.equal((await post('login', JSON.stringify({ login: 'anna', password: 'anna-pw' }))).status, 200);
   } finally { s.srv.close(); }
 });
 
@@ -415,6 +427,54 @@ test('roles: taken out of the publishing group, publishing stops at once (asked 
   } finally { s.srv.close(); roles.close(); }
 });
 
+test('roles: a disabled account, or one taken out of the sign-in group, is signed out within minutes on whatever it does, without a publishing group', async () => {
+  const roles = fakeAd({ base: BASE, service: SERVICE, groups: { 'NOBS-OSign-Admins': [] }, people: {
+    eva: { pw: 'eva-pw', name: 'Eva Editor', mail: 'eva@example.ch', groups: ['NOBS-OSign-Admins'] },
+    otto: { pw: 'otto-pw', name: 'Otto Other', mail: 'otto@example.ch', groups: ['NOBS-OSign-Admins'] }
+  } });
+  const url = await roles.listen();
+  const s = await server({ OSIGN_LDAP_URL: url, OSIGN_LDAP_SERVICE_DN: SERVICE.dn, OSIGN_LDAP_SERVICE_PASSWORD: SERVICE.pw, OSIGN_LDAP_DIRECTORY_BASE: BASE });
+  const realNow = Date.now;
+  try {
+    const eva = s.as(await s.signIn('eva', 'eva-pw')), otto = s.as(await s.signIn('otto', 'otto-pw'));
+    const admin = s.as(await s.signIn('admin', 'admin-pw'));
+    const c = cfg([{ id: 'a', name: 'A', html: '<p>A</p>' }]);
+    assert.equal((await eva('draft/save', { configJson: c, force: true })).ok, true);
+    roles.set('eva', 'userAccountControl', '514');
+    roles.set('otto', 'memberOf', null);
+    // Kept for a few minutes: not an LDAP question on every request.
+    assert.equal((await eva('draft/get')).ok, true);
+    Date.now = () => realNow() + 5 * 60 * 1000 + 1000;
+    const r = await eva('draft/save', { configJson: c, force: true });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /not in the group/);
+    assert.equal((await eva('draft/get')).error, 'Not signed in.');
+    assert.match((await otto('assets/upload', { name: 'x.png', data: PNG.toString('base64') })).error, /not in the group/);
+    // The local account admin is not in AD and goes on.
+    assert.equal((await admin('draft/get')).ok, true);
+  } finally { Date.now = realNow; s.srv.close(); roles.close(); }
+});
+
+test('an unexpected error is not shown as it is: the server\'s log has it, the answer says something went wrong', async () => {
+  const errors = [];
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-err-'));
+  const srv = http.createServer(createApp({ log: { info() {}, warn() {}, error: (m) => errors.push(String(m)) }, env: { OSIGN_DATA: dataDir, OSIGN_SECURE_COOKIE: '0', OSIGN_ADMIN_PASSWORD: 'admin-pw', OSIGN_APP_KEY: 'the-first-servers-key' } }));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  try {
+    const at = 'http://127.0.0.1:' + srv.address().port;
+    const cookie = (await fetch(at + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'admin-pw' }) })).headers.get('set-cookie').split(';')[0];
+    // The images' folder made a file: writing an image there fails with the system's own error.
+    fs.rmSync(path.join(dataDir, 'assets'), { recursive: true, force: true });
+    fs.writeFileSync(path.join(dataDir, 'assets'), 'x');
+    const r = await fetch(at + '/api/assets/upload', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ name: 'a.png', data: PNG.toString('base64') }) });
+    assert.equal(r.status, 500);
+    const j = await r.json();
+    assert.equal(j.error, 'Something went wrong on the server.');
+    assert.doesNotMatch(JSON.stringify(j), /ENOTDIR|osign-err-/);
+    assert.ok(errors.some((e) => /ENOTDIR/.test(e)), errors.join('\n'));
+  } finally { srv.close(); }
+});
+
 test('signed in stays signed in across a restart (an update): the sessions kept sealed, not as they are', async () => {
   const s = await server();
   try {
@@ -448,6 +508,12 @@ test('banner campaigns: refused when the banner is not as its HTML says, in the 
     const camp = { id: 'xmas', name: 'Xmas', validFrom: day(-5), validUntil: day(2), html: '<p>Banner</p>', compiled: '<p>Banner</p>', signatures: [] };
     assert.match((await admin('publish', { configJson: withCamp(Object.assign({}, camp, { compiled: '<p><a href="https://evil.example/">Banner</a></p>' })) })).error, /campaign "Xmas" is not as its HTML says/);
     assert.match((await admin('publish', { configJson: withCamp(Object.assign({}, camp, { langs: { en: { html: '<p>EN</p>', compiled: '<p>other</p>' } } })) })).error, /campaign "Xmas"/);
+    // Two links whose addresses trade places, and a comment Outlook shows: refused too.
+    const links = '<p><a href="https://a.example/">Shop</a> <a href="https://b.example/">Help</a></p>';
+    assert.match((await admin('publish', { configJson: withCamp(Object.assign({}, camp, { html: links, compiled: links.replace('a.example', 'X').replace('b.example', 'a.example').replace('X', 'b.example') })) })).error, /campaign "Xmas"/);
+    assert.match((await admin('publish', { configJson: withCamp(Object.assign({}, camp, { compiled: '<p>Banner</p><!--[if mso]><img src="https://t.example/p.gif"><![endif]-->' })) })).error, /campaign "Xmas"/);
+    const sigWith = (compiled) => cfg([{ id: 'a', name: 'A', html: '<p>@@mail</p>', compiled }]);
+    assert.match((await admin('publish', { configJson: sigWith('<!--sig-if:mail--><p>@@mail</p><!--/sig-if--><!--[if mso]>hidden<![endif]-->') })).error, /signature "A" is not as its HTML says/);
     assert.equal((await admin('publish', { configJson: withCamp(camp) })).ok, true);
     const now = (await admin('notify/get')).now;
     assert.ok(now.some((x) => /campaign "Xmas" ends in 2 day\(s\)/.test(x)), now.join('\n'));
@@ -494,6 +560,16 @@ test('the campaign role: only the campaigns of the draft change, it publishes th
     assert.match((await admin('history/list')).versions[0].by, /Mara Marketing \(campaigns\)/);
     // The draft of the editors stays theirs.
     assert.equal(JSON.parse((await admin('draft/get')).configJson).signatures[0].html, '<p>draft of the editors</p>');
+    // The published logo replaced in the draft and named by her campaign: the logo goes out as
+    // published, not as uploaded (a campaign never changes what a signature shows).
+    // (The editors' draft names it no more, so she may remove it and upload another one by its name.)
+    const other = Buffer.concat([PNG, Buffer.from('other')]);
+    assert.equal((await mara('assets/delete', { name: 'logo.png' })).ok, true);
+    assert.equal((await mara('assets/upload', { name: 'logo.png', data: other.toString('base64') })).name, 'logo.png');
+    const withLogo = Object.assign({}, camp, { html: '<p><img src="assets/fair.png"><img src="assets/logo.png"></p>', compiled: '<p><img src="assets/fair.png"><img src="assets/logo.png"></p>' });
+    const p2 = await mara('publish', { configJson: JSON.stringify(Object.assign(sigs('x'), { campaigns: [withLogo] })) });
+    assert.equal(p2.ok, true, p2.error);
+    assert.deepEqual(fs.readFileSync(path.join(s.dataDir, 'publish', 'assets', 'logo.png')), PNG);
     // A signature's image: not hers to remove; the rest of the API not hers at all.
     await admin('draft/save', { configJson: JSON.stringify(Object.assign(sigs('<p><img src="assets/logo.png"></p>'), { campaigns: [camp] })) });
     assert.match((await mara('assets/delete', { name: 'logo.png' })).error, /A signature uses this image/);

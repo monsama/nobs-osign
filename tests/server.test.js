@@ -271,6 +271,23 @@ test('images: only real PNG/JPG/GIF, safe names, never overwritten', async () =>
   assert.deepEqual((await api('draft/get')).assets.map((x) => x.name), ['Our-Logo.png']);
 });
 
+test('images: the draft holds 500 at most; its hash follows a changed image', () => {
+  const { createStore } = require('../server/store');
+  const store = createStore(fs.mkdtempSync(path.join(os.tmpdir(), 'osign-store-')));
+  // Each one other bytes after the image's end (a PNG reader stops at IEND), so each is a file of its own.
+  const img = (i) => Buffer.concat([PNG, Buffer.from(String(i))]).toString('base64');
+  for (let i = 0; i < 500; i++) assert.equal(store.uploadAsset('i' + i + '.png', img(i)).error, undefined);
+  assert.match(store.uploadAsset('one-more.png', img('x')).error, /500 images already/);
+  // The same image again is not one more.
+  assert.equal(store.uploadAsset('i1.png', img(1)).name, 'i1.png');
+  const before = store.draftHash();
+  assert.equal(store.draftHash(), before, 'unchanged: the same hash');
+  fs.writeFileSync(path.join(store.assetDir, 'i1.png'), Buffer.concat([PNG, Buffer.from('changed')]));
+  assert.notEqual(store.draftHash(), before, 'an image changed: another hash');
+  assert.equal(store.deleteAsset('i2.png').error, undefined);
+  assert.equal(store.uploadAsset('one-more.png', img('x')).name, 'one-more.png');
+});
+
 test('settings: the publish folder is the server\'s; the add-in\'s settings are checked', async () => {
   const s = await api('settings/save', { settings: { folder: '/etc', photosFolder: '/root', clientId: '00000000-0000-0000-0000-000000000001', addinUrl: 'https://osign.example.pages.dev/' } });
   assert.equal(s.ok, true);

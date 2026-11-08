@@ -132,14 +132,15 @@
     const json = JSON.stringify(prepared()), seq = changeSeq;
     saving = saving.then(() => api('draft/save', { configJson: json, rev: S.rev || '', force: !!(opts && opts.force) }, opts))
       // The answer to an older save says nothing about changes made since: those are still coming.
-      .then((r) => { if (r.rev) S.rev = r.rev; if (seq === changeSeq) { S.dirty = r.dirty; S.savedAt = Date.now(); renderStatus(); } })
+      .then((r) => { if (r.rev) S.rev = r.rev; if (seq === changeSeq) { S.dirty = r.dirty; S.savedAt = Date.now(); renderStatus(); } return true; })
       // Not taken (publishing right now, the network gone): tried again a moment later, and kept
       // for when the page closes, unless something newer is on its way already.
       .catch((e) => {
         renderStatus(t('Not saved'));
         // Changed elsewhere since this one was loaded: asked, never written over without a word.
-        if (e.data && e.data.conflict) { saveConflict(e.data); return; }
+        if (e.data && e.data.conflict) { saveConflict(e.data); return false; }
         toast(t(e.message), true); if (seq === changeSeq && !saveTimer) saveTimer = setTimeout(save, 3000);
+        return false;
       });
     return saving;
   }

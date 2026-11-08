@@ -47,12 +47,24 @@ old_image="$(env_get OSIGN_IMAGE)"
 tar -xzf "$work/$name" -C "$work"
 src="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'nobs-osign-server-*' | head -1)"
 [ -n "$src" ] || fail "The archive does not hold the server's files."
+# Without IMAGE the image is named by its version only, which its attestation cannot check: with
+# OSIGN_REQUIRE_ATTESTATION=1 such a release is not installed (checked before any file is replaced).
+if [ "$(env_get OSIGN_REQUIRE_ATTESTATION)" = 1 ] && ! [ -s "$src/IMAGE" ]; then
+    fail "OSIGN_REQUIRE_ATTESTATION=1, but the release $want does not name its image by its digest (IMAGE): its image cannot be checked. Not installed."
+fi
+# IMAGE names the release's image: the one of the release before must not stay when the new one
+# has none (a release from before 0.7.2), or it would start the old image again.
+rm -f "$BASE_DIR/IMAGE"
 cp -a "$src"/. "$BASE_DIR"/
 # A release from before 0.6.0 had no key for the passwords set in the editor.
 app_key_ensure
 # Exactly the image the release names (by its digest), or, for an older release, its version.
 new_image="$(release_image)"
-case "$new_image" in *"@sha256:"*) attest_verify "oci://${new_image%%:*}@${new_image#*@}" "$REPO" ;; esac
+case "$new_image" in
+    *"@sha256:"*) attest_verify "oci://${new_image%%:*}@${new_image#*@}" "$REPO" ;;
+    # An IMAGE that is not as it should be: the same as none.
+    *) if [ "$(env_get OSIGN_REQUIRE_ATTESTATION)" = 1 ]; then fail "OSIGN_REQUIRE_ATTESTATION=1, but the release $want does not name its image by its digest (IMAGE): its image cannot be checked. Not installed."; fi ;;
+esac
 env_set OSIGN_IMAGE "$new_image"
 docker pull "$(env_get OSIGN_IMAGE)" >/dev/null || fail "The image of $want could not be pulled."
 compose up -d --no-build >/dev/null

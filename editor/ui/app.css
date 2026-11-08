@@ -1427,3 +1427,6 @@ body.role-campaigns .side-sect { border-top: 0 !important; margin-top: 0 !import
 .imgbar label { margin: 0; }
 .imgbar select, .imgbar input, .imgbar button { margin: 0 !important; vertical-align: middle; }
 .imgbar select { color: var(--text); }
+/* Image work under way (preparing, fitting): the editing held, it would put the old names back. */
+.image-work #design, .image-work #source { pointer-events: none; opacity: .6; }
+.image-work .classic-prep, .image-work .classic-fit { pointer-events: none; opacity: .5; }
