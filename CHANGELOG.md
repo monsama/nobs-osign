@@ -5,6 +5,13 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.99
+- A banner (or a signature with days of its own) goes next to the add-in's files on its first day
+  and away after its last: a campaign published early cannot be seen there before it starts. The
+  server looks every quarter of an hour, and tries again then when an upload failed.
+- Setup: Cloudflare Pages marked as recommended, with why (sharp images in classic Outlook); the
+  other web servers say what classic Outlook gets with them.
+
 ## 0.9.98 (add-in changed)
 - **Classic Outlook: images sharp, also when the signature goes in by itself.** With the add-in's
   files on Cloudflare Pages, each publish also puts the signatures' and banners' images (not

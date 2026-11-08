@@ -416,7 +416,7 @@ function createApp(opts) {
     if (!r.error && r.changed) history.add({ by, message, configJson, images: r.images });
     if (r.error) return r;
     // The images also next to the add-in's files on Cloudflare Pages, for classic Outlook.
-    const hosted = r.changed ? await hostPublished(r.images) : '';
+    const hosted = r.changed ? await hostPublished(configJson, r.images) : '';
     // The draft's version after it (it was written as published), so the editor goes on from it.
     return Object.assign({ changed: r.changed, folder: t.describe(), rev: store.getDraft().rev }, hosted && hosted !== 'ok' ? { hostedError: hosted } : {});
   }
@@ -427,15 +427,30 @@ function createApp(opts) {
     const up = readJson(addinUploadFile);
     return !!(addin.pagesEnabled(pages) && !addin.pagesProblem(pages) && up && up.version && up.version === addinMade().version);
   }
-  // The published images (name → bytes) into the add-in's img/, then uploaded with its files.
-  // 'ok', '' (not set up), or what went wrong (the publish itself stands).
-  async function hostPublished(images) {
+  // Of the published images (name → bytes), the ones to be next to the add-in's files today: those
+  // of signatures, building blocks and campaigns on their days. One only a signature or a banner
+  // with days of its own uses goes up on its first day and down after its last, so a campaign
+  // published early cannot be seen there before it starts.
+  function hostedToday(configJson, images, now) {
+    let c;
+    try { c = JSON.parse(configJson || '{}'); } catch (e) { return images; }
+    const refs = (o) => [...JSON.stringify(o || '').matchAll(/assets\/([^"'?#\s>\\]+)/g)].map((m) => m[1]);
+    const dated = (c.signatures || []).filter((x) => core.isCampaign(x)).concat(c.campaigns || []);
+    const keep = new Set(refs(Object.assign({}, c, { signatures: (c.signatures || []).filter((x) => !core.isCampaign(x)), campaigns: [] })));
+    for (const x of dated) if (core.inPeriod(x, now || new Date())) refs(x).forEach((n) => keep.add(n));
+    return new Map([...images].filter(([n]) => keep.has(n)));
+  }
+  // The images for today into the add-in's img/, then uploaded with its files.
+  // 'ok', '' (not set up), or what went wrong (the publish itself stands; tried again within the hour).
+  async function hostPublished(configJson, images) {
     if (!hostingOn()) return '';
     try {
-      addin.hostImages(addinDir, images);
+      addin.hostImages(addinDir, hostedToday(configJson, images));
       await addin.pagesDeploy(pages, addinDir, fetchFn);
       return 'ok';
     } catch (e) {
+      // Not up: no index here either, so the next look (hostTick) tries again.
+      try { fs.rmSync(path.join(addinDir, 'img', 'index.json'), { force: true }); } catch (e2) { /* gone */ }
       log.warn('Images to Cloudflare Pages: ' + e.message);
       return e.message;
     }
@@ -446,6 +461,23 @@ function createApp(opts) {
     for (const n of Object.keys(history.latestImages())) { const b = history.latestImage(n); if (b) m.set(n, b); }
     return m;
   }
+  // Those of them for today (addin/build puts them with the files).
+  const hostedImagesNow = () => hostedToday(history.latest(), publishedImages());
+  // Every quarter of an hour: whether today's images are other than the ones up there (a campaign
+  // began or ended, or the last upload failed); then they go up again.
+  let hostBusy = false;
+  async function hostTick() {
+    if (hostBusy || !hostingOn() || !history.latest()) return;
+    hostBusy = true;
+    try {
+      const want = [...hostedImagesNow().keys()].sort().join('\n');
+      const index = readJson(path.join(addinDir, 'img', 'index.json'));
+      const have = index ? Object.keys(index).sort().join('\n') : null;
+      if (want !== have) { const r = await hostPublished(history.latest(), publishedImages()); log.info('Images to Cloudflare Pages for today: ' + r); }
+    } catch (e) { log.warn('Images to Cloudflare Pages: ' + e.message); } finally { hostBusy = false; }
+  }
+  const hostTimer = setInterval(hostTick, 15 * 60 * 1000);
+  if (hostTimer.unref) hostTimer.unref();
   // The server's connections for the editor: what is set, where from (GUI or .env), never a secret.
   function connectionsAnswer() {
     const cert = certs.active();
@@ -579,7 +611,7 @@ function createApp(opts) {
   Object.assign(routes, createConnectionRoutes({ connections, connectionsAnswer, settings, certs, setup, deployment, addinId, addinUrlFromPages, configure, targetFor,
     graphCfg, ldapCfg, dir, pages, fetchFn, adminOnly, live: () => ({ graph }), log }).routes);
   // The add-in's files (server/routes-addin.js).
-  Object.assign(routes, createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, publishedImages, fetchFn, adminOnly, live: () => ({ graph }), log }).routes);
+  Object.assign(routes, createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, publishedImages: hostedImagesNow, fetchFn, adminOnly, live: () => ({ graph }), log }).routes);
   // What was published (server/routes-history.js).
   Object.assign(routes, createHistoryRoutes({ history, store, settings, busy: () => publishing }).routes);
   // Photos (server/routes-photos.js) and the directory, AD and Entra ID (server/routes-directory.js).

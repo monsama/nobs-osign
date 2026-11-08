@@ -47,7 +47,7 @@ Classic Outlook refuses its event handler the sign-in (`untrusted_origin`), and 
 nothing but the add-in's settings in the mailbox, 32 KB in all. So the pane, opened once there,
 keeps in them the signatures that go in by themselves; the event handler takes them from there.
 The images: with the add-in's files on Cloudflare Pages, each publish also puts the signatures'
-images (not people's photos) next to them (`img/`, by their content); the event handler loads them
+images (not people's photos; a banner only on its days) next to them (`img/`, by their content); the event handler loads them
 from there without a sign-in and embeds them as they are, sharp, with no "download pictures" for
 the recipient. Without that (or without a network) it takes the copies in the mailbox, made as
 small as they are shown, as many as fit; an image that does not fit there (a large banner) is left
