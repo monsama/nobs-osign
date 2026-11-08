@@ -265,7 +265,7 @@
     const out = await new Promise((res) => c.toBlob(res, type, 0.86));
     // A GIF stays as it came (the canvas makes none).
     const data = /\.gif$/i.test(name) ? blob : out;
-    const b64 = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.readAsDataURL(data); });
+    const b64 = await b64Of(data);
     if (!fixedName && isDefaultPhoto(name)) { errBox().textContent = t('That name is the placeholder photo\'s.'); return; }
     if (!opts.replace && photoItems.some((p) => p.name.toLowerCase() === name.toLowerCase()) && !(await ask(t('{0} is there already. Replace it?', name), t('Replace'), true))) return;
     try {

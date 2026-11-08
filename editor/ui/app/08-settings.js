@@ -478,7 +478,7 @@
   $('connCaFile').addEventListener('change', async () => {
     const f = $('connCaFile').files[0];
     if (!f) return;
-    connCaReading = new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+    connCaReading = b64Of(f);
   });
   // Saves what the dialog holds; the dialog stays open (Test) or closes (Save).
   async function connSaveNow() {

@@ -565,7 +565,7 @@
     f = await shrinkUpload(f);
     if (f.shrunk) toast(t('Image made smaller: {0} → {1} ({2} → {3} pixels wide).', kb(f.shrunk.from), kb(f.shrunk.to), f.shrunk.w, f.shrunk.w2));
     if (f.size > 1024 * 1024) { $('imgErr').textContent = t('The image is larger than 1 MB.'); return; }
-    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+    const data = await b64Of(f);
     try {
       const r = await api('assets/upload', { name: f.name, data });
       S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]).sort((a, b) => a.name.localeCompare(b.name));
