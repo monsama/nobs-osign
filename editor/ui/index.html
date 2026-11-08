@@ -637,8 +637,8 @@
     <div class="grid2">
       <label>Address of the add-in <small>(where the files are served)</small><input id="setAddinUrl" placeholder="https://osign.contoso.com/"></label>
       <label>Write the files to<span class="pick"><input id="setAddinFolder" placeholder="C:\OSign-addin"><button type="button" class="pick-btn" data-for="setAddinFolder">Choose folder…</button></span></label>
-      <label>Web server <small>(its caching file goes with the files)</small><select id="setAddinHost">
-        <option value="">Choose…</option><option value="cloudflare">Cloudflare Pages</option><option value="azure">Azure Static Web Apps</option>
+      <label title="Only with Cloudflare Pages does the server upload the signatures' images with every publish, so classic Outlook puts them in sharp; elsewhere it takes the smaller copies in the mailbox.">Web server <small>(its caching file goes with the files)</small><select id="setAddinHost">
+        <option value="">Choose…</option><option value="cloudflare">Cloudflare Pages (recommended)</option><option value="azure">Azure Static Web Apps</option>
         <option value="iis">IIS</option><option value="apache">Web host (Apache)</option><option value="other">Another web server</option></select></label>
       <label>Application (client) ID<input id="setClientId" placeholder="00000000-0000-0000-0000-000000000000"></label>
       <label>Directory (tenant) ID <small>(only for a single-organization app)</small><input id="setTenantId" placeholder="optional"></label>
@@ -963,7 +963,8 @@
       <p class="wiz-intro" data-th="wizHostLead">The add-in consists of a few static files - code only, no data - that Outlook loads from a web
         address. They only change with a new version of NOBS OSign. Choose where they will be hosted:</p>
       <label class="wiz-opt"><input type="radio" name="whost" value="cloudflare"> <span data-th="wizHostCf"><b>Cloudflare Pages</b> <em>recommended</em><span class="sub">Free
-        of charge, no credit card required; the server uploads the files itself.</span></span></label>
+        of charge, no credit card required; the server uploads the files itself, and with every publish the
+        signatures' images, so classic Outlook puts them in sharp.</span></span></label>
       <label class="wiz-opt"><input type="radio" name="whost" value="azure"> <span data-th="wizHostAz"><b>Azure Static Web Apps</b><span class="sub">Free plan;
         requires an Azure subscription.</span></span></label>
       <label class="wiz-opt"><input type="radio" name="whost" value="apache"> <span data-th="wizHostAp"><b>Your existing web host</b><span class="sub">A subdomain
@@ -972,6 +973,9 @@
         reachable from the internet over HTTPS.</span></span></label>
       <label class="wiz-opt"><input type="radio" name="whost" value="other"> <span data-th="wizHostOther"><b>Another web server</b><span class="sub">Any
         server that serves static files over HTTPS.</span></span></label>
+      <p class="hint" data-th="wizHostNote">Only with Cloudflare Pages are the signatures' images uploaded with every publish. With
+        another web server, classic Outlook puts in smaller copies of them (or leaves a large banner out) when the signature goes in
+        by itself; every other Outlook gets them as they are.</p>
       <div class="wiz-fields">
         <label>Address of the add-in <small id="wizUrlHint"></small><input id="wizUrl" placeholder="https://osign.contoso.com/"></label>
       </div>

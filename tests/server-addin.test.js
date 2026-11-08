@@ -179,6 +179,21 @@ test('publishing puts the images next to the add-in\'s files (img/, by their con
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8')), index);
 });
 
+test('a banner of a campaign that has not begun is not next to the add-in\'s files yet (nor one that is over)', async () => {
+  const png = fs.readFileSync(path.join(ROOT, 'addin', 'assets', 'icon-16.png'));
+  for (const n of ['soon.png', 'over.png', 'now.png']) assert.ok((await api('assets/upload', { name: n, data: png.toString('base64') })).name);
+  const day = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const banner = (id, img, from, until) => { const h = '<p><img src="assets/' + img + '" width="16" alt="b"></p>'; return { id, name: id, validFrom: from, validUntil: until, html: h, compiled: h }; };
+  const html = '<p>Anna<img src="assets/banner.png" width="32" alt="B"></p>';
+  const config = { schemaVersion: 1, options: {}, fields: [], signatures: [{ id: 'a', name: 'A', html, compiled: html }],
+    campaigns: [banner('soon', 'soon.png', day(3), day(10)), banner('over', 'over.png', day(-10), day(-3)), banner('now', 'now.png', day(0), day(5))] };
+  const r = await api('publish', { configJson: JSON.stringify(config) });
+  assert.equal(r.changed, true, JSON.stringify(r));
+  assert.ok(!r.hostedError, r.hostedError);
+  const index = JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8'));
+  assert.deepEqual(Object.keys(index).sort(), ['banner.png', 'now.png']);
+});
+
 test('check: the address serves exactly the files made here', async () => {
   const r = await api('addin/check');
   assert.equal(r.ok, true, JSON.stringify(r));
