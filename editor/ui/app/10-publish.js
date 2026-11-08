@@ -63,60 +63,79 @@
     if (over.length) out.push(['good', t('Campaigns over: {0}. They can be removed (Campaigns → Over).', nm(over)), null, t('Campaigns over: {0}', over.length)]);
     return out;
   }
-  // Everything to look at before publishing: what stops it, then the notes.
+  // Everything to look at before publishing: what stops it, then the notes, the ones that matter
+  // most first (who gets nothing, images missing), the looks after. What a recipient would see is
+  // checked in the active signatures only: the ones someone gets, now or on days still to come.
+  // The rest (templates, tests, ones over) are said in one grey line, not checked.
   function publishChecks() {
     (S.assets || []).forEach((a) => { if (/\.png$/i.test(a.name)) darkCheck(a.name); });
     // As it goes out: the building blocks put in.
-    const c = prepared(), out = [];
+    const c = prepared(), out = [], later = [], day = core.today();
     const errs = core.validate(c);
     errs.forEach((e) => out.push(['bad', t(e)]));
     if (!c.signatures.length) out.push(['bad', t('There is no signature.')]);
-    const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length && s.audience.everyone !== false);
-    const nobody = c.signatures.filter((s) => core.forNobody(s));
-    if (nobody.length) out.push(['warn', t('Not assigned, nobody gets: {0} (Who gets it).', nobody.map((s) => s.name).join(', ')), null, t('Not assigned: {0}', count(nobody))]);
-    if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', t('No signature is the default for new mail: users get none unless they pick one.'), null, t('No default for new mail')]);
-    else if (!plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.'), null, t('The default for new mail is for some only')]);
-    if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
+    const idle = c.signatures.filter((s) => core.forNobody(s) || (core.isCampaign(s) && s.validUntil && s.validUntil < day));
+    const active = c.signatures.filter((s) => !idle.includes(s)), ca = Object.assign({}, c, { signatures: active });
     if (onServer()) {
       if (!toSharePoint()) out.push(['warn', t("Publishing goes into the server's own folder, not to SharePoint: Microsoft Graph is not set up on the server."), null, t('Into the server\'s folder, not SharePoint')]);
       else if (lastSettings.folderError) out.push(['warn', t('SharePoint cannot be reached: {0}', t(lastSettings.folderError)), null, t('SharePoint cannot be reached')]);
     } else if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
-    if (core.groupsUsed(c).length && core.valueSource(c) === 'graph') out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.'), null, t('Groups need GroupMember.Read.All')]);
-    const perPerson = c.signatures.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
-    if (perPerson.length) out.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; users without a photo get the signature without one.', perPerson.join(', ')), null, t('Photos per person')]);
-    const lost = c.signatures.filter((s) => /<img[^>]+src="(?!assets\/|photos\/|https:)[^"]*"/i.test(s.html || '')).map((s) => s.name);
+    // Who gets nothing for new mail: as read from AD under Users when there are users, else as the
+    // defaults say. One note, not two.
+    const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length && s.audience.everyone !== false);
+    const snapUsers = S.snap && S.snap.users && S.snap.users.length ? S.snap.users : null;
+    const g = snapUsers ? whoGets(snapUsers) : null, none = snapUsers ? snapUsers.filter((u) => !g.get(u).new).length : 0;
+    if (!c.signatures.some((s) => s.defaultNew)) out.push(['warn', t('No signature is the default for new mail: users get none unless they pick one.'), null, t('No default for new mail')]);
+    else if (none) out.push(['warn', t('{0} of the {1} users read from AD get no signature for new mail (Users → Only without a signature).', none, snapUsers.length) + (!plain.some((s) => s.defaultNew) ? ' ' + t('The default for new mail is limited to some (Who gets it).') : ''), null, t('{0} users without a signature', none)]);
+    else if (!snapUsers && !plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.'), null, t('The default for new mail is for some only')]);
+    if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
+    // Images the active signatures show that are not in the draft: left out of every mail. One of
+    // the same name in another form (the GIF made a PNG, a -2) is offered in its place.
+    const named = (list) => [...new Set(list.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
+    const missing = named(active), stem = (n) => n.toLowerCase().replace(/(?:-\d+)*\.[a-z0-9]+$/, '');
+    const twin = (n) => (S.assets.find((a) => stem(a.name) === stem(n) && /\.(png|jpe?g|gif)$/i.test(a.name)) || {}).name || '';
+    if (missing.length) {
+      const swaps = missing.filter(twin);
+      out.push(['warn', t('Images not in the draft, left out of every mail until added: {0}', missing.map((n) => twin(n) ? n + ' (→ ' + twin(n) + ')' : n).join(', ')),
+        swaps.length ? { label: t('Use those in the draft'), fn: () => { swaps.forEach((n) => renameAsset(n, twin(n))); reopenChanged(); toast(t('{0} images put in place.', swaps.length)); } } : null,
+        t('Images missing in the draft: {0}', missing.length)]);
+    }
+    const big = classicHeavy().filter((x) => active.includes(x.s) || active.some((a) => a.id === x.s.id));
+    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. What helps: a smaller width, a JPEG instead of a PNG for photos, or fewer images.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), { label: t('Prepare for classic Outlook'), fn: prepareClassic, leave: true }, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
+    const lost = active.filter((s) => /<img[^>]+src="(?!assets\/|photos\/|https:)[^"]*"/i.test(s.html || '')).map((s) => s.name);
     if (lost.length) out.push(['warn', t('Images not stored with the signatures are left out in: {0}.', lost.join(', ')), null, t('Images left out: {0}', count(lost))]);
     const keys = fieldKeys();
-    const used = [...new Set(c.signatures.flatMap((s) => core.placeholdersIn(s.html)))];
+    const used = [...new Set(active.flatMap((s) => core.placeholdersIn(s.html)))];
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     if (unknown.length) out.push(['warn', t('Unknown placeholders, left as typed: {0}', unknown.map((k) => '@@' + k).join(', ')), null, t('Unknown placeholders: {0}', unknown.length)]);
     // {{campaign}} is the campaigns' place, no building block.
-    const noBlock = [...new Set(c.signatures.flatMap((s) => core.blocksIn(s.html)))].filter((k) => k.toLowerCase() !== 'campaign');
+    const noBlock = [...new Set(active.flatMap((s) => core.blocksIn(s.html)))].filter((k) => k.toLowerCase() !== 'campaign');
     if (noBlock.length) out.push(['warn', t('Unknown building blocks, left as typed: {0}', noBlock.map((k) => '{{' + k + '}}').join(', ')), null, t('Unknown building blocks: {0}', noBlock.length)]);
     const noGraph = used.filter((k) => { const f = c.fields.find((x) => x.key === k); return f && core.fieldSource(c, f) === 'none'; });
     if (noGraph.length) out.push(['warn', t('Empty in Outlook (no source): {0}', noGraph.map(fieldName).join(', ')), null, t('Fields empty in Outlook: {0}', noGraph.length)]);
+    if (core.groupsUsed(c).length && core.valueSource(c) === 'graph') out.push(['warn', t('Signatures limited to AD groups: the app registration needs GroupMember.Read.All (delegated, with admin consent), and the groups have to be synced to Entra ID.'), null, t('Groups need GroupMember.Read.All')]);
     if (core.usesAdExport(c)) {
       const sn = S.snap;
-      if (sn && S.snapMatches && !sn.written) out.push(['good', t('The users as read {0} are written: {1} new, {2} changed, {3} removed.', when(sn.readAt), sn.counts.new, sn.counts.changed, sn.counts.removed), null, t('Users: {0} new, {1} changed', sn.counts.new, sn.counts.changed)]);
-      else if (sn && S.snapMatches && sn.written) out.push(['warn', t('The users stay as published {0}. To update them, read and check them under Users first.', when(sn.readAt)), null, t('The users stay as published')]);
+      if (sn && S.snapMatches && !sn.written) later.push(['good', t('The users as read {0} are written: {1} new, {2} changed, {3} removed.', when(sn.readAt), sn.counts.new, sn.counts.changed, sn.counts.removed), null, t('Users: {0} new, {1} changed', sn.counts.new, sn.counts.changed)]);
+      // As published, nothing to do: said, not a note.
+      else if (sn && S.snapMatches && sn.written) later.push(['good', t('The users stay as published {0}. To update them, read and check them under Users first.', when(sn.readAt)), null, t('The users stay as published')]);
       else out.push(['warn', t('The users are not written: read and check them under Users first. Until then they stay as they are in the folder.'), null, t('The users are not written')]);
     }
-    const missing = [...new Set(c.signatures.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
-    if (missing.length) out.push(['warn', t('Images not in the draft, left out until added: {0}', missing.join(', ')), null, t('Images missing in the draft: {0}', missing.length)]);
-    signatureChecks(c).forEach((x) => out.push(x));
+    // How it looks: in the active signatures, then the banners.
+    signatureChecks(ca).forEach((x) => out.push(x));
     campaignChecks(c).forEach((x) => out.push(x));
-    const big = classicHeavy();
-    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. What helps: a smaller width, a JPEG instead of a PNG for photos, or fewer images.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), { label: t('Prepare for classic Outlook'), fn: prepareClassic, leave: true }, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
-    const unused = unusedImages();
-    if (unused.length) out.push(['good', t('Images in the draft that nothing uses: {0}. They go out all the same.', unused.join(', ')), { label: t('Remove them'), fn: removeUnused }, t('Unused images: {0}', unused.length)]);
-    // Who would get nothing, as read from AD under Users.
-    if (S.snap && S.snap.users && S.snap.users.length) {
-      const g = whoGets(S.snap.users), none = S.snap.users.filter((u) => !g.get(u).new).length;
-      if (none) out.push(['warn', t('{0} of the {1} users read from AD get no signature for new mail (Users → Only without a signature).', none, S.snap.users.length), null, t('{0} users without a signature', none)]);
+    const perPerson = active.filter((s) => /<img[^>]+src="photos\//i.test(s.html || '')).map((s) => s.name);
+    if (perPerson.length) later.push(['good', t('Photos per person ({0}) come from photos\\<username>.jpg in the OSign folder; users without a photo get the signature without one.', perPerson.join(', ')), null, t('Photos per person')]);
+    if (idle.length) {
+      const gone = named(idle);
+      later.push(['good', t('Nobody gets these, so they are not checked: {0} (Who gets it).', idle.map((s) => s.name).join(', ')) + (gone.length ? ' ' + t('Images they show that are not in the draft: {0}.', gone.join(', ')) : ''), null, t('Not checked (nobody gets them): {0}', count(idle))]);
     }
-    if (!out.some((x) => x[0] !== 'good')) out.push(['good', t('{0} signature(s), ready.', c.signatures.length)]);
-    return out;
+    const unused = unusedImages();
+    if (unused.length) later.push(['good', t('Images in the draft that nothing uses: {0}. They go out all the same.', unused.join(', ')), { label: t('Remove them'), fn: removeUnused }, t('Unused images: {0}', unused.length)]);
+    if (!out.some((x) => x[0] !== 'good')) out.push(['good', t('{0} signature(s), ready.', active.length || c.signatures.length)]);
+    return out.concat(later);
   }
+
 
   // Keyboard shortcuts, in the page and in the design view (its own document).
   function onKeys(e) {
