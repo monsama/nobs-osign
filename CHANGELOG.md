@@ -5,6 +5,19 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.100
+- **Publish checks, as best practice has it:** what a recipient would see (alt text, width,
+  http://, dark mode, missing images, classic Outlook) is checked in the active signatures only,
+  the ones someone gets now or on days still to come. Templates and tests nobody gets, and
+  signatures whose days are over, are said in one grey line ("not checked"), with any images they
+  lack.
+- Who gets nothing for new mail: one note, not two, first in the list.
+- Images missing in the draft: one of the same name in another form (the GIF made a PNG, a -2)
+  is named, and *Use those in the draft* puts it in their place.
+- "The users stay as published" is no longer a note (nothing to do): in the grey line.
+- The notes come in the order they matter: who gets nothing, images missing, classic Outlook,
+  then how it looks.
+
 ## 0.9.99
 - A banner (or a signature with days of its own) goes next to the add-in's files on its first day
   and away after its last: a campaign published early cannot be seen there before it starts. The

@@ -76,6 +76,9 @@ const preview = () => page.frameLocator('#preview').locator('body');
 // Each test leaves the next one where it starts: in the signature, design tab.
 const pvText = () => page.evaluate(() => document.querySelector('#preview').contentDocument.body.innerText);
 
+// The open signature for the entire organization (a new one is not assigned, and so not checked before publishing).
+async function assignAll() { await page.click('#audienceSummary'); await page.click('.seg label:has(input[value=all])'); }
+
 test('make, preview and publish a signature', { skip }, async () => {
   await page.goto(url);
   await page.waitForSelector('#viewEmpty:not([hidden])');
@@ -110,10 +113,15 @@ test('make, preview and publish a signature', { skip }, async () => {
   await page.waitForFunction(() => (((document.querySelector('#preview').contentDocument || {}).body || {}).textContent || '').includes('Abteilung Informatik'));
   assert.match(await page.textContent('#pvNote'), /Not a field: @@nope/);
 
-
+  await assignAll();
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
   assert.match(await page.textContent('#pubChecks'), /Unknown placeholders, left as typed: @@nope/);
+  // Published as it was made (not assigned): the tests after it count on that.
+  await page.click('#dlgPublish button[value=cancel]');
+  await page.click('#audienceSummary'); await page.click('.seg label:has(input[value=none])');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
   await page.fill('#pubMsg', 'First signatures');
   await page.click('#pubGo');
   await page.waitForFunction(() => /Published/.test(document.querySelector('#pubOk').textContent));
@@ -1161,7 +1169,7 @@ test('who gets it: a new signature is not assigned until the entire organization
   await page.click('.seg label:has(input[value=none])');
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
-  assert.match(await page.textContent('#pubChecks'), /Not assigned, nobody gets: /);
+  assert.match(await page.textContent('#pubChecks'), /Nobody gets these, so they are not checked: /);
   await page.click('#dlgPublish button[value=cancel]');
   await page.click('#btnDel');
   await page.click('#askOk');
@@ -1282,6 +1290,7 @@ test('building blocks: made once, put into a signature as a chip, published put 
   assert.match(body, /Confidential: anna\.muster@example\.com/);
   // The checks: an http:// link.
   await page.evaluate(() => { const d = document.querySelector('#design').contentDocument; const p = d.createElement('p'); p.innerHTML = '<a href="http://example.com">x</a>'; d.body.append(p); d.body.dispatchEvent(new Event('input', { bubbles: true })); });
+  await assignAll();
   await page.click('#btnPublish');
   await page.waitForSelector('#dlgPublish[open]');
   assert.match(await page.textContent('#pubChecks'), /http:\/\//);
@@ -1982,6 +1991,47 @@ test('one way to make a signature ready for classic Outlook: the HTML lighter, t
   await page.click('.tab[data-mode=design]');
   await page.waitForFunction(() => !document.querySelector('#pvNote button.classic-prep'), null, { timeout: 10000 });
   await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});
+
+test('publish checks: the active signatures checked, the rest in one grey line; a missing image offered from one of the same name', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 8; c.height = 8; c.getContext('2d').fillRect(0, 0, 8, 8); return c.toDataURL('image/png').split(',')[1]; });
+  const up = await api('assets/upload', { name: 'tw-icon.png', data: png });
+  await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
+  // Active: for everyone, showing an image by a name the draft has only as a PNG.
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Aktiv <img src="assets/tw-icon.gif" width="8" alt="Icon"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await assignAll();
+  const mine = await page.inputValue('#sigName');
+  // Not active (nobody gets it): an image without alt text, not a note.
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.fill('#sigName', 'Nur Vorlage'); await page.dispatchEvent('#sigName', 'input');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Vorlage <img src="assets/' + up.name + '" width="8"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  const text = await page.textContent('#pubChecks');
+  assert.match(text, /Nobody gets these, so they are not checked: [^.]*Nur Vorlage/);
+  assert.doesNotMatch(text, /Images without a text for when images are blocked \(alt\): [^.]*Nur Vorlage/);
+  assert.match(text, /tw-icon\.gif \(→ tw-icon\.png\)/);
+  await page.evaluate(() => document.querySelectorAll('#pubChecks details').forEach((d) => { d.open = true; }));
+  await page.click('#pubChecks button:has-text("Use those in the draft")');
+  await page.waitForFunction(() => !document.querySelector('#dlgPublish[open]') || !/tw-icon\.gif/.test(document.querySelector('#pubChecks').textContent), null, { timeout: 10000 });
+  if (await page.isVisible('#dlgPublish[open]')) await page.click('#dlgPublish button[value=cancel]');
+  await page.click('#sigList li a:has-text("' + mine + '")');
+  await page.click('.tab[data-mode=html]');
+  const html = await page.inputValue('#source');
+  assert.match(html, /assets\/tw-icon\.png/);
+  assert.doesNotMatch(html, /tw-icon\.gif/);
+  await page.click('.tab[data-mode=design]');
+  for (const n of ['Nur Vorlage', mine]) { await page.click('#sigList li a:has-text("' + n + '")'); await page.click('#btnDel'); await page.click('#askOk'); }
   assert.deepEqual(errors, []);
 });
 
