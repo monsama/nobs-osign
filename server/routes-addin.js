@@ -9,7 +9,7 @@ const path = require('node:path');
 const addin = require('./addin');
 const { writeAtomic } = require('./store');
 
-function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, fetchFn, adminOnly, live, log }) {
+function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, publishedImages, fetchFn, adminOnly, live, log }) {
   const routes = {
     // The add-in's files: made into the data volume, then uploaded or downloaded.
     'addin/build': async (d, s) => {
@@ -27,6 +27,8 @@ function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, ad
         catch (e) { note = 'The SharePoint folder could not be reached (' + e.message + '): make the files again once it can, so the add-in reads it directly.'; log.warn('addin/build: ' + note); }
       }
       const r = await addin.build(env, st, addinDir);
+      // The published images with them (img/), for classic Outlook: uploaded together.
+      if (!r.error && publishedImages) { try { const imgs = publishedImages(); if (imgs.size) addin.hostImages(addinDir, imgs); } catch (e) { log.warn('addin/build: images: ' + e.message); } }
       if (!r.error && note) r.note = note;
       return r.error ? r : Object.assign({ folder: '' }, r);
     },

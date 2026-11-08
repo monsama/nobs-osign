@@ -157,6 +157,28 @@ test('upload to Cloudflare Pages: the project made, only missing files sent, _he
   assert.equal(cf.deployments.length, 2);
 });
 
+test('publishing puts the images next to the add-in\'s files (img/, by their content) and uploads them, for classic Outlook', async () => {
+  // Uploaded as made: a publish takes the images along.
+  assert.equal((await api('info')).features.imagesHosted, true);
+  const png = fs.readFileSync(path.join(ROOT, 'addin', 'assets', 'icon-32.png'));
+  const up = await api('assets/upload', { name: 'banner.png', data: png.toString('base64') });
+  assert.equal(up.name, 'banner.png', JSON.stringify(up));
+  const before = cf.deployments.length;
+  const html = '<p>Anna<img src="assets/banner.png" width="32" alt="B"></p>';
+  const r = await api('publish', { configJson: JSON.stringify({ schemaVersion: 1, options: {}, fields: [], signatures: [{ id: 'a', name: 'A', html, compiled: html }] }) });
+  assert.equal(r.changed, true, JSON.stringify(r));
+  assert.ok(!r.hostedError, r.hostedError);
+  assert.equal(cf.deployments.length, before + 1, 'uploaded with the add-in\'s files');
+  const index = JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8'));
+  assert.match(index['banner.png'], /^img\/[0-9a-f]{24}\.png$/);
+  const d = cf.deployments[cf.deployments.length - 1];
+  assert.ok(cf.assets.get(d.manifest['/' + index['banner.png']]).data.equals(png), 'the image as it is');
+  assert.ok(d.manifest['/img/index.json'] && d.manifest['/manifest.xml']);
+  // Made again: the images go with them.
+  assert.ok(!(await api('addin/build')).error);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8')), index);
+});
+
 test('check: the address serves exactly the files made here', async () => {
   const r = await api('addin/check');
   assert.equal(r.ok, true, JSON.stringify(r));

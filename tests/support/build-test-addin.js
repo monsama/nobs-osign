@@ -12,7 +12,7 @@ module.exports = async function buildTestAddin(site, ids) {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-addin-'));
   const common = {
     bundle: true, format: 'iife', target: 'es2016', logLevel: 'error', plugins: [stub], define: { OSIGN_VERSION: '"9.9.9"' },
-    banner: { js: 'var OSIGN_SETUP={clientId:"11111111-2222-3333-4444-555555555555",tenantId:"",site:' + JSON.stringify(site || 'root') + ',folder:"OSign",drive:' + JSON.stringify((ids && ids.drive) || '') + ',item:' + JSON.stringify((ids && ids.item) || '') + '};' }
+    banner: { js: 'var OSIGN_SETUP={base:' + JSON.stringify((ids && ids.base) || '') + ',clientId:"11111111-2222-3333-4444-555555555555",tenantId:"",site:' + JSON.stringify(site || 'root') + ',folder:"OSign",drive:' + JSON.stringify((ids && ids.drive) || '') + ',item:' + JSON.stringify((ids && ids.item) || '') + '};' }
   };
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'addin/src/launchevent.js')], outfile: path.join(out, 'launchevent.js') });
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'addin/src/taskpane.js')], outfile: path.join(out, 'taskpane.js') });

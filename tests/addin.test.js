@@ -19,10 +19,11 @@ const fakeGraph = require('./support/fake-graph.js');
 const doc = new JSDOM('').window.document;
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4d60000000049454e44ae426082', 'hex');
 const JPG = Buffer.from('ffd8ffe000104a46494600010100000100010000ffd9', 'hex');
-let bundle, siteBundle, idsBundle, upperSiteBundle;
+let bundle, siteBundle, idsBundle, upperSiteBundle, hostedBundle;
 test.before(async () => {
   upperSiteBundle = fs.readFileSync(path.join(await buildTestAddin('contoso.sharepoint.com:/Sites/Signatures:'), 'launchevent.js'), 'utf8');
   bundle = fs.readFileSync(path.join(await buildTestAddin(), 'launchevent.js'), 'utf8');
+  hostedBundle = fs.readFileSync(path.join(await buildTestAddin('', { base: 'https://osign.example/' }), 'launchevent.js'), 'utf8');
   siteBundle = fs.readFileSync(path.join(await buildTestAddin('contoso.sharepoint.com:/sites/Signatures:'), 'launchevent.js'), 'utf8');
   idsBundle = fs.readFileSync(path.join(await buildTestAddin('contoso.sharepoint.com:/sites/Signatures:', { drive: 'b!drive-1', item: 'OSIGN-ITEM' }), 'launchevent.js'), 'utf8');
 });
@@ -46,7 +47,7 @@ function makeConfig(edit) {
 }
 const ME = { givenName: 'Anna', surname: 'Muster', mobilePhone: null, mail: 'anna@example.com', department: 'Sales', onPremisesSamAccountName: 'mustera' };
 
-function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang, runtimeStorage, platform, failing, saveFails, upperSite } = {}) {
+function runtime({ config, files, me = ME, groups = [], composeType = 'newMail', coercion = 'html', from = 'anna@example.com', roaming = {}, itemType = 'message', attachments = [], session, notices, deny, signInFails, signInHangs, site, byIds, lang, runtimeStorage, platform, failing, saveFails, upperSite, hosted } = {}) {
   const calls = [];
   const ok = (value) => (cb) => cb({ status: 'succeeded', value });
   const handlers = {};
@@ -100,6 +101,14 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
     const f = failing && failing(url);
     if (f === 'network') { graph.requests.push(url); throw new TypeError('Failed to fetch'); }
     if (f) { graph.requests.push(url); return { ok: false, status: f, json: async () => ({}), text: async () => '', arrayBuffer: async () => new ArrayBuffer(0) }; }
+    // The add-in's own address (hosted: its files there), as Cloudflare Pages serves them.
+    if (hosted && String(url).startsWith('https://osign.example/')) {
+      graph.requests.push(url);
+      const body = hosted[String(url).slice('https://osign.example/'.length)];
+      if (body === undefined) return { ok: false, status: 404, json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0) };
+      const buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
+      return { ok: true, status: 200, json: async () => JSON.parse(buf.toString()), arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length) };
+    }
     return graph.fetch(url, init);
   };
   const sandbox = { Office, console: { log: (m) => calls.push(['log', String(m)]) }, setTimeout: fastTimeout, clearTimeout, fetch, __osignSignInHangs: !!signInHangs };
@@ -110,7 +119,7 @@ function runtime({ config, files, me = ME, groups = [], composeType = 'newMail',
   if (runtimeStorage) sandbox.OfficeRuntime = { storage: { getItem: async (k) => (k in runtimeStorage ? runtimeStorage[k] : null), setItem: async (k, v) => { runtimeStorage[k] = v; } } };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(upperSite ? upperSiteBundle : byIds ? idsBundle : site ? siteBundle : bundle, sandbox, { filename: 'launchevent.js' });
+  vm.runInContext(hosted ? hostedBundle : upperSite ? upperSiteBundle : byIds ? idsBundle : site ? siteBundle : bundle, sandbox, { filename: 'launchevent.js' });
   const fire = (name) => new Promise((resolve) => handlers[name]({ completed: () => resolve() }));
   return { calls, graph, handlers, fire, settings, atts, signIns };
 }
@@ -317,6 +326,38 @@ test('classic Outlook: the copy the pane kept in the mailbox goes in, with the i
   assert.ok(r.calls.some((c) => c[0] === 'attach' && /logo/.test(c[1])), 'the logo from the mailbox');
   assert.ok(r.calls.some((c) => c[0] === 'log' && /copy in the mailbox/.test(c[1])));
   assert.deepEqual(notices, {});
+});
+
+test('classic Outlook: the images as they are from next to the add-in\'s files (img/), not the smaller copies in the mailbox', async () => {
+  const config = makeConfig();
+  const std = config.signatures[0];
+  const small = Buffer.from('a smaller copy');
+  const roaming = {
+    'osign.profile': JSON.stringify({ at: Date.now() - 60 * 60 * 1000, values: { givenName: 'Anna', sn: 'Muster', mobile: '', sAMAccountName: 'mustera', mail: 'anna@example.com' }, groups: [], groupsFor: 'graph\n' }),
+    'osign.classic': JSON.stringify({ at: config.updated, cfg: { schemaVersion: config.schemaVersion, options: config.options, fields: [], signatures: [{ id: std.id, name: std.name, compiled: std.compiled, defaultNew: true, audience: std.audience }] },
+      images: { 'assets/logo.png': { b64: small.toString('base64'), type: 'image/png', file: 'assets-logo.png' } } })
+  };
+  const file = 'img/' + 'a1'.repeat(12) + '.png';
+  const r = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { 'logo.png': file }, [file]: PNG } });
+  await r.fire('onNewMessageComposeHandler');
+  const logo = r.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]));
+  assert.ok(logo, r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
+  assert.equal(logo[2], PNG.toString('base64'), 'the image as published, not the copy');
+  assert.equal(logo[3], true, 'embedded');
+  assert.ok(r.graph.requests.includes('https://osign.example/img/index.json'));
+  // Kept in this Outlook for the next mail, only the images published now.
+  const storage = { 'osign.hosted': JSON.stringify({ ['img/' + 'b2'.repeat(12) + '.png']: 'b2xk' }) };
+  const again = runtime({ signInFails: true, roaming, platform: 'PC', runtimeStorage: storage, hosted: { 'img/index.json': { 'logo.png': file }, [file]: PNG } });
+  await again.fire('onNewMessageComposeHandler');
+  assert.deepEqual(Object.keys(JSON.parse(storage['osign.hosted'])), [file], 'the image no longer published is gone');
+  // Not to be had there (no network): the copy kept in the mailbox.
+  const off = runtime({ signInFails: true, roaming, platform: 'PC', hosted: {}, failing: (u) => (/osign\.example/.test(u) ? 'network' : '') });
+  await off.fire('onNewMessageComposeHandler');
+  assert.equal(off.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]))[2], small.toString('base64'));
+  // An index naming something that is not an image file of its own: not followed.
+  const odd = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { 'logo.png': '../manifest.xml' } } });
+  await odd.fire('onNewMessageComposeHandler');
+  assert.equal(odd.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]))[2], small.toString('base64'));
 });
 
 test('a sign-in that never answers: after a while a notice, and the event completes', async () => {

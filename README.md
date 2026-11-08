@@ -45,10 +45,14 @@ All of these need Exchange Online (Microsoft 365) mailboxes.
 
 Classic Outlook refuses its event handler the sign-in (`untrusted_origin`), and shares with the pane
 nothing but the add-in's settings in the mailbox, 32 KB in all. So the pane, opened once there,
-keeps in them the signatures that go in by themselves, with their images made as small as they are
-shown, as many as fit (the smallest first); the event handler takes them from there. An image that
-does not fit (a large banner) is left out there, and the pane says so; *Insert* always puts in
-everything. Until the pane was opened once, the notice says to open it.
+keeps in them the signatures that go in by themselves; the event handler takes them from there.
+The images: with the add-in's files on Cloudflare Pages, each publish also puts the signatures'
+images (not people's photos) next to them (`img/`, by their content); the event handler loads them
+from there without a sign-in and embeds them as they are, sharp, with no "download pictures" for
+the recipient. Without that (or without a network) it takes the copies in the mailbox, made as
+small as they are shown, as many as fit; an image that does not fit there (a large banner) is left
+out, and the pane says so. *Insert* always puts in everything. Until the pane was opened once, the
+notice says to open it.
 
 The editor makes images smaller when they are uploaded or imported: at most 1200 pixels wide (twice
 a wide signature, still sharp on high-resolution screens), photos at most 400; a JPEG saved again
@@ -246,10 +250,12 @@ Windows PowerShell 5.1.
 ## Known limits
 
 - **Classic Outlook (Windows)** puts signatures in by itself from a copy the pane keeps in the
-  mailbox, when Outlook refuses the add-in the sign-in there: about 30 KB for all of it (Microsoft's
-  limit for an add-in's settings). What does not fit is made smaller for that copy, step by step;
-  what still does not fit is left out there (the largest image first). *Insert* in the pane puts
-  in everything. The editor says how much a signature takes, and what happens to it there.
+  mailbox, when Outlook refuses the add-in the sign-in there: about 30 KB for its text (Microsoft's
+  limit for an add-in's settings). The images come as they are from next to the add-in's files on
+  Cloudflare Pages (published there with every publish; they can be read by anyone who knows their
+  address, as any image in a mail); with the add-in's files elsewhere, or without a network, from
+  smaller copies in that 30 KB, what does not fit left out. *Insert* in the pane puts in
+  everything. The editor says how much a signature takes, and what happens to it there.
 - **Rounded corners** and a round photo do not show in classic Outlook for Windows (Word draws the
   mail); there the image stays square.
 - **Dark mode** is Outlook's own: the preview shows it roughly. A dark logo on a transparent

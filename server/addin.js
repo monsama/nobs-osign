@@ -12,6 +12,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
+const crypto = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { blake3 } = require('@noble/hashes/blake3');
 const { bytesToHex } = require('@noble/hashes/utils');
@@ -50,6 +51,27 @@ async function build(env, settings, outDir) {
   } catch (e) { return { error: e.message }; }
   const version = JSON.parse(fs.readFileSync(path.join(from, 'osign-addin.json'), 'utf8')).version;
   return { files: walk(outDir).length, version, manifestUrl: s.base + 'manifest.xml', redirectUri: 'brk-multihub://' + new URL(s.base).host };
+}
+
+// The published signatures' images (name → bytes) next to the add-in's files, in img/: each under
+// its content (a new image is a new file, so no cache keeps an old one), with img/index.json
+// naming them. Classic Outlook's event handler is refused the sign-in to SharePoint; from here it
+// loads them as they are, without one (common.js hostedImage). Photos of people are not put here.
+// The number of images.
+function hostImages(dir, images) {
+  const out = path.join(dir, 'img');
+  fs.rmSync(out, { recursive: true, force: true });
+  fs.mkdirSync(out, { recursive: true });
+  const index = {};
+  for (const [name, bytes] of images || []) {
+    const ext = (/\.(png|jpe?g|gif)$/i.exec(name) || [])[0];
+    if (!ext || !Buffer.isBuffer(bytes) || name.includes('/') || name.includes('\\')) continue;
+    const file = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 24) + ext.toLowerCase().replace('.jpeg', '.jpg');
+    fs.writeFileSync(path.join(out, file), bytes);
+    index[name] = 'img/' + file;
+  }
+  fs.writeFileSync(path.join(out, 'index.json'), JSON.stringify(index));
+  return Object.keys(index).length;
 }
 
 // A ZIP of the folder, stored (the files are small and mostly compressed already). zlib.crc32
@@ -122,7 +144,7 @@ function pagesProblem(c) {
   return '';
 }
 
-const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.xml': 'application/xml', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
+const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.xml': 'application/xml', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
 // What Pages calls a file: the first 32 hex digits of BLAKE3 over its base64 and its extension.
 function pagesHash(data, rel) { return bytesToHex(blake3(Buffer.from(data.toString('base64') + path.extname(rel).slice(1), 'utf8'))).slice(0, 32); }
 // Files Pages reads as settings, not serves: they go with the deployment itself.
@@ -196,4 +218,4 @@ async function pagesTest(c, fetchFn) {
   return { project: true, url: 'https://' + ((j.result && j.result.subdomain) || c.project + '.pages.dev') };
 }
 
-module.exports = { pagesTest, templateDir, build, zip, check, pagesConfig, pagesEnabled, pagesProblem, pagesDeploy, walk };
+module.exports = { hostImages, pagesTest, templateDir, build, zip, check, pagesConfig, pagesEnabled, pagesProblem, pagesDeploy, walk };

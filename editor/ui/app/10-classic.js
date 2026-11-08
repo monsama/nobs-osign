@@ -56,14 +56,19 @@
     const text = html.length * 1.3, room = CLASSIC_KB * 1024;
     let used = text + photos;
     const missing = [], squeezed = [];
-    for (const x of images.slice().reverse()) {
+    // With the images next to the add-in's files (Cloudflare Pages), classic Outlook loads them from
+    // there as they are: only the text has to fit (and a photo, kept in the mailbox).
+    const hosted = classicHosted();
+    for (const x of hosted ? [] : images.slice().reverse()) {
       if (used + x.bytes <= room) used += x.bytes;
       // Made smaller there, step by step, till it fits (the last step's size here).
       else if (used + x.least <= room) { used += x.least; squeezed.push(x.name); }
       else missing.push(x.name);
     }
-    return { kb: Math.round((text + images.reduce((n, x) => n + x.bytes, 0) + photos) / 1024), images, missing, squeezed, textFits: text <= room, text, photos, textKb: Math.round(text / 1024), photoKb: Math.round(photos / 1024) };
+    return { kb: Math.round((text + images.reduce((n, x) => n + x.bytes, 0) + photos) / 1024), images, missing, squeezed, hosted, textFits: text <= room, text, photos, textKb: Math.round(text / 1024), photoKb: Math.round(photos / 1024) };
   }
+  // Whether the server puts the published images next to the add-in's files (Cloudflare Pages).
+  function classicHosted() { return !!(S.info && S.info.features && S.info.features.imagesHosted); }
   function classicKb(s) { return classicParts(s).kb; }
   // As classicParts, once every image is measured.
   async function classicPartsSettled(s) { classicParts(s); while (classicPending.size) await Promise.all([...classicPending]); return classicParts(s); }

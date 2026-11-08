@@ -18,7 +18,8 @@
 // OSIGN_HOST       cloudflare, azure, iis or apache: adds that web server's caching file
 //
 // The blanks: in launchevent.js and taskpane.js the strings @@OSIGN_CLIENT_ID@@,
-// @@OSIGN_TENANT_ID@@, @@OSIGN_SP_SITE@@ and @@OSIGN_SP_FOLDER@@ (in the first line, var OSIGN_SETUP);
+// @@OSIGN_TENANT_ID@@, @@OSIGN_SP_SITE@@ and @@OSIGN_SP_FOLDER@@, and @@OSIGN_BASE@@, the add-in's own
+// address (in the first line, var OSIGN_SETUP);
 // in manifest.xml {{BASE}}, {{ORIGIN}} and {{SUPPORT}}. hosting/<host>/ holds the caching file for
 // each kind of web server (Cloudflare Pages, Azure Static Web Apps, IIS, Apache). editor/OSign.ps1 (Build-AddinPackage)
 // fills them the same way as fillTemplate in addin/fill.mjs.
@@ -47,7 +48,7 @@ const common = {
   // Classic Outlook's JavaScript-only runtime: syntax newer than this is turned into older syntax.
   target: 'es2016',
   // The settings, outside the bundle so the minifier leaves them as they are; filled in later.
-  banner: { js: 'var OSIGN_SETUP={clientId:"@@OSIGN_CLIENT_ID@@",tenantId:"@@OSIGN_TENANT_ID@@",site:"@@OSIGN_SP_SITE@@",folder:"@@OSIGN_SP_FOLDER@@",drive:"@@OSIGN_SP_DRIVE@@",item:"@@OSIGN_SP_ITEM@@"};' },
+  banner: { js: 'var OSIGN_SETUP={base:"@@OSIGN_BASE@@",clientId:"@@OSIGN_CLIENT_ID@@",tenantId:"@@OSIGN_TENANT_ID@@",site:"@@OSIGN_SP_SITE@@",folder:"@@OSIGN_SP_FOLDER@@",drive:"@@OSIGN_SP_DRIVE@@",item:"@@OSIGN_SP_ITEM@@"};' },
   // Its version, shown at the foot of the task pane.
   define: { OSIGN_VERSION: JSON.stringify(pkg.version) },
   legalComments: 'none',
@@ -79,7 +80,9 @@ fs.writeFileSync(path.join(template, 'index.html'), `<!doctype html><html lang="
 // copy (so a new version reaches everyone within minutes). The editor copies the one for the host
 // chosen into the add-in's folder; the rest of hosting/ is never copied.
 const HOSTING = {
-  cloudflare: { '_headers': '/*\n  Cache-Control: no-cache\n' },
+  // img/: the published images (server/addin.js hostImages), for classic Outlook's event runtime,
+  // which may load them from another origin than the add-in's.
+  cloudflare: { '_headers': '/*\n  Cache-Control: no-cache\n/img/*\n  Access-Control-Allow-Origin: *\n' },
   azure: { 'staticwebapp.config.json': JSON.stringify({ globalHeaders: { 'Cache-Control': 'no-cache' } }, null, 2) + '\n' },
   iis: { 'web.config': '<?xml version="1.0" encoding="utf-8"?>\n<configuration>\n  <system.webServer>\n    <staticContent>\n      <clientCache cacheControlMode="DisableCache" />\n    </staticContent>\n  </system.webServer>\n</configuration>\n' },
   apache: { '.htaccess': '<IfModule mod_headers.c>\n  Header set Cache-Control "no-cache"\n</IfModule>\n' }

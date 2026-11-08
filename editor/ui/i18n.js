@@ -985,6 +985,8 @@
     'The file is not the image its name says.': 'Die Datei ist nicht das Bild, das ihr Name sagt.',
     'Only who asked for it, or the local account admin, can withdraw it.': 'Zurückziehen kann sie nur, wer sie angefragt hat, oder der lokale Admin.',
     'User to look up': 'Gesuchte Person',
+    'The images could not be put next to the add-in\'s files on Cloudflare Pages ({0}): classic Outlook takes the smaller copies in the mailbox until the next publish.': 'Die Bilder konnten nicht neben die Add-in-Dateien auf Cloudflare Pages gelegt werden ({0}): Das klassische Outlook nimmt bis zur nächsten Veröffentlichung die kleineren Kopien aus dem Postfach.',
+    'Classic Outlook: the images come in as they are from the add-in\'s address (Cloudflare Pages), not from the mailbox: all of it goes in, sharp. Without a network there, it takes the smaller copies kept in the mailbox.': 'Klassisches Outlook: Die Bilder kommen unverändert von der Adresse des Add-ins (Cloudflare Pages), nicht aus dem Postfach: alles wird eingefügt, scharf. Ohne Netz nimmt es die kleineren Kopien aus dem Postfach.',
     'Deployed': 'Verteilt',
     'the local account admin sees why': 'der lokale Admin sieht, warum',
     'Something went wrong on the server.': 'Auf dem Server ist etwas schiefgegangen.',
