@@ -5,6 +5,15 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.98 (add-in changed)
+- **Classic Outlook: images sharp, also when the signature goes in by itself.** With the add-in's
+  files on Cloudflare Pages, each publish also puts the signatures' and banners' images (not
+  people's photos) next to them; classic Outlook loads them from there, as they are, and embeds them
+  in the mail (the recipient sees them at once). The 30 KB in the mailbox are then for the text
+  only; the smaller copies there are for when there is no network. The preview says so.
+- Make the add-in files again once (they now know their own address); from then on every publish
+  uploads the images by itself. A publish that cannot reach Cloudflare still publishes, and says so.
+
 ## 0.9.97
 - Housekeeping: the editor's image work in a file of its own (`10-images.js`: which images are
   used, made lighter, put in another's place), classic Outlook's room and the ways to fit it in

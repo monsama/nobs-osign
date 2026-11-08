@@ -414,8 +414,37 @@ function createApp(opts) {
     settings.forget(); photos.clear();
     // A version that differs from what was there: kept, with who and the note.
     if (!r.error && r.changed) history.add({ by, message, configJson, images: r.images });
+    if (r.error) return r;
+    // The images also next to the add-in's files on Cloudflare Pages, for classic Outlook.
+    const hosted = r.changed ? await hostPublished(r.images) : '';
     // The draft's version after it (it was written as published), so the editor goes on from it.
-    return r.error ? r : { changed: r.changed, folder: t.describe(), rev: store.getDraft().rev };
+    return Object.assign({ changed: r.changed, folder: t.describe(), rev: store.getDraft().rev }, hosted && hosted !== 'ok' ? { hostedError: hosted } : {});
+  }
+  // Whether the images go next to the add-in's files: with Cloudflare Pages set up, and the add-in's
+  // files made here uploaded there as they are now (a version made but not uploaded yet is not
+  // uploaded by a publish).
+  function hostingOn() {
+    const up = readJson(addinUploadFile);
+    return !!(addin.pagesEnabled(pages) && !addin.pagesProblem(pages) && up && up.version && up.version === addinMade().version);
+  }
+  // The published images (name → bytes) into the add-in's img/, then uploaded with its files.
+  // 'ok', '' (not set up), or what went wrong (the publish itself stands).
+  async function hostPublished(images) {
+    if (!hostingOn()) return '';
+    try {
+      addin.hostImages(addinDir, images);
+      await addin.pagesDeploy(pages, addinDir, fetchFn);
+      return 'ok';
+    } catch (e) {
+      log.warn('Images to Cloudflare Pages: ' + e.message);
+      return e.message;
+    }
+  }
+  // The images of the version published last (name → bytes).
+  function publishedImages() {
+    const m = new Map();
+    for (const n of Object.keys(history.latestImages())) { const b = history.latestImage(n); if (b) m.set(n, b); }
+    return m;
   }
   // The server's connections for the editor: what is set, where from (GUI or .env), never a secret.
   function connectionsAnswer() {
@@ -448,6 +477,8 @@ function createApp(opts) {
         // Their version, and the one on Cloudflare Pages: older than the server's, they are made again.
         addinVersion: addinMade().version || '',
         addinUploaded: readJson(addinUploadFile),
+        // The images next to the add-in's files (Cloudflare Pages), for classic Outlook.
+        imagesHosted: hostingOn(),
         // The add-in's files go to Cloudflare Pages from here, or by hand as a ZIP.
         pagesUpload: !addin.pagesProblem(pages),
         pagesProblem: addin.pagesProblem(pages),
@@ -548,7 +579,7 @@ function createApp(opts) {
   Object.assign(routes, createConnectionRoutes({ connections, connectionsAnswer, settings, certs, setup, deployment, addinId, addinUrlFromPages, configure, targetFor,
     graphCfg, ldapCfg, dir, pages, fetchFn, adminOnly, live: () => ({ graph }), log }).routes);
   // The add-in's files (server/routes-addin.js).
-  Object.assign(routes, createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, fetchFn, adminOnly, live: () => ({ graph }), log }).routes);
+  Object.assign(routes, createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, publishedImages, fetchFn, adminOnly, live: () => ({ graph }), log }).routes);
   // What was published (server/routes-history.js).
   Object.assign(routes, createHistoryRoutes({ history, store, settings, busy: () => publishing }).routes);
   // Photos (server/routes-photos.js) and the directory, AD and Entra ID (server/routes-directory.js).

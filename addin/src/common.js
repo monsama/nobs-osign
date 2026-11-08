@@ -27,6 +27,8 @@ const FOLDER = OSIGN_SETUP.folder;
 // none: the folder is then found through its site.
 const DRIVE = /^[A-Za-z0-9!_.-]+$/.test(OSIGN_SETUP.drive || '') ? OSIGN_SETUP.drive : '';
 const ITEM = /^[A-Za-z0-9!_.-]+$/.test(OSIGN_SETUP.item || '') ? OSIGN_SETUP.item : '';
+// The add-in's own address (https://…/), where the server also puts the published images (img/).
+const BASE = /^https:\/\/[^\s"'<>]+\/$/.test(OSIGN_SETUP.base || '') ? OSIGN_SETUP.base : '';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 // Reading the folder needs Sites.Read.All; groups need GroupMember.Read.All. Both delegated, so the
 // add-in reads only what the user may read anyway, and both with admin consent, so nobody is asked.
@@ -453,6 +455,44 @@ async function keptImage(w) {
   return classic && classic.images && classic.images[w.key] ? classic.images[w.key] : null;
 }
 
+// The published images next to the add-in's files (img/, with img/index.json naming them): read
+// without a sign-in, so classic Outlook's event handler, refused one, still puts them in as they
+// are, not the smaller copies kept in the mailbox. The index is looked at once a minute at most;
+// an image is cached by its file (a new image is a new file). null when not there (no index, the
+// network gone, a photo): the copies kept before then.
+let hosted = null, hostedAt = 0;
+async function hostedIndex() {
+  if (!BASE) return null;
+  if (hosted && Date.now() - hostedAt < 60 * 1000) return hosted;
+  try {
+    const j = await fetchWithin(BASE + 'img/index.json', { cache: 'no-cache' }, 8000, 'The images', (r) => (r.ok ? r.json() : null));
+    hosted = j && typeof j === 'object' && !Array.isArray(j) ? j : {};
+  } catch (e) { console.log('OSign: hosted images: ' + (e && e.message ? e.message : e)); hosted = hosted || null; }
+  hostedAt = Date.now();
+  return hosted;
+}
+// An image's file in the index (its name as published, in any case), or ''.
+function hostedFile(index, name) {
+  const f = index && (index[name] || index[Object.keys(index).find((k) => k.toLowerCase() === String(name).toLowerCase())]);
+  return typeof f === 'string' && /^img\/[0-9a-f]{24}\.(png|jpg|gif)$/.test(f) ? f : '';
+}
+async function hostedImage(w) {
+  if (w.dir !== 'assets') return null;
+  const index = await hostedIndex();
+  const file = hostedFile(index, w.name);
+  if (!file) return null;
+  const ck = 'osign.hosted.' + file;
+  const cached = await readJson(ck);
+  if (cached && cached.b64) return { b64: cached.b64, type: typeOf(w.name), file: fileOf(w) };
+  try {
+    const b64 = base64(await fetchWithin(BASE + file, {}, 15000, 'Loading ' + w.name, async (r) => { if (!r.ok) throw new Error('Loading ' + w.name + ': ' + r.status); return new Uint8Array(await r.arrayBuffer()); }));
+    if (b64.length < IMAGE_CACHE_MAX * 4 / 3) await store.set(ck, JSON.stringify({ b64 }));
+    return { b64, type: typeOf(w.name), file: fileOf(w) };
+  } catch (e) { console.log('OSign: hosted image ' + w.name + ': ' + (e && e.message ? e.message : e)); return null; }
+}
+// An image when SharePoint cannot be read now: next to the add-in's files as it is, else a copy kept before.
+async function fallbackImage(w) { return (await hostedImage(w)) || keptImage(w); }
+
 // { 'assets/logo.png': { b64, type, file } } for what the signature shows; what is not there is
 // left out of the map (and so out of the signature).
 async function loadImages(refs, interactive) {
@@ -462,10 +502,11 @@ async function loadImages(refs, interactive) {
   if (!wanted.length) return out;
   let tok;
   try { tok = await token(BASE_SCOPES, interactive); } catch (e) {
-    // No sign-in (classic Outlook's event runtime may be refused it): the copies kept before.
-    for (const w of wanted) { const k = await keptImage(w); if (k) out[w.key] = k; }
+    // No sign-in (classic Outlook's event runtime is refused it): the images next to the add-in's
+    // files, else the copies kept before.
+    for (const w of wanted) { const k = await fallbackImage(w); if (k) out[w.key] = k; }
     if (!Object.keys(out).length) throw e;
-    console.log('OSign: images from the copy kept before (sign-in: ' + (e && e.message ? e.message : e) + ').');
+    console.log('OSign: images without SharePoint (sign-in: ' + (e && e.message ? e.message : e) + ').');
     return out;
   }
   // The logos and icons: one listing tells which are there and whether they changed. Not to be
@@ -493,7 +534,7 @@ async function loadImages(refs, interactive) {
   };
   for (const w of wanted) {
     try {
-      if (w.dir === 'assets' && !assets) { const k = await keptImage(w); if (k) out[w.key] = k; continue; }
+      if (w.dir === 'assets' && !assets) { const k = await fallbackImage(w); if (k) out[w.key] = k; continue; }
       let meta = w.dir === 'assets' ? assets[w.name.toLowerCase()] : await graphGet(tok, await itemUrl(tok, 'photos/' + w.name), 'Finding the photo', true);
       if (meta) meta.__rel = w.key;
       else if (w.dir === 'photos') meta = await placeholder(w.name.split('.').pop().toLowerCase());
@@ -510,7 +551,7 @@ async function loadImages(refs, interactive) {
     } catch (e) {
       // Not to be read now: the copy kept before, if there is one.
       console.log('OSign: image ' + w.key + ': ' + (e && e.message ? e.message : e));
-      try { const k = await keptImage(w); if (k) out[w.key] = k; } catch (e2) { /* without it */ }
+      try { const k = await fallbackImage(w); if (k) out[w.key] = k; } catch (e2) { /* without it */ }
     }
   }
   return out;
@@ -642,7 +683,12 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     delete copy.images[largest];
     left++;
   }
-  return { kept: true, images: Object.keys(copy.images).length, left, squeezed, signatures: copy.cfg.signatures.length };
+  // Of those left out (or made smaller) here, the ones classic Outlook loads as they are from next
+  // to the add-in's files: nothing is missing there for them while it is online.
+  const index = await hostedIndex();
+  const hostedAll = wanted.filter((w) => w.ref.dir === 'assets' && hostedFile(index, w.ref.name)).length;
+  const leftOut = wanted.filter((w) => !copy.images[w.key] && !(w.ref.dir === 'assets' && hostedFile(index, w.ref.name))).length;
+  return { kept: true, images: Object.keys(copy.images).length, left: Math.min(left, leftOut), squeezed, hosted: hostedAll, signatures: copy.cfg.signatures.length };
 }
 // The banner campaigns not yet over, as far as the event handler needs them (the banner in the
 // user's language only).

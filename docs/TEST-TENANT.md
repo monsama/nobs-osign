@@ -32,6 +32,10 @@ Tick each line; note what differs.
 - [ ] A banner campaign running today: its banner where the signature has `{{campaign}}` (else
       below), its image embedded, its link with `utm_campaign`; *new mail only*: not in a reply.
 - [ ] Classic Outlook: the banner also when the signature goes in by itself (pane opened once).
+- [ ] Classic Outlook, add-in files on Cloudflare Pages: a banner too large for the mailbox (say
+      600 px, 40 KB) goes in by itself sharp, as published (not made smaller), and the recipient
+      sees it without "download pictures". `<add-in address>/img/index.json` names it. With the
+      network off: the smaller copy from the mailbox, or none.
 
 ## Publishing
 

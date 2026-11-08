@@ -48,7 +48,7 @@ export function fillTemplate(from, outDir, setup) {
   const s = checkSetup(setup);
   const host = String(setup.host || '');
   if (host && !HOSTS.includes(host)) throw new Error('The web server is one of ' + HOSTS.join(', ') + '.');
-  const js = { '@@OSIGN_CLIENT_ID@@': s.clientId, '@@OSIGN_TENANT_ID@@': s.tenantId, '@@OSIGN_SP_SITE@@': s.site, '@@OSIGN_SP_FOLDER@@': s.folder, '@@OSIGN_SP_DRIVE@@': s.drive, '@@OSIGN_SP_ITEM@@': s.item };
+  const js = { '@@OSIGN_BASE@@': s.base, '@@OSIGN_CLIENT_ID@@': s.clientId, '@@OSIGN_TENANT_ID@@': s.tenantId, '@@OSIGN_SP_SITE@@': s.site, '@@OSIGN_SP_FOLDER@@': s.folder, '@@OSIGN_SP_DRIVE@@': s.drive, '@@OSIGN_SP_ITEM@@': s.item };
   const xml = { '{{BASE}}': xmlEscape(s.base), '{{ORIGIN}}': xmlEscape(new URL(s.base).origin), '{{SUPPORT}}': xmlEscape(s.base),
     '{{MIN_VERSION}}': setup.mobile ? '1.5' : '1.10', '{{MOBILE}}': setup.mobile ? MOBILE : '' };
   fs.mkdirSync(outDir, { recursive: true });
