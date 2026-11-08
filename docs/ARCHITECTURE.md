@@ -112,9 +112,10 @@ topic, each given what it needs from it: `routes-publish.js` (publishing, four e
 
 `editor/ui/app/NN-*.js` are one script by topic, put together in order and served as
 `/ui/app.js` (one IIFE: `01-base.js` opens it, `11-start.js` closes it): the state, saving and the
-list (`01`), the design editor and its undo (`02-design.js`), its tools: house colours, spacing, the bars for a link, a cell and an image's place (`02-tools.js`), the preview (`03`), photos (`04`), signatures
+list (`01`), the design editor and its undo (`02-design.js`), PNGs with a palette (`02-png.js`), its tools: house colours, spacing, the bars for a link, a cell and an image's place (`02-tools.js`), the preview (`03`), photos (`04`), signatures
 and what is published (`05`), import (`06`), fields, options and users (`07`), building blocks and
-Settings (`08`), banner campaigns (`09-campaigns.js`), the setup assistant (`09-wizard.js`), publishing, search and the dialogs (`10-publish.js`),
+Settings (`08`), banner campaigns (`09-campaigns.js`), the setup assistant (`09-wizard.js`), classic Outlook's room and the ways to fit it (`10-classic.js`),
+the draft's images: used, made lighter, put in another's place (`10-images.js`), publishing, search and the dialogs (`10-publish.js`),
 replace in all signatures (`10-replace.js`), undo for the whole draft and ⟳ (`10-undo.js`), and
 the start (`11`). `editor/ui/i18n.js` holds the German; the page is written in English.
 

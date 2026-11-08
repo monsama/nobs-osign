@@ -632,3 +632,6 @@
 
   $('sigFilter').addEventListener('input', () => renderList());
   $('sigFilter').addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('sigFilter').value) { e.preventDefault(); e.stopPropagation(); $('sigFilter').value = ''; renderList(); } });
+  // A file (or blob) as a data: URL, or as base64 alone (what the server takes for an upload).
+  function dataUrlOf(blob) { return new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.onerror = no; fr.readAsDataURL(blob); }); }
+  async function b64Of(blob) { return (await dataUrlOf(blob)).split(',')[1] || ''; }

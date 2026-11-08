@@ -289,7 +289,7 @@ test('classic Outlook: an image too large for the mailbox is made smaller step b
 test('the steps an image is made smaller by for classic Outlook are the same in the add-in and in the editor\'s estimate', () => {
   const steps = (file) => (/CLASSIC_SQUEEZE = (\[[^\]]+\])/.exec(fs.readFileSync(path.join(__dirname, '..', file), 'utf8')) || [])[1];
   assert.ok(steps('addin/src/common.js'));
-  assert.equal(steps('editor/ui/app/10-publish.js'), steps('addin/src/common.js'));
+  assert.equal(steps('editor/ui/app/10-classic.js'), steps('addin/src/common.js'));
 });
 
 test('a choice the mailbox does not keep: said so, not "Saved", and the list shows what is in force', { skip }, async () => {

@@ -906,7 +906,7 @@ test('photos: one per person, uploaded and made small, listed, removed; the prev
   await page.dispatchEvent('#source', 'input');
   await page.waitForFunction(() => /No photo .*\.jpg in the photos folder/.test(document.querySelector('#pvNote').textContent));
   // Removed again (asked first).
-  await page.click('#pvNote a:has-text("Add the photo")');
+  await page.click('#pvNote button:has-text("Add the photo")');
   await page.waitForSelector('#viewPhotos:not([hidden])');
   assert.match(await page.textContent('#photosRule'), /Photos are named after/);
   assert.equal(await page.inputValue('#photoWho'), 'Muster');
@@ -1020,7 +1020,7 @@ test('placeholders no field has: added as fields from the preview\'s note; the H
   await page.click('#toolbar .html-only');
   assert.match(await page.inputValue('#source'), /^<p>\n  @@company<br>\n  @@streetAdress, @@postalCode @@l\n<\/p>\n<table>/);
   await page.waitForFunction(() => /Not a field: .*@@company/.test(document.querySelector('#pvNote').textContent));
-  await page.click('#pvNote a:has-text("Add them as fields")');
+  await page.click('#pvNote button:has-text("Add them as fields")');
   await page.waitForFunction(() => !/Not a field/.test(document.querySelector('#pvNote').textContent));
   await page.click('.tab[data-mode=design]');
   assert.equal(await page.isVisible('#toolbar .html-only'), false);
@@ -1962,8 +1962,8 @@ test('one way to make a signature ready for classic Outlook: the HTML lighter, t
   await page.dispatchEvent('#source', 'input');
   await page.click('.tab[data-mode=design]');
   // The note says it is too large, and offers the one way.
-  await page.waitForSelector('#pvNote a.classic-prep', { timeout: 10000 });
-  await page.click('#pvNote a.classic-prep');
+  await page.waitForSelector('#pvNote button.classic-prep', { timeout: 10000 });
+  await page.click('#pvNote button.classic-prep');
   await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((x) => /Ready for classic Outlook|Still too large/.test(x.textContent)), null, { timeout: 30000 });
   // Ready; or, with other default signatures from the tests before still too large, not this one.
   const said = await page.evaluate(() => [...document.querySelectorAll('.toast')].map((x) => x.textContent).join(' | '));
@@ -1980,7 +1980,7 @@ test('one way to make a signature ready for classic Outlook: the HTML lighter, t
   assert.ok(assets.find((x) => x.name === 'prep-icon.png').size < gif.size);
   // Fits now: no warning on classic Outlook any more.
   await page.click('.tab[data-mode=design]');
-  await page.waitForFunction(() => !document.querySelector('#pvNote a.classic-prep'), null, { timeout: 10000 });
+  await page.waitForFunction(() => !document.querySelector('#pvNote button.classic-prep'), null, { timeout: 10000 });
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
@@ -2001,16 +2001,16 @@ test('a further way when preparing is not enough: the images as small in KB as i
   await page.dispatchEvent('#source', 'input');
   await page.click('.tab[data-mode=design]');
   // Images would be left out (once measured): both ways offered.
-  await page.waitForSelector('#pvNote a.classic-fit', { timeout: 15000 });
+  await page.waitForSelector('#pvNote button.classic-fit', { timeout: 15000 });
   await page.waitForTimeout(1500);
-  await page.waitForSelector('#pvNote a.classic-fit', { timeout: 15000 });
-  await page.click('#pvNote a.classic-fit');
+  await page.waitForSelector('#pvNote button.classic-fit', { timeout: 15000 });
+  await page.click('#pvNote button.classic-fit');
   await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((x) => /Ready for classic Outlook|still too large/i.test(x.textContent) && !/Making the images/.test(x.textContent)), null, { timeout: 60000 });
   const said = await page.evaluate(() => [...document.querySelectorAll('.toast')].map((x) => x.textContent).join(' | '));
   const mine = await page.inputValue('#sigName');
   assert.ok(/Ready for classic Outlook/.test(said) || !new RegExp('too large for classic Outlook:[^.]*\\b' + mine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(said), said);
   // Fits now: the images still there, much smaller, the note gone.
-  await page.waitForFunction(() => !document.querySelector('#pvNote a.classic-fit') && !document.querySelector('#pvNote a.classic-prep'), null, { timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector('#pvNote button.classic-fit') && !document.querySelector('#pvNote button.classic-prep'), null, { timeout: 15000 });
   await page.click('.tab[data-mode=html]');
   const html = await page.inputValue('#source');
   const names = [...html.matchAll(/assets\/([^"]+)/g)].map((m) => m[1]);

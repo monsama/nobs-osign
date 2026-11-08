@@ -5,6 +5,15 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.97
+- Housekeeping: the editor's image work in a file of its own (`10-images.js`: which images are
+  used, made lighter, put in another's place), classic Outlook's room and the ways to fit it in
+  another (`10-classic.js`); what was there twice or more (an image loaded and drawn, a file as
+  base64, an image put in another's place) once.
+- The actions in the preview's notes (*Prepare for classic Outlook*, *Add the photo*, *Open*, …)
+  are buttons, not links: reached and named as buttons by a keyboard or a screen reader.
+- Fixed: optimizing images while a building block was open left the old image names in it.
+
 ## 0.9.96
 - The client's address (for the sign-in throttle and the audit log) is taken from X-Forwarded-For
   only when the request comes from the shared proxy (`nobs-proxy`, or `OSIGN_PROXY_HOST`); another

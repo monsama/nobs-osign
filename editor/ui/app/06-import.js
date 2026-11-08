@@ -103,7 +103,7 @@
 
   async function uploadImage(file) {
     file = await shrinkUpload(file);
-    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(file); });
+    const data = await b64Of(file);
     const r = await api('assets/upload', { name: file.name, data });
     S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]).sort((a, b) => a.name.localeCompare(b.name));
     return r.name;
@@ -177,7 +177,7 @@
       if (impPhotosOn) {
         for (let f of impPhotos) {
           f = await shrinkUpload(f, PHOTO_MAX_W);
-          const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+          const data = await b64Of(f);
           const r = await api('photos/upload', { name: f.name, data }).catch((e) => ({ error: e.message }));
           if (!r.error) photosDone++;
         }

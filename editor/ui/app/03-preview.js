@@ -41,7 +41,7 @@
         if (!r.ok) { img.remove(); return; }
         const b = await r.blob();
         if (!/^image\//.test(b.type)) { img.remove(); return; }
-        img.src = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); });
+        img.src = await dataUrlOf(b);
       } catch (e) { img.remove(); }
     }));
     return { body: doc.body.innerHTML, name: (s.name || 'signature').replace(/[^\w\- ]+/g, '').trim() || 'signature' };
@@ -112,7 +112,7 @@
         img.remove();
         if (!$('pvNote').querySelector('[data-photo="' + CSS.escape(name) + '"]')) {
           $('pvNote').append(el('div', { class: 'warn', 'data-photo': name }, t('No photo {0} in the photos folder: the signature goes without it.', name) + ' ',
-            el('a', { href: '#', onclick: (e) => { e.preventDefault(); photoAddFor(name); } }, t('Add the photo'))));
+            el('button', { type: 'button', class: 'linklike', onclick: () => photoAddFor(name) }, t('Add the photo'))));
         }
       };
       d.querySelectorAll('img[src*="/photos/"]').forEach((img) => { if (img.complete && !img.naturalWidth) gone(img); else img.addEventListener('error', () => gone(img)); });
@@ -123,8 +123,7 @@
     const unknown = used.filter((k) => keys.indexOf(k) < 0);
     const noGraph = used.filter((k) => { const f = S.config.fields.find((x) => x.key === k); return f && core.fieldSource(S.config, f) === 'none'; });
     if (unknown.length) notes.push(el('div', { class: 'warn' }, t('Not a field: {0} - left as typed.', unknown.map((k) => '@@' + k).join(', ')) + ' ',
-      el('a', { href: '#', onclick: (e) => {
-        e.preventDefault();
+      el('button', { type: 'button', class: 'linklike', onclick: () => {
         const added = addMissingFields([s]);
         changed({ list: false });
         toast(t('Fields added: {0}. Check their AD attribute and Graph source under Fields.', added.map((k) => '@@' + k).join(', ')));
@@ -148,7 +147,7 @@
     const dayText = onDay ? pvNow().toLocaleDateString(loc) : '';
     if (onDay && core.isCampaign(s) && !core.inPeriod(s, pvNow())) notes.push(el('div', { class: 'warn' }, t('On {0} this signature is not used (its own days: {1}).', dayText, campaignText(s))));
     if (camp) notes.push(el('div', null, (onDay ? t('On {0}: the banner of «{1}».', dayText, camp.name) : t('Banner of the campaign «{0}», running now.', camp.name)) + ' ',
-      el('a', { href: '#', onclick: (e) => { e.preventDefault(); campSel = camp.id; goView('campaigns'); } }, t('Open'))));
+      el('button', { type: 'button', class: 'linklike', onclick: () => { campSel = camp.id; goView('campaigns'); } }, t('Open'))));
     else if (onDay) notes.push(el('div', null, t('On {0}: no campaign banner.', dayText)));
     // Classic Outlook: what it keeps in the mailbox, when it gets tight.
     if (s.defaultNew || s.defaultReply) {
@@ -156,9 +155,9 @@
       // Said as it will be there: without which images (the largest first), or not at all.
       // What the room goes to, and what helps with each.
       const share = ' ' + t('Of it: text ~{0} KB, photo ~{1} KB, images ~{2} KB.', cp.textKb, cp.photoKb, Math.round(cp.images.reduce((n, x) => n + x.bytes, 0) / 1024));
-      const act = el('span', null, share, ' ', el('a', { href: '#', class: 'classic-prep', onclick: (e) => { e.preventDefault(); prepareClassic(); } }, t('Prepare for classic Outlook')),
+      const act = el('span', null, share, ' ', el('button', { type: 'button', class: 'linklike classic-prep', onclick: () => prepareClassic() }, t('Prepare for classic Outlook')),
         // The further way, when the text fits and images would be left out: as small as it takes.
-        ...(cp.textFits && cp.missing.length ? [' · ', el('a', { href: '#', class: 'classic-fit', title: t('Makes the images as small in KB as it takes for all of it to fit; they look less sharp, in every mail.'), onclick: (e) => { e.preventDefault(); fitClassic(); } }, t('Images small enough to fit'))] : []));
+        ...(cp.textFits && cp.missing.length ? [' · ', el('button', { type: 'button', class: 'linklike classic-fit', title: t('Makes the images as small in KB as it takes for all of it to fit; they look less sharp, in every mail.'), onclick: () => fitClassic() }, t('Images small enough to fit'))] : []));
       if (kb > CLASSIC_KB && !cp.textFits) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: even the text of this signature is more than the {0} KB its mailbox keeps: there it is not put in by itself, only with Insert in the pane.', CLASSIC_KB), act));
       else if (kb > CLASSIC_KB && cp.missing.length) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB its mailbox keeps. When it puts the signature in by itself, it goes without: {2}. The rest fits; Insert in the pane puts in everything.', kb, CLASSIC_KB, cp.missing.map((x) => x + ' (~' + Math.round((cp.images.find((y) => y.name === x) || {}).bytes / 1024) + ' KB)').join(', ')), act));
       // It fits with those images made smaller there: said, nothing to do.

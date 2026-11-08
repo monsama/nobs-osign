@@ -1430,3 +1430,7 @@ body.role-campaigns .side-sect { border-top: 0 !important; margin-top: 0 !import
 /* Image work under way (preparing, fitting): the editing held, it would put the old names back. */
 .image-work #design, .image-work #source { pointer-events: none; opacity: .6; }
 .image-work .classic-prep, .image-work .classic-fit { pointer-events: none; opacity: .5; }
+/* An action in running text (the preview's notes): a button that reads as a link. */
+button.linklike { display: inline; height: auto; padding: 0; border: 0; border-radius: 0; background: none; color: var(--link); font: inherit; text-decoration: underline; white-space: normal; cursor: pointer; }
+button.linklike:hover { text-decoration-thickness: 2px; }
+button.linklike:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
