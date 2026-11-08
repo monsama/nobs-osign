@@ -3,6 +3,7 @@
  * editor allows it - which one is used for new mail and which for replies.
  */
 import { LANG } from './lang.js';
+import { setSafeHtml, safeUrl } from './safehtml.js';
 import { core, localize, langOf, loadConfig, loadUserValues, getPrefs, setPrefs, getVariants, setVariants, isClassicOutlook, keepForClassic, composeInfo, fromAddress, insertSignature, previewHtml, editableHtml } from './common.js';
 
 /* global Office, OSIGN_VERSION */
@@ -19,6 +20,7 @@ const DE = {
   'No signature': 'Keine Signatur',
   'Saved. It applies to the next new message.': 'Gespeichert. Gilt ab der nächsten neuen Mail.',
   'Saved. It applies to the next reply.': 'Gespeichert. Gilt ab der nächsten Antwort.',
+  'Outlook did not save your choice. Try again.': 'Outlook hat Ihre Wahl nicht gespeichert. Versuchen Sie es noch einmal.',
   'No signature is set up for you.': 'Für Sie ist keine Signatur eingerichtet.',
   'new mail': 'neue Mails',
   'replies': 'Antworten',
@@ -110,8 +112,16 @@ function renderChoice(list) {
       option('none', t('No signature'), prefs[kind] === 'none'),
       ...list.map((s) => option(s.id, s.name, prefs[kind] === s.id)));
     sel.onchange = async () => {
-      const p = getPrefs(); p[kind] = sel.value; await setPrefs(p);
+      const p = getPrefs(); p[kind] = sel.value;
+      if (!(await setPrefs(p))) {
+        // Not kept: the list shows again what is in force.
+        sel.value = getPrefs()[kind] || '';
+        message(t('Outlook did not save your choice. Try again.'), true);
+        return;
+      }
       message(kind === 'new' ? t('Saved. It applies to the next new message.') : t('Saved. It applies to the next reply.'));
+      // Classic Outlook's event handler goes by the copy in the mailbox: it follows the choice.
+      if (isClassicOutlook()) keepClassic();
     };
   });
   $('choice').hidden = false;
@@ -205,8 +215,8 @@ function ownHtml(box) {
   c.querySelectorAll('script,style,iframe,object,embed,form,input,button,select,textarea,link,meta,base,svg,video,audio').forEach((n) => n.remove());
   c.querySelectorAll('*').forEach((n) => {
     [...n.attributes].forEach((a) => {
-      if (/^on/i.test(a.name) || a.name === 'contenteditable') n.removeAttribute(a.name);
-      if (/^(href|src)$/i.test(a.name) && /^\s*(javascript|vbscript):/i.test(a.value)) n.removeAttribute(a.name);
+      if (/^on/i.test(a.name) || a.name === 'contenteditable' || /^(srcset|srcdoc|formaction)$/i.test(a.name)) n.removeAttribute(a.name);
+      else if (/^(href|src|xlink:href|action|background|poster)$/i.test(a.name) && !safeUrl(a.value)) n.removeAttribute(a.name);
     });
   });
   c.querySelectorAll('img').forEach((im) => {
@@ -231,7 +241,7 @@ async function editOwn(card, base, existing) {
   box.textContent = t('Loading…');
   const tools = document.createElement('div'); tools.className = 'own-tools';
   const tool = (label, title2, cmd) => { const b = button(label, () => { box.focus(); document.execCommand(cmd); }, true); b.title = title2; b.addEventListener('mousedown', (e) => e.preventDefault()); return b; };
-  const reset = button(t('Company signature again'), async () => { box.innerHTML = await editableHtml(base, user.values); }, true);
+  const reset = button(t('Company signature again'), async () => { setSafeHtml(box, await editableHtml(base, user.values)); }, true);
   tools.append(tool('B', t('Bold (Ctrl+B)'), 'bold'), tool('I', t('Italic (Ctrl+I)'), 'italic'), tool('U', t('Underline (Ctrl+U)'), 'underline'), reset);
   const row = document.createElement('div'); row.className = 'actions';
   row.append(button(t('Cancel'), () => render(), true), button(t('Save'), () => form.requestSubmit()));
@@ -256,7 +266,7 @@ async function editOwn(card, base, existing) {
   card.replaceChildren(form);
   form.scrollIntoView({ block: 'nearest' });
   const ownSig = existing ? (full.signatures || []).find((x) => x.id === existing.id) : null;
-  box.innerHTML = await editableHtml(ownSig || base, user.values);
+  setSafeHtml(box, await editableHtml(ownSig || base, user.values));
   box.focus();
 }
 
@@ -302,7 +312,7 @@ function editVariant(card, sig, existing) {
     let h = await editableHtml(Object.assign({}, s0, { userValues: Object.assign({}, s0.userValues || {}, uv) }), user.values);
     h = h.replace(/<[^>]*>/g, (tag) => tag.replace(/\u2063([^\u2064]*)\u2064[^\u2065]*\u2065/g, '$1'));
     h = h.replace(/\u2063([^\u2064]*)\u2064([^\u2065]*)\u2065/g, (all, v, k) => '<span class="fld" data-k="' + k + '">' + v + '</span>');
-    live.innerHTML = h;
+    setSafeHtml(live, h);
     live.querySelectorAll('a[href]').forEach((a) => a.removeAttribute('href'));
     live.querySelectorAll('.fld').forEach((sp) => {
       const k = sp.dataset.k;
@@ -398,17 +408,20 @@ async function shrink(img, shown, step) {
   return b64 && b64.length < img.b64.length ? { b64 } : img;
 }
 // Classic Outlook: what would go in by itself, kept in the mailbox for its event handler.
-let classicBusy = false;
+// Asked again while at it (another choice, the details read anew): once more when done, with
+// what is in force then.
+let classicBusy = false, classicAgain = false;
 async function keepClassic() {
-  if (classicBusy) return;
+  if (classicBusy) { classicAgain = true; return; }
   classicBusy = true;
+  classicAgain = false;
   try {
     // What goes in today first; then what goes in once today's campaigns end, and on the first
     // days of those still to come: the event handler picks among them by the day.
     const prefs = getPrefs(), sigs = [];
     const add = (x) => { if (x && !sigs.some((y) => y.id === x.id)) sigs.push(x); };
     const plain = Object.assign({}, full, { signatures: full.signatures.filter((s) => !core.isCampaign(s)) });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = core.today();
     const later = full.signatures.map((s) => String(s.validFrom || '')).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d > today).sort().slice(0, 3);
     ['new', 'reply'].forEach((kind) => add(core.pick(full, user.values, from, kind, prefs, user.groups)));
     ['new', 'reply'].forEach((kind) => add(core.pick(plain, user.values, from, kind, prefs, user.groups)));
@@ -417,7 +430,10 @@ async function keepClassic() {
     const r = await keepForClassic(cfg, sigs, user.values, shrink);
     if (!r.kept) message(t('Classic Outlook: these signatures are too large to be kept in your mailbox, so they are not put in by themselves there. Use Insert.'), true);
     else if (r.left) message(t('Classic Outlook: {0} image(s) did not fit into your mailbox settings and are left out when the signature goes in by itself there. Insert puts in everything.', r.left));
-  } catch (e) { console.log('OSign: classic copy: ' + (e && e.message ? e.message : e)); } finally { classicBusy = false; }
+  } catch (e) { console.log('OSign: classic copy: ' + (e && e.message ? e.message : e)); } finally {
+    classicBusy = false;
+    if (classicAgain) { classicAgain = false; keepClassic(); }
+  }
 }
 
 // Everything the pane shows: the signatures, the user's details and groups, the choices; then shown.

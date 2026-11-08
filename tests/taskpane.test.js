@@ -39,7 +39,9 @@ window.Office = {
   onReady: (fn) => setTimeout(fn, 0),
   context: {
     requirements: { isSetSupported: () => true },
-    roamingSettings: { get: (k) => window.__roaming[k], set: (k, v) => { window.__roaming[k] = v; }, saveAsync: (cb) => cb && cb({ status: 'succeeded' }) },
+    roamingSettings: { get: (k) => window.__roaming[k], set: (k, v) => { window.__roaming[k] = v; }, remove: (k) => { delete window.__roaming[k]; },
+      // window.__refuse(settings), when a test sets it: true has the save refused (as a mailbox that is full).
+      saveAsync: (cb) => cb && cb({ status: window.__refuse && window.__refuse(window.__roaming) ? 'failed' : 'succeeded' }) },
     mailbox: {
       userProfile: { displayName: 'Anna Muster', emailAddress: 'anna@example.com' },
       item: {
@@ -55,8 +57,9 @@ window.Office = {
   }
 };`;
 
-async function openPane(browser, dir, graph, displayLanguage, platform) {
+async function openPane(browser, dir, graph, displayLanguage, platform, init) {
   const page = await browser.newPage();
+  if (init) await page.addInitScript(init);
   await page.route('https://appsforoffice.microsoft.com/**', (r) => r.fulfill({ contentType: 'text/javascript', body: OFFICE_STUB.replace("context: {", "context: { displayLanguage: '" + displayLanguage + "', diagnostics: { platform: '" + (platform || 'OfficeOnline') + "' },") }));
   const viaFake = async (r) => {
     const res = await graph.fetch(r.request().url(), { headers: { Authorization: r.request().headers().authorization } });
@@ -287,4 +290,74 @@ test('the steps an image is made smaller by for classic Outlook are the same in 
   const steps = (file) => (/CLASSIC_SQUEEZE = (\[[^\]]+\])/.exec(fs.readFileSync(path.join(__dirname, '..', file), 'utf8')) || [])[1];
   assert.ok(steps('addin/src/common.js'));
   assert.equal(steps('editor/ui/app/10-publish.js'), steps('addin/src/common.js'));
+});
+
+test('a choice the mailbox does not keep: said so, not "Saved", and the list shows what is in force', { skip }, async () => {
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(cfg), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
+  try {
+    const page = await openPane(browser, dir, graph, 'de-CH');
+    await page.evaluate(() => { window.__refuse = () => true; });
+    await page.selectOption('#prefReply', 'short');
+    await page.waitForFunction(() => /nicht gespeichert/.test(document.querySelector('#msg').textContent));
+    assert.match(await page.getAttribute('#msg', 'class'), /error/);
+    assert.equal(await page.evaluate(() => window.__roaming['osign.prefs']), undefined);
+    assert.equal(await page.inputValue('#prefReply'), '');
+  } finally { await browser.close(); }
+});
+
+test('classic Outlook: a new choice is kept for its event handler too', { skip }, async () => {
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(cfg), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
+  try {
+    const page = await openPane(browser, dir, graph, 'en-US', 'PC');
+    await page.waitForFunction(() => !!window.__roaming['osign.classic'], null, { timeout: 8000 });
+    assert.deepEqual(JSON.parse(await page.evaluate(() => window.__roaming['osign.classic'])).cfg.signatures.map((x) => x.id), ['std']);
+    await page.selectOption('#prefReply', 'short');
+    await page.waitForFunction(() => /"short"/.test(window.__roaming['osign.classic'] || ''), null, { timeout: 8000 });
+    assert.deepEqual(JSON.parse(await page.evaluate(() => window.__roaming['osign.classic'])).cfg.signatures.map((x) => x.id), ['std', 'short']);
+  } finally { await browser.close(); }
+});
+
+test('classic Outlook: a copy the mailbox refuses is tried again without its largest image, and the refused one is not left behind', { skip }, async () => {
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(cfg), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
+  try {
+    // The mailbox refuses whatever carries the logo (as one that counts more than the add-in does).
+    const page = await openPane(browser, dir, graph, 'en-US', 'PC', "window.__refuse = (r) => /assets\\/logo\\.png\":\\{\"b64/.test(r['osign.classic'] || '');");
+    await page.waitForFunction(() => !!window.__roaming['osign.classic'], null, { timeout: 8000 });
+    const kept = JSON.parse(await page.evaluate(() => window.__roaming['osign.classic']));
+    assert.deepEqual(kept.cfg.signatures.map((x) => x.id), ['std']);
+    assert.deepEqual(kept.images, {});
+    await page.waitForFunction(() => /1 image\(s\) did not fit/.test(document.querySelector('#msg').textContent));
+    // What is saved after it is not refused with it.
+    await page.selectOption('#prefNew', 'short');
+    await page.waitForFunction(() => !!window.__roaming['osign.prefs']);
+    assert.deepEqual(JSON.parse(await page.evaluate(() => window.__roaming['osign.prefs'])), { new: 'short', reply: '' });
+    assert.doesNotMatch(await page.textContent('#msg'), /did not save/);
+  } finally { await browser.close(); }
+});
+
+test('a signature put into the pane to be changed: nothing in it runs, no address it loads from that is not one', { skip }, async () => {
+  const c = JSON.parse(JSON.stringify(cfg));
+  c.options.allowOwnSignatures = true;
+  c.signatures[0].html = '<p><b>@@givenName @@sn</b></p><p><img src="' + HOST + 'missing.png" onerror="window.__xss=1"><a href="java&#9;script:window.__xss=2">site</a></p><p><img src="assets/logo.png"></p>';
+  c.signatures[0].compiled = core.compile(c.signatures[0].html, doc);
+  const dir = await buildTestAddin();
+  const graph = fakeGraph({ files: { 'signatures.json': JSON.stringify(c), 'assets/logo.png': PNG }, me: { givenName: 'Anna', surname: 'Muster', department: 'Sales', mail: 'anna@example.com' } });
+  const browser = await chromium.launch(process.env.OSIGN_TEST_CHROMIUM ? { executablePath: process.env.OSIGN_TEST_CHROMIUM } : {});
+  try {
+    const page = await openPane(browser, dir, graph, 'en-US');
+    await page.click('.card:nth-child(1) button.secondary:has-text("Own variant")');
+    await page.waitForFunction(() => /Anna Muster/.test(document.querySelector('.own-edit').textContent));
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => window.__xss), undefined);
+    assert.equal(await page.$$eval('.own-edit [onerror]', (x) => x.length), 0);
+    assert.deepEqual(await page.$$eval('.own-edit a', (x) => x.map((a) => a.getAttribute('href'))), [null]);
+    // The company's image is still there, shown.
+    assert.equal(await page.$$eval('.own-edit img[data-osign-src="assets/logo.png"]', (x) => x.length), 1);
+  } finally { await browser.close(); }
 });

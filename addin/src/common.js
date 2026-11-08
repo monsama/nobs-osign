@@ -44,11 +44,34 @@ const IMAGE_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', g
 // What the add-in attaches to show its images starts with this, so it knows its own again.
 const ATTACHMENT_PREFIX = 'osign-';
 
-function withTimeout(promise, ms, what) {
+// ctrl: an AbortController, stopped when the time is up (so a request does not go on unseen).
+function withTimeout(promise, ms, what, ctrl) {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(what + ' took too long.')), ms);
+    const t = setTimeout(() => {
+      reject(new Error(what + ' took too long.'));
+      try { if (ctrl) ctrl.abort(); } catch (e) { /* already over */ }
+    }, ms);
     promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
   });
+}
+
+// A request and the reading of its answer (read(response)), both within ms: a server that sends
+// the headers and then stalls in the body is cut off too. Where there is no AbortController
+// (classic Outlook's runtime may have none), the request goes on, but nobody waits for it.
+// No network at all (fetch fails with a TypeError) is said as that.
+function fetchWithin(url, init, ms, what, read) {
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const p = (async () => {
+    let r;
+    try { r = await fetch(url, ctrl ? Object.assign({}, init, { signal: ctrl.signal }) : init); }
+    catch (e) { throw unreachable(e, what); }
+    try { return await read(r); }
+    catch (e) { throw unreachable(e, what); }
+  })();
+  return withTimeout(p, ms, what, ctrl);
+}
+function unreachable(e, what) {
+  return e && (e.name === 'TypeError' || e instanceof TypeError) ? new Error(what + ': cannot be reached.') : e;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -99,7 +122,9 @@ const MSG_DE = [
   [/^Outlook refused\.$/, 'Outlook hat abgelehnt.'],
   [/ took too long\.$/, ' dauerte zu lange.'],
   [/: not found in SharePoint \(404\)\.$/, ': in SharePoint nicht gefunden (404).'],
-  [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.']
+  [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.'],
+  [/: cannot be reached\.$/, ': nicht erreichbar.'],
+  [/^your details could not be read\.$/, 'Ihre Angaben konnten nicht gelesen werden.']
 ];
 // The language of Outlook's display: German, French, Italian, else English.
 export function langOf(code) { const m = /^(de|fr|it)/i.exec(String(code || '')); return m ? m[1].toLowerCase() : 'en'; }
@@ -131,7 +156,9 @@ function scopesOf(token) {
 
 // One GET to Graph with the user's token: its JSON, null for a 404 when allowed, or an error in words.
 async function graphGet(token, url, what, allowNotFound) {
-  const r = await withTimeout(fetch(url, { headers: { Authorization: 'Bearer ' + token } }), 8000, what);
+  return fetchWithin(url, { headers: { Authorization: 'Bearer ' + token } }, 8000, what, (r) => graphAnswer(r, token, url, what, allowNotFound));
+}
+function graphAnswer(r, token, url, what, allowNotFound) {
   if (r.status === 404 && allowNotFound) return null;
   if (r.status === 401 || r.status === 403) {
     const need = /memberOf/i.test(url) ? GROUP_SCOPE : /\/(sites|drives)\//.test(url) ? 'Sites.Read.All' : 'User.Read';
@@ -153,15 +180,24 @@ const TOKEN_REUSE_MS = 10 * 60 * 1000;
 // Outlook's sign-in answers in a second or two. When it does not answer at all, the event handler
 // would wait until Outlook gives up on it, silently: so it waits this long, then says so.
 const SIGN_IN_MS = 20 * 1000;
+// A sign-in without a window that failed is not tried again for this long (the pane's own, with a
+// window, always is): else one message would wait for it once for each thing it reads.
+const SIGN_IN_RETRY_MS = 5 * 60 * 1000;
 let tokens = {};
 // A Graph token for the add-in (nested app authentication), cached until shortly before it runs out.
 async function token(scopes, interactive) {
   const key = scopes.join(' ');
   const had = tokens[key];
-  if (!had || interactive || Date.now() - had.at > TOKEN_REUSE_MS) {
+  if (!had || interactive || Date.now() - had.at > (had.failed ? SIGN_IN_RETRY_MS : TOKEN_REUSE_MS)) {
     const entry = { at: Date.now() };
     const p = getGraphToken(interactive, scopes);
-    entry.p = (interactive ? p : withTimeout(p, SIGN_IN_MS, 'Signing in')).catch((e) => { if (tokens[key] === entry) delete tokens[key]; throw e; });
+    entry.p = (interactive ? p : withTimeout(p, SIGN_IN_MS, 'Signing in')).catch((e) => {
+      if (tokens[key] === entry) {
+        if (interactive) delete tokens[key];
+        else { entry.failed = true; entry.at = Date.now(); }
+      }
+      throw e;
+    });
     tokens[key] = entry;
   }
   return tokens[key].p;
@@ -173,13 +209,14 @@ async function token(scopes, interactive) {
 const SITE_KEY = 'osign.site.' + SITE;
 let siteId = null;
 function siteUrl() {
-  const m = /^([A-Za-z0-9.-]+):\/(sites|teams|personal)\/([^:/]+):$/.exec(SITE);
+  // As addin/fill.mjs accepts it: "Sites" or "sites" alike.
+  const m = /^([A-Za-z0-9.-]+):\/(sites|teams|personal)\/([^:/]+):$/i.exec(SITE);
   if (!m) throw new Error('The add-in was made for the SharePoint site "' + SITE + '": make its files again in NOBS OSign.');
-  return GRAPH + '/sites/' + m[1] + ':/' + m[2] + '/' + encodeURIComponent(m[3]) + ':';
+  return GRAPH + '/sites/' + m[1] + ':/' + m[2].toLowerCase() + '/' + encodeURIComponent(m[3]) + ':';
 }
 // The Graph address of the site's drive the signatures are in, found once.
 async function siteBase(tok) {
-  if (!SITE || SITE === 'root') return GRAPH + '/sites/root';
+  if (!SITE || /^root$/i.test(SITE)) return GRAPH + '/sites/root';
   if (!siteId) {
     siteId = (async () => {
       const kept = await store.get(SITE_KEY);
@@ -205,9 +242,11 @@ async function itemUrl(tok, rel) {
 async function download(meta, tok, what, asText) {
   // The address Graph hands out is signed for a short while: no token is sent there.
   const url = meta['@microsoft.graph.downloadUrl'];
-  const r = await withTimeout(url ? fetch(url) : fetch((await itemUrl(tok, meta.__rel)) + ':/content', { headers: { Authorization: 'Bearer ' + tok } }), 10000, what);
-  if (!r.ok) throw new Error(what + ': SharePoint answered ' + r.status + '.');
-  return asText ? r.text() : new Uint8Array(await r.arrayBuffer());
+  const target = url || (await itemUrl(tok, meta.__rel)) + ':/content';
+  return fetchWithin(target, url ? {} : { headers: { Authorization: 'Bearer ' + tok } }, 10000, what, async (r) => {
+    if (!r.ok) throw new Error(what + ': SharePoint answered ' + r.status + '.');
+    return asText ? r.text() : new Uint8Array(await r.arrayBuffer());
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -251,15 +290,38 @@ export async function loadConfig(opts) {
 // ---------------------------------------------------------------------------------------------
 function roaming() { return Office.context && Office.context.roamingSettings; }
 function readRoaming(key) { try { const v = roaming() && roaming().get(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
-// Answers whether Outlook kept it: the mailbox holds 32 KB of these at most.
+// Answers whether Outlook kept it: the mailbox holds 32 KB of these at most. Refused, the value
+// before is put back: Outlook saves all settings at once, so one too large left in there would
+// have every later save refused too.
 function writeRoaming(key, value) {
   return new Promise((resolve) => {
     const rs = roaming(); if (!rs) { resolve(false); return; }
+    let had = null;
+    try { had = rs.get(key); } catch (e) { had = null; }
+    const undo = () => { try { if (had !== undefined && had !== null) rs.set(key, had); else rs.remove(key); } catch (e) { /* nothing to put back */ } };
     try {
       rs.set(key, JSON.stringify(value));
-      rs.saveAsync((r) => resolve(!r || !r.status || r.status === 'succeeded' || (Office.AsyncResultStatus && r.status === Office.AsyncResultStatus.Succeeded)));
-    } catch (e) { resolve(false); }
+      rs.saveAsync((r) => {
+        const ok = !r || !r.status || r.status === 'succeeded' || (Office.AsyncResultStatus && r.status === Office.AsyncResultStatus.Succeeded);
+        if (!ok) undo();
+        resolve(!!ok);
+      });
+    } catch (e) { undo(); resolve(false); }
   });
+}
+// How much a setting takes in the mailbox: Outlook keeps them as JSON, so the text kept (itself
+// JSON) is quoted once more, and counted in UTF-8 bytes.
+export function storedSize(text) {
+  const s = JSON.stringify(typeof text === 'string' ? text : JSON.stringify(text));
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length) { n += 4; i++; }
+    else n += 3;
+  }
+  return n;
 }
 
 export function getPrefs() { return readRoaming(PREFS_KEY) || {}; }
@@ -380,6 +442,16 @@ export function base64(bytes) {
 }
 
 function typeOf(name) { return IMAGE_TYPES[String(name).split('.').pop().toLowerCase()] || ''; }
+// The attachment's name, without its osign-<tag>- prefix (insertSignature puts that in front).
+function fileOf(w) { return w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-'); }
+// An image as it was kept before (this Outlook's copy, else the one in the mailbox), or null: for
+// when SharePoint cannot be read now.
+async function keptImage(w) {
+  const cached = await readJson('osign.img.' + w.key.toLowerCase());
+  if (cached && cached.b64) return { b64: cached.b64, type: typeOf(w.name), file: fileOf(w) };
+  const classic = classicCopy();
+  return classic && classic.images && classic.images[w.key] ? classic.images[w.key] : null;
+}
 
 // { 'assets/logo.png': { b64, type, file } } for what the signature shows; what is not there is
 // left out of the map (and so out of the signature).
@@ -391,22 +463,20 @@ async function loadImages(refs, interactive) {
   let tok;
   try { tok = await token(BASE_SCOPES, interactive); } catch (e) {
     // No sign-in (classic Outlook's event runtime may be refused it): the copies kept before.
-    const classic = classicCopy();
-    for (const w of wanted) {
-      const cached = await readJson('osign.img.' + w.key.toLowerCase());
-      if (cached && cached.b64) out[w.key] = { b64: cached.b64, type: typeOf(w.name), file: w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-') };
-      else if (classic && classic.images && classic.images[w.key]) out[w.key] = classic.images[w.key];
-    }
+    for (const w of wanted) { const k = await keptImage(w); if (k) out[w.key] = k; }
     if (!Object.keys(out).length) throw e;
     console.log('OSign: images from the copy kept before (sign-in: ' + (e && e.message ? e.message : e) + ').');
     return out;
   }
-  // The logos and icons: one listing tells which are there and whether they changed.
+  // The logos and icons: one listing tells which are there and whether they changed. Not to be
+  // had (offline, SharePoint busy): null, and the copies kept before are used.
   let assets = null;
   if (wanted.some((w) => w.dir === 'assets')) {
-    const j = await graphGet(tok, (await itemUrl(tok, 'assets')) + ':/children?$top=999', 'Listing the images', true);
-    assets = {};
-    ((j && j.value) || []).forEach((it) => { assets[String(it.name).toLowerCase()] = it; });
+    try {
+      const j = await graphGet(tok, (await itemUrl(tok, 'assets')) + ':/children?$top=999', 'Listing the images', true);
+      assets = {};
+      ((j && j.value) || []).forEach((it) => { assets[String(it.name).toLowerCase()] = it; });
+    } catch (e) { console.log('OSign: images: ' + (e && e.message ? e.message : e)); }
   }
   // The placeholder photo, for whoever has none of their own: looked for once per extension.
   const placeholders = {};
@@ -423,9 +493,11 @@ async function loadImages(refs, interactive) {
   };
   for (const w of wanted) {
     try {
+      if (w.dir === 'assets' && !assets) { const k = await keptImage(w); if (k) out[w.key] = k; continue; }
       let meta = w.dir === 'assets' ? assets[w.name.toLowerCase()] : await graphGet(tok, await itemUrl(tok, 'photos/' + w.name), 'Finding the photo', true);
       if (meta) meta.__rel = w.key;
       else if (w.dir === 'photos') meta = await placeholder(w.name.split('.').pop().toLowerCase());
+      // Not in SharePoint (it said so): not in the signature either.
       if (!meta) continue;
       const ck = 'osign.img.' + w.key.toLowerCase();
       const cached = await readJson(ck);
@@ -434,10 +506,11 @@ async function loadImages(refs, interactive) {
         b64 = base64(await download(meta, tok, 'Loading ' + w.name));
         if (b64.length < IMAGE_CACHE_MAX * 4 / 3) await store.set(ck, JSON.stringify({ etag: meta.eTag || '', b64 }));
       }
-      // The attachment's name, without its osign-<tag>- prefix (insertSignature puts that in front).
-      out[w.key] = { b64, type: typeOf(w.name), file: w.dir + '-' + w.name.replace(/[^A-Za-z0-9._-]+/g, '-') };
+      out[w.key] = { b64, type: typeOf(w.name), file: fileOf(w) };
     } catch (e) {
+      // Not to be read now: the copy kept before, if there is one.
       console.log('OSign: image ' + w.key + ': ' + (e && e.message ? e.message : e));
+      try { const k = await keptImage(w); if (k) out[w.key] = k; } catch (e2) { /* without it */ }
     }
   }
   return out;
@@ -498,7 +571,7 @@ export function isClassicOutlook() {
 export const CLASSIC_SQUEEZE = [{ scale: 1, quality: 0.7 }, { scale: 1, quality: 0.55 }, { scale: 0.8, quality: 0.5 }, { scale: 0.65, quality: 0.45 }];
 // shrink(image, shownWidth, step) → a smaller { b64, type } or the same; only the pane has the canvas for it.
 export async function keepForClassic(cfg, sigs, values, shrink) {
-  const used = [PREFS_KEY, VARIANTS_KEY, PROFILE_KEY].reduce((n, k) => { try { const v = roaming() && roaming().get(k); return n + (v ? String(v).length + k.length : 0); } catch (e) { return n; } }, 0);
+  const used = [PREFS_KEY, VARIANTS_KEY, PROFILE_KEY].reduce((n, k) => { try { const v = roaming() && roaming().get(k); return n + (v ? storedSize(String(v)) + k.length + 4 : 0); } catch (e) { return n; } }, 0);
   const room = ROAMING_ROOM - used;
   const keep = ['id', 'name', 'compiled', 'removeEmptyLines', 'defaultNew', 'defaultReply', 'audience', 'validFrom', 'validUntil', 'variantOf', 'userValues'];
   // The fields as far as reading the user's details and their variants needs them: without them
@@ -512,9 +585,10 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     images: {}
   };
   // sigs come most needed first: the later ones go when not all fit (the banners first).
-  if (JSON.stringify(copy).length > room) copy.cfg.campaigns = [];
-  while (copy.cfg.signatures.length > 1 && JSON.stringify(copy).length > room) copy.cfg.signatures.pop();
-  if (JSON.stringify(copy).length > room) { console.log('OSign: the signatures do not fit into the mailbox settings for classic Outlook.'); return { kept: false, images: 0, left: 0 }; }
+  const size = () => storedSize(copy) + CLASSIC_KEY.length + 4;
+  if (size() > room) copy.cfg.campaigns = [];
+  while (copy.cfg.signatures.length > 1 && size() > room) copy.cfg.signatures.pop();
+  if (size() > room) { console.log('OSign: the signatures do not fit into the mailbox settings for classic Outlook.'); return { kept: false, images: 0, left: 0 }; }
   sigs = sigs.slice(0, copy.cfg.signatures.length);
   // The images, each as small as it is shown; the smallest first, as many as fit.
   const wanted = [];
@@ -539,43 +613,48 @@ export async function keepForClassic(cfg, sigs, values, shrink) {
     small.push([w.key, s2, w]);
   }
   small.sort((a, b) => a[1].b64.length - b[1].b64.length);
-  let size = JSON.stringify(copy).length, left = 0, squeezed = 0;
-  const cost = (key, img) => key.length + img.b64.length + img.file.length + 40;
+  let left = 0, squeezed = 0;
+  // Whether the copy still fits with this image in it (counted as Outlook stores it).
+  const fits = (key, img) => { copy.images[key] = { b64: img.b64, type: img.type, file: img.file }; const ok = size() <= room; if (!ok) delete copy.images[key]; return ok; };
   for (const [key, img, w] of small) {
     // Too large as it is: made smaller step by step, for this copy only (the mail from the pane,
     // and every other Outlook, has the image as it is), until it fits or the last step is done.
     let cur = img;
-    for (let l = 0; shrink && size + cost(key, cur) > room && l < CLASSIC_SQUEEZE.length; l++) {
+    for (let l = 0; shrink && !fits(key, cur) && l < CLASSIC_SQUEEZE.length; l++) {
       try { const x = Object.assign({}, images[key], await shrink(images[key], w.width, CLASSIC_SQUEEZE[l])); if (x.b64 && x.b64.length < cur.b64.length) cur = x; } catch (e) { break; }
     }
-    if (size + cost(key, cur) > room) { left++; continue; }
+    if (!fits(key, cur)) { left++; continue; }
     if (cur !== img) squeezed++;
-    copy.images[key] = { b64: cur.b64, type: cur.type, file: cur.file };
-    size += cost(key, cur);
   }
-  const text = JSON.stringify(copy);
   let had = '';
   try { had = roaming() ? String(roaming().get(CLASSIC_KEY) || '') : ''; } catch (e) { had = ''; }
-  if (had !== text && !(await writeRoaming(CLASSIC_KEY, copy))) {
-    // Refused (too large after all): the copy before back, so the settings saved later with it
-    // (the user's choices, their variants) are not refused too.
-    try { if (had) roaming().set(CLASSIC_KEY, had); else roaming().remove(CLASSIC_KEY); } catch (e) { /* nothing to put back */ }
-    await new Promise((resolve) => { try { roaming().saveAsync(() => resolve()); } catch (e) { resolve(); } });
-    console.log('OSign: the mailbox did not keep the signatures for classic Outlook.');
-    return { kept: false, images: 0, left: 0 };
+  // Refused (too large after all: the mailbox counts in its own way): tried again without the
+  // largest image, a few times, before nothing is kept. writeRoaming puts the copy before back,
+  // so the settings saved later (the user's choices, their variants) are not refused with it.
+  for (let tries = 0; ; tries++) {
+    if (had === JSON.stringify(copy) || await writeRoaming(CLASSIC_KEY, copy)) break;
+    const keys = Object.keys(copy.images);
+    if (tries >= 3 || !keys.length) {
+      console.log('OSign: the mailbox did not keep the signatures for classic Outlook.');
+      return { kept: false, images: 0, left: 0 };
+    }
+    const largest = keys.reduce((a, b) => (copy.images[b].b64.length > copy.images[a].b64.length ? b : a));
+    delete copy.images[largest];
+    left++;
   }
   return { kept: true, images: Object.keys(copy.images).length, left, squeezed, signatures: copy.cfg.signatures.length };
 }
 // The banner campaigns not yet over, as far as the event handler needs them (the banner in the
 // user's language only).
 function classicCampaigns(cfg, values) {
-  const day = new Date().toISOString().slice(0, 10), lang = String((values || {}).preferredLanguage || '').split(/[-_]/)[0].toLowerCase();
+  const day = core.today(), lang = String((values || {}).preferredLanguage || '').split(/[-_]/)[0].toLowerCase();
   return (cfg.campaigns || []).filter((c) => !c.validUntil || c.validUntil >= day).map((c) => {
     const o = { id: c.id, compiled: core.campaignHtml(c, values, 0) };
     ['validFrom', 'validUntil', 'signatures', 'position', 'newOnly', 'audience', 'days'].forEach((k) => { if (c[k] !== undefined) o[k] = c[k]; });
-    // Banners that take turns: each with its HTML (not in a language of its own: that one only).
-    if (!o.langs && (c.more || []).length) o.more = c.more.map((x) => ({ compiled: x.compiled || x.html || '' }));
+    // The banner in the user's language, if it has one; else the banners that take turns, each
+    // with its HTML (with a language of its own, that one only).
     if (lang && c.langs && c.langs[lang]) o.langs = { [lang]: { compiled: c.langs[lang].compiled || c.langs[lang].html } };
+    if (!o.langs && (c.more || []).length) o.more = c.more.map((x) => ({ compiled: x.compiled || x.html || '' }));
     return o;
   });
 }

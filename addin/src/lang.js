@@ -27,7 +27,9 @@ export const LANG = {
       'Outlook a refusé.',
       ' a pris trop de temps.',
       ' : introuvable dans SharePoint (404).',
-      ' : $1 a répondu $2.'
+      ' : $1 a répondu $2.',
+      ' : impossible à joindre.',
+      'Vos données n\'ont pas pu être lues.'
     ],
     ui: {
       'Signatures': 'Signatures',
@@ -82,6 +84,7 @@ export const LANG = {
       'Classic Outlook: these signatures are too large to be kept in your mailbox, so they are not put in by themselves there. Use Insert.': 'Outlook classique : ces signatures sont trop grandes pour être enregistrées dans votre boîte aux lettres ; elles n\'y sont donc pas insérées d\'elles-mêmes. Utilisez Insérer.',
       'Classic Outlook: {0} image(s) did not fit into your mailbox settings and are left out when the signature goes in by itself there. Insert puts in everything.': 'Outlook classique : {0} image(s) ne tiennent pas dans les paramètres de votre boîte aux lettres et manquent lorsque la signature s\'y insère d\'elle-même. Insérer ajoute tout.',
       'Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.': 'Outlook n\'a pas enregistré la variante : l\'espace pour les paramètres des compléments de votre boîte aux lettres est plein. Raccourcissez ou supprimez d\'autres variantes.',
+      'Outlook did not save your choice. Try again.': 'Outlook n\'a pas enregistré votre choix. Réessayez.',
       'You have {0} variants, the most there can be.': 'Vous avez {0} variantes, le maximum possible.',
       'Only the fields below are yours to change; the rest stays the company signature.': 'Seuls les champs ci-dessous sont modifiables ; le reste reste la signature de l\'entreprise.',
       'How it works': 'Comment ça marche',
@@ -116,7 +119,9 @@ export const LANG = {
       'Outlook ha rifiutato.',
       ' ha impiegato troppo tempo.',
       ': non trovato in SharePoint (404).',
-      ': $1 ha risposto $2.'
+      ': $1 ha risposto $2.',
+      ': non raggiungibile.',
+      'Non è stato possibile leggere i suoi dati.'
     ],
     ui: {
       'Signatures': 'Firme',
@@ -171,6 +176,7 @@ export const LANG = {
       'Classic Outlook: these signatures are too large to be kept in your mailbox, so they are not put in by themselves there. Use Insert.': 'Outlook classico: queste firme sono troppo grandi per essere salvate nella cassetta postale, quindi lì non vengono inserite da sé. Usi Inserisci.',
       'Classic Outlook: {0} image(s) did not fit into your mailbox settings and are left out when the signature goes in by itself there. Insert puts in everything.': 'Outlook classico: {0} immagine/i non rientrano nelle impostazioni della cassetta postale e mancano quando la firma vi viene inserita da sé. Inserisci aggiunge tutto.',
       'Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.': 'Outlook non ha salvato la variante: lo spazio per le impostazioni dei componenti aggiuntivi nella cassetta postale è pieno. Accorci o elimini altre varianti.',
+      'Outlook did not save your choice. Try again.': 'Outlook non ha salvato la sua scelta. Riprovi.',
       'You have {0} variants, the most there can be.': 'Ha {0} varianti, il massimo possibile.',
       'Only the fields below are yours to change; the rest stays the company signature.': 'Può modificare solo i campi qui sotto; il resto rimane la firma aziendale.',
       'How it works': 'Come funziona',
