@@ -737,6 +737,7 @@
     if (clean !== s.html) { s.html = clean; changed({ list: false }); }
   }
   // Kept as it will be once the tab is left (made safe), so leaving it is no change of its own.
-  $('source').addEventListener('input', () => { const s = sig(); if (!s || s.id !== sourceFor) return; s.html = sanitize(plainHtml($('source').value)); changed({ list: false }); });
+  // Taken as shown then: a draft loaded later (or an undo) is not written over with it.
+  $('source').addEventListener('input', () => { const s = sig(); if (!s || s.id !== sourceFor) return; s.html = sanitize(plainHtml($('source').value)); sourceShown = $('source').value; changed({ list: false }); });
   $('source').addEventListener('blur', flushSource);
 

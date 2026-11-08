@@ -84,14 +84,15 @@
   // Enter in the answer field: as OK.
   $('askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('dlgAsk').close('ok'); } });
   // action: { label, run }, a button in it (e.g. Undo), and it stays a little longer.
-  function toast(msg, isError, action) {
+  // stay: kept up till the next message (work under way).
+  function toast(msg, isError, action, stay) {
     const box = $('toast'); box.replaceChildren(msg); box.className = 'toast show' + (isError ? ' error' : '') + (action ? ' act' : '');
     if (action) {
       const b = el('button', { type: 'button', class: 'small' }, action.label);
       b.addEventListener('click', () => { clearTimeout(toastTimer); box.className = 'toast'; action.run(); });
       box.append(' ', b);
     }
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { box.className = 'toast'; }, action ? 9000 : isError ? 6000 : 3000);
+    clearTimeout(toastTimer); if (!stay) toastTimer = setTimeout(() => { box.className = 'toast'; }, action ? 9000 : isError ? 6000 : 3000);
   }
 
   // A file picked through a button-like label: its name next to it.

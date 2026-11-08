@@ -8,19 +8,21 @@
   // signature (sharp on high-resolution screens), uploaded as a new file and put in their place;
   // the old file stays until removed. Without a width in the signature an image stays as it is.
   // The images the signatures, building blocks and campaigns show.
+  // An image's address, with its size: a file under a name used before is not taken from the cache.
+  const assetUrl = (name) => '/assets/' + encodeURIComponent(name) + '?v=' + (((S.assets || []).find((x) => x.name === name) || {}).size || 0);
   const usedHtml = () => S.config.signatures.map((s) => s.html || '').concat((S.config.blocks || []).map((b) => b.html || ''), (S.config.campaigns || []).flatMap((c) => [c.html || ''].concat(Object.values(c.langs || {}).map((v) => v.html || ''), (c.more || []).map((v) => v.html || ''))));
   async function shrinkUsed(opts) {
     const all = usedHtml();
     const shown = new Map();
     for (const h of all) for (const m of h.matchAll(/<img\b[^>]*>/gi)) {
       const src = (/\ssrc\s*=\s*["']?assets\/([^"'\s>]+)/i.exec(m[0]) || [])[1], w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]);
-      if (src && w && (!opts || !opts.only || opts.only === src)) shown.set(src, Math.max(shown.get(src) || 0, w));
+      if (src && w && (!opts || !opts.only || (opts.only instanceof Set ? opts.only.has(src) : opts.only === src))) shown.set(src, Math.max(shown.get(src) || 0, w));
     }
     let n = 0, from = 0, to = 0;
     const renamed = {}, done = [];
     for (const [name, w] of shown) {
       try {
-        const blob = await (await fetch('/assets/' + encodeURIComponent(name), { credentials: 'same-origin' })).blob();
+        const blob = await (await fetch(assetUrl(name), { credentials: 'same-origin' })).blob();
         const f = new File([blob], name, { type: blob.type || (/\.png$/i.test(name) ? 'image/png' : 'image/jpeg') });
         // Strong: as wide as shown (not twice that, for sharp screens), JPEGs at a lower quality.
         const strong = !!(opts && opts.strong);
@@ -28,14 +30,8 @@
         if (!small.shrunk || small.size >= f.size) continue;
         const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(small); });
         const r = await api('assets/upload', { name: freshName(name), data });
-        if (r.name !== name) {
-          renamed[name] = r.name;
-          const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
-          S.config.signatures.forEach((s) => { s.html = (s.html || '').replace(re, 'assets/' + r.name); });
-          (S.config.blocks || []).forEach((b) => { b.html = (b.html || '').replace(re, 'assets/' + r.name); });
-          // A campaign's banner is made from its form: the image's name there.
-          (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
-        }
+        if (r.name !== name) renamed[name] = r.name;
+        renameAsset(name, r.name);
         S.assets = S.assets.filter((a) => a.name !== r.name).concat([{ name: r.name, size: r.size }]);
         // Saved under another name (an image is never written over): the old one, used by nothing now, goes.
         if (r.name !== name && unusedImages().includes(name)) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); } catch (e) { /* it stays */ } }
@@ -52,8 +48,11 @@
   // a still GIF as a PNG, a PNG with a palette where it can be, one without transparency as a JPEG.
   async function optimizeImages(opts) {
     const strong = !!(opts && opts.strong);
-    const a = await shrinkUsed({ strong });
-    const used = (re) => [...new Set(usedHtml().flatMap((h) => [...h.matchAll(re)].map((m) => m[1])))];
+    const only = opts && opts.only ? new Set(opts.only) : null;
+    const a = await shrinkUsed({ strong, only });
+    // Made smaller under a new name: still one of these.
+    if (only) for (const n of Object.values(a.renamed)) only.add(n);
+    const used = (re) => [...new Set(usedHtml().flatMap((h) => [...h.matchAll(re)].map((m) => m[1])))].filter((n) => !only || only.has(n));
     const c = await gifToPng(used(/src="assets\/([^"?#]+\.gif)"/gi), strong);
     const b = await pngToJpeg(used(/src="assets\/([^"?#]+\.png)"/gi), strong ? 0.72 : 0.86);
     return a.n + b.n + c.n;
@@ -68,7 +67,7 @@
     const attr = (tag, a) => (new RegExp('\\s' + a + '\\s*=\\s*["\']?([^"\'\\s>]*)', 'i').exec(tag) || [])[1] || '';
     const size = (n) => { const a = S.assets.find((x) => x.name === n); return a ? a.size || 0 : 0; };
     const big = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && size(n) > 100 * 1024)))];
-    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Optimize for Outlook'), fn: prepareClassic }, t('Large images: {0}', big.length)]);
+    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Prepare for classic Outlook'), fn: prepareClassic, leave: true }, t('Large images: {0}', big.length)]);
     const noAlt = names((s) => imgs(s).some((i) => !/photos\//.test(attr(i, 'src')) && !/\salt\s*=\s*["'][^"']+["']/i.test(i)));
     if (noAlt.length) out.push(['warn', t('Images without a text for when images are blocked (alt): {0}. Image bar → alt text, e.g. the company name for the logo.', noAlt.join(', ')), null, t('Images without alt text: {0}', count(noAlt))]);
     const tooWide = (s) => imgs(s).some((i) => Number(attr(i, 'width')) > 600) ||
@@ -112,7 +111,7 @@
     const nameOf = (i) => (/src="assets\/([^"?#]+)"/.exec(i) || [])[1];
     const size = (n) => { const a = S.assets.find((z) => z.name === n); return a ? a.size || 0 : 0; };
     const heavy = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && size(n) > 100 * 1024))];
-    if (heavy.length) out.push(['warn', t('Large banner images (over 100 KB), in every mail while the campaign runs: {0}.', heavy.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Optimize for Outlook'), fn: prepareClassic }, t('Large banner images: {0}', heavy.length)]);
+    if (heavy.length) out.push(['warn', t('Large banner images (over 100 KB), in every mail while the campaign runs: {0}.', heavy.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Prepare for classic Outlook'), fn: prepareClassic, leave: true }, t('Large banner images: {0}', heavy.length)]);
     const darkOnes = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && dark[n] === true))];
     if (darkOnes.length) out.push(['warn', t('Dark banner image on a transparent background, hard to see in dark mode: {0}. A background of its own helps.', darkOnes.join(', ')), null, t('Banner hard to see in dark mode: {0}', darkOnes.length)]);
     const over = (c.campaigns || []).filter((x) => x.validUntil && x.validUntil < day);
@@ -214,7 +213,7 @@
       settle(); schedulePreview();
     };
     img.onerror = () => { classicImg[k] = 0; settle(); };
-    img.src = '/assets/' + encodeURIComponent(name);
+    img.src = assetUrl(name);
   }
   // Roughly what one signature takes there (its HTML, its images as there, a photo), and its images.
   function classicParts(s) {
@@ -253,45 +252,62 @@
   // The one way to make the signatures ready for classic Outlook (and lighter for every mail): the
   // HTML made lighter, the images optimized; still too large, the images smaller still; then said
   // whether it fits now, or which image still does not.
+  // The image work (preparing, fitting) one at a time, the editing held meanwhile (it would put
+  // the old names back), the message kept up till it is done. The undo steps from before start
+  // anew after it: the files they name are gone.
   let preparing = false;
-  async function prepareClassic() {
-    if (preparing) return;
+  async function imageWork(what, fn) {
+    if (preparing) { toast(t('Still working on the images…')); return; }
     preparing = true;
+    document.body.classList.add('image-work'); $('source').readOnly = true;
+    try { if (ddoc && ddoc.activeElement) ddoc.activeElement.blur(); } catch (e) { /* no design view */ }
     try {
       flushSource();
-      toast(t('Preparing the signatures for classic Outlook…'));
-      const weight = () => (S.assets || []).reduce((n, x) => n + (x.size || 0), 0);
-      const before = weight();
+      toast(what, false, null, true);
+      await fn();
+    } finally {
+      preparing = false;
+      document.body.classList.remove('image-work'); $('source').readOnly = false;
+      ghReset();
+      schedulePreview();
+    }
+  }
+  const defaultSigs = () => S.config.signatures.filter((x) => x.defaultNew || x.defaultReply);
+  // The default signatures classic Outlook would put in without some of it.
+  async function classicLeft() { const out = []; for (const x of defaultSigs()) { const p = await classicPartsSettled(x); if (p.missing.length || !p.textFits) out.push({ s: x, p }); } return out; }
+  // What the used images weigh.
+  function usedWeight() { const used = new Set(usedHtml().flatMap((h) => [...h.matchAll(/assets\/([^"'?#\s>]+)/g)].map((m) => m[1]))); return (S.assets || []).filter((x) => used.has(x.name)).reduce((n, x) => n + (x.size || 0), 0); }
+  // The one way to make the signatures ready for classic Outlook (and lighter for every mail): the
+  // HTML made lighter, the images optimized; still too large, the images of those signatures
+  // smaller still; then said whether it fits now, or which image still does not.
+  function prepareClassic() {
+    return imageWork(t('Preparing the signatures for classic Outlook…'), async () => {
+      const before = usedWeight();
       const saved = slimAll();
-      const defaults = () => S.config.signatures.filter((x) => x.defaultNew || x.defaultReply);
-      const tooLarge = async () => { const out = []; for (const x of defaults()) { const p = await classicPartsSettled(x); if (p.missing.length || !p.textFits) out.push({ s: x, p }); } return out; };
       await optimizeImages();
-      let left = await tooLarge();
-      if (left.length) { await optimizeImages({ strong: true }); left = await tooLarge(); }
-      const imgs = t('{0} → {1}', kb2(before), kb2(weight()));
-      if (!left.length) toast(t('Ready for classic Outlook. HTML {0} lighter, images {1}.', kb2(Math.max(0, saved)), imgs));
+      let left = await classicLeft();
+      if (left.some((x) => x.p.textFits)) { await optimizeImages({ strong: true, only: new Set(left.flatMap((x) => x.p.images.map((i) => i.name))) }); left = await classicLeft(); }
+      const after = usedWeight();
+      const did = [saved > 0 ? t('HTML {0} lighter', kb2(saved)) : '', after < before ? t('images {0} → {1}', kb2(before), kb2(after)) : ''].filter(Boolean).join(', ');
+      if (!defaultSigs().length) toast(did ? t('Done: {0}. No signature is a default, so classic Outlook puts none in by itself.', did) : t('Nothing to make lighter. No signature is a default, so classic Outlook puts none in by itself.'));
+      else if (!left.length) toast(did ? t('Ready for classic Outlook: {0}.', did) : t('Ready for classic Outlook: nothing needed changing.'));
       else {
         const textOnly = left.every((x) => !x.p.textFits);
         toast(t('Still too large for classic Outlook: {0}. Missing there: {1}. Show these images narrower, or use fewer; Insert in the pane puts in everything.', left.map((x) => x.s.name).join(', '), [...new Set(left.flatMap((x) => x.p.missing))].join(', ') || t('the text')), true,
           textOnly ? null : { label: t('Images small enough to fit'), run: fitClassic });
       }
-      schedulePreview();
-    } finally { preparing = false; }
+    });
   }
   // The further way, when preparing is not enough: the images of the default signatures that
   // classic Outlook would still go without made as small in KB as it takes for all of it to fit
   // (narrower drawn, a JPEG at a lower quality, a PNG with fewer colours), at a cost in
   // sharpness that shows. Every mail gets them so, as with optimizing.
-  async function fitClassic() {
-    if (preparing) return;
-    preparing = true;
-    try {
-      flushSource();
-      toast(t('Making the images small enough for classic Outlook…'));
+  function fitClassic() {
+    return imageWork(t('Making the images small enough for classic Outlook…'), async () => {
       const room = CLASSIC_KB * 1024 * 0.95;
-      const defaults = () => S.config.signatures.filter((x) => x.defaultNew || x.defaultReply);
-      const left = async () => { const out = []; for (const x of defaults()) { const p = await classicPartsSettled(x); if (p.missing.length || !p.textFits) out.push({ s: x, p }); } return out; };
-      let todo = await left(), changed = 0;
+      let todo = await classicLeft();
+      // The images made smaller, by their name now (one made smaller twice is one).
+      const done = new Set();
       // Each round a share of what is left for the images (the text and a photo first), each image
       // its part of it by its size now; still not enough, the next round asks less.
       for (let round = 0; round < 4 && todo.some((x) => x.p.textFits); round++) {
@@ -303,41 +319,45 @@
           const share = Math.max(0.02, avail / total) * Math.pow(0.8, round);
           for (const x of p.images) goal.set(x.name, Math.min(goal.has(x.name) ? goal.get(x.name) : Infinity, Math.max(600, x.bytes * share * 3 / 4)));
         }
-        for (const [name, bytes] of goal) if (await squeezeTo(name, bytes)) changed++;
-        todo = await left();
-        if (!changed) break;
+        let any = false;
+        for (const [name, bytes] of goal) {
+          const r = await squeezeTo(name, bytes);
+          if (r) { done.delete(name); done.add(r.name); any = true; }
+        }
+        if (any) reopenChanged();
+        todo = await classicLeft();
+        if (!any) break;
       }
-      if (changed) reopenChanged();
-      if (!todo.length) toast(changed ? t('Ready for classic Outlook: {0} images made smaller to fit.', changed) : t('It fits classic Outlook already: nothing made smaller.'));
+      if (!todo.length) toast(done.size ? t('Ready for classic Outlook: {0} images made smaller to fit.', done.size) : t('It fits classic Outlook already: nothing made smaller.'));
       else if (todo.every((x) => !x.p.textFits)) toast(t('Still too large for classic Outlook: {0}. Missing there: {1}. Show these images narrower, or use fewer; Insert in the pane puts in everything.', todo.map((x) => x.s.name).join(', '), t('the text')), true);
       else toast(t('Even as small as they go, still too large for classic Outlook: {0}. Use fewer images there; Insert in the pane puts in everything.', todo.map((x) => x.s.name).join(', ')), true);
-      schedulePreview();
-    } finally { preparing = false; }
+    });
   }
   // The width an image is shown at in the signatures, building blocks and campaigns (0: none set).
   function shownWidth(name) { let w = 0; for (const h of usedHtml()) for (const m of h.matchAll(/<img\b[^>]*>/gi)) if (m[0].includes('assets/' + name + '"')) w = Math.max(w, Number((/\swidth\s*=\s*["']?(\d+)/i.exec(m[0]) || [])[1]) || 0); return w; }
   // One image made at most this many bytes, or as near as it goes: drawn narrower step by step,
   // without a transparent pixel as a JPEG at a lower quality, with one as a PNG with fewer colours.
-  // The smallest made takes its place when it is smaller than the file. Whether it did.
+  // The smallest made takes its place when it is smaller than the file: the new one, or null.
   async function squeezeTo(name, bytes) {
     try {
       const was = ((S.assets || []).find((x) => x.name === name) || {}).size || 0;
-      if (was && was <= bytes) return false;
-      const blob = await (await fetch('/assets/' + encodeURIComponent(name), { credentials: 'same-origin' })).blob();
+      if (was && was <= bytes) return null;
+      const blob = await (await fetch(assetUrl(name), { credentials: 'same-origin' })).blob();
       if (/\.gif$/i.test(name) || blob.type === 'image/gif') {
         // One that moves stays a GIF (and as it is).
         const b = new Uint8Array(await blob.arrayBuffer()); let frames = 0;
         for (let i = 0; i + 2 < b.length; i++) if (b[i] === 0x21 && b[i + 1] === 0xf9 && b[i + 2] === 0x04) frames++;
-        if (frames > 1) return false;
+        if (frames > 1) return null;
       }
       const img = new Image(), url = URL.createObjectURL(blob);
       await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = url; });
       URL.revokeObjectURL(url);
-      const shown = shownWidth(name) || img.naturalWidth, cv = document.createElement('canvas'), g = cv.getContext('2d');
+      // Without a width in the HTML it shows as wide as its file: then only made lighter, not narrower.
+      const set = shownWidth(name), shown = set || img.naturalWidth, cv = document.createElement('canvas'), g = cv.getContext('2d');
       const draw = (w) => { cv.width = Math.max(1, Math.round(w)); cv.height = Math.max(1, Math.round(img.naturalHeight * cv.width / img.naturalWidth)); g.clearRect(0, 0, cv.width, cv.height); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, cv.width, cv.height); return g.getImageData(0, 0, cv.width, cv.height); };
       let clear = false; { const d = draw(Math.min(img.naturalWidth, shown)).data; for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { clear = true; break; } }
       let best = null;
-      for (const scale of [1, 0.85, 0.7, 0.55, 0.45, 0.35]) {
+      for (const scale of set ? [1, 0.85, 0.7, 0.55, 0.45, 0.35] : [1]) {
         const w = Math.max(16, Math.min(img.naturalWidth, shown * scale)), data = draw(w);
         for (const step of clear ? [256, 128, 64, 32, 16] : [0.6, 0.5, 0.4, 0.32, 0.25]) {
           const b = clear ? await palettePng(data, true, step) : await new Promise((r) => cv.toBlob(r, 'image/jpeg', step));
@@ -346,10 +366,9 @@
         }
         if (best && best.size <= bytes) break;
       }
-      if (!best || best.size >= (was || blob.size)) return false;
-      await swapAsset(name, best, clear ? '.png' : '.jpg');
-      return true;
-    } catch (e) { return false; }
+      if (!best || best.size >= (was || blob.size)) return null;
+      return await swapAsset(name, best, clear ? '.png' : '.jpg');
+    } catch (e) { return null; }
   }
   // An image put in another's place: uploaded under a new name (one is never written over), named
   // by the signatures, building blocks and campaign banners, the old one gone when nothing uses it.
@@ -357,13 +376,33 @@
     const data = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = no; fr.readAsDataURL(blob); });
     const r = await api('assets/upload', { name: freshName(name.replace(/\.[a-z0-9]+$/i, '') + ext), data });
     S.assets = S.assets.filter((x) => x.name !== r.name).concat([{ name: r.name, size: r.size }]);
-    const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
-    S.config.signatures.forEach((x) => { x.html = (x.html || '').replace(re, 'assets/' + r.name); });
-    (S.config.blocks || []).forEach((x) => { x.html = (x.html || '').replace(re, 'assets/' + r.name); });
-    (S.config.campaigns || []).forEach((c) => { [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => { if (v.design && v.design.img === name) v.design.img = r.name; }); campBuild(c); });
+    renameAsset(name, r.name);
     if (unusedImages().includes(name)) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((x) => x.name !== name); } catch (e) { /* it stays */ } }
     return r;
   }
+  // An image named anew wherever it is used: signatures, building blocks, campaign banners (made
+  // from their form, or from their own HTML); what was measured of a file under the new name
+  // before (a name can come back once its file is gone) forgotten.
+  function renameAsset(name, to) {
+    forgetAsset(to);
+    if (to === name) return;
+    const re = new RegExp('assets/' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=["\'\\s>?#])', 'g');
+    S.config.signatures.forEach((x) => { x.html = (x.html || '').replace(re, 'assets/' + to); });
+    (S.config.blocks || []).forEach((x) => { x.html = (x.html || '').replace(re, 'assets/' + to); });
+    (S.config.campaigns || []).forEach((c) => {
+      [c].concat(Object.values(c.langs || {}), c.more || []).forEach((v) => {
+        if (!v.design) return;
+        if (v.design.img === name) v.design.img = to;
+        if (typeof v.design.html === 'string') v.design.html = v.design.html.replace(re, 'assets/' + to);
+      });
+      campBuild(c);
+    });
+  }
+  function forgetAsset(name) {
+    for (const k of Object.keys(classicImg)) if (k.startsWith(name + '@')) delete classicImg[k];
+    delete dark[name];
+  }
+
   // The way to fit: each PNG of the signature (and its banner) with no transparent pixel becomes a
   // JPEG (a photo or a banner is much smaller so), the signatures, building blocks and campaigns
   // then name the JPEG. One with transparency (a logo) stays: a JPEG would give it a box.
@@ -373,7 +412,7 @@
     let n = 0;
     for (const name of gifs) {
       try {
-        const bytes = new Uint8Array(await (await fetch('/assets/' + encodeURIComponent(name), { credentials: 'same-origin' })).arrayBuffer());
+        const bytes = new Uint8Array(await (await fetch(assetUrl(name), { credentials: 'same-origin' })).arrayBuffer());
         // More than one frame (a graphic control block each): it moves, and stays a GIF.
         let frames = 0; for (let i = 0; i + 2 < bytes.length; i++) if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) frames++;
         if (frames > 1) continue;
@@ -398,7 +437,7 @@
     for (const name of pngs) {
       try {
         const img = new Image();
-        await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = '/assets/' + encodeURIComponent(name); });
+        await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = assetUrl(name); });
         const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
         const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
         const d = g.getImageData(0, 0, cv.width, cv.height).data;
@@ -436,7 +475,7 @@
       } catch (e) { dark[name] = false; }
     };
     img.onerror = () => { dark[name] = false; };
-    img.src = '/assets/' + encodeURIComponent(name);
+    img.src = assetUrl(name);
   }
   // Everything to look at before publishing: what stops it, then the notes.
   function publishChecks() {
@@ -481,7 +520,7 @@
     signatureChecks(c).forEach((x) => out.push(x));
     campaignChecks(c).forEach((x) => out.push(x));
     const big = classicHeavy();
-    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. What helps: a smaller width, a JPEG instead of a PNG for photos, or fewer images.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), { label: t('Optimize for Outlook'), fn: prepareClassic }, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
+    if (big.length) out.push(['warn', t('Too large for classic Outlook to put in by itself (about 30 KB fit in the mailbox): {0}. There, images are left out, or Insert in the pane is needed. What helps: a smaller width, a JPEG instead of a PNG for photos, or fewer images.', big.map((x) => x.s.name + ' (~' + x.kb + ' KB)').join(', ')), { label: t('Prepare for classic Outlook'), fn: prepareClassic, leave: true }, t('Too large for classic Outlook: {0}', count(big.map((x) => x.s)))]);
     const unused = unusedImages();
     if (unused.length) out.push(['good', t('Images in the draft that nothing uses: {0}. They go out all the same.', unused.join(', ')), { label: t('Remove them'), fn: removeUnused }, t('Unused images: {0}', unused.length)]);
     // Who would get nothing, as read from AD under Users.
@@ -513,7 +552,7 @@
     }
     if (mod && !e.shiftKey && !e.altKey && k === 'k' && !(inDialog && inDialog.id !== 'dlgFind')) { e.preventDefault(); openFind(); return; }
     if (mod && !e.shiftKey && !e.altKey && k === 'h' && !inDialog) { e.preventDefault(); openReplace(); return; }
-    if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); toast(t('Draft saved.')); return; }
+    if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); save().then((ok) => { if (ok) toast(t('Draft saved.')); }); return; }
     if (mod && e.key === 'Enter' && !inDialog) { e.preventDefault(); $('btnPublish').click(); return; }
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable) || (e.target && e.target.ownerDocument === ddoc);
     if (e.key === '?' && !mod && !typing && !inDialog) { e.preventDefault(); $('dlgKeys').showModal(); }
@@ -584,7 +623,11 @@
     const order = { bad: 0, warn: 1, good: 2 };
     const list = checks.slice().sort((a, b) => order[a[0]] - order[b[0]]);
     const bad = list.filter((c) => c[0] === 'bad'), warn = list.filter((c) => c[0] === 'warn'), good = list.filter((c) => c[0] === 'good');
-    const actBtn = (act) => el('button', { type: 'button', class: 'small', onclick: async (e) => { e.currentTarget.disabled = true; await act.fn(); $('dlgPublish').close(); $('btnPublish').click(); } }, act.label);
+    // leave: the dialog closed first, so that what the work says (and offers next) can be seen.
+    const actBtn = (act) => el('button', { type: 'button', class: 'small', onclick: async (e) => {
+      if (act.leave) { $('dlgPublish').close(); await act.fn(); return; }
+      e.currentTarget.disabled = true; await act.fn(); $('dlgPublish').close(); $('btnPublish').click();
+    } }, act.label);
     const item = ([k, text, act, short]) => el('li', { class: k }, short
       ? el('details', { class: 'chk' }, el('summary', null, short), el('p', null, text), act ? actBtn(act) : null)
       : el('span', null, text, act ? actBtn(act) : null));

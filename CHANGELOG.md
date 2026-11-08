@@ -11,6 +11,16 @@ when it says so. The release notes on GitHub say the same for each version.
   default signatures made as small in KB as it takes for all of it to fit (narrower, a JPEG at a
   lower quality, a PNG with fewer colours). They look less sharp, in every mail; it says when even
   that is not enough (then fewer images).
+- Preparing makes smaller still only the images of the signatures that do not fit (not every
+  image); an image without a width in the HTML keeps its size; a banner made of HTML is taken
+  along. While the images are worked on, the editing waits and the message stays.
+- From the publish checks, *Prepare for classic Outlook* closes the dialog, so that what it says
+  (and offers next) can be seen. One name for it everywhere.
+- Fixed: text typed in the HTML tab was written into a draft loaded afterwards (load published,
+  history, a newer version), and ↶ did not undo it. Undo after preparing no longer brings back
+  images that are gone. A size measured for classic Outlook was kept for a new file of the same
+  name. Ctrl+S says "saved" only once it is.
+- Texts: the server's messages in German, unused ones removed.
 
 ## 0.9.94
 - **One way to get a signature ready for classic Outlook:** *Prepare for classic Outlook*, in the
