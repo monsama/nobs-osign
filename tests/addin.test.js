@@ -345,6 +345,11 @@ test('classic Outlook: the images as they are from next to the add-in\'s files (
   assert.equal(logo[2], PNG.toString('base64'), 'the image as published, not the copy');
   assert.equal(logo[3], true, 'embedded');
   assert.ok(r.graph.requests.includes('https://osign.example/img/index.json'));
+  // Kept in this Outlook for the next mail, only the images published now.
+  const storage = { 'osign.hosted': JSON.stringify({ ['img/' + 'b2'.repeat(12) + '.png']: 'b2xk' }) };
+  const again = runtime({ signInFails: true, roaming, platform: 'PC', runtimeStorage: storage, hosted: { 'img/index.json': { 'logo.png': file }, [file]: PNG } });
+  await again.fire('onNewMessageComposeHandler');
+  assert.deepEqual(Object.keys(JSON.parse(storage['osign.hosted'])), [file], 'the image no longer published is gone');
   // Not to be had there (no network): the copy kept in the mailbox.
   const off = runtime({ signInFails: true, roaming, platform: 'PC', hosted: {}, failing: (u) => (/osign\.example/.test(u) ? 'network' : '') });
   await off.fire('onNewMessageComposeHandler');

@@ -13,6 +13,8 @@ when it says so. The release notes on GitHub say the same for each version.
   only; the smaller copies there are for when there is no network. The preview says so.
 - Make the add-in files again once (they now know their own address); from then on every publish
   uploads the images by itself. A publish that cannot reach Cloudflare still publishes, and says so.
+- Images no longer published go: from Cloudflare Pages with the next publish (only what is
+  published is there), and from what each Outlook keeps of them.
 
 ## 0.9.97
 - Housekeeping: the editor's image work in a file of its own (`10-images.js`: which images are

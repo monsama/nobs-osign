@@ -460,6 +460,7 @@ async function keptImage(w) {
 // are, not the smaller copies kept in the mailbox. The index is looked at once a minute at most;
 // an image is cached by its file (a new image is a new file). null when not there (no index, the
 // network gone, a photo): the copies kept before then.
+const HOSTED_KEY = 'osign.hosted';
 let hosted = null, hostedAt = 0;
 async function hostedIndex() {
   if (!BASE) return null;
@@ -481,12 +482,18 @@ async function hostedImage(w) {
   const index = await hostedIndex();
   const file = hostedFile(index, w.name);
   if (!file) return null;
-  const ck = 'osign.hosted.' + file;
-  const cached = await readJson(ck);
-  if (cached && cached.b64) return { b64: cached.b64, type: typeOf(w.name), file: fileOf(w) };
+  // Kept in one place, by file, only for the files the index names now: an image no longer
+  // published goes from this Outlook's storage too.
+  const cache = (await readJson(HOSTED_KEY)) || {};
+  if (cache[file]) return { b64: cache[file], type: typeOf(w.name), file: fileOf(w) };
   try {
     const b64 = base64(await fetchWithin(BASE + file, {}, 15000, 'Loading ' + w.name, async (r) => { if (!r.ok) throw new Error('Loading ' + w.name + ': ' + r.status); return new Uint8Array(await r.arrayBuffer()); }));
-    if (b64.length < IMAGE_CACHE_MAX * 4 / 3) await store.set(ck, JSON.stringify({ b64 }));
+    if (b64.length < IMAGE_CACHE_MAX * 4 / 3) {
+      const now = new Set(Object.values(index));
+      const keep = {}; Object.keys(cache).forEach((f) => { if (now.has(f)) keep[f] = cache[f]; });
+      keep[file] = b64;
+      await store.set(HOSTED_KEY, JSON.stringify(keep));
+    }
     return { b64, type: typeOf(w.name), file: fileOf(w) };
   } catch (e) { console.log('OSign: hosted image ' + w.name + ': ' + (e && e.message ? e.message : e)); return null; }
 }
