@@ -5,6 +5,13 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.95
+- **Images small enough to fit**, a further option for classic Outlook when preparing is not
+  enough (in the note in the preview, and in the message after preparing): the images of the
+  default signatures made as small in KB as it takes for all of it to fit (narrower, a JPEG at a
+  lower quality, a PNG with fewer colours). They look less sharp, in every mail; it says when even
+  that is not enough (then fewer images).
+
 ## 0.9.94
 - **One way to get a signature ready for classic Outlook:** *Prepare for classic Outlook*, in the
   note in the preview (and *Optimize for Outlook* in the publish checks). It makes the HTML

@@ -1984,3 +1984,40 @@ test('one way to make a signature ready for classic Outlook: the HTML lighter, t
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('a further way when preparing is not enough: the images as small in KB as it takes for all of it to fit', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  // Five wide photos with fine detail, each shown wide: even made smaller by the add-in, not all fit.
+  const photo = (seed) => page.evaluate((seed) => { const c = document.createElement('canvas'); c.width = 1000; c.height = 500; const g = c.getContext('2d'); const d = g.createImageData(1000, 500); for (let i = 0; i < d.data.length; i += 4) { const p = i / 4, x = p % 1000, y = Math.floor(p / 1000); d.data[i] = (x * seed) % 255; d.data[i + 1] = (y * 3 + x) % 255; d.data[i + 2] = 128 + Math.random() * 60; d.data[i + 3] = 255; } g.putImageData(d, 0, 0); return c.toDataURL('image/jpeg', 0.9).split(',')[1]; }, seed);
+  const imgs = [];
+  for (let n = 1; n <= 5; n++) imgs.push(await api('assets/upload', { name: 'fit-' + n + '.jpg', data: await photo(n + 1) }));
+  await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#sigList li a.active');
+  if (!(await page.isChecked('#sigNew'))) await page.click('label:has(#sigNew)');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Anna Muster</p><p>' + imgs.map((x) => '<img src="assets/' + x.name + '" width="500" alt="' + x.name + '">').join('<br>') + '</p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  // Images would be left out (once measured): both ways offered.
+  await page.waitForSelector('#pvNote a.classic-fit', { timeout: 15000 });
+  await page.waitForTimeout(1500);
+  await page.waitForSelector('#pvNote a.classic-fit', { timeout: 15000 });
+  await page.click('#pvNote a.classic-fit');
+  await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((x) => /Ready for classic Outlook|still too large/i.test(x.textContent) && !/Making the images/.test(x.textContent)), null, { timeout: 60000 });
+  const said = await page.evaluate(() => [...document.querySelectorAll('.toast')].map((x) => x.textContent).join(' | '));
+  const mine = await page.inputValue('#sigName');
+  assert.ok(/Ready for classic Outlook/.test(said) || !new RegExp('too large for classic Outlook:[^.]*\\b' + mine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(said), said);
+  // Fits now: the images still there, much smaller, the note gone.
+  await page.waitForFunction(() => !document.querySelector('#pvNote a.classic-fit') && !document.querySelector('#pvNote a.classic-prep'), null, { timeout: 15000 });
+  await page.click('.tab[data-mode=html]');
+  const html = await page.inputValue('#source');
+  const names = [...html.matchAll(/assets\/([^"]+)/g)].map((m) => m[1]);
+  assert.equal(names.length, 5, html);
+  const assets = (await api('draft/get')).assets;
+  assert.ok(names.reduce((n, x) => n + assets.find((y) => y.name === x).size, 0) < 30 * 1024, JSON.stringify(assets));
+  assert.ok(!assets.some((x) => imgs.some((y) => y.name === x.name)), 'the originals gone');
+  await page.click('#btnDel'); await page.click('#askOk');
+  assert.deepEqual(errors, []);
+});

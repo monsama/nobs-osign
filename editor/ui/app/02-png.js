@@ -23,16 +23,17 @@
   }
   // The palette of an image: exact when it has 256 colours or fewer; else (lossy only) the 256
   // most used, the colours first made coarser until few enough are left to choose from. null: not
-  // possible this way (more colours and not lossy).
-  function paletteOf(px, lossy) {
+  // possible this way (more colours and not lossy). max: fewer colours than 256 (smaller still).
+  function paletteOf(px, lossy, max) {
+    max = max || 256;
     const count = new Map();
     for (let i = 0; i < px.length; i += 4) {
       // Fully transparent pixels are one colour, whatever their RGB says.
       const k = px[i + 3] === 0 ? 0 : ((px[i] << 24) | (px[i + 1] << 16) | (px[i + 2] << 8) | px[i + 3]) >>> 0;
       count.set(k, (count.get(k) || 0) + 1);
-      if (count.size > 256 && !lossy) return null;
+      if (count.size > max && !lossy) return null;
     }
-    if (count.size <= 256) return [...count.keys()];
+    if (count.size <= max) return [...count.keys()];
     // Coarser buckets (fewer bits a channel) until at most 4096 are left, each the mean of its colours.
     for (let drop = 1; drop <= 5; drop++) {
       const mask = (0xff << drop) & 0xff, buckets = new Map();
@@ -44,15 +45,15 @@
         buckets.set(bk, e);
       }
       if (buckets.size <= 4096 || drop === 5) {
-        return [...buckets.values()].sort((x, y) => y.n - x.n).slice(0, 256)
+        return [...buckets.values()].sort((x, y) => y.n - x.n).slice(0, max)
           .map((e) => ((Math.round(e.r / e.n) << 24) | (Math.round(e.g / e.n) << 16) | (Math.round(e.b / e.n) << 8) | Math.round(e.a / e.n)) >>> 0);
       }
     }
     return null;
   }
   // The image (ImageData) as a PNG with a palette, or null when it would not be one.
-  async function palettePng(img, lossy) {
-    const px = img.data, pal = paletteOf(px, lossy);
+  async function palettePng(img, lossy, max) {
+    const px = img.data, pal = paletteOf(px, lossy, max);
     if (!pal || !pal.length) return null;
     const index = new Map(pal.map((c, i) => [c, i]));
     const pr = pal.map((c) => c >>> 24), pg = pal.map((c) => (c >>> 16) & 0xff), pb = pal.map((c) => (c >>> 8) & 0xff), pa = pal.map((c) => c & 0xff);

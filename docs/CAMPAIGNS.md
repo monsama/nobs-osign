@@ -37,7 +37,8 @@ banner that goes into them for some days, and out again by itself.
   disappears in dark mode: give it a light background.
 - **Classic Outlook** keeps the signature it puts in by itself in the mailbox, about 30 KB. The
   add-in makes a banner smaller there by itself; when even that is not enough, the preview says so,
-  and *Prepare for classic Outlook* in that note does all there is to do.
+  and *Prepare for classic Outlook* in that note does all there is to do without a loss you see.
+  Still too large: *Images small enough to fit* makes them as small in KB as it takes (less sharp).
 - **Rounded corners** do not show in classic Outlook for Windows.
 - **Where the banner goes** in a signature is the orange *Campaign banner* place; without it,
   below the signature. Moving that place is for IT (it is part of the signature).
