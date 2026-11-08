@@ -28,7 +28,14 @@ function createConnectionRoutes({ connections, connectionsAnswer, settings, cert
         knownAddin: st.clientId, knownServer: graphCfg.clientId || '' });
     },
     'deploy/start': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : deployment.start({ origin: String(d.origin || ''), addinId: addinId() })),
-    'deploy/status': () => ({ last: deployment.last(), waiting: deployment.waiting() }),
+    // For the local admin all of it; for others whether it is deployed, which version, when checked
+    // (the status list), not to whom.
+    'deploy/status': (d, s) => {
+      const last = deployment.last(), waiting = deployment.waiting();
+      if (!adminOnly(s) || !last) return { last, waiting };
+      const m = last.summary;
+      return { waiting, last: { at: last.at, error: last.error ? 'the local account admin sees why' : '', summary: m ? { found: m.found, enabled: m.enabled, version: m.version, hidden: true } : null } };
+    },
     'setup/status': (d, s) => (adminOnly(s) ? { error: adminOnly(s) } : setup.status()),
     // "Test" in Server connections: each part, with what is saved, for real. → { message } or { error }.
     'connections/test': async (d, s) => {

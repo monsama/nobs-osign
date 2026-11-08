@@ -52,6 +52,7 @@ services:
       OSIGN_CF_API_TOKEN_FILE: /run/secrets/cf_api_token
       # Twice a day, whether a newer release is out (one request to GitHub, nothing comes in): 0 is off.
       OSIGN_UPDATE_CHECK: ${OSIGN_UPDATE_CHECK:-1}
+      OSIGN_PROXY_HOST: ${OSIGN_PROXY_HOST:-nobs-proxy}
     secrets:
       - admin_password
       - app_key

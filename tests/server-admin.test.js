@@ -580,3 +580,31 @@ test('the campaign role: only the campaigns of the draft change, it publishes th
     assert.match((await mara('publish', { configJson: JSON.stringify(sent) })).error, /approval/);
   } finally { s.srv.close(); }
 });
+
+test('where the add-in is deployed: to whom for the local admin only, the rest for the status list', async () => {
+  const s = await server();
+  try {
+    fs.writeFileSync(path.join(s.dataDir, 'addin-deployment.json'), JSON.stringify({ at: '2026-11-08T10:00:00Z', found: true, props: { DisplayName: 'NOBS OSign', Version: '0.9.95.0', Enabled: 'True', AssignedUsers: 'viktor@example.ch' } }));
+    const admin = s.as(await s.signIn('admin', 'admin-pw'));
+    const anna = s.as(await s.signIn('anna', 'anna-pw'));
+    assert.equal((await admin('deploy/status')).last.summary.assigned, 'viktor@example.ch');
+    const seen = await anna('deploy/status');
+    assert.deepEqual(seen.last.summary, { found: true, enabled: true, version: '0.9.95.0', hidden: true });
+    assert.ok(!JSON.stringify(seen).includes('viktor'), JSON.stringify(seen));
+  } finally { s.srv.close(); }
+});
+
+test('X-Forwarded-For only from the proxy: from another address the connection\'s own', async () => {
+  // The proxy is 127.0.0.2 here: a request from 127.0.0.1 is not from it.
+  const s = await server({ OSIGN_PROXY_HOST: '127.0.0.2' });
+  try {
+    const admin = s.as(await s.signIn('admin', 'admin-pw', { 'X-Forwarded-For': '10.9.9.9' }));
+    assert.equal((await admin('audit/list')).entries[0].ip, '127.0.0.1');
+  } finally { s.srv.close(); }
+  // The proxy is this address: what it says is taken.
+  const p = await server({ OSIGN_PROXY_HOST: '127.0.0.1' });
+  try {
+    const admin = p.as(await p.signIn('admin', 'admin-pw', { 'X-Forwarded-For': '10.1.2.3' }));
+    assert.equal((await admin('audit/list')).entries[0].ip, '10.1.2.3');
+  } finally { p.srv.close(); }
+});

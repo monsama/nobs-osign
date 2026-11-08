@@ -9,6 +9,7 @@
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const path = require('node:path');
+const dns = require('node:dns');
 const { createStore, ASSET_TYPES } = require('./store');
 const { createSettings } = require('./settings');
 const { graphConfig, graphEnabled, graphProblem, createGraph, folderTarget } = require('./graph');
@@ -138,16 +139,39 @@ function saidOnPurpose(e) {
 }
 
 // Who is asking: the shared proxy (Caddy) puts the client's address in X-Forwarded-For, replacing
-// what the client sent; without a proxy, the connection's own.
-function clientAddress(req) {
+// what the client sent. Taken from the proxy only (proxy: its addresses); from anyone else (another
+// container on the proxy's network, or no proxy) the connection's own. Proxy not known (null): the
+// header as it is, as before.
+function clientAddress(req, proxy) {
+  const peer = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
-  return fwd.length ? fwd[fwd.length - 1] : String(req.socket.remoteAddress || '');
+  if (!fwd.length || (proxy && !proxy.has(peer))) return peer;
+  return fwd[fwd.length - 1];
 }
 
 // The server: its parts made from the environment, and the one handler for every request.
 function createApp(opts) {
   const env = (opts && opts.env) || process.env;
   const log = (opts && opts.log) || console;
+  // The shared proxy's addresses in the Docker network, by its name (OSIGN_PROXY_HOST, else
+  // nobs-proxy), looked up again every 10 minutes. Not found: null (said once in the log).
+  const proxyHost = env.OSIGN_PROXY_HOST || 'nobs-proxy';
+  let proxyAt = 0, proxyKnown = null, proxyLooking = null, proxySaid = false;
+  function proxyAddresses() {
+    if (Date.now() - proxyAt < 10 * 60 * 1000) return Promise.resolve(proxyKnown);
+    if (!proxyLooking) {
+      proxyLooking = new Promise((done) => {
+        const timer = setTimeout(() => done(proxyKnown), 2000);
+        dns.lookup(proxyHost, { all: true }, (err, list) => {
+          clearTimeout(timer);
+          if (!err && list && list.length) proxyKnown = new Set(list.map((x) => x.address.replace(/^::ffff:/, '')));
+          else if (!proxyKnown && !proxySaid) { proxySaid = true; log.warn('The proxy ' + proxyHost + ' is not found: X-Forwarded-For is taken from anyone. Set OSIGN_PROXY_HOST to its name.'); }
+          done(proxyKnown);
+        });
+      }).finally(() => { proxyAt = Date.now(); proxyLooking = null; });
+    }
+    return proxyLooking;
+  }
   const dataDir = env.OSIGN_DATA || '/data';
   const publishDir = env.OSIGN_PUBLISH_DIR || path.join(dataDir, 'publish');
   fs.mkdirSync(dataDir, { recursive: true });
@@ -640,7 +664,7 @@ function createApp(opts) {
     }
     if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
 
-    const ip = clientAddress(req);
+    const ip = clientAddress(req, await proxyAddresses());
     if (name === 'login') {
       const r = await auth.login(data.login, data.password, ip);
       audit.add({ who: String(data.login || '').slice(0, 120), ip, what: 'signin', ok: !r.error, detail: r.error || '' });

@@ -5,6 +5,13 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.96
+- The client's address (for the sign-in throttle and the audit log) is taken from X-Forwarded-For
+  only when the request comes from the shared proxy (`nobs-proxy`, or `OSIGN_PROXY_HOST`); another
+  container on its network can no longer give itself another address.
+- Where the add-in is deployed: to whom only for the local admin; others see whether it is, which
+  version, and when it was checked.
+
 ## 0.9.95 (add-in changed)
 - **Images small enough to fit**, a further option for classic Outlook when preparing is not
   enough (in the note in the preview, and in the message after preparing): the images of the
