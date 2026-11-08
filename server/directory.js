@@ -85,14 +85,16 @@ async function withService(c, fn) {
 const first = (attrs, name) => { const v = attrs[String(name).toLowerCase()]; return v && v.length ? String(v[0]) : ''; };
 
 // One user by sAMAccountName, mail or UPN: { values: { <key>: value }, displayName, groups }, the
-// groups by name and sAMAccountName, nested ones included.
-async function lookup(c, query, fields) {
+// groups by name and sAMAccountName, nested ones included. opts.activeOnly: a disabled account is
+// not found (asking whether someone may still sign in).
+async function lookup(c, query, fields, opts) {
   const q = String(query || '').trim();
   if (!q) throw new Error('Enter a user name or mail address.');
   const attrs = [...new Set((fields || []).map((f) => String(f.ad || '')).filter((a) => attrOk(a, c)).map((a) => a.toLowerCase()))];
   return withService(c, async (client) => {
     const v = escapeFilter(q);
-    const found = await search(client, c.base, '(&(objectCategory=person)(objectClass=user)(|(sAMAccountName=' + v + ')(mail=' + v + ')(userPrincipalName=' + v + ')))', ['displayname', 'samaccountname', ...attrs], 2);
+    const active = opts && opts.activeOnly ? '(!(userAccountControl:1.2.840.113556.1.4.803:=2))' : '';
+    const found = await search(client, c.base, '(&(objectCategory=person)(objectClass=user)' + active + '(|(sAMAccountName=' + v + ')(mail=' + v + ')(userPrincipalName=' + v + ')))', ['displayname', 'samaccountname', ...attrs], 2);
     if (!found.length) throw new Error('No user ' + q + ' in Active Directory.');
     if (found.length > 1) throw new Error('More than one user matches ' + q + '.');
     const u = found[0];

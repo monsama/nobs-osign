@@ -301,25 +301,122 @@
   }
 
   // Whether a signature's compiled HTML (what the add-in renders) says what its html says: the
-  // same text, and no address or other attribute value the html does not have. The server checks
-  // it, as it cannot compile without a DOM: so what an approver reads is what goes out.
+  // same elements in the same order, each with the same attributes, and the same text between
+  // them. compile() only adds its line marks (<!--sig-if:…--> … <!--/sig-if-->) and the <tbody>
+  // the browser puts into a table; any other comment in compiled is refused, as Outlook reads
+  // some of them (<!--[if mso]>…<![endif]-->) and shows what is in them. The server checks it, as
+  // it cannot compile without a DOM: so what an approver reads is what goes out.
+  var MARK = /^<!--(?:sig-if:[A-Za-z0-9_,]*|\/sig-if)-->$/;
+  var ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  function decodeEntities(x) {
+    return String(x).replace(/&(#[0-9]{1,7}|#x[0-9a-f]{1,6}|[a-z]+);/gi, function (all, e) {
+      if (e.charAt(0) === '#') {
+        var n = /^#x/i.test(e) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        if (!(n > 0 && n <= 0x10ffff)) return all;
+        if (n < 0x10000) return String.fromCharCode(n);
+        n -= 0x10000;
+        return String.fromCharCode(0xd800 + (n >> 10), 0xdc00 + (n & 0x3ff));
+      }
+      var k = e.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(ENTITIES, k) ? ENTITIES[k] : all;
+    }).replace(/ /g, ' ');
+  }
+  // HTML as a list of what it is made of, in order: a start tag with its attributes (sorted by
+  // name), an end tag, a stretch of text, what a style or the like holds (kept as written), a
+  // comment; null when the HTML cannot be read (a tag or comment that does not end).
+  var RAW_TEXT = { script: 1, style: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, textarea: 1, title: 1 };
+  function htmlTokens(x) {
+    var s = String(x || ''), out = [], i = 0, text = '';
+    var flush = function () { if (text) { out.push({ k: 't', v: text }); text = ''; } };
+    while (i < s.length) {
+      var lt = s.indexOf('<', i);
+      if (lt < 0) { text += s.slice(i); break; }
+      text += s.slice(i, lt);
+      var rest = s.slice(lt);
+      if (rest.slice(0, 4) === '<!--') {
+        var end = s.indexOf('-->', lt + 4);
+        if (end < 0) return null;
+        flush(); out.push({ k: 'c', v: s.slice(lt, end + 3) }); i = end + 3; continue;
+      }
+      if (/^<[!?]/.test(rest)) {
+        // <!doctype>, <![CDATA[ … ]]>, <![if !mso]>, <?xml …>: read by the browser as a comment.
+        var gt = s.indexOf('>', lt);
+        if (gt < 0) return null;
+        flush(); out.push({ k: 'c', v: s.slice(lt, gt + 1) }); i = gt + 1; continue;
+      }
+      var m = /^<(\/?)([A-Za-z][^\s\/>]*)/.exec(rest);
+      if (!m) { text += '<'; i = lt + 1; continue; }
+      flush();
+      var name = m[2].toLowerCase(), j = lt + m[0].length, attrs = [], seen = {};
+      // The attributes: name, name=value, name="value", name='value'; the first of a name counts.
+      for (;;) {
+        while (j < s.length && /[\s\/]/.test(s.charAt(j))) j++;
+        if (j >= s.length) return null;
+        if (s.charAt(j) === '>') { j++; break; }
+        var an = /^[^\s\/>=]+|^=[^\s\/>=]*/.exec(s.slice(j))[0];
+        j += an.length;
+        while (j < s.length && /\s/.test(s.charAt(j))) j++;
+        var val = '';
+        if (s.charAt(j) === '=') {
+          j++;
+          while (j < s.length && /\s/.test(s.charAt(j))) j++;
+          var q = s.charAt(j);
+          if (q === '"' || q === "'") {
+            var close = s.indexOf(q, j + 1);
+            if (close < 0) return null;
+            val = s.slice(j + 1, close); j = close + 1;
+          } else {
+            var uv = /^[^\s>]*/.exec(s.slice(j))[0];
+            val = uv; j += uv.length;
+          }
+        }
+        an = an.toLowerCase();
+        if (!seen[an]) { seen[an] = 1; attrs.push(an + '=' + decodeEntities(val).replace(/\s+/g, ' ').trim()); }
+      }
+      if (m[1]) { out.push({ k: 'e', v: name }); i = j; continue; }
+      out.push({ k: 's', v: name + (attrs.length ? ' ' + attrs.sort().join(' ') : '') });
+      i = j;
+      // What a style or the like holds is not read as HTML: up to its end tag, compared as written.
+      if (RAW_TEXT[name]) {
+        var re = new RegExp('</' + name + '[\\s/>]', 'i'), at = re.exec(s.slice(i));
+        var stop = at ? i + at.index : s.length;
+        out.push({ k: 'r', v: s.slice(i, stop) }); i = stop;
+      }
+    }
+    flush();
+    return out;
+  }
+  // What a reader sees of HTML, in order, for comparing: the tags (without the <tbody> a browser
+  // adds and a document's own html, head and body), the text between them with its white space
+  // made one. Comments are left out here (compiledMatches looks at them first).
+  function readable(tokens) {
+    var out = [], text = '';
+    var flush = function () { var t = decodeEntities(text).replace(/\s+/g, ' ').trim(); if (t) out.push('t:' + t); text = ''; };
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      if (t.k === 't') { text += t.v; continue; }
+      if (t.k === 'c') continue;
+      if (t.k === 'r') { flush(); out.push('r:' + t.v.replace(/\s+/g, ' ').trim()); continue; }
+      var name = t.v.split(' ')[0];
+      if (name === 'tbody' || name === 'html' || name === 'head' || name === 'body') continue;
+      flush(); out.push(t.k + ':' + t.v);
+    }
+    flush();
+    return out;
+  }
   function compiledMatches(html, compiled) {
     if (typeof compiled !== 'string' || compiled === '') return true;
-    var ent = function (x) { return x.replace(/&nbsp;|&#160;| /g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'"); };
-    var text = function (x) { return ent(String(x || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim(); };
-    var attrs = function (x) {
-      var out = [], re = /\s([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g, m, tag, tre = /<[A-Za-z][^>]*>/g;
-      while ((tag = tre.exec(String(x || '')))) { re.lastIndex = 0; while ((m = re.exec(tag[0]))) out.push(m[1].toLowerCase() + '=' + ent(m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4]).replace(/\s+/g, ' ').trim()); }
-      return out;
-    };
-    if (text(html) !== text(compiled)) return false;
-    var have = {};
-    attrs(html).forEach(function (a) { have[a] = (have[a] || 0) + 1; });
-    var tags = function (x) { return (String(x || '').replace(/<!--[\s\S]*?-->/g, '').match(/<([A-Za-z][\w:-]*)/g) || []).map(function (t) { return t.slice(1).toLowerCase(); }); };
-    // Tags the compiled one has that the html has not (but what the browser adds by itself).
-    var htags = {}; tags(html).forEach(function (t) { htags[t] = 1; });
-    if (tags(compiled).some(function (t) { return !htags[t] && t !== 'tbody'; })) return false;
-    return attrs(compiled).every(function (a) { return have[a] > 0; });
+    var c = htmlTokens(compiled);
+    if (!c) return false;
+    // A comment in compiled that compile() does not write: refused (it could hold what the html does not show).
+    if (c.some(function (t) { return t.k === 'c' && !MARK.test(t.v); })) return false;
+    // compile() leaves out the html's scripts and any line marks pasted into it.
+    var h = htmlTokens(String(html || '').replace(/<script\b[\s\S]*?<\/script\s*>/gi, ''));
+    if (!h) return false;
+    var a = readable(h), b = readable(c);
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
   }
 
   function isEmpty(v) { return v === undefined || v === null || String(v).trim() === ''; }
@@ -344,9 +441,14 @@
     // The last line of a paragraph went: the <br> that ended the line before it would now end the
     // paragraph, and Outlook (Word) shows that as an empty line.
     if (dropped) html = html.replace(/<br\s*\/?>(\s*)(<\/(?:p|div|td|th|li|h[1-6]|blockquote)>)/gi, '$1$2');
-    html = html.replace(PLACEHOLDER, function (all, key) {
+    // A value that goes into an address (href, src) is taken only as a web, mail or phone address,
+    // or as a relative one: anything else (javascript:, data:) could run or load in the mail.
+    var inUrl = urlRanges(html);
+    html = html.replace(PLACEHOLDER, function (all, key, at) {
       if (!Object.prototype.hasOwnProperty.call(values, key)) return opts.keepUnknown === false ? '' : all;
-      return isEmpty(values[key]) ? '' : escapeHtml(values[key]);
+      if (isEmpty(values[key])) return '';
+      if (inUrl(at) && !linkValueOk(values[key])) return '';
+      return escapeHtml(values[key]);
     });
     // Images live in two folders next to signatures.json: assets/ (logos, icons) and photos/ (one
     // per person, by name: photos/@@sAMAccountName.jpg). opts.assetBase is put in front of both,
@@ -371,6 +473,25 @@
       });
     }
     return html;
+  }
+
+  // Where in the HTML the values of href, src and background attributes are: a function that
+  // answers whether a position is inside one of them.
+  function urlRanges(html) {
+    var ranges = [], tre = /<[A-Za-z][^>]*>/g, are = /\s(?:href|src|background)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, t, a;
+    while ((t = tre.exec(html))) {
+      are.lastIndex = 0;
+      while ((a = are.exec(t[0]))) { var end = t.index + a.index + a[0].length; ranges.push([end - a[1].length, end]); }
+    }
+    return function (at) { return ranges.some(function (r) { return at >= r[0] && at < r[1]; }); };
+  }
+  // A value fit for an address: http(s):, mailto:, tel:, or none at all (relative, or the part
+  // after a mailto: the template has). Spaces, control and invisible characters do not count, as
+  // browsers skip them too (java\tscript:).
+  function linkValueOk(v) {
+    var s = String(v).replace(/[\u0000-\u0020\u007f-\u009f\u00ad\u200b-\u200f\u2028\u2029\u2060-\u2065\ufeff]/g, '');
+    var m = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(s);
+    return !m || /^(https?|mailto|tel)$/i.test(m[1]);
   }
 
   function imgSrc(tag) {

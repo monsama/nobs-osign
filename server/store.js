@@ -11,6 +11,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const MAX_ASSET_BYTES = 1024 * 1024;
+// The draft's images all together: so many files and bytes at most (a signature needs a handful).
+const MAX_ASSETS = 500;
+const MAX_ASSETS_BYTES = 200 * 1024 * 1024;
 // Windows PowerShell's limit decided this for OSign.ps1; the same here, so both answer alike.
 const MAX_CONFIG_CHARS = 1500 * 1024;
 const ASSET_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif' };
@@ -62,6 +65,17 @@ function createStore(dataDir) {
     return names.filter((n) => safeAssetName(n) === n && fs.statSync(path.join(assetDir, n)).isFile()).sort()
       .map((n) => ({ name: n, size: fs.statSync(path.join(assetDir, n)).size }));
   }
+  // The hash of each image, kept by its name, size and time of change: the draft's hash is asked
+  // for on every save, and reading every image each time is not needed.
+  const hashes = new Map();
+  function assetHash(name) {
+    const file = path.join(assetDir, name), st = fs.statSync(file), key = st.size + ':' + st.mtimeMs;
+    const hit = hashes.get(name);
+    if (hit && hit.key === key) return hit.hash;
+    const hash = sha256(fs.readFileSync(file));
+    hashes.set(name, { key, hash });
+    return hash;
+  }
   function state() {
     try { const s = JSON.parse(readText(stateFile)); if (s && typeof s === 'object') return s; } catch (e) { /* below */ }
     return { publishedHash: '', publishedAt: 0 };
@@ -71,13 +85,16 @@ function createStore(dataDir) {
   // published or loaded? The same parts as Get-DraftHash.
   function draftHash() {
     const parts = [sha256(Buffer.from(readText(draftFile) || '', 'utf8'))];
-    for (const a of assets()) parts.push(a.name + ':' + sha256(fs.readFileSync(path.join(assetDir, a.name))));
+    const list = assets();
+    for (const a of list) parts.push(a.name + ':' + assetHash(a.name));
+    // Images gone from the folder are forgotten.
+    if (hashes.size > list.length) { const there = new Set(list.map((a) => a.name)); for (const k of [...hashes.keys()]) if (!there.has(k)) hashes.delete(k); }
     return sha256(Buffer.from(parts.join('\n'), 'utf8'));
   }
   // The draft's images: name → sha256 of the content.
   function assetHashes() {
     const out = {};
-    for (const a of assets()) out[a.name] = sha256(fs.readFileSync(path.join(assetDir, a.name)));
+    for (const a of assets()) out[a.name] = assetHash(a.name);
     return out;
   }
   const dirty = () => draftHash() !== String(state().publishedHash || '');
@@ -114,6 +131,12 @@ function createStore(dataDir) {
     if (fs.existsSync(file) && sha256(fs.readFileSync(file)) !== sha256(bytes)) {
       const stem = n.slice(0, -ext.length);
       for (let i = 2; fs.existsSync(file); i++) { n = stem + '-' + i + ext; file = path.join(assetDir, n); }
+    }
+    // A new file: within what the draft may hold in all.
+    if (!fs.existsSync(file)) {
+      const list = assets(), total = list.reduce((sum, a) => sum + a.size, 0);
+      if (list.length >= MAX_ASSETS) return { error: 'The draft holds ' + MAX_ASSETS + ' images already, the most it can: remove the ones no signature uses first.' };
+      if (total + bytes.length > MAX_ASSETS_BYTES) return { error: 'The draft\'s images would be larger than 200 MB together: remove the ones no signature uses first.' };
     }
     fs.writeFileSync(file, bytes);
     return { path: 'assets/' + n, name: n, size: bytes.length };

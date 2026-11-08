@@ -31,13 +31,14 @@ release_image() {
     grep -oE 'ghcr\.io/monsama/nobs-osign:[0-9]+\.[0-9]+\.[0-9]+' docker-compose.yml | head -1
 }
 
-# Whether a release's file (or image, oci://…) was built by this repository's release workflow:
-# `gh attestation verify`, where the GitHub CLI is there and signed in. Without it only the
-# checksum is checked, unless OSIGN_REQUIRE_ATTESTATION=1 in .env, which then stops the update.
+# Whether a release's file (or image, oci://…) was built by this repository's release workflow
+# (.github/workflows/release.yml, which makes the attestations; not only by some workflow of the
+# repository): `gh attestation verify`, where the GitHub CLI is there and signed in. Without it only
+# the checksum is checked, unless OSIGN_REQUIRE_ATTESTATION=1 in .env, which then stops the update.
 attest_verify() {
     local what="$1" repo="$2" must; must="$(env_get OSIGN_REQUIRE_ATTESTATION)"
     if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-        gh attestation verify "$what" --repo "$repo" >/dev/null 2>&1 || fail "The attestation of $what does not verify: it was not built by $repo's release workflow. Not installed."
+        gh attestation verify "$what" --repo "$repo" --signer-workflow "$repo/.github/workflows/release.yml" >/dev/null 2>&1 || fail "The attestation of $what does not verify: it was not built by $repo's release workflow. Not installed."
         info "Attestation verified: $(basename "$what") was built by $repo's release workflow"
         return 0
     fi
