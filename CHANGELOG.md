@@ -26,6 +26,17 @@ then on a publish uploads the images only with the files uploaded last.
   (with OSIGN_PROXY_HOST set, as docker-compose does); the images get `nosniff`; an upload error
   shows no details of the server.
 - The campaign role's publish takes images however the banner names them.
+- **Editor:**
+  - undo and redo wait while images are worked on (they would bring back files that are gone);
+  - Publish stops when the draft could not be saved (a newer one elsewhere), instead of going out;
+  - *Remove them* (unused images) asks first; what a check's button did is said in the dialog,
+    and the note typed there is kept;
+  - with no signature the one note is shown open, and "no folder to publish to" still stops it;
+  - the dark-mode check is there the first time Publish is opened;
+  - import: a file ticked moves up, the counts follow, a click on its name ticks it;
+  - an image named xmas-2026.png keeps its name (only -2, -3 copies are taken off);
+  - wording: *Make images lighter* on large images, *Use the draft's images instead*, one image
+    in the singular, *Ask for approval with none* with four eyes.
 
 ## 0.9.101
 - Fixed: with every signature deleted, the change could not be published ("There is no signature"

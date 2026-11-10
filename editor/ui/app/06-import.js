@@ -67,13 +67,21 @@
 
   // The list in parts: the photos per person first (they count at once), then the templates ticked,
   // then the rest folded away (copies, AutoBackups, CI-Sign's own editor files, text blocks): a
-  // CI-Sign folder holds hundreds of files, and what is taken over should be in sight.
-  function renderImportList() {
-    const ul = $('impList'); ul.textContent = '';
+  // CI-Sign folder holds hundreds of files, and what is taken over should be in sight. A box
+  // ticked or not: the list made anew (the file moves to its part, the counts follow), the scroll
+  // position, the folded part as it was and the box in focus kept. focus: the template whose box
+  // gets the focus.
+  function renderImportList(focus) {
+    const ul = $('impList'), top = ul.scrollTop, wasOpen = !!ul.querySelector('.imp-rest > details[open]');
+    ul.textContent = '';
+    let focusBox = null;
+    // Each with its box and words in one label: a click on the name ticks it too.
+    const pick = (box, ...kids) => el('label', { class: 'imp-pick' }, box, el('div', null, ...kids));
     const item = (it) => {
       const box = el('input', { type: 'checkbox' }); box.checked = it.checked;
+      if (it === focus) focusBox = box;
       const li = el('li', { class: 'imp-item' + (it.checked ? '' : ' skip') });
-      box.addEventListener('change', () => { it.checked = box.checked; li.classList.toggle('skip', !box.checked); offFor($('impGo'), impItems.some((x) => x.checked) ? '' : t('Tick at least one template.')); heads(); });
+      box.addEventListener('change', () => { it.checked = box.checked; renderImportList(it); });
       const exists = S.config.signatures.some((x) => x.name.toLowerCase() === it.name.toLowerCase());
       const meta = [];
       if (it.blocks) meta.push(el('span', { class: 'warn' }, t('CI-Sign text blocks ({##…}), not a signature. ')));
@@ -90,7 +98,7 @@
       }
       if (it.perPerson.length) meta.push(t(' · photo per person {0} → photos\\{1}', it.perPerson[0], it.perPerson[0].split(/[\\/]/).pop()));
       if (exists) meta.push(t(' · replaces the signature of the same name'));
-      li.append(box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta)));
+      li.append(pick(box, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta)));
       return li;
     };
     if (impPhotos.length) {
@@ -99,26 +107,22 @@
       const li = el('li', { class: 'imp-item' + (impPhotosOn ? '' : ' skip') });
       box.addEventListener('change', () => { impPhotosOn = box.checked; li.classList.toggle('skip', !box.checked); });
       const names = impPhotos.map((f) => f.name);
-      li.append(box, el('div', null,
+      li.append(pick(box,
         el('div', { class: 'imp-name' }, t('Photos per person: {0} into photos\\ in the OSign folder', impPhotos.length)),
         el('div', { class: 'imp-meta' }, names.slice(0, 12).join(', ') + (names.length > 12 ? ' …' : '') + t(' · used at once, without publishing; a photo already there of the same name is replaced'))));
       ul.append(li);
     }
     const on = impItems.filter((x) => x.checked), off = impItems.filter((x) => !x.checked);
-    const headOn = el('li', { class: 'imp-head' });
-    ul.append(headOn, ...on.map(item));
-    let headOff = null;
+    ul.append(el('li', { class: 'imp-head' }, t('Templates to import: {0}', on.length)), ...on.map(item));
     if (off.length) {
-      headOff = el('summary');
-      ul.append(el('li', { class: 'imp-rest' }, el('details', null, headOff, el('ul', { class: 'imp-list imp-sub' }, ...off.map(item)))));
+      // After a tick: open as it was, or when the box just unticked went in there (it keeps its focus).
+      const open = !!focus && (wasOpen || !focus.checked);
+      ul.append(el('li', { class: 'imp-rest' }, el('details', { open },
+        el('summary', null, t('Not ticked: {0} more files (copies, AutoBackups, CI-Sign\'s own files, text blocks)', off.length)),
+        el('ul', { class: 'imp-list imp-sub' }, ...off.map(item)))));
     }
-    // The counts in the headings, again when a box is ticked or not.
-    function heads() {
-      const n = impItems.filter((x) => x.checked).length;
-      headOn.textContent = t('Templates to import: {0}', n);
-      if (headOff) headOff.textContent = t('Not ticked: {0} more files (copies, AutoBackups, CI-Sign\'s own files, text blocks)', off.length);
-    }
-    heads();
+    if (focus) ul.scrollTop = top;
+    if (focusBox) focusBox.focus({ preventScroll: true });
     const n = impItems.length;
     $('impNote').textContent = n ? t('{0} template file(s) found, {1} image(s) picked.', n, impImages.size) : t('No .htm files among what was picked.');
     offFor($('impGo'), impItems.some((x) => x.checked) ? '' : t('Tick at least one template.'));

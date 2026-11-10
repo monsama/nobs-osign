@@ -36,13 +36,18 @@
     const all = text.join('\n');
     return (S.assets || []).map((a) => a.name).filter((n) => !all.includes('assets/' + n + '"') && !all.includes('assets/' + n + "'") && !all.includes('assets/' + n + '?'));
   }
+  // Those images deleted on the server, asked first: what came of it in words (null: not asked
+  // for). The undo steps start anew after it: the files they name are gone.
   async function removeUnused() {
     const names = unusedImages(); let n = 0;
+    if (!names.length) return null;
+    if (!(await ask(t('Remove these images from the draft? Nothing uses them: {0}', names.join(', ')), t('Remove'), true))) return null;
     for (const name of names) { try { await api('assets/delete', { name }); S.assets = S.assets.filter((a) => a.name !== name); n++; } catch (e) { /* that one stays */ } }
     changed({ list: false });
-    toast(t('{0} unused images removed from the draft.', n));
+    ghReset();
+    return n === 1 ? t('1 unused image removed from the draft.') : t('{0} unused images removed from the draft.', n);
   }
-  $('imgUnused').addEventListener('click', async () => { await removeUnused(); renderImageList(); });
+  $('imgUnused').addEventListener('click', async () => { const said = await removeUnused(); if (said) toast(said); renderImageList(); });
   // After the signatures' HTML changed here: the HTML tab shows the new one (else reopening would
   // take the old text in it for a change), saved, the signature or building block open again.
   function reopenChanged() {
@@ -53,9 +58,10 @@
     else if (S.sigId) openSig(S.sigId);
   }
   // The name an image is saved again under: without the -2, -3 an earlier save gave it (the server
-  // never writes over a file, so each save would add one), when that name is free.
+  // never writes over a file, so each save would add one), when that name is free. Only the
+  // server's endings (one or two digits): xmas-2026.png stays as it is.
   function freshName(name) {
-    const base = name.replace(/(?:-\d+)+(\.[A-Za-z0-9]+)$/, '$1');
+    const base = name.replace(/(?:-\d{1,2})+(\.[A-Za-z0-9]+)$/, '$1');
     return (S.assets || []).some((a) => a.name === base) ? name : base;
   }
   // An image put in another's place: uploaded under a new name (one is never written over), named
@@ -87,7 +93,7 @@
   }
   function forgetAsset(name) {
     for (const k of Object.keys(classicImg)) if (k.startsWith(name + '@')) delete classicImg[k];
-    delete dark[name];
+    delete dark[name]; delete darkWait[name];
   }
 
   // The images for the web, in one go (quiet; prepareClassic says what came of it): each shown as
@@ -196,15 +202,19 @@
     } catch (e) { return null; }
   }
   // Whether an image is dark lines on nothing (a logo that disappears on a dark background):
-  // looked at once, in the background; the publish checks say it the next time they are shown.
+  // looked at once, in the background; the publish checks say it the next time they are shown
+  // (Publish… waits for the ones used). Done when it is known (at once when it was already).
+  const darkWait = {};
   function darkCheck(name) {
-    if (name in dark) return; dark[name] = null;
-    loadImage(assetUrl(name)).then((img) => {
+    if (name in dark) return darkWait[name] || Promise.resolve();
+    dark[name] = null;
+    const p = darkWait[name] = loadImage(assetUrl(name)).then((img) => {
       try {
         const d = drawn(img, Math.min(120, img.naturalWidth)).data.data;
         let clear = 0, seen = 0, lum = 0;
         for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 40) { clear++; continue; } seen++; lum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; }
         dark[name] = clear > d.length / 4 * 0.2 && seen > 0 && lum / seen < 70;
       } catch (e) { dark[name] = false; }
-    }, () => { dark[name] = false; });
+    }, () => { dark[name] = false; }).finally(() => { if (darkWait[name] === p) delete darkWait[name]; });
+    return p;
   }

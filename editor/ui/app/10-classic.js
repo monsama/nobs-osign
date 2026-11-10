@@ -75,16 +75,28 @@
   // The image work (preparing, fitting) one at a time, the editing held meanwhile (it would put
   // the old names back), the message kept up till it is done. The undo steps from before start
   // anew after it: the files they name are gone.
+  // Undo and redo wait too (10-undo.js, the editor's own): a step from before would bring back
+  // files now gone.
   let preparing = false;
+  // Whether the image work is on: then said so, the message kept up (it goes when the work says
+  // what came of it).
+  function imagesBusy() {
+    if (preparing) toast(t('Still working on the images…'), false, null, true);
+    return preparing;
+  }
   async function imageWork(what, fn) {
-    if (preparing) { toast(t('Still working on the images…')); return; }
+    if (imagesBusy()) return;
     preparing = true;
+    ghButtons();
     document.body.classList.add('image-work'); $('source').readOnly = true;
     try { if (ddoc && ddoc.activeElement) ddoc.activeElement.blur(); } catch (e) { /* no design view */ }
     try {
       flushSource();
       toast(what, false, null, true);
       await fn();
+    } catch (e) {
+      // Said, so the message above does not stay up for ever.
+      toast(t(e.message), true);
     } finally {
       preparing = false;
       document.body.classList.remove('image-work'); $('source').readOnly = false;

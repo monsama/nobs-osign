@@ -598,6 +598,8 @@
   function histNote() { if (S.view === 'sig' && hist.id) { clearTimeout(hist.timer); hist.timer = setTimeout(histRecord, 500); } }
   // The editor's undo or redo one step.
   function histStep(dir) {
+    // Not while the images are worked on (10-classic.js): it would put the old names back.
+    if (imagesBusy()) return;
     if (hist.timer) histRecord();
     const s = sig(); if (!s || s.id !== hist.id) return;
     if (S.mode === 'html') flushSource();
