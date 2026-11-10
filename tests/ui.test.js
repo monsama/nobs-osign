@@ -173,14 +173,17 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
     { name: 'mustera.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('ffd8ffe000104a464946', 'hex') },
     { name: 'Newsletter-1.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('ffd8ffe000104a464946', 'hex') }
   ]);
-  await page.waitForSelector('#impList li');
-  const items = await page.$$eval('#impList li', (lis) => lis.map((li) => ({ name: li.querySelector('.imp-name').textContent, on: li.querySelector('input').checked, meta: li.querySelector('.imp-meta').textContent })));
-  assert.deepEqual(items.map((i) => [i.name, i.on]), [['Vertrieb', true], ['textblocks', false], ['Photos per person: 1 into photos\\ in the OSign folder', false]]);
+  await page.waitForSelector('#impList li.imp-item');
+  // In parts: the photos per person first, the templates ticked, the rest folded away.
+  assert.deepEqual(await page.$$eval('#impList > li.imp-head', (h) => h.map((x) => x.textContent)), ['Photos per person', 'Templates to import: 1']);
+  assert.match(await page.textContent('#impList .imp-rest summary'), /Not ticked: 1 more files/);
+  const items = await page.$$eval('#impList li.imp-item', (lis) => lis.map((li) => ({ name: li.querySelector('.imp-name').textContent, on: li.querySelector('input').checked, meta: li.querySelector('.imp-meta').textContent })));
+  assert.deepEqual(items.map((i) => [i.name, i.on]), [['Photos per person: 1 into photos\\ in the OSign folder', false], ['Vertrieb', true], ['textblocks', false]]);
   // Named like a user: a photo; a newsletter image is not one. Off unless ticked (photos count at once).
-  assert.match(items[2].meta, /^mustera\.jpg · used at once/);
-  assert.match(items[0].meta, /photo per person images\/@@sAMAccountName\.jpg → photos\\@@sAMAccountName\.jpg/);
-  assert.match(items[1].meta, /text blocks/);
-  assert.match(items[0].meta, /past text blocks left out: old · text blocks notice, legal, old \(with days: a campaign each\)/);
+  assert.match(items[0].meta, /^mustera\.jpg · used at once/);
+  assert.match(items[1].meta, /photo per person images\/@@sAMAccountName\.jpg → photos\\@@sAMAccountName\.jpg/);
+  assert.match(items[2].meta, /text blocks/);
+  assert.match(items[1].meta, /past text blocks left out: old · text blocks notice, legal, old \(with days: a campaign each\)/);
   await page.click('#impGo');
   await page.waitForSelector('#dlgImport:not([open])', { state: 'attached' });
   // A report of what came over: the templates, the campaigns, the blocks, and what is left to do.

@@ -65,11 +65,15 @@
     renderImportList();
   }
 
+  // The list in parts: the photos per person first (they count at once), then the templates ticked,
+  // then the rest folded away (copies, AutoBackups, CI-Sign's own editor files, text blocks): a
+  // CI-Sign folder holds hundreds of files, and what is taken over should be in sight.
   function renderImportList() {
     const ul = $('impList'); ul.textContent = '';
-    impItems.forEach((it) => {
+    const item = (it) => {
       const box = el('input', { type: 'checkbox' }); box.checked = it.checked;
-      box.addEventListener('change', () => { it.checked = box.checked; offFor($('impGo'), impItems.some((x) => x.checked) ? '' : t('Tick at least one template.')); });
+      const li = el('li', { class: 'imp-item' + (it.checked ? '' : ' skip') });
+      box.addEventListener('change', () => { it.checked = box.checked; li.classList.toggle('skip', !box.checked); offFor($('impGo'), impItems.some((x) => x.checked) ? '' : t('Tick at least one template.')); heads(); });
       const exists = S.config.signatures.some((x) => x.name.toLowerCase() === it.name.toLowerCase());
       const meta = [];
       if (it.blocks) meta.push(el('span', { class: 'warn' }, t('CI-Sign text blocks ({##…}), not a signature. ')));
@@ -86,16 +90,35 @@
       }
       if (it.perPerson.length) meta.push(t(' · photo per person {0} → photos\\{1}', it.perPerson[0], it.perPerson[0].split(/[\\/]/).pop()));
       if (exists) meta.push(t(' · replaces the signature of the same name'));
-      ul.append(el('li', { class: it.checked ? '' : 'skip' }, box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta))));
-    });
+      li.append(box, el('div', null, el('div', { class: 'imp-name' }, it.name), el('div', { class: 'imp-meta' }, el('span', null, it.path), el('br'), ...meta)));
+      return li;
+    };
     if (impPhotos.length) {
+      ul.append(el('li', { class: 'imp-head' }, t('Photos per person')));
       const box = el('input', { type: 'checkbox' }); box.checked = impPhotosOn;
-      box.addEventListener('change', () => { impPhotosOn = box.checked; });
+      const li = el('li', { class: 'imp-item' + (impPhotosOn ? '' : ' skip') });
+      box.addEventListener('change', () => { impPhotosOn = box.checked; li.classList.toggle('skip', !box.checked); });
       const names = impPhotos.map((f) => f.name);
-      ul.append(el('li', { class: impPhotosOn ? '' : 'skip' }, box, el('div', null,
+      li.append(box, el('div', null,
         el('div', { class: 'imp-name' }, t('Photos per person: {0} into photos\\ in the OSign folder', impPhotos.length)),
-        el('div', { class: 'imp-meta' }, names.slice(0, 12).join(', ') + (names.length > 12 ? ' …' : '') + t(' · used at once, without publishing; a photo already there of the same name is replaced')))));
+        el('div', { class: 'imp-meta' }, names.slice(0, 12).join(', ') + (names.length > 12 ? ' …' : '') + t(' · used at once, without publishing; a photo already there of the same name is replaced'))));
+      ul.append(li);
     }
+    const on = impItems.filter((x) => x.checked), off = impItems.filter((x) => !x.checked);
+    const headOn = el('li', { class: 'imp-head' });
+    ul.append(headOn, ...on.map(item));
+    let headOff = null;
+    if (off.length) {
+      headOff = el('summary');
+      ul.append(el('li', { class: 'imp-rest' }, el('details', null, headOff, el('ul', { class: 'imp-list imp-sub' }, ...off.map(item)))));
+    }
+    // The counts in the headings, again when a box is ticked or not.
+    function heads() {
+      const n = impItems.filter((x) => x.checked).length;
+      headOn.textContent = t('Templates to import: {0}', n);
+      if (headOff) headOff.textContent = t('Not ticked: {0} more files (copies, AutoBackups, CI-Sign\'s own files, text blocks)', off.length);
+    }
+    heads();
     const n = impItems.length;
     $('impNote').textContent = n ? t('{0} template file(s) found, {1} image(s) picked.', n, impImages.size) : t('No .htm files among what was picked.');
     offFor($('impGo'), impItems.some((x) => x.checked) ? '' : t('Tick at least one template.'));

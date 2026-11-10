@@ -982,6 +982,8 @@
     'The file is not the image its name says.': 'Die Datei ist nicht das Bild, das ihr Name sagt.',
     'Only who asked for it, or the local account admin, can withdraw it.': 'Zurückziehen kann sie nur, wer sie angefragt hat, oder der lokale Admin.',
     'User to look up': 'Gesuchte Person',
+    'Templates to import: {0}': 'Zu importierende Vorlagen: {0}',
+    "Not ticked: {0} more files (copies, AutoBackups, CI-Sign's own files, text blocks)": 'Nicht gewählt: {0} weitere Dateien (Kopien, AutoBackups, Dateien von CI-Sign selbst, Textbausteine)',
     'There is no signature: publishing takes all of them out of Outlook. From then on, nobody gets one by OSign.': 'Es gibt keine Signatur: Veröffentlichen nimmt alle aus Outlook heraus. Danach bekommt niemand mehr eine von OSign.',
     'No signature: Outlook gets none': 'Keine Signatur: Outlook bekommt keine',
     'Publish with no signature? Outlook then puts none in, for anyone.': 'Ohne Signatur veröffentlichen? Outlook fügt dann bei niemandem mehr eine ein.',

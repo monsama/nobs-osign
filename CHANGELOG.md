@@ -9,6 +9,9 @@ when it says so. The release notes on GitHub say the same for each version.
 - Fixed: with every signature deleted, the change could not be published ("There is no signature"
   stopped it), and "Unpublished changes" stayed. Now it can: the checks say the one thing to know
   (Outlook then gets none, from anyone), and *Publish* asks once more.
+- Importing from CI-Sign: the list in parts. The photos per person first, then the templates
+  ticked, the rest (copies, AutoBackups, CI-Sign's own files, text blocks) folded away below, with
+  how many there are.
 
 ## 0.9.100
 - **Publish checks, as best practice has it:** what a recipient would see (alt text, width,
