@@ -58,20 +58,21 @@ async function build(env, settings, outDir) {
 // naming them. Classic Outlook's event handler is refused the sign-in to SharePoint; from here it
 // loads them as they are, without one (common.js hostedImage). Photos of people are not put here.
 // The number of images.
-function hostImages(dir, images) {
+function hostImages(dir, images, updated) {
   const out = path.join(dir, 'img');
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
-  const index = {};
+  const files = {};
   for (const [name, bytes] of images || []) {
     const ext = (/\.(png|jpe?g|gif)$/i.exec(name) || [])[0];
     if (!ext || !Buffer.isBuffer(bytes) || name.includes('/') || name.includes('\\')) continue;
     const file = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 24) + ext.toLowerCase().replace('.jpeg', '.jpg');
     fs.writeFileSync(path.join(out, file), bytes);
-    index[name] = 'img/' + file;
+    files[name] = 'img/' + file;
   }
-  fs.writeFileSync(path.join(out, 'index.json'), JSON.stringify(index));
-  return Object.keys(index).length;
+  // updated: the version of the signatures they are for; the add-in takes them for that one only.
+  fs.writeFileSync(path.join(out, 'index.json'), JSON.stringify({ updated: String(updated || ''), files }));
+  return Object.keys(files).length;
 }
 
 // A ZIP of the folder, stored (the files are small and mostly compressed already). zlib.crc32
@@ -151,7 +152,9 @@ function pagesHash(data, rel) { return bytesToHex(blake3(Buffer.from(data.toStri
 const SPECIAL = new Set(['_headers', '_redirects', '_routes.json', '_worker.js']);
 
 // The add-in's files uploaded to the Pages project: only the files not there yet, then a deployment of all.
-async function pagesDeploy(c, dir, fetchFn) {
+// opts.create false: a project not there (removed in Cloudflare) is not made again (the images
+// after a publish), only by the admin's upload.
+async function pagesDeploy(c, dir, fetchFn, opts) {
   const problem = pagesProblem(c); if (problem) throw new Error(problem);
   // One call to the Cloudflare API, its answer or the error it says.
   async function cf(method, url, { token, json, form } = {}) {
@@ -175,6 +178,7 @@ async function pagesDeploy(c, dir, fetchFn) {
   let info;
   try { info = await cf('GET', proj); } catch (e) {
     if (e.status !== 404) throw e;
+    if (opts && opts.create === false) throw new Error('The Cloudflare Pages project ' + c.project + ' is not there: upload the add-in\'s files once (Settings → Outlook add-in).');
     info = await cf('POST', c.api + '/accounts/' + c.account + '/pages/projects', { json: { name: c.project, production_branch: 'main' } });
   }
   // Its own address: <name>.pages.dev, or what Cloudflare gave it when that name was taken.

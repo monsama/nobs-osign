@@ -165,18 +165,25 @@ test('publishing puts the images next to the add-in\'s files (img/, by their con
   assert.equal(up.name, 'banner.png', JSON.stringify(up));
   const before = cf.deployments.length;
   const html = '<p>Anna<img src="assets/banner.png" width="32" alt="B"></p>';
-  const r = await api('publish', { configJson: JSON.stringify({ schemaVersion: 1, options: {}, fields: [], signatures: [{ id: 'a', name: 'A', html, compiled: html }] }) });
+  const r = await api('publish', { configJson: JSON.stringify({ schemaVersion: 1, updated: '2026-11-10T10:00:00.000Z', options: {}, fields: [], signatures: [{ id: 'a', name: 'A', html, compiled: html }] }) });
   assert.equal(r.changed, true, JSON.stringify(r));
   assert.ok(!r.hostedError, r.hostedError);
   assert.equal(cf.deployments.length, before + 1, 'uploaded with the add-in\'s files');
   const index = JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8'));
-  assert.match(index['banner.png'], /^img\/[0-9a-f]{24}\.png$/);
+  assert.match(index.files['banner.png'], /^img\/[0-9a-f]{24}\.png$/);
+  assert.equal(index.updated, '2026-11-10T10:00:00.000Z', 'for that version of the signatures');
   const d = cf.deployments[cf.deployments.length - 1];
-  assert.ok(cf.assets.get(d.manifest['/' + index['banner.png']]).data.equals(png), 'the image as it is');
+  assert.ok(cf.assets.get(d.manifest['/' + index.files['banner.png']]).data.equals(png), 'the image as it is');
   assert.ok(d.manifest['/img/index.json'] && d.manifest['/manifest.xml']);
-  // Made again: the images go with them.
+  // Made again: the images go with them; but a publish now uploads nothing until these are uploaded.
   assert.ok(!(await api('addin/build')).error);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8')), index);
+  const n = cf.deployments.length;
+  const html2 = html + '<p>2</p>';
+  const r2 = await api('publish', { configJson: JSON.stringify({ schemaVersion: 1, options: {}, fields: [], signatures: [{ id: 'a', name: 'A', html: html2, compiled: html2 }] }) });
+  assert.match(r2.hostedError, /not the ones on Cloudflare Pages/);
+  assert.equal(cf.deployments.length, n, 'files made, not uploaded, do not go up with a publish');
+  assert.equal((await api('addin/upload')).ok, true);
 });
 
 test('a banner of a campaign that has not begun is not next to the add-in\'s files yet (nor one that is over)', async () => {
@@ -191,7 +198,13 @@ test('a banner of a campaign that has not begun is not next to the add-in\'s fil
   assert.equal(r.changed, true, JSON.stringify(r));
   assert.ok(!r.hostedError, r.hostedError);
   const index = JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8'));
-  assert.deepEqual(Object.keys(index).sort(), ['banner.png', 'now.png']);
+  assert.deepEqual(Object.keys(index.files).sort(), ['banner.png', 'now.png']);
+  // A signature nobody gets: its images are not there either.
+  const nobody = '<p><img src="assets/soon.png" width="16" alt="b"></p>';
+  config.signatures.push({ id: 'n', name: 'N', html: nobody, compiled: nobody, audience: { everyone: false } });
+  assert.ok(!(await api('publish', { configJson: JSON.stringify(config) })).hostedError);
+  const index2 = JSON.parse(fs.readFileSync(path.join(dataDir, 'addin', 'img', 'index.json'), 'utf8'));
+  assert.deepEqual(Object.keys(index2.files).sort(), ['banner.png', 'now.png']);
 });
 
 test('check: the address serves exactly the files made here', async () => {

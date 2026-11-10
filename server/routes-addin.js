@@ -9,7 +9,7 @@ const path = require('node:path');
 const addin = require('./addin');
 const { writeAtomic } = require('./store');
 
-function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, publishedImages, fetchFn, adminOnly, live, log }) {
+function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, addinMade, publishedImages, addinBuildFile, hostSerial, fetchFn, adminOnly, live, log }) {
   const routes = {
     // The add-in's files: made into the data volume, then uploaded or downloaded.
     'addin/build': async (d, s) => {
@@ -28,7 +28,12 @@ function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, ad
       }
       const r = await addin.build(env, st, addinDir);
       // The published images with them (img/), for classic Outlook: uploaded together.
-      if (!r.error && publishedImages) { try { const imgs = publishedImages(); if (imgs.size) addin.hostImages(addinDir, imgs); } catch (e) { log.warn('addin/build: images: ' + e.message); } }
+      // Only for Cloudflare Pages: no other host gets them again with every publish (they would go stale there).
+      if (!r.error && publishedImages && st.addinHost === 'cloudflare' && addin.pagesEnabled(pages)) {
+        try { const h = publishedImages(); if (h.images.size) addin.hostImages(addinDir, h.images, h.updated); } catch (e) { log.warn('addin/build: images: ' + e.message); }
+      }
+      // This making's own id: a publish uploads the images only with the files uploaded last.
+      if (!r.error && addinBuildFile) writeAtomic(addinBuildFile, JSON.stringify({ id: require('node:crypto').randomBytes(9).toString('hex'), at: Date.now() }));
       if (!r.error && note) r.note = note;
       return r.error ? r : Object.assign({ folder: '' }, r);
     },
@@ -41,12 +46,17 @@ function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, ad
     'addin/upload': async (d, s) => {
       if (adminOnly(s)) return { error: adminOnly(s) };
       if (!fs.existsSync(path.join(addinDir, 'manifest.xml'))) return { error: 'Create the add-in files first.' };
-      try {
-        const r = await addin.pagesDeploy(pages, addinDir, fetchFn);
-        // Which version went up, and when: Status compares it with this server's.
-        writeAtomic(addinUploadFile, JSON.stringify({ version: addinMade().version, at: Date.now(), url: r.url }));
-        return r;
-      } catch (e) { return { error: e.message }; }
+      const run = async () => {
+        try {
+          const r = await addin.pagesDeploy(pages, addinDir, fetchFn);
+          // Which version and making went up, and when: Status compares it with this server's, and
+          // publishing uploads the images only with these files.
+          const made = addinBuildFile ? (() => { try { return JSON.parse(fs.readFileSync(addinBuildFile, 'utf8')); } catch (e) { return null; } })() : null;
+          writeAtomic(addinUploadFile, JSON.stringify({ version: addinMade().version, build: made ? made.id : '', at: Date.now(), url: r.url }));
+          return r;
+        } catch (e) { return { error: e.message }; }
+      };
+      return hostSerial ? hostSerial(run) : run();
     }
   };
   return { routes };
