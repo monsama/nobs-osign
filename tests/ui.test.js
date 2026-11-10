@@ -2041,8 +2041,10 @@ test('publish checks: the active signatures checked, the rest in one grey line; 
   assert.match(text, /tw-icon\.gif \(→ tw-icon\.png\)/);
   await page.evaluate(() => document.querySelectorAll('#pubChecks details').forEach((d) => { d.open = true; }));
   await page.click('#pubChecks button:has-text("Use the draft\'s images instead")');
-  await page.waitForFunction(() => !document.querySelector('#dlgPublish[open]') || !/tw-icon\.gif/.test(document.querySelector('#pubChecks').textContent), null, { timeout: 10000 });
-  if (await page.isVisible('#dlgPublish[open]')) await page.click('#dlgPublish button[value=cancel]');
+  // Done, and said in the dialog opened again (once it is open again: it waits for the dark-mode looks).
+  await page.waitForFunction(() => document.querySelector('#dlgPublish[open]') && /image put in place|images put in place/.test(document.querySelector('#pubOk').textContent), null, { timeout: 10000 });
+  assert.doesNotMatch(await page.textContent('#pubChecks'), /tw-icon\.gif/);
+  await page.click('#dlgPublish button[value=cancel]');
   await page.click('#sigList li a:has-text("' + mine + '")');
   await page.click('.tab[data-mode=html]');
   const html = await page.inputValue('#source');
