@@ -2071,3 +2071,25 @@ test('a further way when preparing is not enough: the images as small in KB as i
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('all signatures deleted: publishing that (asked once more) takes them out of Outlook; the change is not stuck', { skip }, async () => {
+  const c = JSON.parse((await api('draft/get')).configJson);
+  c.signatures = [];
+  assert.ok(!(await api('draft/save', { configJson: JSON.stringify(c), force: true })).error);
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  const text = await page.textContent('#pubChecks');
+  assert.match(text, /There is no signature: publishing takes all of them out of Outlook/);
+  assert.doesNotMatch(text, /default for new mail|default for replies/, 'only the one thing to know');
+  assert.equal(await page.isDisabled('#pubGo'), false);
+  await page.click('#pubGo');
+  await page.waitForSelector('#dlgAsk[open]');
+  await page.click('#askOk');
+  await page.waitForFunction(() => /Published/.test(document.querySelector('#pubOk').textContent));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder, 'signatures.json'), 'utf8')).signatures, []);
+  await page.click('#dlgPublish button[value=cancel]');
+  await page.waitForFunction(() => !/Unpublished changes/.test(document.querySelector('#stPub') ? document.querySelector('#stPub').textContent : ''));
+  assert.deepEqual(errors, []);
+});
