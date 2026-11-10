@@ -5,6 +5,14 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.101
+- Fixed: with every signature deleted, the change could not be published ("There is no signature"
+  stopped it), and "Unpublished changes" stayed. Now it can: the checks say the one thing to know
+  (Outlook then gets none, from anyone), and *Publish* asks once more.
+- Importing from CI-Sign: the list in parts. The photos per person first, then the templates
+  ticked, the rest (copies, AutoBackups, CI-Sign's own files, text blocks) folded away below, with
+  how many there are.
+
 ## 0.9.100
 - **Publish checks, as best practice has it:** what a recipient would see (alt text, width,
   http://, dark mode, missing images, classic Outlook) is checked in the active signatures only,

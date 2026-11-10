@@ -73,7 +73,12 @@
     const c = prepared(), out = [], later = [], day = core.today();
     const errs = core.validate(c);
     errs.forEach((e) => out.push(['bad', t(e)]));
-    if (!c.signatures.length) out.push(['bad', t('There is no signature.')]);
+    // None left (all deleted): publishing that takes them out of Outlook, said as the one thing
+    // to know (the defaults, the users and the looks say nothing then); asked once more on Publish.
+    if (!c.signatures.length) {
+      out.push(['warn', t('There is no signature: publishing takes all of them out of Outlook. From then on, nobody gets one by OSign.'), null, t('No signature: Outlook gets none')]);
+      return out;
+    }
     const idle = c.signatures.filter((s) => core.forNobody(s) || (core.isCampaign(s) && s.validUntil && s.validUntil < day));
     const active = c.signatures.filter((s) => !idle.includes(s)), ca = Object.assign({}, c, { signatures: active });
     if (onServer()) {
@@ -286,6 +291,7 @@
   const pubNote = () => $('pubMsg').value.trim() || $('pubMsg').placeholder;
   $('pubGo').addEventListener('click', async (e) => {
     e.preventDefault();
+    if (!prepared().signatures.length && !(await ask(t('Publish with no signature? Outlook then puts none in, for anyone.'), t('Publish with none'), true))) return;
     $('pubGo').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
       // A change still waiting for its save goes first, so the draft and what is published match.
