@@ -330,15 +330,16 @@ test('classic Outlook: the copy the pane kept in the mailbox goes in, with the i
 
 test('classic Outlook: the images as they are from next to the add-in\'s files (img/), not the smaller copies in the mailbox', async () => {
   const config = makeConfig();
+  config.updated = '2026-11-10T09:00:00.000Z';
   const std = config.signatures[0];
   const small = Buffer.from('a smaller copy');
   const roaming = {
     'osign.profile': JSON.stringify({ at: Date.now() - 60 * 60 * 1000, values: { givenName: 'Anna', sn: 'Muster', mobile: '', sAMAccountName: 'mustera', mail: 'anna@example.com' }, groups: [], groupsFor: 'graph\n' }),
-    'osign.classic': JSON.stringify({ at: config.updated, cfg: { schemaVersion: config.schemaVersion, options: config.options, fields: [], signatures: [{ id: std.id, name: std.name, compiled: std.compiled, defaultNew: true, audience: std.audience }] },
+    'osign.classic': JSON.stringify({ at: config.updated, cfg: { schemaVersion: config.schemaVersion, updated: config.updated, options: config.options, fields: [], signatures: [{ id: std.id, name: std.name, compiled: std.compiled, defaultNew: true, audience: std.audience }] },
       images: { 'assets/logo.png': { b64: small.toString('base64'), type: 'image/png', file: 'assets-logo.png' } } })
   };
   const file = 'img/' + 'a1'.repeat(12) + '.png';
-  const r = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { 'logo.png': file }, [file]: PNG } });
+  const r = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { updated: config.updated, files: { 'logo.png': file } }, [file]: PNG } });
   await r.fire('onNewMessageComposeHandler');
   const logo = r.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]));
   assert.ok(logo, r.calls.filter((c) => c[0] === 'log').map((c) => c[1]).join('\n'));
@@ -347,7 +348,7 @@ test('classic Outlook: the images as they are from next to the add-in\'s files (
   assert.ok(r.graph.requests.includes('https://osign.example/img/index.json'));
   // Kept in this Outlook for the next mail, only the images published now.
   const storage = { 'osign.hosted': JSON.stringify({ ['img/' + 'b2'.repeat(12) + '.png']: 'b2xk' }) };
-  const again = runtime({ signInFails: true, roaming, platform: 'PC', runtimeStorage: storage, hosted: { 'img/index.json': { 'logo.png': file }, [file]: PNG } });
+  const again = runtime({ signInFails: true, roaming, platform: 'PC', runtimeStorage: storage, hosted: { 'img/index.json': { updated: config.updated, files: { 'logo.png': file } }, [file]: PNG } });
   await again.fire('onNewMessageComposeHandler');
   assert.deepEqual(Object.keys(JSON.parse(storage['osign.hosted'])), [file], 'the image no longer published is gone');
   // Not to be had there (no network): the copy kept in the mailbox.
@@ -355,9 +356,17 @@ test('classic Outlook: the images as they are from next to the add-in\'s files (
   await off.fire('onNewMessageComposeHandler');
   assert.equal(off.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]))[2], small.toString('base64'));
   // An index naming something that is not an image file of its own: not followed.
-  const odd = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { 'logo.png': '../manifest.xml' } } });
+  const odd = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { updated: config.updated, files: { 'logo.png': '../manifest.xml' } } } });
   await odd.fire('onNewMessageComposeHandler');
   assert.equal(odd.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]))[2], small.toString('base64'));
+  // An index of another publish (the copy here is older or newer): the copy kept with this one.
+  const other = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { updated: '1999-01-01T00:00:00Z', files: { 'logo.png': file } }, [file]: PNG } });
+  await other.fire('onNewMessageComposeHandler');
+  assert.equal(other.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]))[2], small.toString('base64'));
+  // Not an image (a page answered in its place): not put in.
+  const page = runtime({ signInFails: true, roaming, platform: 'PC', hosted: { 'img/index.json': { updated: config.updated, files: { 'logo.png': file } }, [file]: Buffer.from('<html>not found</html>') } });
+  await page.fire('onNewMessageComposeHandler');
+  assert.equal(page.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]))[2], small.toString('base64'));
 });
 
 test('a sign-in that never answers: after a while a notice, and the event completes', async () => {
@@ -600,7 +609,7 @@ test('signature HTML put into the pane: nothing in it runs or loads from a stran
     '<a href="https://ex.ch/">a</a><a href="mailto:a@b.ch">b</a><a href="tel:+41">c</a><a href="kontakt.html">d</a><img src="data:image/png;base64,AA" data-osign-src="assets/logo.png"><img src="cid:x">');
   // Read differently a second time (noscript): it is never written as text again.
   assert.equal(clean('<noscript><p title="</noscript><img src=x onerror=alert(1)>"></p></noscript><i>x</i>'), '<i>x</i>');
-  assert.equal(clean('<p style="width:expression(alert(1))">x</p><svg><a xlink:href="javascript:alert(1)"><text>t</text></a></svg>'), '<p>x</p><svg><a><text>t</text></a></svg>');
+  assert.equal(clean('<p style="width:expression(alert(1))">x</p><svg><a xlink:href="javascript:alert(1)"><text>t</text></a></svg>'), '<p>x</p>', 'svg is not kept at all (its <set>/<animate> can make a javascript: link)');
   for (const bad of ['javascript:x', 'JaVaScRiPt:x', 'vbscript:x', '\u0001javascript:x', 'java\nscript:x', 'data:text/html,x', 'data:application/x', 'file:///c:/x']) assert.equal(safeUrl(bad), false, JSON.stringify(bad));
   for (const ok of ['https://x', 'http://x', 'mailto:a@b', 'tel:+41', 'cid:a', 'data:image/png;base64,AA', 'assets/logo.png', '#top', '']) assert.equal(safeUrl(ok), true, ok);
 });

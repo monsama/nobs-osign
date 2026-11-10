@@ -82,7 +82,7 @@ fs.writeFileSync(path.join(template, 'index.html'), `<!doctype html><html lang="
 const HOSTING = {
   // img/: the published images (server/addin.js hostImages), for classic Outlook's event runtime,
   // which may load them from another origin than the add-in's.
-  cloudflare: { '_headers': '/*\n  Cache-Control: no-cache\n/img/*\n  Access-Control-Allow-Origin: *\n' },
+  cloudflare: { '_headers': '/*\n  Cache-Control: no-cache\n/img/*\n  Access-Control-Allow-Origin: *\n  X-Content-Type-Options: nosniff\n' },
   azure: { 'staticwebapp.config.json': JSON.stringify({ globalHeaders: { 'Cache-Control': 'no-cache' } }, null, 2) + '\n' },
   iis: { 'web.config': '<?xml version="1.0" encoding="utf-8"?>\n<configuration>\n  <system.webServer>\n    <staticContent>\n      <clientCache cacheControlMode="DisableCache" />\n    </staticContent>\n  </system.webServer>\n</configuration>\n' },
   apache: { '.htaccess': '<IfModule mod_headers.c>\n  Header set Cache-Control "no-cache"\n</IfModule>\n' }

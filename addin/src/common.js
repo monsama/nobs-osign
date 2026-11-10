@@ -28,7 +28,10 @@ const FOLDER = OSIGN_SETUP.folder;
 const DRIVE = /^[A-Za-z0-9!_.-]+$/.test(OSIGN_SETUP.drive || '') ? OSIGN_SETUP.drive : '';
 const ITEM = /^[A-Za-z0-9!_.-]+$/.test(OSIGN_SETUP.item || '') ? OSIGN_SETUP.item : '';
 // The add-in's own address (https://…/), where the server also puts the published images (img/).
-const BASE = /^https:\/\/[^\s"'<>]+\/$/.test(OSIGN_SETUP.base || '') ? OSIGN_SETUP.base : '';
+const BASE = /^(https:\/\/[^\s"'<>]+|http:\/\/localhost(:\d+)?)\/$/.test(OSIGN_SETUP.base || '') ? OSIGN_SETUP.base : '';
+// The version of the signatures loaded last (their "updated"): the images next to the add-in's
+// files are used only when they are of the same publish, else the copies kept with that version.
+let loadedUpdated = '';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 // Reading the folder needs Sites.Read.All; groups need GroupMember.Read.All. Both delegated, so the
 // add-in reads only what the user may read anyway, and both with admin consent, so nobody is asked.
@@ -271,6 +274,7 @@ export async function loadConfig(opts) {
     if (!cached || cached.etag !== meta.eTag) await store.set(CONFIG_KEY, JSON.stringify({ etag: meta.eTag || '', text }));
     // A pilot (published by 0.9.57-0.9.60): not any more; everyone gets the version for all.
     delete cfg.pilot;
+    loadedUpdated = String(cfg.updated || '');
     return cfg;
   } catch (e) {
     if (cached && cached.text) {
@@ -278,11 +282,12 @@ export async function loadConfig(opts) {
         const cfg = JSON.parse(cached.text);
         console.log('OSign: signatures from the copy kept before (' + (e && e.message ? e.message : e) + ').');
         delete cfg.pilot;
+        loadedUpdated = String(cfg.updated || '');
         return cfg;
       } catch (e2) { /* below */ }
     }
     const classic = classicCopy();
-    if (classic) { console.log('OSign: signatures from the copy in the mailbox (' + (e && e.message ? e.message : e) + ').'); return classic.cfg; }
+    if (classic) { console.log('OSign: signatures from the copy in the mailbox (' + (e && e.message ? e.message : e) + ').'); loadedUpdated = String(classic.cfg.updated || ''); return classic.cfg; }
     throw e;
   }
 }
@@ -461,39 +466,60 @@ async function keptImage(w) {
 // an image is cached by its file (a new image is a new file). null when not there (no index, the
 // network gone, a photo): the copies kept before then.
 const HOSTED_KEY = 'osign.hosted';
+// At most this much of them kept in this Outlook (its storage holds about 10 MB in all), and an
+// image downloaded only up to the size the server takes (1 MB).
+const HOSTED_CACHE_MAX = 2 * 1024 * 1024, HOSTED_FILE_MAX = 1024 * 1024;
 let hosted = null, hostedAt = 0;
+// The index ({ updated, files: { name: 'img/<hash>.png' } }), looked at once a minute at most,
+// also when it could not be had (no network, a host that answers something else): then {}.
 async function hostedIndex() {
   if (!BASE) return null;
-  if (hosted && Date.now() - hostedAt < 60 * 1000) return hosted;
+  if (hostedAt && Date.now() - hostedAt < 60 * 1000) return hosted;
+  hostedAt = Date.now();
   try {
     const j = await fetchWithin(BASE + 'img/index.json', { cache: 'no-cache' }, 8000, 'The images', (r) => (r.ok ? r.json() : null));
-    hosted = j && typeof j === 'object' && !Array.isArray(j) ? j : {};
-  } catch (e) { console.log('OSign: hosted images: ' + (e && e.message ? e.message : e)); hosted = hosted || null; }
-  hostedAt = Date.now();
+    hosted = j && typeof j === 'object' && !Array.isArray(j) && j.files && typeof j.files === 'object' && !Array.isArray(j.files) ? j : {};
+  } catch (e) { console.log('OSign: hosted images: ' + (e && e.message ? e.message : e)); hosted = {}; }
   return hosted;
 }
-// An image's file in the index (its name as published, in any case), or ''.
+// An image's file in the index (its name as published, in any case), or '': only for the
+// signatures of that same publish.
 function hostedFile(index, name) {
-  const f = index && (index[name] || index[Object.keys(index).find((k) => k.toLowerCase() === String(name).toLowerCase())]);
+  const files = index && index.files;
+  if (!files || !index.updated || String(index.updated) !== loadedUpdated) return '';
+  const f = files[name] || files[Object.keys(files).find((k) => k.toLowerCase() === String(name).toLowerCase())];
   return typeof f === 'string' && /^img\/[0-9a-f]{24}\.(png|jpg|gif)$/.test(f) ? f : '';
+}
+// Whether the bytes are the image the name says (an error page is not).
+function isImage(b, file) {
+  const ext = file.split('.').pop();
+  if (ext === 'png') return b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+  if (ext === 'jpg') return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  return b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38;
 }
 async function hostedImage(w) {
   if (w.dir !== 'assets') return null;
   const index = await hostedIndex();
   const file = hostedFile(index, w.name);
   if (!file) return null;
-  // Kept in one place, by file, only for the files the index names now: an image no longer
-  // published goes from this Outlook's storage too.
+  // Kept in one place, by file, only for the files the index names now (an image no longer
+  // published goes from this Outlook's storage too), at most HOSTED_CACHE_MAX of them.
   const cache = (await readJson(HOSTED_KEY)) || {};
   if (cache[file]) return { b64: cache[file], type: typeOf(w.name), file: fileOf(w) };
   try {
-    const b64 = base64(await fetchWithin(BASE + file, {}, 15000, 'Loading ' + w.name, async (r) => { if (!r.ok) throw new Error('Loading ' + w.name + ': ' + r.status); return new Uint8Array(await r.arrayBuffer()); }));
-    if (b64.length < IMAGE_CACHE_MAX * 4 / 3) {
-      const now = new Set(Object.values(index));
-      const keep = {}; Object.keys(cache).forEach((f) => { if (now.has(f)) keep[f] = cache[f]; });
-      keep[file] = b64;
-      await store.set(HOSTED_KEY, JSON.stringify(keep));
-    }
+    const bytes = await fetchWithin(BASE + file, {}, 15000, 'Loading ' + w.name, async (r) => {
+      if (!r.ok) throw new Error('Loading ' + w.name + ': ' + r.status);
+      const n = Number(r.headers && r.headers.get ? r.headers.get('content-length') : 0);
+      if (n > HOSTED_FILE_MAX) throw new Error('Loading ' + w.name + ': too large');
+      return new Uint8Array(await r.arrayBuffer());
+    });
+    if (bytes.length > HOSTED_FILE_MAX || !isImage(bytes, file)) throw new Error('Loading ' + w.name + ': not an image');
+    const b64 = base64(bytes);
+    const now = new Set(Object.values(index.files));
+    const keep = {}; let total = b64.length;
+    Object.keys(cache).forEach((f) => { if (now.has(f) && total + cache[f].length <= HOSTED_CACHE_MAX) { keep[f] = cache[f]; total += cache[f].length; } });
+    if (b64.length <= HOSTED_CACHE_MAX) keep[file] = b64;
+    await store.set(HOSTED_KEY, JSON.stringify(keep));
     return { b64, type: typeOf(w.name), file: fileOf(w) };
   } catch (e) { console.log('OSign: hosted image ' + w.name + ': ' + (e && e.message ? e.message : e)); return null; }
 }
@@ -511,7 +537,10 @@ async function loadImages(refs, interactive) {
   try { tok = await token(BASE_SCOPES, interactive); } catch (e) {
     // No sign-in (classic Outlook's event runtime is refused it): the images next to the add-in's
     // files, else the copies kept before.
-    for (const w of wanted) { const k = await fallbackImage(w); if (k) out[w.key] = k; }
+    // All at once, and not longer than 20 seconds together (Outlook waits for the signature).
+    const got = await withTimeout(Promise.all(wanted.map((w) => fallbackImage(w).catch(() => null))), 20000, 'The images').catch(() => null);
+    if (got) wanted.forEach((w, i) => { if (got[i]) out[w.key] = got[i]; });
+    else for (const w of wanted) { const k = await keptImage(w); if (k) out[w.key] = k; }
     if (!Object.keys(out).length) throw e;
     console.log('OSign: images without SharePoint (sign-in: ' + (e && e.message ? e.message : e) + ').');
     return out;

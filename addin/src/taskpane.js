@@ -65,7 +65,6 @@ const DE = {
   'Classic Outlook: {0} image(s) did not fit into your mailbox settings and are left out when the signature goes in by itself there. Insert puts in everything.': 'Klassisches Outlook: {0} Bild(er) passen nicht in die Postfach-Einstellungen und fehlen, wenn die Signatur dort selbst eingefügt wird. Einfügen fügt alles ein.',
   'Outlook did not keep the variant: the room for add-in settings in your mailbox is full. Shorten or delete other variants.': 'Outlook hat die Variante nicht gespeichert: Der Platz für Add-in-Einstellungen in Ihrem Postfach ist voll. Kürzen oder löschen Sie andere Varianten.',
   'You have {0} variants, the most there can be.': 'Sie haben {0} Varianten, mehr sind nicht möglich.',
-  'Only the fields below are yours to change; the rest stays the company signature.': 'Nur die Felder unten können Sie ändern; der Rest bleibt die Firmensignatur.',
   'How it works': 'So funktioniert es',
   'Your signature goes into new mail and replies by itself, with your details from the company directory. If they are wrong, IT changes them there; "Read my details again" fetches them anew.': 'Ihre Signatur kommt von selbst in neue Mails und Antworten, mit Ihren Angaben aus dem Firmenverzeichnis. Stimmen sie nicht, ändert die IT sie dort; «Meine Angaben neu lesen» holt sie neu.',
   'Above, choose which signature goes into new mail and which into replies. "Company default" follows what the company sets.': 'Oben wählen Sie, welche Signatur in neue Mails und welche in Antworten kommt. «Firmenstandard» folgt dem, was die Firma festlegt.',

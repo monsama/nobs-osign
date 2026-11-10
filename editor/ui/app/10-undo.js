@@ -67,6 +67,8 @@
   // ↶ and ↷: on or off, their tooltip naming the step.
   function ghButtons() {
     const u = $('ghUndo'), r = $('ghRedo'); if (!u) return;
+    // While the images are worked on, no step: one from before would bring back files now gone.
+    if (preparing) { offFor(u, t('Still working on the images…')); offFor(r, t('Still working on the images…')); return; }
     const back = gh.pos > 0 ? gh.stack[gh.pos] : null, fwd = gh.pos < gh.stack.length - 1 ? gh.stack[gh.pos + 1] : null;
     offFor(u, back ? '' : t('Nothing to undo yet.'));
     offFor(r, fwd ? '' : t('Nothing to redo.'));
@@ -75,6 +77,7 @@
   }
   // One step back or forward: the draft as it was then, the page where the change was.
   function ghStep(dir) {
+    if (imagesBusy()) return false;
     flushSource();
     if (gh.timer) ghRecord();
     const to = gh.pos + dir;

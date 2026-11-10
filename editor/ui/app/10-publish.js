@@ -12,7 +12,7 @@
     const attr = (tag, a) => (new RegExp('\\s' + a + '\\s*=\\s*["\']?([^"\'\\s>]*)', 'i').exec(tag) || [])[1] || '';
     const size = (n) => { const a = S.assets.find((x) => x.name === n); return a ? a.size || 0 : 0; };
     const big = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && size(n) > 100 * 1024)))];
-    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Prepare for classic Outlook'), fn: prepareClassic, leave: true }, t('Large images: {0}', big.length)]);
+    if (big.length) out.push(['warn', t('Large images (over 100 KB), in every mail: {0}. A smaller file makes mails lighter.', big.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make images lighter'), fn: prepareClassic, leave: true }, t('Large images: {0}', big.length)]);
     const noAlt = names((s) => imgs(s).some((i) => !/photos\//.test(attr(i, 'src')) && !/\salt\s*=\s*["'][^"']+["']/i.test(i)));
     if (noAlt.length) out.push(['warn', t('Images without a text for when images are blocked (alt): {0}. Image bar → alt text, e.g. the company name for the logo.', noAlt.join(', ')), null, t('Images without alt text: {0}', count(noAlt))]);
     const tooWide = (s) => imgs(s).some((i) => Number(attr(i, 'width')) > 600) ||
@@ -56,7 +56,7 @@
     const nameOf = (i) => (/src="assets\/([^"?#]+)"/.exec(i) || [])[1];
     const size = (n) => { const a = S.assets.find((z) => z.name === n); return a ? a.size || 0 : 0; };
     const heavy = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && size(n) > 100 * 1024))];
-    if (heavy.length) out.push(['warn', t('Large banner images (over 100 KB), in every mail while the campaign runs: {0}.', heavy.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Prepare for classic Outlook'), fn: prepareClassic, leave: true }, t('Large banner images: {0}', heavy.length)]);
+    if (heavy.length) out.push(['warn', t('Large banner images (over 100 KB), in every mail while the campaign runs: {0}.', heavy.map((n) => n + ' (' + Math.round(size(n) / 1024) + ' KB)').join(', ')), { label: t('Make images lighter'), fn: prepareClassic, leave: true }, t('Large banner images: {0}', heavy.length)]);
     const darkOnes = [...new Set(list.flatMap((x) => bimgs(x).map(nameOf)).filter((n) => n && dark[n] === true))];
     if (darkOnes.length) out.push(['warn', t('Dark banner image on a transparent background, hard to see in dark mode: {0}. A background of its own helps.', darkOnes.join(', ')), null, t('Banner hard to see in dark mode: {0}', darkOnes.length)]);
     const over = (c.campaigns || []).filter((x) => x.validUntil && x.validUntil < day);
@@ -73,18 +73,20 @@
     const c = prepared(), out = [], later = [], day = core.today();
     const errs = core.validate(c);
     errs.forEach((e) => out.push(['bad', t(e)]));
-    // None left (all deleted): publishing that takes them out of Outlook, said as the one thing
-    // to know (the defaults, the users and the looks say nothing then); asked once more on Publish.
-    if (!c.signatures.length) {
-      out.push(['warn', t('There is no signature: publishing takes all of them out of Outlook. From then on, nobody gets one by OSign.'), null, t('No signature: Outlook gets none')]);
-      return out;
-    }
-    const idle = c.signatures.filter((s) => core.forNobody(s) || (core.isCampaign(s) && s.validUntil && s.validUntil < day));
-    const active = c.signatures.filter((s) => !idle.includes(s)), ca = Object.assign({}, c, { signatures: active });
+    // Where it goes: also with no signature left.
     if (onServer()) {
       if (!toSharePoint()) out.push(['warn', t("Publishing goes into the server's own folder, not to SharePoint: Microsoft Graph is not set up on the server."), null, t('Into the server\'s folder, not SharePoint')]);
       else if (lastSettings.folderError) out.push(['warn', t('SharePoint cannot be reached: {0}', t(lastSettings.folderError)), null, t('SharePoint cannot be reached')]);
     } else if (!S.settings.folder) out.push(['bad', t('No folder to publish to: set the synced OSign folder in Settings.')]);
+    // None left (all deleted): publishing that takes them out of Outlook, said as the one thing
+    // to know (the defaults, the users and the looks say nothing then), in full, not folded (the
+    // flag at the end); asked once more on Publish.
+    if (!c.signatures.length) {
+      out.push(['warn', t('There is no signature: publishing takes all of them out of Outlook. From then on, nobody gets one by OSign.'), null, t('No signature: Outlook gets none'), true]);
+      return out;
+    }
+    const idle = c.signatures.filter((s) => core.forNobody(s) || (core.isCampaign(s) && s.validUntil && s.validUntil < day));
+    const active = c.signatures.filter((s) => !idle.includes(s)), ca = Object.assign({}, c, { signatures: active });
     // Who gets nothing for new mail: as read from AD under Users when there are users, else as the
     // defaults say. One note, not two.
     const plain = c.signatures.filter((s) => !(s.audience.departments || []).length && !(s.audience.domains || []).length && !(s.audience.groups || []).length && s.audience.everyone !== false);
@@ -95,14 +97,15 @@
     else if (!snapUsers && !plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.'), null, t('The default for new mail is for some only')]);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
     // Images the active signatures show that are not in the draft: left out of every mail. One of
-    // the same name in another form (the GIF made a PNG, a -2) is offered in its place.
+    // the same name in another form (the GIF made a PNG, a -2) is offered in its place. Only the
+    // server's copy endings (one or two digits) are left out: xmas-2025 is no xmas-2026.
     const named = (list) => [...new Set(list.flatMap((s) => [...(s.html || '').matchAll(/src="assets\/([^"]+)"/g)].map((m) => m[1])))].filter((n) => !S.assets.some((a) => a.name === n));
-    const missing = named(active), stem = (n) => n.toLowerCase().replace(/(?:-\d+)*\.[a-z0-9]+$/, '');
+    const missing = named(active), stem = (n) => n.toLowerCase().replace(/(?:-\d{1,2})*\.[a-z0-9]+$/, '');
     const twin = (n) => (S.assets.find((a) => stem(a.name) === stem(n) && /\.(png|jpe?g|gif)$/i.test(a.name)) || {}).name || '';
     if (missing.length) {
       const swaps = missing.filter(twin);
       out.push(['warn', t('Images not in the draft, left out of every mail until added: {0}', missing.map((n) => twin(n) ? n + ' (→ ' + twin(n) + ')' : n).join(', ')),
-        swaps.length ? { label: t('Use those in the draft'), fn: () => { swaps.forEach((n) => renameAsset(n, twin(n))); reopenChanged(); toast(t('{0} images put in place.', swaps.length)); } } : null,
+        swaps.length ? { label: t("Use the draft's images instead"), fn: () => { swaps.forEach((n) => renameAsset(n, twin(n))); reopenChanged(); return swaps.length === 1 ? t('1 image put in place.') : t('{0} images put in place.', swaps.length); } } : null,
         t('Images missing in the draft: {0}', missing.length)]);
     }
     const big = classicHeavy().filter((x) => active.includes(x.s) || active.some((a) => a.id === x.s.id));
@@ -137,7 +140,6 @@
     }
     const unused = unusedImages();
     if (unused.length) later.push(['good', t('Images in the draft that nothing uses: {0}. They go out all the same.', unused.join(', ')), { label: t('Remove them'), fn: removeUnused }, t('Unused images: {0}', unused.length)]);
-    if (!out.some((x) => x[0] !== 'good')) out.push(['good', t('{0} signature(s), ready.', active.length || c.signatures.length)]);
     return out.concat(later);
   }
 
@@ -228,23 +230,30 @@
   $('stPub').addEventListener('click', () => { if (S.pub) openChanges(); else $('btnPublish').click(); });
   // What to look at before publishing, short: what stops it first (red), then the notes (one line
   // each, a click for the names and what to do), what is fine in one grey line at the end. With
-  // nothing red, the notes are folded under one line.
+  // nothing red, the notes are folded under one line. A note flagged to stand alone (the fifth
+  // entry: no signature left) is said in full, not folded.
   function renderChecks(checks) {
     const order = { bad: 0, warn: 1, good: 2 };
     const list = checks.slice().sort((a, b) => order[a[0]] - order[b[0]]);
     const bad = list.filter((c) => c[0] === 'bad'), warn = list.filter((c) => c[0] === 'warn'), good = list.filter((c) => c[0] === 'good');
     // leave: the dialog closed first, so that what the work says (and offers next) can be seen.
+    // Else the checks made anew after it, the note typed kept, and what the work says (its
+    // answer) shown in the dialog: a message under it would be hidden.
     const actBtn = (act) => el('button', { type: 'button', class: 'small', onclick: async (e) => {
       if (act.leave) { $('dlgPublish').close(); await act.fn(); return; }
-      e.currentTarget.disabled = true; await act.fn(); $('dlgPublish').close(); $('btnPublish').click();
+      e.currentTarget.disabled = true;
+      const said = await act.fn(), note = $('pubMsg').value;
+      $('dlgPublish').close(); await openPublish();
+      $('pubMsg').value = note;
+      if (said) $('pubOk').textContent = said;
     } }, act.label);
-    const item = ([k, text, act, short]) => el('li', { class: k }, short
+    const item = ([k, text, act, short, alone]) => el('li', { class: k }, short && !alone
       ? el('details', { class: 'chk' }, el('summary', null, short), el('p', null, text), act ? actBtn(act) : null)
       : el('span', null, text, act ? actBtn(act) : null));
     const out = bad.map(item);
     if (warn.length) {
       const items = warn.map(item);
-      if (bad.length) out.push(...items);
+      if (bad.length || warn.some((c) => c[4])) out.push(...items);
       else out.push(el('li', { class: 'chk-head' }, el('details', { class: 'chk-all' },
         el('summary', null, el('b', null, t('Ready to publish.')), ' ', warn.length === 1 ? t('1 note') : t('{0} notes', warn.length)),
         el('ul', { class: 'checks chk-sub' }, ...items))));
@@ -253,9 +262,13 @@
       el('details', { class: 'chk' }, el('summary', null, t('details')), ...good.map((g) => el('p', null, g[1], g[2] ? ' ' : null, g[2] ? actBtn(g[2]) : null)))));
     $('pubChecks').replaceChildren(...out);
   }
-  $('btnPublish').addEventListener('click', async () => {
+  // Publish…: the checks (the PNGs used looked at for dark mode first, 3 seconds at most), where
+  // it goes, what waits for approval.
+  async function openPublish() {
     flushSource();
     if (core.usesAdExport(S.config)) { await saving; await loadSnapshot(); }
+    const pngs = [...new Set(usedHtml().flatMap((h) => [...h.matchAll(/assets\/([^"'?#\s>]+\.png)/gi)].map((m) => m[1])))].filter((n) => (S.assets || []).some((a) => a.name === n));
+    await Promise.race([Promise.all(pngs.map(darkCheck)), new Promise((r) => setTimeout(r, 3000))]);
     $('pubWhere').textContent = onServer() ? t('To {0}. New messages use it a minute or two later.', S.settings.folder)
       : S.settings.folder ? t('To {0}. OneDrive uploads it to SharePoint; new messages use it a minute or two later.', S.settings.folder)
       : t('No folder set yet (Settings).');
@@ -266,7 +279,8 @@
     await loadApproval(); renderApproval();
     await loadRelease();
     $('dlgPublish').showModal();
-  });
+  }
+  $('btnPublish').addEventListener('click', () => openPublish());
   // Later, at a set time (server/routes-release.js): the server's, for whoever publishes without approval.
   async function loadRelease() {
     const can = onServer() && !(S.info.features && S.info.features.requireApproval);
@@ -291,12 +305,17 @@
   const pubNote = () => $('pubMsg').value.trim() || $('pubMsg').placeholder;
   $('pubGo').addEventListener('click', async (e) => {
     e.preventDefault();
-    if (!prepared().signatures.length && !(await ask(t('Publish with no signature? Outlook then puts none in, for anyone.'), t('Publish with none'), true))) return;
+    // With approval on, it is asked for, not published.
+    const approval = !!(S.info && S.info.features && S.info.features.requireApproval);
+    if (!prepared().signatures.length && !(await ask(t('Publish with no signature? Outlook then puts none in, for anyone.'), approval ? t('Ask for approval with none') : t('Publish with none'), true))) return;
     $('pubGo').disabled = true; $('pubErr').textContent = ''; $('pubOk').textContent = t('Publishing…');
     try {
       // A change still waiting for its save goes first, so the draft and what is published match.
-      if (saveTimer) save();
-      await saving;
+      // Not saved (the server did not take it, or it was changed elsewhere): nothing goes out. A
+      // save that failed before (since loaded anew, say) is tried once more first.
+      let ok = await (saveTimer ? save() : saving);
+      if (ok === false) ok = await save();
+      if (ok === false) { $('pubOk').textContent = ''; $('pubErr').textContent = t('Not saved'); return; }
       const c = prepared(); c.updated = new Date().toISOString();
       // Values from AD: the users first, so a signature never asks for a file that is not there yet.
       // The users as read and checked under Users (never a fresh read nobody has seen), first, so a

@@ -184,6 +184,14 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   assert.match(items[1].meta, /photo per person images\/@@sAMAccountName\.jpg → photos\\@@sAMAccountName\.jpg/);
   assert.match(items[2].meta, /text blocks/);
   assert.match(items[1].meta, /past text blocks left out: old · text blocks notice, legal, old \(with days: a campaign each\)/);
+  // Ticked by its name (a label), it moves up and the counts follow; unticked again, back.
+  await page.click('#impList .imp-rest summary');
+  await page.click('#impList .imp-rest .imp-name:has-text("textblocks")');
+  assert.deepEqual(await page.$$eval('#impList > li.imp-head', (h) => h.map((x) => x.textContent)), ['Photos per person', 'Templates to import: 2']);
+  assert.equal(await page.locator('#impList .imp-rest').count(), 0);
+  await page.click('#impList .imp-name:has-text("textblocks")');
+  assert.match(await page.textContent('#impList .imp-rest summary'), /Not ticked: 1 more files/);
+  assert.deepEqual(await page.$$eval('#impList > li.imp-head', (h) => h.map((x) => x.textContent)), ['Photos per person', 'Templates to import: 1']);
   await page.click('#impGo');
   await page.waitForSelector('#dlgImport:not([open])', { state: 'attached' });
   // A report of what came over: the templates, the campaigns, the blocks, and what is left to do.
@@ -1903,8 +1911,15 @@ test('campaigns checked before publishing, unused images removed, columns in lay
   checks = await page.textContent('#pubChecks');
   assert.match(checks, /nothing uses: .*unbenutzt\.png/);
   await page.click('#pubChecks .chk-ok > details > summary');
+  await page.fill('#pubMsg', 'Kept note');
   await page.click('#pubChecks button:has-text("Remove them")');
-  await page.waitForFunction(() => !/unbenutzt/.test(document.querySelector('#pubChecks').textContent) || true);
+  // Asked first; what came of it said in the dialog made anew, the note typed kept.
+  await page.waitForSelector('#dlgAsk[open]');
+  assert.match(await page.textContent('#askText'), /unbenutzt\.png/);
+  await page.click('#askOk');
+  await page.waitForFunction(() => /unused images? removed/.test(document.querySelector('#pubOk').textContent), null, { timeout: 5000 });
+  assert.equal(await page.inputValue('#pubMsg'), 'Kept note');
+  assert.doesNotMatch(await page.textContent('#pubChecks'), /unbenutzt/);
   await page.click('#dlgPublish button[value=cancel]');
   for (let i = 0; i < 30 && (await api('draft/get')).assets.some((a) => a.name === 'unbenutzt.png'); i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(!(await api('draft/get')).assets.some((a) => a.name === 'unbenutzt.png'));
@@ -2025,9 +2040,11 @@ test('publish checks: the active signatures checked, the rest in one grey line; 
   assert.doesNotMatch(text, /Images without a text for when images are blocked \(alt\): [^.]*Nur Vorlage/);
   assert.match(text, /tw-icon\.gif \(→ tw-icon\.png\)/);
   await page.evaluate(() => document.querySelectorAll('#pubChecks details').forEach((d) => { d.open = true; }));
-  await page.click('#pubChecks button:has-text("Use those in the draft")');
-  await page.waitForFunction(() => !document.querySelector('#dlgPublish[open]') || !/tw-icon\.gif/.test(document.querySelector('#pubChecks').textContent), null, { timeout: 10000 });
-  if (await page.isVisible('#dlgPublish[open]')) await page.click('#dlgPublish button[value=cancel]');
+  await page.click('#pubChecks button:has-text("Use the draft\'s images instead")');
+  // Done, and said in the dialog opened again (once it is open again: it waits for the dark-mode looks).
+  await page.waitForFunction(() => document.querySelector('#dlgPublish[open]') && /image put in place|images put in place/.test(document.querySelector('#pubOk').textContent), null, { timeout: 10000 });
+  assert.doesNotMatch(await page.textContent('#pubChecks'), /tw-icon\.gif/);
+  await page.click('#dlgPublish button[value=cancel]');
   await page.click('#sigList li a:has-text("' + mine + '")');
   await page.click('.tab[data-mode=html]');
   const html = await page.inputValue('#source');
@@ -2086,6 +2103,7 @@ test('all signatures deleted: publishing that (asked once more) takes them out o
   const text = await page.textContent('#pubChecks');
   assert.match(text, /There is no signature: publishing takes all of them out of Outlook/);
   assert.doesNotMatch(text, /default for new mail|default for replies/, 'only the one thing to know');
+  assert.equal(await page.locator('#pubChecks .chk-head').count(), 0, 'said in full, not folded');
   assert.equal(await page.isDisabled('#pubGo'), false);
   await page.click('#pubGo');
   await page.waitForSelector('#dlgAsk[open]');

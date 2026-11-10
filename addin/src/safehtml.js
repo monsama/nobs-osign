@@ -6,7 +6,9 @@
  */
 
 // Elements that run, load a page of their own, or change how the page around them is read.
-const DROP = 'script,iframe,frame,frameset,object,embed,applet,base,meta,link,noscript,noembed,noframes,template,xmp,plaintext';
+// svg and math too: an SVG <set>/<animate> can put a javascript: address on a link, past any
+// attribute check (a signature needs neither).
+const DROP = 'script,iframe,frame,frameset,object,embed,applet,base,meta,link,noscript,noembed,noframes,template,xmp,plaintext,svg,math';
 // Attributes holding an address.
 const URL_ATTR = /^(href|src|xlink:href|action|background|poster|lowsrc|dynsrc|cite|longdesc|data)$/i;
 

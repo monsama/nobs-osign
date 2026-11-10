@@ -5,6 +5,39 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.102 (add-in changed)
+A full check again (bugs, security, use). Make the add-in files again and upload them once: from
+then on a publish uploads the images only with the files uploaded last.
+- **Images next to the add-in's files (classic Outlook):**
+  - only those of signatures someone gets (their building blocks put in) and of campaigns on
+    their days, a day more at the end; a signature for nobody or a block no one uses is not
+    there, nor named in the public list;
+  - files made but not uploaded (to look at, or as a ZIP) never go up with a publish; the publish
+    says so instead;
+  - one upload at a time; compared by content too, so an image replaced under the same name goes
+    up again; just after midnight, not up to 15 minutes later; after a failure tried again later
+    each time (up to 4 hours), and a Pages project removed in Cloudflare is not made again by it;
+  - only with Cloudflare Pages (another web server would keep them stale);
+  - the add-in takes them only for the same publish as the signatures it has, checks they are
+    images (and at most 1 MB), loads them together with one time limit, keeps at most 2 MB of them,
+    and does not ask again for a minute when they cannot be had.
+- **Security:** an SVG in signature HTML is no longer put into the pane (an SVG animation could
+  make a script link there); X-Forwarded-For is taken from no one until the proxy is found
+  (with OSIGN_PROXY_HOST set, as docker-compose does); the images get `nosniff`; an upload error
+  shows no details of the server.
+- The campaign role's publish takes images however the banner names them.
+- **Editor:**
+  - undo and redo wait while images are worked on (they would bring back files that are gone);
+  - Publish stops when the draft could not be saved (a newer one elsewhere), instead of going out;
+  - *Remove them* (unused images) asks first; what a check's button did is said in the dialog,
+    and the note typed there is kept;
+  - with no signature the one note is shown open, and "no folder to publish to" still stops it;
+  - the dark-mode check is there the first time Publish is opened;
+  - import: a file ticked moves up, the counts follow, a click on its name ticks it;
+  - an image named xmas-2026.png keeps its name (only -2, -3 copies are taken off);
+  - wording: *Make images lighter* on large images, *Use the draft's images instead*, one image
+    in the singular, *Ask for approval with none* with four eyes.
+
 ## 0.9.101
 - Fixed: with every signature deleted, the change could not be published ("There is no signature"
   stopped it), and "Unpublished changes" stayed. Now it can: the checks say the one thing to know
