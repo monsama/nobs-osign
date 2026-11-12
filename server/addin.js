@@ -178,7 +178,7 @@ async function pagesDeploy(c, dir, fetchFn, opts) {
   let info;
   try { info = await cf('GET', proj); } catch (e) {
     if (e.status !== 404) throw e;
-    if (opts && opts.create === false) throw new Error('The Cloudflare Pages project ' + c.project + ' is not there: upload the add-in\'s files once (Settings → Outlook add-in).');
+    if (opts && opts.create === false) throw Object.assign(new Error('The Cloudflare Pages project is not there: upload the add-in\'s files once (Settings → Outlook add-in).'), { expose: true });
     info = await cf('POST', c.api + '/accounts/' + c.account + '/pages/projects', { json: { name: c.project, production_branch: 'main' } });
   }
   // Its own address: <name>.pages.dev, or what Cloudflare gave it when that name was taken.

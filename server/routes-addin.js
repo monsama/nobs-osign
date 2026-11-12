@@ -26,7 +26,10 @@ function createAddinRoutes({ env, settings, pages, addinDir, addinUploadFile, ad
         try { const at = await settings.target().locate(); st.spDrive = at.driveId; st.spItem = at.itemId; }
         catch (e) { note = 'The SharePoint folder could not be reached (' + e.message + '): make the files again once it can, so the add-in reads it directly.'; log.warn('addin/build: ' + note); }
       }
-      const r = await addin.build(env, st, addinDir);
+      // Not while an upload reads the folder; the id of the making before goes first, so a making
+      // that fails leaves none that matches the upload (and no publish uploads the empty folder).
+      const make = async () => { try { fs.rmSync(addinBuildFile, { force: true }); } catch (e) { /* none */ } return addin.build(env, st, addinDir); };
+      const r = await (hostSerial ? hostSerial(make) : make());
       // The published images with them (img/), for classic Outlook: uploaded together.
       // Only for Cloudflare Pages: no other host gets them again with every publish (they would go stale there).
       if (!r.error && publishedImages && st.addinHost === 'cloudflare' && addin.pagesEnabled(pages)) {

@@ -145,12 +145,12 @@
         if (!v) return { state: 'off', text: t('Nothing published yet.') };
         return { state: 'good', text: new Date(v.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB') + ' · ' + v.by + (f.requireApproval ? ' · ' + t('four eyes on') : '') };
       } },
-      { name: 'Outlook add-in files', act: () => (!f.addinVersion || !f.addinFiles || f.addinVersion === S.info.version && (!f.pagesUpload || (f.addinUploaded && f.addinUploaded.version === f.addinVersion)) ? null
+      { name: 'Outlook add-in files', act: () => (!f.addinVersion || !f.addinFiles || f.addinVersion === S.info.version && (!f.pagesUpload || (f.addinUploaded && f.addinUploaded.version === f.addinVersion && !f.addinUnsent)) ? null
         : { label: f.pagesUpload ? t('Make and upload') : t('Make again'), fn: addinRemake }), run: async () => {
         const v = f.addinVersion, up = f.addinUploaded;
         if (!v) return { state: 'off', text: t('Not made yet (Settings → Outlook add-in).') };
         if (v !== S.info.version) return { state: 'warn', text: t('Made with {0}; this server is {1}: make them again, so Outlook gets the new version.', v, S.info.version) };
-        if (f.pagesUpload && (!up || up.version !== v)) return { state: 'warn', text: t('Made, but not uploaded to Cloudflare Pages yet.') };
+        if (f.pagesUpload && (!up || up.version !== v || f.addinUnsent)) return { state: 'warn', text: t('Made, but not uploaded to Cloudflare Pages yet.') };
         return { state: 'good', text: f.pagesUpload ? t('Version {0}, on Cloudflare Pages since {1}.', v, new Date(up.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) : t('Version {0}.', v) };
       } },
       // Where the add-in is deployed in Microsoft 365: only a script with an admin's sign-in can

@@ -5,6 +5,18 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.103 (add-in changed)
+A check of what 0.9.102 changed. Make the add-in files again and upload them.
+- Fixed: making the add-in files when it failed (a wrong tenant ID, say), then a publish, could
+  upload an add-in without its files. Now nothing goes up without them.
+- Fixed: classic Outlook took only the first of several images from next to the add-in's files
+  (the others from the smaller copies), and kept only one of them.
+- Images that come late are still taken; only the others from the copies kept before.
+- Files made and not uploaded: the status bar and Status say so (*Upload the add-in*); a publish
+  says it in German too.
+- Making the add-in files waits for an upload that is running; two looks at once upload once.
+- The campaign role's publish no longer takes a link to another site's /assets/ for an image.
+
 ## 0.9.102 (add-in changed)
 A full check again (bugs, security, use). Make the add-in files again and upload them once: from
 then on a publish uploads the images only with the files uploaded last.
