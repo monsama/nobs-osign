@@ -469,18 +469,38 @@ const HOSTED_KEY = 'osign.hosted';
 // At most this much of them kept in this Outlook (its storage holds about 10 MB in all), and an
 // image downloaded only up to the size the server takes (1 MB).
 const HOSTED_CACHE_MAX = 2 * 1024 * 1024, HOSTED_FILE_MAX = 1024 * 1024;
-let hosted = null, hostedAt = 0;
+let hosted = null, hostedAt = 0, hostedAsk = null;
 // The index ({ updated, files: { name: 'img/<hash>.png' } }), looked at once a minute at most,
 // also when it could not be had (no network, a host that answers something else): then {}.
-async function hostedIndex() {
-  if (!BASE) return null;
-  if (hostedAt && Date.now() - hostedAt < 60 * 1000) return hosted;
-  hostedAt = Date.now();
-  try {
-    const j = await fetchWithin(BASE + 'img/index.json', { cache: 'no-cache' }, 8000, 'The images', (r) => (r.ok ? r.json() : null));
-    hosted = j && typeof j === 'object' && !Array.isArray(j) && j.files && typeof j.files === 'object' && !Array.isArray(j.files) ? j : {};
-  } catch (e) { console.log('OSign: hosted images: ' + (e && e.message ? e.message : e)); hosted = {}; }
-  return hosted;
+// Images asked for together wait for the same look.
+function hostedIndex() {
+  if (!BASE) return Promise.resolve(null);
+  if (hostedAsk) return hostedAsk;
+  if (hostedAt && Date.now() - hostedAt < 60 * 1000) return Promise.resolve(hosted);
+  hostedAsk = (async () => {
+    try {
+      const j = await fetchWithin(BASE + 'img/index.json', { cache: 'no-cache' }, 8000, 'The images', (r) => (r.ok ? r.json() : null));
+      hosted = j && typeof j === 'object' && !Array.isArray(j) && j.files && typeof j.files === 'object' && !Array.isArray(j.files) ? j : {};
+    } catch (e) { console.log('OSign: hosted images: ' + (e && e.message ? e.message : e)); hosted = {}; }
+    hostedAt = Date.now();
+    hostedAsk = null;
+    return hosted;
+  })();
+  return hostedAsk;
+}
+// What is kept of them, written one at a time and read again just before: images loaded together
+// do not write over each other.
+let hostedWrite = Promise.resolve();
+function keepHosted(file, b64, index) {
+  hostedWrite = hostedWrite.then(async () => {
+    const cache = (await readJson(HOSTED_KEY)) || {};
+    const now = new Set(Object.values(index.files));
+    const keep = {}; let total = b64.length <= HOSTED_CACHE_MAX ? b64.length : 0;
+    Object.keys(cache).forEach((f) => { if (f !== file && now.has(f) && total + cache[f].length <= HOSTED_CACHE_MAX) { keep[f] = cache[f]; total += cache[f].length; } });
+    if (b64.length <= HOSTED_CACHE_MAX) keep[file] = b64;
+    await store.set(HOSTED_KEY, JSON.stringify(keep));
+  }).catch(() => { /* not kept */ });
+  return hostedWrite;
 }
 // An image's file in the index (its name as published, in any case), or '': only for the
 // signatures of that same publish.
@@ -515,11 +535,7 @@ async function hostedImage(w) {
     });
     if (bytes.length > HOSTED_FILE_MAX || !isImage(bytes, file)) throw new Error('Loading ' + w.name + ': not an image');
     const b64 = base64(bytes);
-    const now = new Set(Object.values(index.files));
-    const keep = {}; let total = b64.length;
-    Object.keys(cache).forEach((f) => { if (now.has(f) && total + cache[f].length <= HOSTED_CACHE_MAX) { keep[f] = cache[f]; total += cache[f].length; } });
-    if (b64.length <= HOSTED_CACHE_MAX) keep[file] = b64;
-    await store.set(HOSTED_KEY, JSON.stringify(keep));
+    await keepHosted(file, b64, index);
     return { b64, type: typeOf(w.name), file: fileOf(w) };
   } catch (e) { console.log('OSign: hosted image ' + w.name + ': ' + (e && e.message ? e.message : e)); return null; }
 }
@@ -538,9 +554,11 @@ async function loadImages(refs, interactive) {
     // No sign-in (classic Outlook's event runtime is refused it): the images next to the add-in's
     // files, else the copies kept before.
     // All at once, and not longer than 20 seconds together (Outlook waits for the signature).
-    const got = await withTimeout(Promise.all(wanted.map((w) => fallbackImage(w).catch(() => null))), 20000, 'The images').catch(() => null);
-    if (got) wanted.forEach((w, i) => { if (got[i]) out[w.key] = got[i]; });
-    else for (const w of wanted) { const k = await keptImage(w); if (k) out[w.key] = k; }
+    // Each one in as it comes; the ones not there in time from the copies kept before.
+    let late = false;
+    await withTimeout(Promise.all(wanted.map((w) => fallbackImage(w).then((k) => { if (k && !late && !(w.key in out)) out[w.key] = k; }, () => {}))), 20000, 'The images').catch(() => {});
+    late = true;
+    for (const w of wanted) { if (w.key in out) continue; const k = await keptImage(w); if (k) out[w.key] = k; }
     if (!Object.keys(out).length) throw e;
     console.log('OSign: images without SharePoint (sign-in: ' + (e && e.message ? e.message : e) + ').');
     return out;

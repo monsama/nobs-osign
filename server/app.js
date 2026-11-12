@@ -427,7 +427,8 @@ function createApp(opts) {
   const addinBuildFile = path.join(dataDir, 'addin-build.json');
   function hostingOn() {
     const up = readJson(addinUploadFile), made = readJson(addinBuildFile);
-    if (!addin.pagesEnabled(pages) || addin.pagesProblem(pages) || !up) return false;
+    // A making that failed leaves no files: then nothing goes up (never an add-in without them).
+    if (!addin.pagesEnabled(pages) || addin.pagesProblem(pages) || !up || !fs.existsSync(path.join(addinDir, 'manifest.xml'))) return false;
     // Made and uploaded before builds had ids: by their version.
     if (!up.build && !made) return !!(up.version && up.version === addinMade().version);
     return !!(up.build && made && up.build === made.id);
@@ -465,7 +466,7 @@ function createApp(opts) {
   // 'ok', '' (not set up), or what went wrong, said so for anyone (the publish itself stands).
   function hostPublished(configJson) {
     return hostSerial(async () => {
-      if (!hostingOn()) return hostingStale() ? 'The add-in\'s files made here are not the ones on Cloudflare Pages: upload them (Settings → Outlook add-in), and classic Outlook gets the new images.' : '';
+      if (!hostingOn()) return hostingStale() ? 'The add-in\'s files made here are not the ones on Cloudflare Pages: upload them (Settings → Outlook add-in); until then classic Outlook takes the smaller copies of the images in the mailbox.' : '';
       try {
         const c = JSON.parse(configJson || '{}');
         addin.hostImages(addinDir, publishedImages(hostedNames(configJson)), c.updated);
@@ -477,7 +478,7 @@ function createApp(opts) {
         try { fs.rmSync(path.join(addinDir, 'img', 'index.json'), { force: true }); } catch (e2) { /* gone */ }
         hostFails++; hostRetryAt = Date.now() + Math.min(4 * 60, 15 * Math.pow(2, hostFails - 1)) * 60 * 1000;
         log.warn('Images to Cloudflare Pages: ' + e.message);
-        return saidOnPurpose(e) ? e.message : 'The images could not be uploaded to Cloudflare Pages (the server log says why).';
+        return e.expose ? e.message : 'The images could not be uploaded to Cloudflare Pages (the server log says why).';
       }
     });
   }
@@ -492,8 +493,13 @@ function createApp(opts) {
   // Every quarter of an hour, and just after midnight: whether today's images (by name and content)
   // are other than the ones up there (a campaign began or ended, an upload failed); then they go
   // up again.
+  let hostLooking = false;
   async function hostTick() {
-    if (!hostingOn() || Date.now() < hostRetryAt) return;
+    if (hostLooking || !hostingOn() || Date.now() < hostRetryAt) return;
+    hostLooking = true;
+    try { await hostLook(); } finally { hostLooking = false; }
+  }
+  async function hostLook() {
     const cfg = history.latest(); if (!cfg) return;
     try {
       const sums = history.latestImages(), names = hostedNames(cfg);
@@ -545,6 +551,9 @@ function createApp(opts) {
         // Their version, and the one on Cloudflare Pages: older than the server's, they are made again.
         addinVersion: addinMade().version || '',
         addinUploaded: readJson(addinUploadFile),
+        // Pages set up and uploaded to before, but the files made here are others now (made, not
+        // uploaded): classic Outlook does not get the new images until they are.
+        addinUnsent: hostingStale(),
         // The images next to the add-in's files (Cloudflare Pages), for classic Outlook.
         imagesHosted: hostingOn(),
         // The add-in's files go to Cloudflare Pages from here, or by hand as a ZIP.
@@ -685,7 +694,7 @@ function createApp(opts) {
   const campaignsOf = (text) => { let c; try { c = JSON.parse(text); } catch (e) { return null; } return c && typeof c === 'object' && Array.isArray(c.campaigns) ? c.campaigns : c && typeof c === 'object' ? [] : null; };
   // The images a list of campaigns shows (their HTML in every part).
   const campaignImages = (list) => [...new Set((list || []).flatMap((x) => [x].concat(Object.values((x && x.langs) || {}), (x && x.more) || []))
-    .flatMap((p) => [...String((p && p.html) || '').matchAll(/assets\/([^"'?#\s>\\]+)/g)].map((m) => m[1])))];
+    .flatMap((p) => [...String((p && p.html) || '').matchAll(/(?<![\w/.-])assets\/([^"'?#\s>\\]+)/g)].map((m) => m[1])))];
   const campaignRoutes = {
     // The campaigns sent, into the draft as it is: nothing else of what was sent is kept.
     'draft/save': (d, s) => {

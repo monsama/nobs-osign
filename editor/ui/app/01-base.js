@@ -402,7 +402,7 @@
     // Older than the server, or made but not uploaded yet (with Cloudflare Pages): one click does it.
     const built = f0s.addinVersion, up2 = f0s.addinUploaded && f0s.addinUploaded.version;
     const stale = admin && built && built !== S.info.version;
-    const unsent = admin && built && !stale && f0s.pagesUpload && up2 !== built;
+    const unsent = admin && built && !stale && f0s.pagesUpload && (up2 !== built || !!f0s.addinUnsent);
     if (!$('stAddin').classList.contains('busy') && !$('stAddin').classList.contains('done')) {
       $('stAddin').hidden = !(stale || unsent);
       if (stale) $('stAddinText').textContent = t('Update the add-in ({0} → {1})', built, S.info.version);

@@ -352,7 +352,8 @@
       if (onServer()) { try { lastSettings = await api('settings/get'); } catch (e2) { /* as it was */ } }
       $('pubOk').textContent = (r.changed ? t('Published to {0}.', r.folder) : t('Nothing had changed.')) + exported;
       // Published; only the images next to the add-in's files (for classic Outlook) did not go up.
-      if (r.hostedError) $('pubErr').textContent = t('The images could not be put next to the add-in\'s files on Cloudflare Pages ({0}): classic Outlook takes the smaller copies in the mailbox until the next publish.', t(r.hostedError));
+      // Published; only the images next to the add-in's files (classic Outlook) did not go up: why, as the server says it.
+      if (r.hostedError) $('pubErr').textContent = t(r.hostedError);
       // The users written now: their marks (new, changed) go on the Users page.
       if (core.usesAdExport(S.config)) loadSnapshot().then(() => { if (S.view === 'users') renderUsers(); });
       // Done: only Close is left.

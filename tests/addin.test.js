@@ -369,6 +369,25 @@ test('classic Outlook: the images as they are from next to the add-in\'s files (
   assert.equal(page.calls.find((c) => c[0] === 'attach' && /logo/.test(c[1]))[2], small.toString('base64'));
 });
 
+test('classic Outlook: several images from next to the add-in\'s files, all of them (one look at the index), all kept', async () => {
+  const config = makeConfig();
+  config.updated = '2026-11-12T09:00:00.000Z';
+  const std = config.signatures[0];
+  std.compiled = std.compiled.replace('<img src="assets/logo.png"', '<img src="assets/icon.png" width="9"><img src="assets/logo.png"');
+  const roaming = {
+    'osign.profile': JSON.stringify({ at: Date.now() - 60 * 60 * 1000, values: { givenName: 'Anna', sn: 'Muster', mobile: '', sAMAccountName: 'mustera', mail: 'anna@example.com' }, groups: [], groupsFor: 'graph\n' }),
+    'osign.classic': JSON.stringify({ at: config.updated, cfg: { schemaVersion: config.schemaVersion, updated: config.updated, options: config.options, fields: [], signatures: [{ id: std.id, name: std.name, compiled: std.compiled, defaultNew: true, audience: std.audience }] }, images: {} })
+  };
+  const a = 'img/' + 'c3'.repeat(12) + '.png', b = 'img/' + 'd4'.repeat(12) + '.png';
+  const storage = {};
+  const r = runtime({ signInFails: true, roaming, platform: 'PC', runtimeStorage: storage, hosted: { 'img/index.json': { updated: config.updated, files: { 'logo.png': a, 'icon.png': b } }, [a]: PNG, [b]: PNG } });
+  await r.fire('onNewMessageComposeHandler');
+  const attached = r.calls.filter((c) => c[0] === 'attach').map((c) => c[1]);
+  assert.ok(attached.some((n) => /logo/.test(n)) && attached.some((n) => /icon/.test(n)), attached.join(', '));
+  assert.equal(r.graph.requests.filter((u) => /img\/index\.json/.test(u)).length, 1, 'the index looked at once');
+  assert.deepEqual(Object.keys(JSON.parse(storage['osign.hosted'])).sort(), [a, b].sort(), 'both kept');
+});
+
 test('a sign-in that never answers: after a while a notice, and the event completes', async () => {
   const notices = {};
   const r = runtime({ signInHangs: true, notices });
