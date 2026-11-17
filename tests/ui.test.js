@@ -230,8 +230,8 @@ test('import: UTF-16 templates with their images, text-block files left out, gro
   await page.click('.tab[data-mode=design]');
   // (The preview of the signature shown before may still be there for a moment.)
   await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; return d && d.body && /Anna Muster/.test(d.body.textContent) && !/Freundliche/.test(d.body.textContent); });
-  await page.waitForFunction(() => document.querySelector('#preview').contentDocument.querySelectorAll('img').length >= 2);
-  const imgs = await page.evaluate(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].map((i) => i.getAttribute('src')));
+  // Read in the same moment it is checked (the preview can be drawn again in between).
+  const imgs = await (await page.waitForFunction(() => { const d = document.querySelector('#preview').contentDocument; const l = d ? [...d.querySelectorAll('img')].map((i) => i.getAttribute('src')) : []; return l.length >= 2 && l; })).jsonValue();
   assert.deepEqual(imgs, ['/assets/logo.png', '/photos/mustera.jpg']);
   // Both load: the logo from the draft, the photo from the photos folder.
   await page.waitForFunction(() => [...document.querySelector('#preview').contentDocument.querySelectorAll('img')].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 5000 });
@@ -2116,5 +2116,28 @@ test('all signatures deleted: publishing that (asked once more) takes them out o
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(folder, 'signatures.json'), 'utf8')).signatures, []);
   await page.click('#dlgPublish button[value=cancel]');
   await page.waitForFunction(() => !/Unpublished changes/.test(document.querySelector('#stPub') ? document.querySelector('#stPub').textContent : ''));
+  assert.deepEqual(errors, []);
+});
+
+test('the bar shows the font, size and colour of the text at the cursor, and the same font can be chosen again', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p style="font-family:Verdana,sans-serif;font-size:12pt;color:#cc0000"><b>Fett rot</b></p><p style="font-family:Arial,sans-serif;font-size:9pt">Klein</p><p style="font-family:Futura,sans-serif;font-size:13pt">Anders</p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  const frame = page.frameLocator('#design');
+  await frame.locator('b').click();
+  await page.waitForFunction(() => document.querySelector('#tbFont').value === 'Verdana');
+  assert.equal(await page.inputValue('#tbSize'), '12');
+  assert.equal(await page.inputValue('#tbColor'), '#cc0000');
+  assert.ok(await page.evaluate(() => document.querySelector('#toolbar button[data-cmd=bold]').classList.contains('on')), 'bold shown');
+  await frame.locator('text=Klein').click();
+  await page.waitForFunction(() => document.querySelector('#tbFont').value === 'Arial' && document.querySelector('#tbSize').value === '9');
+  // A font not in the list: shown all the same.
+  await frame.locator('text=Anders').click();
+  await page.waitForFunction(() => document.querySelector('#tbFont').value === 'Futura' && document.querySelector('#tbSize').value === '13');
+  await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
