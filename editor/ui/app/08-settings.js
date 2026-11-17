@@ -171,7 +171,9 @@
         const when = new Date(x.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB');
         if (x.error) return { state: 'bad', text: t('The check on {0} stopped: {1}', when, t(x.error)) };
         const m = x.summary;
-        if (!m.found) return { state: 'bad', text: t('Not deployed (checked {0}): Microsoft 365 admin center → Settings → Integrated apps → Upload custom apps, with the manifest address.', when) };
+        // What the script can ask (Get-OrganizationAddIn) is only one of the ways Microsoft deploys
+        // an add-in: one deployed through Integrated apps more recently is not in it.
+        if (!m.found) return { state: 'warn', text: t('Not found in the central deployment (checked {0}). It can still be deployed through Integrated apps, which this check cannot see: if Outlook has it, all is well. Else: Microsoft 365 admin center → Settings → Integrated apps → Upload custom apps, with the manifest.', when) };
         // To whom: for the local admin only.
         const parts = [m.hidden ? t('Deployed') : t('Deployed to: {0}', m.everyone ? t('everyone') : m.assigned || t('nobody named'))];
         if (m.version) parts.push(t('version {0}', m.version));

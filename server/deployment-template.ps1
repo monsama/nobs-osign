@@ -61,7 +61,7 @@ try {
         foreach ($p in @($found.PSObject.Properties) | Select-Object -First 40) { $props[$p.Name] = Text $p.Value }
         Say ("Found: " + $props['DisplayName'] + " " + $props['Version']) ("Gefunden: " + $props['DisplayName'] + " " + $props['Version']) 'Green'
     } else {
-        Say "NOBS OSign is not deployed (Integrated apps)." "NOBS OSign ist nicht verteilt (Integrierte Apps)." 'Yellow'
+        Say "NOBS OSign was not found in the central deployment. It can still be deployed through Integrated apps, which this cannot see: if it is in Outlook, all is well." "NOBS OSign wurde in der zentralen Bereitstellung nicht gefunden. Es kann trotzdem über Integrierte Apps verteilt sein, was hier nicht sichtbar ist: Ist es in Outlook, ist alles in Ordnung." 'Yellow'
     }
     Send @{ found = [bool]$found; props = $props }
     Say "Sent to NOBS OSign ($Server): see Settings -> Server." "An NOBS OSign übermittelt ($Server): siehe Einstellungen -> Server." 'Green'

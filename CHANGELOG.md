@@ -5,6 +5,11 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.105
+- *Add-in in Microsoft 365 → Check…*: an add-in not in the central deployment is no longer said to
+  be "not deployed" (red): it can be deployed through Integrated apps, which that check cannot see.
+  Said so (orange), with what to do when Outlook does not have it.
+
 ## 0.9.104 (add-in changed)
 - **The add-in's app registration watched:** the server asks Entra ID every 6 hours (and when
   Status is opened) whether the add-in's client ID is still in the organisation, the way Microsoft
