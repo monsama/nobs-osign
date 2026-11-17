@@ -2024,6 +2024,7 @@ test('publish checks: the active signatures checked, the rest in one grey line; 
   await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
   // Active: for everyone, showing an image by a name the draft has only as a PNG.
   await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await page.fill('#sigName', 'Aktiv TW'); await page.dispatchEvent('#sigName', 'input');
   await page.click('.tab[data-mode=html]');
   await page.fill('#source', '<p>Aktiv <img src="assets/tw-icon.gif" width="8" alt="Icon"></p>');
   await page.dispatchEvent('#source', 'input');
