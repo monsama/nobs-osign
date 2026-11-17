@@ -150,7 +150,8 @@
       el('button', { type: 'button', class: 'linklike', onclick: () => { campSel = camp.id; goView('campaigns'); } }, t('Open'))));
     else if (onDay) notes.push(el('div', null, t('On {0}: no campaign banner.', dayText)));
     // Classic Outlook: what it keeps in the mailbox, when it gets tight.
-    if (s.defaultNew || s.defaultReply) {
+    // Only for a default someone gets (one for nobody never goes in anywhere).
+    if ((s.defaultNew || s.defaultReply) && !core.forNobody(s)) {
       const cp = classicParts(s), kb = cp.kb;
       // Said as it will be there: without which images (the largest first), or not at all.
       // What the room goes to, and what helps with each.
@@ -161,10 +162,11 @@
       if (kb > CLASSIC_KB && !cp.textFits) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: even the text of this signature is more than the {0} KB its mailbox keeps: there it is not put in by itself, only with Insert in the pane.', CLASSIC_KB), act));
       else if (kb > CLASSIC_KB && cp.missing.length) notes.push(el('div', { class: 'warn' }, t('Classic Outlook: about {0} KB, more than the {1} KB its mailbox keeps. When it puts the signature in by itself, it goes without: {2}. The rest fits; Insert in the pane puts in everything.', kb, CLASSIC_KB, cp.missing.map((x) => x + ' (~' + Math.round((cp.images.find((y) => y.name === x) || {}).bytes / 1024) + ' KB)').join(', ')), act));
       // The images in full from next to the add-in's files: said once it would not fit otherwise.
-      else if (cp.hosted && kb > CLASSIC_KB) notes.push(el('div', null, t('Classic Outlook: the images come in as they are from the add-in\'s address (Cloudflare Pages), not from the mailbox: all of it goes in, sharp. Without a network there, it takes the smaller copies kept in the mailbox.')));
+      // Nothing to do: one quiet line, the rest on hover.
+      else if (cp.hosted && kb > CLASSIC_KB) notes.push(el('div', { class: 'pv-quiet', title: t('Classic Outlook: the images come in as they are from the add-in\'s address (Cloudflare Pages), not from the mailbox: all of it goes in, sharp. Without a network there, it takes the smaller copies kept in the mailbox.') }, t('Classic Outlook: all of it goes in, the images sharp.')));
       // It fits with those images made smaller there: said, nothing to do.
-      else if (kb > CLASSIC_KB) notes.push(el('div', null, t('Classic Outlook: about {0} KB; so that all of it fits into the {1} KB its mailbox keeps, the add-in makes {2} smaller there (only there: every other Outlook gets them as they are).', kb, CLASSIC_KB, cp.squeezed.join(', '))));
-      else if (kb > CLASSIC_KB * 0.7) notes.push(el('div', null, t('Classic Outlook: about {0} of {1} KB, nearly full.', kb, CLASSIC_KB)));
+      else if (kb > CLASSIC_KB) notes.push(el('div', { class: 'pv-quiet' }, t('Classic Outlook: about {0} KB; so that all of it fits into the {1} KB its mailbox keeps, the add-in makes {2} smaller there (only there: every other Outlook gets them as they are).', kb, CLASSIC_KB, cp.squeezed.join(', '))));
+      else if (kb > CLASSIC_KB * 0.7) notes.push(el('div', { class: 'pv-quiet' }, t('Classic Outlook: about {0} of {1} KB, nearly full.', kb, CLASSIC_KB)));
     }
     const none = $('pvSource').value.startsWith('without:') ? $('pvSource').value.slice(8) : '';
     if (none && used.includes(none)) notes.push(emptyFieldNote(s, none));

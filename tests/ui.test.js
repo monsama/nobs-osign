@@ -1983,6 +1983,8 @@ test('one way to make a signature ready for classic Outlook: the HTML lighter, t
   await page.click('#sigList li a.active');
   // The note is for what goes in by itself: the signature a default (other tests may have left one).
   if (!(await page.isChecked('#sigNew'))) await page.click('label:has(#sigNew)');
+  // And someone gets it (the note on classic Outlook is for a default someone gets).
+  await assignAll();
   await page.click('.tab[data-mode=html]');
   await page.fill('#source', '<table lang="DE-CH" style="border-collapse:collapse;mso-table-lspace:0pt"><tr><td style="mso-line-height-rule:exactly;font-size:10pt"><span><span lang="DE-CH">Anna</span></span>   <b>Muster</b></td></tr></table>' +
     '<p><img src="assets/' + gif.name + '" width="20" alt="Icon"> <img src="assets/' + big.name + '" width="400" alt="Banner"></p>');
@@ -2066,6 +2068,8 @@ test('a further way when preparing is not enough: the images as small in KB as i
   await page.goto(url); await page.waitForSelector('html[data-ready="1"]');
   await page.click('#sigList li a.active');
   if (!(await page.isChecked('#sigNew'))) await page.click('label:has(#sigNew)');
+  // And someone gets it (the note on classic Outlook is for a default someone gets).
+  await assignAll();
   await page.click('.tab[data-mode=html]');
   await page.fill('#source', '<p>Anna Muster</p><p>' + imgs.map((x) => '<img src="assets/' + x.name + '" width="500" alt="' + x.name + '">').join('<br>') + '</p>');
   await page.dispatchEvent('#source', 'input');
