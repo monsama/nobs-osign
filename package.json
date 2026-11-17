@@ -9,7 +9,7 @@
     "server": "node server/index.js"
   },
   "dependencies": {
-    "@azure/msal-browser": "5.27.0",
+    "@azure/msal-browser": "5.29.1",
     "@noble/hashes": "1.8.0",
     "ldapts": "9.2.0"
   },
@@ -17,7 +17,7 @@
     "esbuild": "0.28.2",
     "jsdom": "26.1.0",
     "ldapjs": "3.0.7",
-    "playwright": "1.64.1"
+    "playwright": "1.65.1"
   },
   "license": "GPL-3.0-or-later"
 }
