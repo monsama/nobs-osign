@@ -2143,3 +2143,26 @@ test('the bar shows the font, size and colour of the text at the cursor, and the
   await page.click('#btnDel'); await page.click('#askOk');
   assert.deepEqual(errors, []);
 });
+
+test('a banner in the line of a field that can be empty: said in the preview and before publishing; on a line of its own, not', { skip }, async () => {
+  await page.goto(url);
+  await page.waitForSelector('html[data-ready="1"]');
+  await page.click('#btnNew'); await page.click('[data-tpl=compact]');
+  await assignAll();
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Anna</p><p>@@info <img src="assets/banner-x.png" width="400" alt="Banner"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await page.waitForFunction(() => /The image banner-x\.png stands in the line of @@info/.test(document.querySelector('#pvNote').textContent));
+  await page.click('#btnPublish');
+  await page.waitForSelector('#dlgPublish[open]');
+  assert.match(await page.textContent('#pubChecks'), /Images that go with an empty line: 1/);
+  await page.click('#dlgPublish button[value=cancel]');
+  // Enter after the field: a line of its own, nothing said.
+  await page.click('.tab[data-mode=html]');
+  await page.fill('#source', '<p>Anna</p><p>@@info<br><img src="assets/banner-x.png" width="400" alt="Banner"></p>');
+  await page.dispatchEvent('#source', 'input');
+  await page.click('.tab[data-mode=design]');
+  await page.waitForFunction(() => !/stands in the line of/.test(document.querySelector('#pvNote').textContent));
+  await page.click('#btnDel'); await page.click('#askOk');
+});

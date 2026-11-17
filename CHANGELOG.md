@@ -5,6 +5,18 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.108
+- **Fixed: a banner went with an empty field above it.** In HTML as Word and CI-Sign write it
+  (`@@info<span><br><br><img banner></span>`), the line breaks inside the `<span>` were not taken
+  as the end of the line: when the field was empty (an absence note, say), the banner went with
+  it, in the preview and in Outlook. Now the line ends at that break. Publish again so Outlook gets
+  it.
+- **An image that goes with an empty line is said:** a banner or logo standing in the same line as
+  a field (no line break between them, so it only looks like a line of its own) goes with that
+  line whenever the field is empty, in the preview and in Outlook alike. The preview says so, and
+  the publish checks, with what to do (Enter right after the field). A small icon beside its field
+  (a phone icon) going with it is meant, and not said.
+
 ## 0.9.107
 - **The bar shows the text at the cursor**, as a word processor does: its font, size and colour
   (and bold, italic, underlined, as before), also when the cursor is moved with the keys. A font

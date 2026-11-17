@@ -204,6 +204,13 @@
       if (c.nodeType === 1 && c.querySelector && c.querySelector('br') && !segs[segs.length - 1].some(visible) && !attrPlaceholders(c).length) {
         segs.push([]); markBrLines(doc, c); continue;
       }
+      // One that comes after something on the line but starts with a <br> itself (Word and CI-Sign:
+      // @@info<span><br><br><img banner></span>): that <br> ends the line, so the line is what came
+      // before it, and what is in the element is lines of its own. Else an empty @@info would take
+      // the banner with it.
+      if (c.nodeType === 1 && c.querySelector && c.querySelector('br') && !attrPlaceholders(c).length && startsWithBreak(c)) {
+        segs.push([]); markBrLines(doc, c); continue;
+      }
       segs[segs.length - 1].push(c);
       if (c.nodeType === 1 && c.nodeName === 'BR') segs.push([]);
     }
@@ -220,6 +227,16 @@
 
   // Something on a line that shows: text that is not only space, or an element.
   function visible(n) { return n.nodeType === 1 || (n.nodeType === 3 && /\S/.test(n.nodeValue.replace(/\u00a0/g, 'x'))); }
+  // Whether an element's first content, before anything visible, is a <br> (<span><br>…).
+  function startsWithBreak(el) {
+    for (var c = el.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 1 && c.nodeName === 'BR') return true;
+      // Into a wrapper (<font>, <span>) that carries no field of its own.
+      if (c.nodeType === 1 && c.nodeName !== 'IMG' && c.firstChild && !attrPlaceholders(c).length) return startsWithBreak(c);
+      if (visible(c)) return false;
+    }
+    return false;
+  }
   // The placeholders in an element's own attributes (an <a href="mailto:@@mail">).
   function attrPlaceholders(el) {
     var keys = [];
@@ -417,6 +434,30 @@
     if (a.length !== b.length) return false;
     for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
+  }
+
+  // The larger images (a banner, a logo: wider than minWidth, or of no width given) that stand in
+  // a line that goes when its fields are empty (render, removeEmptyLines): they go with it, which is
+  // seldom meant. Small ones (an icon beside a phone number) going with their line is. Each as
+  // { src, keys } (the line's fields), each image once.
+  function imagesInLines(compiled, minWidth) {
+    minWidth = minWidth || 100;
+    var html = String(compiled || ''), out = [], seen = {}, m, guard = 0;
+    while ((m = IF_BLOCK.exec(html)) && guard++ < 10000) {
+      var keys = m[1] ? m[1].split(',') : [];
+      var imgs = m[2].match(/<img\b[^>]*>/gi) || [];
+      for (var i = 0; i < imgs.length && keys.length; i++) {
+        var tag = imgs[i];
+        var src = (/\ssrc\s*=\s*["']?([^"'\s>]+)/i.exec(tag) || [])[1] || '';
+        var w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(tag) || [])[1] || (/width\s*:\s*(\d+)px/i.exec(tag) || [])[1] || 0);
+        if (w && w < minWidth) continue;
+        if (!src || seen[src]) continue;
+        seen[src] = 1;
+        out.push({ src: src, keys: keys });
+      }
+      html = html.slice(0, m.index) + m[2] + html.slice(m.index + m[0].length);
+    }
+    return out;
   }
 
   function isEmpty(v) { return v === undefined || v === null || String(v).trim() === ''; }
@@ -960,6 +1001,7 @@
     escapeHtml: escapeHtml,
     compile: compile,
     render: render,
+    imagesInLines: imagesInLines,
     htmlToText: htmlToText,
     localImages: localImages, 
     isAvailable: isAvailable,

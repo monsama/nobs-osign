@@ -24,6 +24,9 @@
     const heavy = c.signatures.map((s) => ({ s, kb: Math.round(((s.html || '').length + [...new Set(imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter(Boolean))].reduce((n, x) => n + size(x), 0)) / 1024) })).filter((x) => x.kb > 250);
     if (heavy.length) out.push(['warn', t('Heavy signatures (text and images over 250 KB): {0}.', heavy.map((x) => x.s.name + ' (' + x.kb + ' KB)').join(', ')), null, t('Heavy signatures: {0}', count(heavy.map((x) => x.s)))]);
     const gone = [...new Set(c.signatures.flatMap((s) => imgs(s).map((i) => (/^assets\/(.+)$/.exec(attr(i, 'src')) || [])[1]).filter((n) => n && dark[n] === true)))];
+    // A banner or logo in a line that goes when its fields are empty: it goes with it.
+    const lone = c.signatures.filter((s) => s.removeEmptyLines !== false).flatMap((s) => core.imagesInLines(s.compiled || '').map((x) => s.name + ': ' + x.src.split('/').pop() + ' (@@' + x.keys.join(', @@') + ')'));
+    if (lone.length) out.push(['warn', t('Images in the line of a field, gone with it when the field is empty: {0}. Put each in a line of its own (Enter right after the field).', lone.join('; ')), null, t('Images that go with an empty line: {0}', lone.length)]);
     if (gone.length) out.push(['warn', t('Dark image on a transparent background, hard to see in dark mode: {0}. A light edge, or a background of its own, helps.', gone.join(', ')), null, t('Hard to see in dark mode: {0}', gone.length === 1 ? gone[0] : t('{0} images', gone.length))]);
     return out;
   }
