@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@azure/msal-browser": "5.27.0",
-    "@noble/hashes": "1.8.0",
+    "@noble/hashes": "2.4.0",
     "ldapts": "9.2.0"
   },
   "devDependencies": {
