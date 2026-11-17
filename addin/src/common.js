@@ -129,7 +129,8 @@ const MSG_DE = [
   [/: not found in SharePoint \(404\)\.$/, ': in SharePoint nicht gefunden (404).'],
   [/: (Microsoft Graph|SharePoint) answered (\d+)\.$/, ': $1 antwortete $2.'],
   [/: cannot be reached\.$/, ': nicht erreichbar.'],
-  [/^your details could not be read\.$/, 'Ihre Angaben konnten nicht gelesen werden.']
+  [/^your details could not be read\.$/, 'Ihre Angaben konnten nicht gelesen werden.'],
+  [/the add-in's app registration is not in your organisation \(deleted\?\)\. Tell your IT: NOBS OSign, Settings → Status\.$/, 'die App-Registrierung des Add-ins ist nicht in Ihrer Organisation (gelöscht?). Melden Sie es der IT: NOBS OSign, Einstellungen → Status.']
 ];
 // The language of Outlook's display: German, French, Italian, else English.
 export function langOf(code) { const m = /^(de|fr|it)/i.exec(String(code || '')); return m ? m[1].toLowerCase() : 'en'; }
@@ -190,6 +191,7 @@ const SIGN_IN_MS = 20 * 1000;
 const SIGN_IN_RETRY_MS = 5 * 60 * 1000;
 let tokens = {};
 // A Graph token for the add-in (nested app authentication), cached until shortly before it runs out.
+export const APP_GONE = 'Signing in: the add-in\'s app registration is not in your organisation (deleted?). Tell your IT: NOBS OSign, Settings → Status.';
 async function token(scopes, interactive) {
   const key = scopes.join(' ');
   const had = tokens[key];
@@ -197,6 +199,11 @@ async function token(scopes, interactive) {
     const entry = { at: Date.now() };
     const p = getGraphToken(interactive, scopes);
     entry.p = (interactive ? p : withTimeout(p, SIGN_IN_MS, 'Signing in')).catch((e) => {
+      // The add-in's app registration gone from the organisation (deleted in Entra ID): said
+      // plainly, not as Microsoft's code.
+      if (/AADSTS700016|\b700016\b|was not found in the directory/i.test(String((e && (e.message || e.errorMessage || e.errorCode)) || ''))) {
+        e = new Error(APP_GONE);
+      }
       if (tokens[key] === entry) {
         if (interactive) delete tokens[key];
         else { entry.failed = true; entry.at = Date.now(); }

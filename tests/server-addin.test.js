@@ -229,3 +229,33 @@ test('Test in Server connections: the token works, and whether the project is th
   assert.deepEqual(await pagesTest(cfg('not-there-yet', 'cf-token'), fetch), { project: false });
   await assert.rejects(pagesTest(cfg('company-osign', 'wrong'), fetch), /refused the API token/);
 });
+
+test('the add-in\'s app registration checked in Entra ID: gone (AADSTS700016) is said, there is fine', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-appcheck-'));
+  let gone = true;
+  const asked = [];
+  const stub = async (url, init) => {
+    if (/\/oauth2\/v2\.0\/token$/.test(String(url))) {
+      asked.push(String(url) + ' ' + String(init.body));
+      return new Response(JSON.stringify(gone ? { error: 'unauthorized_client', error_codes: [700016] } : { error: 'invalid_client', error_codes: [7000218] }), { status: 400, headers: { 'content-type': 'application/json' } });
+    }
+    return fetch(url, init);
+  };
+  const s2 = http.createServer(createApp({ fetch: stub, log: { info() {}, warn() {}, error() {} }, env: { OSIGN_DATA: dir, OSIGN_ADMIN_PASSWORD: 'pw', OSIGN_SECURE_COOKIE: '0', OSIGN_LOGIN_URL: 'https://login.example' } }));
+  await new Promise((r) => s2.listen(0, '127.0.0.1', r));
+  try {
+    const b = 'http://127.0.0.1:' + s2.address().port;
+    const c = (await fetch(b + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'admin', password: 'pw' }) })).headers.get('set-cookie').split(';')[0];
+    const call = (name, data) => fetch(b + '/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: c }, body: JSON.stringify(data || {}) }).then((r) => r.json());
+    assert.equal((await call('settings/save', { settings: { clientId: SETTINGS.clientId, tenantId: '11111111-2222-3333-4444-555555555555' } })).ok, true);
+    const r = await call('addin/appcheck');
+    assert.equal(r.missing, true, JSON.stringify(r));
+    assert.match(asked[0], /^https:\/\/login\.example\/11111111-2222-3333-4444-555555555555\/oauth2\/v2\.0\/token .*client_id=00000000-0000-0000-0000-000000000001/);
+    assert.doesNotMatch(asked[0], /secret|assertion/, 'nothing secret sent');
+    assert.equal((await call('info')).features.addinAppMissing, true);
+    assert.ok((await call('notify/get')).now.some((x) => /app registration .* is not in your organisation/.test(x)));
+    gone = false;
+    assert.equal((await call('addin/appcheck')).missing, false);
+    assert.equal((await call('info')).features.addinAppMissing, false);
+  } finally { s2.close(); }
+});

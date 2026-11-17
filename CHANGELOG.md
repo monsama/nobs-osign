@@ -5,6 +5,15 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.104 (add-in changed)
+- **The add-in's app registration watched:** the server asks Entra ID every 6 hours (and when
+  Status is opened) whether the add-in's client ID is still in the organisation, the way Microsoft
+  answers anyone (nothing signed in, nothing changed). When it is gone (deleted while cleaning up,
+  say), Settings → Status says so with what to do, the publish checks say it first, and the
+  webhook is told.
+- In Outlook, a sign-in refused for that reason is said plainly (in German, French and Italian
+  too), not as Microsoft's AADSTS700016.
+
 ## 0.9.103 (add-in changed)
 A check of what 0.9.102 changed. Make the add-in files again and upload them.
 - Fixed: making the add-in files when it failed (a wrong tenant ID, say), then a publish, could
