@@ -419,6 +419,30 @@
     return true;
   }
 
+  // The larger images (a banner, a logo: wider than minWidth, or of no width given) that stand in
+  // a line that goes when its fields are empty (render, removeEmptyLines): they go with it, which is
+  // seldom meant. Small ones (an icon beside a phone number) going with their line is. Each as
+  // { src, keys } (the line's fields), each image once.
+  function imagesInLines(compiled, minWidth) {
+    minWidth = minWidth || 100;
+    var html = String(compiled || ''), out = [], seen = {}, m, guard = 0;
+    while ((m = IF_BLOCK.exec(html)) && guard++ < 10000) {
+      var keys = m[1] ? m[1].split(',') : [];
+      var imgs = m[2].match(/<img\b[^>]*>/gi) || [];
+      for (var i = 0; i < imgs.length && keys.length; i++) {
+        var tag = imgs[i];
+        var src = (/\ssrc\s*=\s*["']?([^"'\s>]+)/i.exec(tag) || [])[1] || '';
+        var w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(tag) || [])[1] || (/width\s*:\s*(\d+)px/i.exec(tag) || [])[1] || 0);
+        if (w && w < minWidth) continue;
+        if (!src || seen[src]) continue;
+        seen[src] = 1;
+        out.push({ src: src, keys: keys });
+      }
+      html = html.slice(0, m.index) + m[2] + html.slice(m.index + m[0].length);
+    }
+    return out;
+  }
+
   function isEmpty(v) { return v === undefined || v === null || String(v).trim() === ''; }
 
   // opts.assetBase: where the images live. Templates keep them as "assets/logo.png"; the add-in
@@ -960,6 +984,7 @@
     escapeHtml: escapeHtml,
     compile: compile,
     render: render,
+    imagesInLines: imagesInLines,
     htmlToText: htmlToText,
     localImages: localImages, 
     isAvailable: isAvailable,

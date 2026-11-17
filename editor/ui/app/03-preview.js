@@ -168,6 +168,13 @@
       else if (kb > CLASSIC_KB) notes.push(el('div', { class: 'pv-quiet' }, t('Classic Outlook: about {0} KB; so that all of it fits into the {1} KB its mailbox keeps, the add-in makes {2} smaller there (only there: every other Outlook gets them as they are).', kb, CLASSIC_KB, cp.squeezed.join(', '))));
       else if (kb > CLASSIC_KB * 0.7) notes.push(el('div', { class: 'pv-quiet' }, t('Classic Outlook: about {0} of {1} KB, nearly full.', kb, CLASSIC_KB)));
     }
+    // A banner or logo in the line of a field that can be empty goes with that line: said, with
+    // what to do (an icon beside a phone number going with its line is meant, and not said).
+    if (s.removeEmptyLines !== false) {
+      for (const x of core.imagesInLines(core.compile(sanitize(sigFull(s)), scratchDoc))) {
+        notes.push(el('div', { class: 'warn' }, t('The image {0} stands in the line of {1}, and goes with it whenever that is empty. Put it in a line of its own: Enter right after the field.', x.src.split('/').pop(), x.keys.map((k) => '@@' + k).join(', '))));
+      }
+    }
     const none = $('pvSource').value.startsWith('without:') ? $('pvSource').value.slice(8) : '';
     if (none && used.includes(none)) notes.push(emptyFieldNote(s, none));
     $('pvNote').replaceChildren(...notes);

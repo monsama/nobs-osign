@@ -486,3 +486,15 @@ test('a value that goes into an address is taken only as a web, mail or phone ad
   // In the text, the same value stays as it is (escaped).
   assert.equal(r('<p title="@@w">@@w</p>', { w: 'javascript:x' }), '<p title="javascript:x">javascript:x</p>');
 });
+
+test('imagesInLines: a banner in the line of a field that can be empty is named; an icon there, or one in a line of its own, is not', () => {
+  const { JSDOM } = require('jsdom');
+  const doc = new JSDOM('').window.document;
+  const core2 = require('../shared/signature-core.js');
+  const of = (h) => core2.imagesInLines(core2.compile(h, doc)).map((x) => x.src + ':' + x.keys.join(','));
+  assert.deepEqual(of('<p>@@info <img src="assets/banner.png" width="400"></p>'), ['assets/banner.png:info']);
+  assert.deepEqual(of('<p>@@info <img src="assets/b2.png"></p>'), ['assets/b2.png:info'], 'no width: taken as large');
+  assert.deepEqual(of('<p>@@info<br><img src="assets/banner.png" width="400"></p>'), []);
+  assert.deepEqual(of('<p>@@info</p><p><img src="assets/banner.png" width="400"></p>'), []);
+  assert.deepEqual(of('<p><img src="assets/phone.png" width="12"> @@mobile</p>'), [], 'an icon beside its field goes with it, as meant');
+});
