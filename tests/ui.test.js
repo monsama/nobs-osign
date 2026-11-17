@@ -1763,6 +1763,8 @@ test('editor tools: a link\'s bar, a table cell\'s bar, an image\'s corners and 
   assert.equal(await frame.locator('p', { hasText: 'Line one' }).evaluate((p) => p.style.lineHeight + ' ' + p.style.marginBottom), '1.5 8px');
 
   // House colours: one added from the colour box, kept in the draft, then used on the text.
+  // (After the bar has shown the colour at the cursor: it follows the cursor, a frame later.)
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.evaluate(() => { const c = document.querySelector('#toolbar input[type=color]'); c.value = '#1d4ed8'; });
   await page.click('#toolbar .pal-btn');
   await page.click('.pal .pal-add');
