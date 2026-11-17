@@ -29,7 +29,8 @@ export const LANG = {
       ' : introuvable dans SharePoint (404).',
       ' : $1 a répondu $2.',
       ' : impossible à joindre.',
-      'Vos données n\'ont pas pu être lues.'
+      'Vos données n\'ont pas pu être lues.',
+      'l\'inscription d\'application du complément n\'est pas dans votre organisation (supprimée ?). Signalez-le à l\'informatique : NOBS OSign, Paramètres → État.'
     ],
     ui: {
       'Signatures': 'Signatures',
@@ -120,7 +121,8 @@ export const LANG = {
       ': non trovato in SharePoint (404).',
       ': $1 ha risposto $2.',
       ': non raggiungibile.',
-      'Non è stato possibile leggere i suoi dati.'
+      'Non è stato possibile leggere i suoi dati.',
+      'la registrazione dell\'app del componente aggiuntivo non è nella sua organizzazione (eliminata?). Lo segnali all\'IT: NOBS OSign, Impostazioni → Stato.'
     ],
     ui: {
       'Signatures': 'Firme',

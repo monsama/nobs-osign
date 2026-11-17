@@ -551,6 +551,8 @@ function createApp(opts) {
         // Their version, and the one on Cloudflare Pages: older than the server's, they are made again.
         addinVersion: addinMade().version || '',
         addinUploaded: readJson(addinUploadFile),
+        // The add-in's app registration gone from Entra ID (checkAddinApp).
+        addinAppMissing: !!(addinApp && addinApp.missing),
         // Pages set up and uploaded to before, but the files made here are others now (made, not
         // uploaded): classic Outlook does not get the new images until they are.
         addinUnsent: hostingStale(),
@@ -625,9 +627,33 @@ function createApp(opts) {
   // The backups (server/routes-backup.js).
   const backups = createBackupRoutes({ dataDir, env, connections, store, configure, adminOnly, version: VERSION, log, busy: () => publishing });
   Object.assign(routes, backups.routes);
+  // Whether the add-in's app registration (its client ID) is still in the organisation: Entra ID
+  // says so to anyone who asks for a token with that client ID and no secret: AADSTS700016 when
+  // there is no app of that ID in the tenant, another refusal (a secret missing) when there is.
+  // Nothing is signed in or changed. At the start, every 6 hours, and when Status asks.
+  let addinApp = null;
+  async function checkAddinApp() {
+    const st = settings.get(), clientId = st.clientId, tenant = st.tenantId || graphCfg.tenantId;
+    if (!clientId || !tenant) { addinApp = null; return addinApp; }
+    try {
+      const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, scope: 'https://graph.microsoft.com/.default' });
+      const r = await fetchFn((graphCfg.loginUrl || 'https://login.microsoftonline.com') + '/' + encodeURIComponent(tenant) + '/oauth2/v2.0/token',
+        { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString(), signal: AbortSignal.timeout(15000) });
+      const j = await r.json().catch(() => ({}));
+      const codes = (j.error_codes || []).map(Number);
+      addinApp = { at: Date.now(), clientId, tenant, missing: codes.includes(700016), tenantMissing: codes.includes(90002) };
+    } catch (e) { addinApp = { at: Date.now(), clientId, tenant, error: 'Entra ID could not be reached: ' + e.message }; }
+    return addinApp;
+  }
+  const appTimer = setInterval(() => { checkAddinApp().catch(() => {}); }, 6 * 60 * 60 * 1000);
+  if (appTimer.unref) appTimer.unref();
+  const appFirst = setTimeout(() => { checkAddinApp().catch(() => {}); }, 30 * 1000);
+  if (appFirst.unref) appFirst.unref();
+  routes['addin/appcheck'] = async () => checkAddinApp();
   // Telling a webhook (Teams, Power Automate) when something needs doing (server/notify.js).
   const problemsNow = () => {
     const out = [];
+    if (addinApp && addinApp.missing) out.push({ key: 'addinapp:' + addinApp.clientId, text: 'The add-in\'s app registration (client ID ' + addinApp.clientId + ') is not in your organisation any more: Outlook cannot sign in, and signatures are not put in. Restore it in Entra ID (App registrations → Deleted applications), or run the setup script again and make the add-in\'s files again.' });
     const ab = backups.autoBackup.answer();
     if (ab.on && ab.last && ab.last.ok === false) out.push({ key: 'backup:' + ab.last.at, text: 'The automatic backup of ' + ab.last.at.slice(0, 16).replace('T', ' ') + ' failed: ' + ab.last.error });
     if (ab.passLost) out.push({ key: 'backup-pass', text: 'The automatic backups are not made: their passphrase cannot be opened. Set it again (Settings → Server → Backup).' });

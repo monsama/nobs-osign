@@ -153,6 +153,16 @@
         if (f.pagesUpload && (!up || up.version !== v || f.addinUnsent)) return { state: 'warn', text: t('Made, but not uploaded to Cloudflare Pages yet.') };
         return { state: 'good', text: f.pagesUpload ? t('Version {0}, on Cloudflare Pages since {1}.', v, new Date(up.at).toLocaleString(I18N.lang === 'de' ? 'de-CH' : 'en-GB')) : t('Version {0}.', v) };
       } },
+      // The add-in's app registration (its client ID): still in the organisation? Without it Outlook
+      // cannot sign in (deleted in Entra ID, say, while cleaning up).
+      { name: 'Add-in sign-in (app registration)', run: async () => {
+        const r = await api('addin/appcheck');
+        if (!r || !r.clientId) return { state: 'off', text: t('Not set up yet (no client ID).') };
+        if (r.error) return { state: 'warn', text: t(r.error) };
+        if (r.tenantMissing) return { state: 'bad', text: t('The tenant {0} is not known to Microsoft: check the tenant ID.', r.tenant) };
+        if (r.missing) return { state: 'bad', text: t('The app registration {0} is not in your organisation any more: Outlook cannot sign in. Restore it in Entra ID (App registrations → Deleted applications), or run the setup script again and make the add-in\'s files again.', r.clientId) };
+        return { state: 'good', text: t('The app registration {0} is there.', r.clientId) };
+      } },
       // Where the add-in is deployed in Microsoft 365: only a script with an admin's sign-in can
       // ask Microsoft; its last answer is shown, with when it came.
       { name: 'Add-in in Microsoft 365', act: () => (S.info.user && S.info.user.local ? { label: t('Check…'), fn: deployCheck } : null), run: async () => {

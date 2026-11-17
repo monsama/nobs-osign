@@ -96,6 +96,8 @@
     else if (none) out.push(['warn', t('{0} of the {1} users read from AD get no signature for new mail (Users → Only without a signature).', none, snapUsers.length) + (!plain.some((s) => s.defaultNew) ? ' ' + t('The default for new mail is limited to some (Who gets it).') : ''), null, t('{0} users without a signature', none)]);
     else if (!snapUsers && !plain.some((s) => s.defaultNew)) out.push(['warn', t('The default for new mail is limited to some users: everyone else gets none.'), null, t('The default for new mail is for some only')]);
     if (!c.signatures.some((s) => s.defaultReply)) out.push(['warn', t('No signature is the default for replies.')]);
+    // Outlook cannot sign in at all: nothing published reaches anyone until that is fixed.
+    if (S.info && S.info.features && S.info.features.addinAppMissing) out.push(['warn', t('The add-in\'s app registration is not in your organisation any more: Outlook cannot sign in, and no signature is put in. Restore it in Entra ID (App registrations → Deleted applications); Settings → Status says more.'), null, t('Outlook cannot sign in'), true]);
     // Images the active signatures show that are not in the draft: left out of every mail. One of
     // the same name in another form (the GIF made a PNG, a -2) is offered in its place. Only the
     // server's copy endings (one or two digits) are left out: xmas-2025 is no xmas-2026.
