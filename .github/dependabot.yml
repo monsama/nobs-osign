@@ -1,0 +1,35 @@
+# Weekly pull requests for outdated dependencies, as in the other NOBS apps. Minor and patch
+# updates come together, one pull request per ecosystem; a major update comes on its own, since it
+# can change behavior. Security fixes come at once, each on its own. Every pull request runs the
+# full test workflow (tests/*.test.js, the add-in in a browser, the setup script on Windows)
+# before it is merged; a release is made as usual once it is.
+version: 2
+updates:
+  # The server, the add-in's sign-in (msal-browser) and what builds and tests them.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+
+  # The image's base (node:…-alpine). A new Node major is moved to by hand, to an even (LTS)
+  # one: the odd ones are short-lived.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  # The workflows' actions (release.yml pins them to commits: those are updated too).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor:
+        update-types: [minor, patch]
