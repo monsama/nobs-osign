@@ -2,7 +2,7 @@
 # proxy (see docker-compose.yml and deploy-osign.sh). The add-in itself is not served from here.
 
 # The add-in's template (dist/template) is built with the dev tools, which the image leaves out.
-FROM node:26.12-alpine3.24 AS build
+FROM node:26.13-alpine3.24 AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -10,7 +10,7 @@ COPY addin addin
 COPY shared shared
 RUN node addin/build.mjs
 
-FROM node:26.12-alpine3.24
+FROM node:26.13-alpine3.24
 # Security fixes Alpine has published since the base image was built (OpenSSL, ...).
 RUN apk upgrade --no-cache
 WORKDIR /app
