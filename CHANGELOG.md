@@ -5,6 +5,11 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.106
+- The note on classic Outlook in the preview only for a default someone gets (one for nobody
+  never goes in anywhere), and, when there is nothing to do, one short grey line ("all of it goes
+  in, the images sharp"; the rest on hover).
+
 ## 0.9.105
 - *Add-in in Microsoft 365 → Check…*: an add-in not in the central deployment is no longer said to
   be "not deployed" (red): it can be deployed through Integrated apps, which that check cannot see.

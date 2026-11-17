@@ -980,6 +980,7 @@
     'The file is not the image its name says.': 'Die Datei ist nicht das Bild, das ihr Name sagt.',
     'Only who asked for it, or the local account admin, can withdraw it.': 'Zurückziehen kann sie nur, wer sie angefragt hat, oder der lokale Admin.',
     'User to look up': 'Gesuchte Person',
+    'Classic Outlook: all of it goes in, the images sharp.': 'Klassisches Outlook: Alles wird eingefügt, die Bilder scharf.',
     'Not found in the central deployment (checked {0}). It can still be deployed through Integrated apps, which this check cannot see: if Outlook has it, all is well. Else: Microsoft 365 admin center → Settings → Integrated apps → Upload custom apps, with the manifest.': 'In der zentralen Bereitstellung nicht gefunden (geprüft {0}). Es kann trotzdem über Integrierte Apps verteilt sein, was diese Prüfung nicht sieht: Hat Outlook es, ist alles in Ordnung. Sonst: Microsoft 365 Admin Center → Einstellungen → Integrierte Apps → Benutzerdefinierte Apps hochladen, mit dem Manifest.',
     'Add-in sign-in (app registration)': 'Anmeldung des Add-ins (App-Registrierung)',
     'Not set up yet (no client ID).': 'Noch nicht eingerichtet (keine Client-ID).',
