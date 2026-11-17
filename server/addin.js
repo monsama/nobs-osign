@@ -14,8 +14,8 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 const { pathToFileURL } = require('node:url');
-const { blake3 } = require('@noble/hashes/blake3');
-const { bytesToHex } = require('@noble/hashes/utils');
+const { blake3 } = require('@noble/hashes/blake3.js');
+const { bytesToHex } = require('@noble/hashes/utils.js');
 
 const ROOT = path.resolve(__dirname, '..');
 

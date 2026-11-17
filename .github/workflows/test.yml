@@ -14,8 +14,8 @@ jobs:
     # Pinned: Playwright 1.56 installs Chromium only on releases it knows (not yet 26.04).
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -32,8 +32,8 @@ jobs:
       matrix:
         shell: [powershell, pwsh]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -48,7 +48,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: shellcheck -x deploy-nobs-osign.sh scripts/osign-lib.sh scripts/update.sh scripts/backup.sh scripts/restore.sh scripts/release.sh
       - run: docker build -t nobs-osign:ci .
       - name: Start it and ask it

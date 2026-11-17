@@ -158,7 +158,8 @@
       { name: 'Add-in sign-in (app registration)', run: async () => {
         const r = await api('addin/appcheck');
         if (!r || !r.clientId) return { state: 'off', text: t('Not set up yet (no client ID).') };
-        if (r.error) return { state: 'warn', text: t(r.error) };
+        if (r.noTenant) return { state: 'off', text: t('Not set up yet (no tenant ID).') };
+        if (r.unreachable) return { state: 'warn', text: r.httpStatus ? t('Entra ID gave no answer that can be read (HTTP {0}).', r.httpStatus) : t(r.unreachable) };
         if (r.tenantMissing) return { state: 'bad', text: t('The tenant {0} is not known to Microsoft: check the tenant ID.', r.tenant) };
         if (r.missing) return { state: 'bad', text: t('The app registration {0} is not in your organisation any more: Outlook cannot sign in. Restore it in Entra ID (App registrations → Deleted applications), or run the setup script again and make the add-in\'s files again.', r.clientId) };
         return { state: 'good', text: t('The app registration {0} is there.', r.clientId) };

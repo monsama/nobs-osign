@@ -10,8 +10,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { blake3 } = require('@noble/hashes/blake3');
-const { bytesToHex } = require('@noble/hashes/utils');
+const { blake3 } = require('@noble/hashes/blake3.js');
+const { bytesToHex } = require('@noble/hashes/utils.js');
 const { createApp } = require('../server/app');
 
 const ROOT = path.join(__dirname, '..');
@@ -232,11 +232,12 @@ test('Test in Server connections: the token works, and whether the project is th
 
 test('the add-in\'s app registration checked in Entra ID: gone (AADSTS700016) is said, there is fine', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osign-appcheck-'));
-  let gone = true;
+  let gone = true, proxyPage = false;
   const asked = [];
   const stub = async (url, init) => {
     if (/\/oauth2\/v2\.0\/token$/.test(String(url))) {
       asked.push(String(url) + ' ' + String(init.body));
+      if (proxyPage) return new Response('<html>Bad gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } });
       return new Response(JSON.stringify(gone ? { error: 'unauthorized_client', error_codes: [700016] } : { error: 'invalid_client', error_codes: [7000218] }), { status: 400, headers: { 'content-type': 'application/json' } });
     }
     return fetch(url, init);
@@ -257,5 +258,11 @@ test('the add-in\'s app registration checked in Entra ID: gone (AADSTS700016) is
     gone = false;
     assert.equal((await call('addin/appcheck')).missing, false);
     assert.equal((await call('info')).features.addinAppMissing, false);
+    // A page that is not Entra ID's answer (a proxy's, a 5xx) says nothing: not "there".
+    proxyPage = true;
+    const odd = await call('addin/appcheck');
+    assert.equal(odd.missing, undefined, JSON.stringify(odd));
+    assert.equal(odd.httpStatus, 502);
+    assert.match(odd.unreachable, /no answer that can be read/);
   } finally { s2.close(); }
 });

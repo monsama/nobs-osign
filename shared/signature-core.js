@@ -193,7 +193,7 @@
   // So are the lines inside an inline element that holds <br>s itself, as CI-Sign writes them
   // (<font>@@info<br><br><img banner></font>): the banner is a line of its own, not part of
   // the line of an empty field.
-  function markBrLines(doc, block) {
+  function markBrLines(doc, block, carry) {
     var segs = [[]];
     for (var c = block.firstChild; c; c = c.nextSibling) {
       // A nested block is a line of its own (it gets its own marks), never part of a <br> line.
@@ -202,20 +202,25 @@
       // <img>): its own lines. Not when something stands before it on the line (a label, "Tel"),
       // nor when it carries a field itself (<a href="mailto:@@mail">): then it is part of the line.
       if (c.nodeType === 1 && c.querySelector && c.querySelector('br') && !segs[segs.length - 1].some(visible) && !attrPlaceholders(c).length) {
-        segs.push([]); markBrLines(doc, c); continue;
+        var pass = segs.length === 1 && carry ? carry : null;
+        segs.push([]); markBrLines(doc, c, pass); continue;
       }
       // One that comes after something on the line but starts with a <br> itself (Word and CI-Sign:
       // @@info<span><br><br><img banner></span>): that <br> ends the line, so the line is what came
       // before it, and what is in the element is lines of its own. Else an empty @@info would take
       // the banner with it.
       if (c.nodeType === 1 && c.querySelector && c.querySelector('br') && !attrPlaceholders(c).length && startsWithBreak(c)) {
-        segs.push([]); markBrLines(doc, c); continue;
+        var before = [];
+        segs[segs.length - 1].forEach(function (n) { (n.nodeType === 3 ? placeholdersIn(n.nodeValue) : ownPlaceholders(n)).forEach(function (k) { if (before.indexOf(k) < 0) before.push(k); }); });
+        segs.push([]); markBrLines(doc, c, before.length ? before : null); continue;
       }
       segs[segs.length - 1].push(c);
       if (c.nodeType === 1 && c.nodeName === 'BR') segs.push([]);
     }
-    segs.forEach(function (seg) {
+    segs.forEach(function (seg, i) {
       if (!seg.length) return;
+      // The <br> that ends the line before this element goes with that line.
+      if (i === 0 && carry && seg[seg.length - 1].nodeName === 'BR' && !seg.slice(0, -1).some(visible)) { wrap(doc, seg[0], seg[seg.length - 1], carry); return; }
       var keys = [];
       seg.forEach(function (n) {
         var ks = n.nodeType === 3 ? placeholdersIn(n.nodeValue) : ownPlaceholders(n);
@@ -445,12 +450,19 @@
     var html = String(compiled || ''), out = [], seen = {}, m, guard = 0;
     while ((m = IF_BLOCK.exec(html)) && guard++ < 10000) {
       var keys = m[1] ? m[1].split(',') : [];
-      var imgs = m[2].match(/<img\b[^>]*>/gi) || [];
+      // A table row (a logo cell beside the fields) goes as a whole on purpose: not a line.
+      var imgs = /^\s*<tr\b/i.test(m[2]) ? [] : (m[2].match(/<img\b[^>]*>/gi) || []);
       for (var i = 0; i < imgs.length && keys.length; i++) {
         var tag = imgs[i];
         var src = (/\ssrc\s*=\s*["']?([^"'\s>]+)/i.exec(tag) || [])[1] || '';
-        var w = Number((/\swidth\s*=\s*["']?(\d+)/i.exec(tag) || [])[1] || (/width\s*:\s*(\d+)px/i.exec(tag) || [])[1] || 0);
+        // width="150" or style="width:150px" (not max-width); a width in % says nothing; a small
+        // height alone (an icon of height="16") is small too.
+        var wa = /\swidth\s*=\s*["']?(\d+)(%?)/i.exec(tag);
+        if (wa && wa[2]) continue;
+        var w = Number((wa || [])[1] || (/(?:^|[\s;"'])width\s*:\s*(\d+)px/i.exec(tag) || [])[1] || 0);
+        var h = Number((/\sheight\s*=\s*["']?(\d+)/i.exec(tag) || [])[1] || (/(?:^|[\s;"'])height\s*:\s*(\d+)px/i.exec(tag) || [])[1] || 0);
         if (w && w < minWidth) continue;
+        if (!w && h && h < 40) continue;
         if (!src || seen[src]) continue;
         seen[src] = 1;
         out.push({ src: src, keys: keys });
@@ -481,7 +493,9 @@
     }
     // The last line of a paragraph went: the <br> that ended the line before it would now end the
     // paragraph, and Outlook (Word) shows that as an empty line.
-    if (dropped) html = html.replace(/<br\s*\/?>(\s*)(<\/(?:p|div|td|th|li|h[1-6]|blockquote)>)/gi, '$1$2');
+    // A wrapper whose lines all went (<span><br>@@b</span>) is left empty: it goes too.
+    if (dropped) for (var e = 0; e < 5; e++) html = html.replace(/<(span|font|b|strong|i|em|u)\b[^>]*>\s*<\/\1>/gi, '');
+    if (dropped) html = html.replace(/<br\s*\/?>((?:\s|<\/(?:span|font|b|strong|i|em|u|a)>)*)(<\/(?:p|div|td|th|li|h[1-6]|blockquote)>)/gi, '$1$2');
     // A value that goes into an address (href, src) is taken only as a web, mail or phone address,
     // or as a relative one: anything else (javascript:, data:) could run or load in the mail.
     var inUrl = urlRanges(html);

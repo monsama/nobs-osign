@@ -434,7 +434,8 @@ function createApp(opts) {
     return !!(up.build && made && up.build === made.id);
   }
   // Whether hosting is meant (Pages set up, uploaded once) but off now: said to the publisher.
-  const hostingStale = () => !!(addin.pagesEnabled(pages) && readJson(addinUploadFile) && !hostingOn());
+  // Not while Pages has a problem of its own (no token): that is said, uploading would not help.
+  const hostingStale = () => !!(addin.pagesEnabled(pages) && !addin.pagesProblem(pages) && readJson(addinUploadFile) && !hostingOn());
   // The images that go next to the add-in's files today, by name: those the signatures someone
   // gets show (their building blocks put in), on their days, and those of the campaigns on theirs
   // (a day more at the end, for those behind the server's clock). A signature for nobody, a block no
@@ -444,7 +445,7 @@ function createApp(opts) {
     try { c = JSON.parse(configJson || '{}'); } catch (e) { return new Set(); }
     const day = now || new Date(), before = new Date(day.getTime() - 24 * 60 * 60 * 1000);
     const on = (x) => core.inPeriod(x, day) || core.inPeriod(x, before);
-    const refs = (h) => [...String(h || '').matchAll(/assets\/([^"'?#\s>\\]+)/g)].map((m) => m[1]);
+    const refs = (h) => [...String(h || '').matchAll(/(?<![\w/.-])assets\/([^"'?#\s>\\]+)/g)].map((m) => m[1]);
     const out = new Set();
     for (const x of c.signatures || []) {
       if (!x || core.forNobody(x) || !on(x)) continue;
@@ -634,15 +635,19 @@ function createApp(opts) {
   let addinApp = null;
   async function checkAddinApp() {
     const st = settings.get(), clientId = st.clientId, tenant = st.tenantId || graphCfg.tenantId;
-    if (!clientId || !tenant) { addinApp = null; return addinApp; }
+    if (!clientId) { addinApp = null; return addinApp; }
+    if (!tenant) { addinApp = { at: Date.now(), clientId, noTenant: true }; return addinApp; }
     try {
       const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, scope: 'https://graph.microsoft.com/.default' });
       const r = await fetchFn((graphCfg.loginUrl || 'https://login.microsoftonline.com') + '/' + encodeURIComponent(tenant) + '/oauth2/v2.0/token',
         { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString(), signal: AbortSignal.timeout(15000) });
       const j = await r.json().catch(() => ({}));
-      const codes = (j.error_codes || []).map(Number);
-      addinApp = { at: Date.now(), clientId, tenant, missing: codes.includes(700016), tenantMissing: codes.includes(90002) };
-    } catch (e) { addinApp = { at: Date.now(), clientId, tenant, error: 'Entra ID could not be reached: ' + e.message }; }
+      const codes = (Array.isArray(j.error_codes) ? j.error_codes : []).map(Number);
+      // Only Entra ID's own refusal says anything (a proxy's page, a 5xx: nothing known). Not
+      // "error", which would make the call fail: said as a warning.
+      if (![400, 401].includes(r.status) || !codes.length) addinApp = { at: Date.now(), clientId, tenant, unreachable: 'Entra ID gave no answer that can be read (HTTP ' + r.status + ').', httpStatus: r.status };
+      else addinApp = { at: Date.now(), clientId, tenant, missing: codes.includes(700016), tenantMissing: codes.includes(90002) };
+    } catch (e) { addinApp = { at: Date.now(), clientId, tenant, unreachable: 'Entra ID could not be reached: ' + e.message }; }
     return addinApp;
   }
   const appTimer = setInterval(() => { checkAddinApp().catch(() => {}); }, 6 * 60 * 60 * 1000);

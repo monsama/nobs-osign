@@ -502,7 +502,7 @@ test('imagesInLines: a banner in the line of a field that can be empty is named;
 test('a line ends at a <br> inside the element after it: @@info<span><br><br><img banner></span> keeps the banner when @@info is empty', () => {
   const doc = new JSDOM('').window.document;
   // As Word and CI-Sign write it (from a signature where the banner went with an empty @@info).
-  const h = '<table><tr><td>x</td></tr></table><span style="font-size: 11pt;"><font size="2">@@info<span style="font-family: Aptos, sans-serif;"><br><br><br><a href="https://www.argolite.ch/x"><img border="0" src="assets/Banner.png" width="400"></a><br></span><br></font></span>';
+  const h = '<table><tr><td>x</td></tr></table><span style="font-size: 11pt;"><font size="2">@@info<span style="font-family: Aptos, sans-serif;"><br><br><br><a href="https://www.example.com/x"><img border="0" src="assets/Banner.png" width="400"></a><br></span><br></font></span>';
   const c = core.compile(h, doc);
   assert.match(core.render(c, { info: '' }), /assets\/Banner\.png/, 'the banner stays');
   assert.doesNotMatch(core.render(c, { info: '' }), /@@info/);
@@ -510,4 +510,21 @@ test('a line ends at a <br> inside the element after it: @@info<span><br><br><im
   assert.deepEqual(core.imagesInLines(c), [], 'nothing to warn about any more');
   // A line whose element holds the rest of it (no <br> first) is still one line.
   assert.equal(core.render(core.compile('<p>@@mobile <span>x<br>y</span></p>', doc), { mobile: '' }).replace(/\s/g, ''), '<p></p>');
+});
+
+test('the <br> that ends a field\'s line goes with it, also when it stands in the element after it; wrappers left empty go', () => {
+  const doc = new JSDOM('').window.document;
+  const r = (h, v) => core.render(core.compile(h, doc), v);
+  assert.equal(r('<table><tr><td>@@info<span><br><img src="assets/b.png"></span></td></tr></table>', { info: '' }), '<table><tbody><tr><td><span><img src="assets/b.png"></span></td></tr></tbody></table>');
+  assert.equal(r('<p>Tel @@t<font><br>Mobile @@m</font></p>', { t: '', m: '079' }), '<p><font>Mobile 079</font></p>');
+  assert.equal(r('<p>Tel @@t<font><br>Mobile @@m</font></p>', { t: '044', m: '079' }), '<p>Tel 044<font><br>Mobile 079</font></p>');
+  assert.equal(r('<p>Fix<br>@@a<span><br>@@b</span></p>', { a: '', b: '' }), '<p>Fix</p>');
+  assert.equal(r('<div>@@a<span><br></span>@@b</div>', { a: '', b: '' }), '<div></div>');
+});
+
+test('imagesInLines: not the logo cell of a field row; widths read as widths', () => {
+  const doc = new JSDOM('').window.document;
+  const ii = (h) => core.imagesInLines(core.compile(h, doc)).map((x) => x.src);
+  assert.deepEqual(ii('<table><tr><td><img src="assets/logo.png" width="150"></td><td>@@displayName<br>@@title</td></tr></table>'), []);
+  assert.deepEqual(ii('<p>@@a <img src="assets/i.png" style="max-width:600px;width:50px"> <img src="assets/j.png" height="16"> <img src="assets/k.png" width="10%"> <img src="assets/big.png" width="400"> <img src="assets/n.png"></p>'), ['assets/big.png', 'assets/n.png']);
 });
