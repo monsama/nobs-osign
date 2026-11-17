@@ -5,6 +5,12 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.107
+- **The bar shows the text at the cursor**, as a word processor does: its font, size and colour
+  (and bold, italic, underlined, as before), also when the cursor is moved with the keys. A font
+  or size not in the list is shown all the same. The same font or size can be chosen again for a
+  selection.
+
 ## 0.9.106
 - The note on classic Outlook in the preview only for a default someone gets (one for nobody
   never goes in anywhere), and, when there is nothing to do, one short grey line ("all of it goes

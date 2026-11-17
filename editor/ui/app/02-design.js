@@ -35,6 +35,8 @@
         ddoc.addEventListener('input', onDesignInput);
         ddoc.addEventListener('keyup', updateToolbarState);
         ddoc.addEventListener('mouseup', updateToolbarState);
+        // Moved with the keys too: the bar follows the cursor.
+        let tbRaf = 0; ddoc.addEventListener('selectionchange', () => { window.cancelAnimationFrame(tbRaf); tbRaf = window.requestAnimationFrame(updateToolbarState); });
         ddoc.addEventListener('click', onDesignClick);
         ddoc.addEventListener('paste', onPaste);
         chipDrag();
@@ -268,11 +270,17 @@
     const btn = (name, title, fn, cmd) => { title = t(title); const b = el('button', { type: 'button', title, 'aria-label': title, 'data-cmd': cmd || '' }); b.innerHTML = svg(name); b.addEventListener('mousedown', (e) => e.preventDefault()); b.addEventListener('click', fn); return b; };
     const sep = () => el('span', { class: 'sep' });
     const fonts = ['Arial', 'Aptos', 'Calibri', 'Segoe UI', 'Verdana', 'Tahoma', 'Helvetica', 'Georgia', 'Times New Roman'];
-    const fontSel = el('select', { title: t('Font'), 'aria-label': t('Font') }, el('option', { value: '' }, t('Font')), fonts.map((f) => el('option', { value: f }, f)));
-    fontSel.addEventListener('change', () => { if (fontSel.value) exec('fontName', fontSel.value + (fontSel.value === 'Georgia' || fontSel.value === 'Times New Roman' ? ', serif' : ', sans-serif')); fontSel.value = ''; });
-    const sizeSel = el('select', { title: t('Size'), 'aria-label': t('Size') }, el('option', { value: '' }, t('Size')), [8, 9, 10, 11, 12, 14, 16, 18, 24].map((n) => el('option', { value: n }, n + ' pt')));
-    sizeSel.addEventListener('change', () => { if (sizeSel.value) setFontSize(sizeSel.value); sizeSel.value = ''; });
-    const color = el('input', { type: 'color', title: t('Text colour'), 'aria-label': t('Text colour'), value: '#222222' });
+    const fontSel = el('select', { id: 'tbFont', title: t('Font'), 'aria-label': t('Font') }, el('option', { value: '' }, t('Font')), fonts.map((f) => el('option', { value: f }, f)));
+    fontSel.addEventListener('change', () => { if (fontSel.value) exec('fontName', fontSel.value + (fontSel.value === 'Georgia' || fontSel.value === 'Times New Roman' ? ', serif' : ', sans-serif')); updateToolbarState(); });
+    const sizeSel = el('select', { id: 'tbSize', title: t('Size'), 'aria-label': t('Size') }, el('option', { value: '' }, t('Size')), [8, 9, 10, 11, 12, 14, 16, 18, 24].map((n) => el('option', { value: String(n) }, n + ' pt')));
+    sizeSel.addEventListener('change', () => { if (sizeSel.value) setFontSize(sizeSel.value); updateToolbarState(); });
+    // They show what the text at the cursor has; opened, they are empty, so the same one can be
+    // chosen again for what is selected (else choosing it would change nothing).
+    [fontSel, sizeSel].forEach((sel) => {
+      sel.addEventListener('mousedown', () => { sel.dataset.was = sel.value; sel.value = ''; });
+      sel.addEventListener('blur', () => { if (!sel.value) updateToolbarState(); });
+    });
+    const color = el('input', { id: 'tbColor', type: 'color', title: t('Text colour'), 'aria-label': t('Text colour'), value: '#222222' });
     color.addEventListener('input', () => exec('foreColor', color.value));
     const fieldSel = el('select', { class: 'field-pick', title: t('Insert a field'), 'aria-label': t('Insert a field') });
     fieldSel.addEventListener('focus', () => fillFieldSelect(fieldSel));
@@ -376,6 +384,31 @@
       let on = false; try { on = ddoc.queryCommandState(c); } catch (e) { }
       b.classList.toggle('on', on);
     });
+    showTextStyle();
+  }
+  // The font, size and colour of the text at the cursor, in the bar (as a word processor shows
+  // them): one not in its list is shown all the same, as an entry of its own.
+  function showTextStyle() {
+    const fontSel = $('tbFont'), sizeSel = $('tbSize'), color = $('tbColor');
+    if (!fontSel || document.activeElement === fontSel || document.activeElement === sizeSel) return;
+    const sel = ddoc.getSelection();
+    let node = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+    if (node && node.nodeType !== 1) node = node.parentElement;
+    if (!node || !ddoc.body.contains(node)) { fontSel.value = ''; sizeSel.value = ''; return; }
+    const cs = design.contentWindow.getComputedStyle(node);
+    const pick = (selEl, value, label) => {
+      [...selEl.querySelectorAll('option[data-here]')].forEach((o) => o.remove());
+      if (!value) { selEl.value = ''; return; }
+      let opt = [...selEl.options].find((o) => o.value.toLowerCase() === String(value).toLowerCase());
+      if (!opt) { opt = el('option', { value: String(value), 'data-here': '' }, label || String(value)); selEl.append(opt); }
+      selEl.value = opt.value;
+    };
+    const family = String(cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim();
+    pick(fontSel, family);
+    const pt = Math.round(parseFloat(cs.fontSize || '0') * 0.75 * 2) / 2;
+    pick(sizeSel, pt ? String(pt) : '', pt + ' pt');
+    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(cs.color || '');
+    if (m && color && document.activeElement !== color) color.value = '#' + [m[1], m[2], m[3]].map((x) => Number(x).toString(16).padStart(2, '0')).join('');
   }
 
   // A link on what is selected (https, mailto: or tel:).
