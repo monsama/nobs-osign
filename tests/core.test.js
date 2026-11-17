@@ -498,3 +498,16 @@ test('imagesInLines: a banner in the line of a field that can be empty is named;
   assert.deepEqual(of('<p>@@info</p><p><img src="assets/banner.png" width="400"></p>'), []);
   assert.deepEqual(of('<p><img src="assets/phone.png" width="12"> @@mobile</p>'), [], 'an icon beside its field goes with it, as meant');
 });
+
+test('a line ends at a <br> inside the element after it: @@info<span><br><br><img banner></span> keeps the banner when @@info is empty', () => {
+  const doc = new JSDOM('').window.document;
+  // As Word and CI-Sign write it (from a signature where the banner went with an empty @@info).
+  const h = '<table><tr><td>x</td></tr></table><span style="font-size: 11pt;"><font size="2">@@info<span style="font-family: Aptos, sans-serif;"><br><br><br><a href="https://www.argolite.ch/x"><img border="0" src="assets/Banner.png" width="400"></a><br></span><br></font></span>';
+  const c = core.compile(h, doc);
+  assert.match(core.render(c, { info: '' }), /assets\/Banner\.png/, 'the banner stays');
+  assert.doesNotMatch(core.render(c, { info: '' }), /@@info/);
+  assert.match(core.render(c, { info: 'Abwesend bis 3.12.' }), /Abwesend bis 3\.12\.<span[^>]*><br><br><br><a/);
+  assert.deepEqual(core.imagesInLines(c), [], 'nothing to warn about any more');
+  // A line whose element holds the rest of it (no <br> first) is still one line.
+  assert.equal(core.render(core.compile('<p>@@mobile <span>x<br>y</span></p>', doc), { mobile: '' }).replace(/\s/g, ''), '<p></p>');
+});

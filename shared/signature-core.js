@@ -204,6 +204,13 @@
       if (c.nodeType === 1 && c.querySelector && c.querySelector('br') && !segs[segs.length - 1].some(visible) && !attrPlaceholders(c).length) {
         segs.push([]); markBrLines(doc, c); continue;
       }
+      // One that comes after something on the line but starts with a <br> itself (Word and CI-Sign:
+      // @@info<span><br><br><img banner></span>): that <br> ends the line, so the line is what came
+      // before it, and what is in the element is lines of its own. Else an empty @@info would take
+      // the banner with it.
+      if (c.nodeType === 1 && c.querySelector && c.querySelector('br') && !attrPlaceholders(c).length && startsWithBreak(c)) {
+        segs.push([]); markBrLines(doc, c); continue;
+      }
       segs[segs.length - 1].push(c);
       if (c.nodeType === 1 && c.nodeName === 'BR') segs.push([]);
     }
@@ -220,6 +227,16 @@
 
   // Something on a line that shows: text that is not only space, or an element.
   function visible(n) { return n.nodeType === 1 || (n.nodeType === 3 && /\S/.test(n.nodeValue.replace(/\u00a0/g, 'x'))); }
+  // Whether an element's first content, before anything visible, is a <br> (<span><br>…).
+  function startsWithBreak(el) {
+    for (var c = el.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 1 && c.nodeName === 'BR') return true;
+      // Into a wrapper (<font>, <span>) that carries no field of its own.
+      if (c.nodeType === 1 && c.nodeName !== 'IMG' && c.firstChild && !attrPlaceholders(c).length) return startsWithBreak(c);
+      if (visible(c)) return false;
+    }
+    return false;
+  }
   // The placeholders in an element's own attributes (an <a href="mailto:@@mail">).
   function attrPlaceholders(el) {
     var keys = [];
