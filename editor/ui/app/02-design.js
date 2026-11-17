@@ -277,7 +277,7 @@
     // They show what the text at the cursor has; opened, they are empty, so the same one can be
     // chosen again for what is selected (else choosing it would change nothing).
     [fontSel, sizeSel].forEach((sel) => {
-      sel.addEventListener('mousedown', () => { sel.dataset.was = sel.value; sel.value = ''; });
+      sel.addEventListener('mousedown', () => { sel.value = ''; });
       sel.addEventListener('blur', () => { if (!sel.value) updateToolbarState(); });
     });
     const color = el('input', { id: 'tbColor', type: 'color', title: t('Text colour'), 'aria-label': t('Text colour'), value: '#222222' });

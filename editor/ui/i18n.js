@@ -993,6 +993,8 @@
     "The add-in's app registration is not in your organisation any more: Outlook cannot sign in, and no signature is put in. Restore it in Entra ID (App registrations → Deleted applications); Settings → Status says more.": 'Die App-Registrierung des Add-ins ist nicht mehr in Ihrer Organisation: Outlook kann sich nicht anmelden, und es wird keine Signatur eingefügt. In Entra ID wiederherstellen (App-Registrierungen → Gelöschte Anwendungen); mehr unter Einstellungen → Status.',
     'Outlook cannot sign in': 'Outlook kann sich nicht anmelden',
     'Entra ID could not be reached': 'Entra ID war nicht erreichbar',
+    'Not set up yet (no tenant ID).': 'Noch nicht eingerichtet (keine Tenant-ID).',
+    'Entra ID gave no answer that can be read (HTTP {0}).': 'Entra ID gab keine lesbare Antwort (HTTP {0}).',
     "The add-in's files made here are not the ones on Cloudflare Pages: upload them (Settings → Outlook add-in); until then classic Outlook takes the smaller copies of the images in the mailbox.": 'Die hier erstellten Add-in-Dateien sind nicht die auf Cloudflare Pages: Laden Sie sie hoch (Einstellungen → Outlook-Add-in); bis dahin nimmt das klassische Outlook die kleineren Kopien der Bilder im Postfach.',
     'The images could not be uploaded to Cloudflare Pages (the server log says why).': 'Die Bilder konnten nicht auf Cloudflare Pages hochgeladen werden (das Server-Log sagt, warum).',
     "The Cloudflare Pages project is not there: upload the add-in's files once (Settings → Outlook add-in).": 'Das Cloudflare-Pages-Projekt gibt es nicht: Laden Sie die Add-in-Dateien einmal hoch (Einstellungen → Outlook-Add-in).',

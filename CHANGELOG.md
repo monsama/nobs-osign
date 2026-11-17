@@ -5,6 +5,22 @@ What changed, in plain words, for whoever runs NOBS OSign. Update with
 again afterwards (status bar or Settings → Outlook add-in); a new `manifest.xml` is only needed
 when it says so. The release notes on GitHub say the same for each version.
 
+## 0.9.109
+- **Fixed: an empty line left where a field's line went** (since 0.9.108): when the line break
+  after an empty field stood inside the next element (`Tel @@phone<font><br>Mobile …</font>`, as
+  Word writes it), the break stayed and showed as an empty line. Now it goes with the line, and a
+  wrapper left empty goes too. Publish again so Outlook gets it.
+- **Fewer false warnings about images in empty lines:** a logo in the cell beside the fields of a
+  table row (the usual layout) is no longer named, nor an icon of small height or a `max-width`
+  style.
+- **Add-in sign-in check:** an answer that is not Entra ID's own (a proxy page, a server error)
+  is now a warning, not "the app registration is there"; with no tenant ID it says so.
+- **Cloudflare Pages:** with a Pages setup problem (no token), the publish checks no longer say the
+  files are not uploaded: the problem itself is said. An image in another site's `assets/` address
+  is not taken as one of ours.
+- **Updates:** Microsoft sign-in library (msal-browser 5.29.1), hashing library (@noble/hashes 2),
+  Node 26.13 in the image, the build actions. **Add-in changed**: make the add-in files again.
+
 ## 0.9.108
 - **Fixed: a banner went with an empty field above it.** In HTML as Word and CI-Sign write it
   (`@@info<span><br><br><img banner></span>`), the line breaks inside the `<span>` were not taken
