@@ -9,9 +9,9 @@
     "server": "node server/index.js"
   },
   "dependencies": {
-    "@azure/msal-browser": "5.29.1",
+    "@azure/msal-browser": "5.30.0",
     "@noble/hashes": "2.4.0",
-    "ldapts": "9.2.0"
+    "ldapts": "9.3.1"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
